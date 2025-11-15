@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Anthropic from "@anthropic-ai/sdk";
+import { config } from "@/lib/config";
 
 export default function Home() {
   // State for the large text input
@@ -8,6 +10,9 @@ export default function Home() {
   
   // State for table data - starts with no rows
   const [tableData, setTableData] = useState<Array<Array<{type: string, value: string}>>>([]);
+  
+  // Loading state for API call
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleTableChange = (rowIndex: number, colIndex: number, value: string) => {
     const newData = [...tableData];
@@ -15,9 +20,50 @@ export default function Home() {
     setTableData(newData);
   };
 
-  const addRow = () => {
+  const addRow = async () => {
+    setIsLoading(true);
+    let workloadValue = "Ingestion"; // default value
+
+    try {
+      // Call Anthropic API if prompt text exists and API key is configured
+      if (promptText.trim() && config.anthropicApiKey) {
+        const anthropic = new Anthropic({
+          apiKey: config.anthropicApiKey,
+          dangerouslyAllowBrowser: true, // Note: For production, use a backend API route
+        });
+
+        const message = await anthropic.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 100,
+          system: config.systemPrompt,
+          messages: [
+            {
+              role: "user",
+              content: promptText,
+            },
+          ],
+        });
+
+        // Extract the workload classification from the response
+        const responseText = message.content[0].type === "text" 
+          ? message.content[0].text.trim() 
+          : "Ingestion";
+        
+        // Validate that the response is one of the valid workload types
+        const validWorkloads = ["Ingestion", "Transformation", "Analysis", "Exploration", "ML Inference"];
+        if (validWorkloads.includes(responseText)) {
+          workloadValue = responseText;
+        }
+      }
+    } catch (error) {
+      console.error("Error calling Anthropic API:", error);
+      // Use default value on error
+    } finally {
+      setIsLoading(false);
+    }
+
     const newRow = [
-      { type: "dropdown", value: "Ingestion" },
+      { type: "dropdown", value: workloadValue },
       { type: "dropdown", value: "All-Purpose" },
       { type: "dropdown", value: "i3.xlarge" },
       { type: "dropdown", value: "1" },
@@ -86,9 +132,10 @@ export default function Home() {
           />
           <button
             onClick={addRow}
-            className="mt-4 px-6 py-2 text-base font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-md hover:shadow-lg"
+            disabled={isLoading}
+            className="mt-4 px-6 py-2 text-base font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg transition-colors shadow-md hover:shadow-lg"
           >
-            Submit
+            {isLoading ? "Processing..." : "Submit"}
           </button>
         </div>
 
