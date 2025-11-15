@@ -6,39 +6,8 @@ export default function Home() {
   // State for the large text input
   const [promptText, setPromptText] = useState("");
   
-  // State for table data - 3 rows, 8 columns each
-  const [tableData, setTableData] = useState([
-    [
-      { type: "dropdown", value: "Ingestion" },
-      { type: "dropdown", value: "All-Purpose" },
-      { type: "dropdown", value: "i3.xlarge" },
-      { type: "dropdown", value: "1" },
-      { type: "dropdown", value: "i3.xlarge" },
-      { type: "dropdown", value: "1" },
-      { type: "text", value: "" },
-      { type: "text", value: "" },
-    ],
-    [
-      { type: "dropdown", value: "Ingestion" },
-      { type: "dropdown", value: "All-Purpose" },
-      { type: "dropdown", value: "i3.xlarge" },
-      { type: "dropdown", value: "1" },
-      { type: "dropdown", value: "i3.xlarge" },
-      { type: "dropdown", value: "1" },
-      { type: "text", value: "" },
-      { type: "text", value: "" },
-    ],
-    [
-      { type: "dropdown", value: "Ingestion" },
-      { type: "dropdown", value: "All-Purpose" },
-      { type: "dropdown", value: "i3.xlarge" },
-      { type: "dropdown", value: "1" },
-      { type: "dropdown", value: "i3.xlarge" },
-      { type: "dropdown", value: "1" },
-      { type: "text", value: "" },
-      { type: "text", value: "" },
-    ],
-  ]);
+  // State for table data - starts with no rows
+  const [tableData, setTableData] = useState<Array<Array<{type: string, value: string}>>>([]);
 
   const handleTableChange = (rowIndex: number, colIndex: number, value: string) => {
     const newData = [...tableData];
@@ -115,6 +84,12 @@ export default function Home() {
             className="w-full min-h-[200px] p-4 text-base border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100 resize-y transition-all"
             rows={8}
           />
+          <button
+            onClick={addRow}
+            className="mt-4 px-6 py-2 text-base font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-md hover:shadow-lg"
+          >
+            Submit
+          </button>
         </div>
 
         {/* Table with 8 columns and dynamic rows */}
