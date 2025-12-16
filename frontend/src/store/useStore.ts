@@ -14,8 +14,14 @@ import type {
   VMPaymentOption
 } from '../types'
 import * as api from '../api/client'
+import type { CurrentUser } from '../api/client'
 
 interface Store {
+  // Current User
+  currentUser: CurrentUser | null
+  isAuthenticated: boolean
+  authError: string | null
+  
   // Estimates
   estimates: EstimateListItem[]
   currentEstimate: Estimate | null
@@ -38,6 +44,10 @@ interface Store {
   vmPricingTiers: VMPricingTier[]
   vmPaymentOptions: VMPaymentOption[]
   vmPricingMap: Record<string, number> // Map of "cloud:region:instance:tier:payment" -> cost_per_hour
+  
+  // Actions - Auth
+  fetchCurrentUser: () => Promise<void>
+  clearAuthError: () => void
   
   // Actions - Estimates
   fetchEstimates: () => Promise<void>
@@ -71,6 +81,10 @@ interface Store {
 
 export const useStore = create<Store>((set, get) => ({
   // Initial state
+  currentUser: null,
+  isAuthenticated: false,
+  authError: null,
+  
   estimates: [],
   currentEstimate: null,
   lineItems: [],
@@ -91,6 +105,23 @@ export const useStore = create<Store>((set, get) => ({
   vmPricingTiers: [],
   vmPaymentOptions: [],
   vmPricingMap: {},
+  
+  // Auth Actions
+  fetchCurrentUser: async () => {
+    try {
+      const user = await api.fetchCurrentUser()
+      set({ currentUser: user, isAuthenticated: true, authError: null })
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error && 'response' in error 
+        ? (error as { response?: { status?: number } }).response?.status === 401
+          ? 'Please access through Databricks Apps or set LOCAL_DEV_EMAIL environment variable.'
+          : 'Failed to authenticate'
+        : 'Failed to authenticate'
+      set({ currentUser: null, isAuthenticated: false, authError: errorMessage })
+    }
+  },
+  
+  clearAuthError: () => set({ authError: null }),
   
   // Estimates
   fetchEstimates: async () => {

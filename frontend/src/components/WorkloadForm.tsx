@@ -33,8 +33,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   const [form, setForm] = useState({
     workload_name: '',
     workload_type: 'JOBS',
-    is_serverless: false,
-    serverless_performance_mode: 'standard',
+    serverless_enabled: false,
+    serverless_mode: 'standard',
     driver_node_type: '',
     worker_node_type: '',
     num_workers: 2,
@@ -42,23 +42,38 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     autoscale_min_workers: 1,
     autoscale_max_workers: 8,
     photon_enabled: false,
-    spot_enabled: false,
-    spot_percentage: 70,
+    spot_percentage: 0,  // 0 = off, >0 = percentage of workers using spot
+    // Cluster autoscaling for Jobs/All Purpose
+    cluster_autoscaling_enabled: false,
+    min_clusters: 1,
+    max_clusters: 2,
     dlt_edition: 'pro',
+    // Cluster autoscaling for DLT
+    dlt_autoscaling_enabled: false,
+    dlt_min_clusters: 1,
+    dlt_max_clusters: 1,
     dlt_pipeline_mode: 'triggered',
     dbsql_warehouse_type: 'serverless',
     dbsql_warehouse_size: 'small',
+    dbsql_num_clusters: 1,
     vector_search_mode: 'delta_sync',
-    lakebase_instance_type: 'small',
+    vector_capacity_millions: 1,
+    lakebase_cu: 1,
     lakebase_storage_gb: 100,
+    lakebase_ha_nodes: 0,
+    lakebase_backup_retention_days: 7,
     fmapi_provider: 'databricks',
     fmapi_model: '',
+    fmapi_endpoint_type: 'pay_per_token',
+    fmapi_context_length: '4k',
+    fmapi_provisioned_type: 'throughput',
     fmapi_input_tokens_per_month: 0,
     fmapi_output_tokens_per_month: 0,
-    hours_per_day: 8,
-    days_per_month: 22,
     runs_per_day: 1,
     avg_runtime_minutes: 30,
+    days_per_month: 22,
+    driver_pricing_tier: 'on_demand',
+    worker_pricing_tier: 'on_demand',
     vm_pricing_tier: 'on_demand',
     vm_payment_option: 'no_upfront',
     notes: ''
@@ -69,8 +84,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       setForm({
         workload_name: lineItem.workload_name || '',
         workload_type: lineItem.workload_type || 'JOBS',
-        is_serverless: lineItem.is_serverless || false,
-        serverless_performance_mode: lineItem.serverless_performance_mode || 'standard',
+        serverless_enabled: lineItem.serverless_enabled || false,
+        serverless_mode: lineItem.serverless_mode || 'standard',
         driver_node_type: lineItem.driver_node_type || '',
         worker_node_type: lineItem.worker_node_type || '',
         num_workers: lineItem.num_workers || 2,
@@ -78,23 +93,38 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         autoscale_min_workers: lineItem.autoscale_min_workers || 1,
         autoscale_max_workers: lineItem.autoscale_max_workers || 8,
         photon_enabled: lineItem.photon_enabled || false,
-        spot_enabled: lineItem.spot_enabled || false,
-        spot_percentage: lineItem.spot_percentage || 70,
+        spot_percentage: lineItem.spot_percentage || 0,
+        // Cluster autoscaling for Jobs/All Purpose
+        cluster_autoscaling_enabled: false, // Default off, can be derived from data
+        min_clusters: 1,
+        max_clusters: lineItem.num_workers || 2,
         dlt_edition: lineItem.dlt_edition || 'pro',
+        // Cluster autoscaling for DLT
+        dlt_autoscaling_enabled: false,
+        dlt_min_clusters: 1,
+        dlt_max_clusters: 1,
         dlt_pipeline_mode: lineItem.dlt_pipeline_mode || 'triggered',
         dbsql_warehouse_type: lineItem.dbsql_warehouse_type || 'serverless',
         dbsql_warehouse_size: lineItem.dbsql_warehouse_size || 'small',
+        dbsql_num_clusters: lineItem.dbsql_num_clusters || 1,
         vector_search_mode: lineItem.vector_search_mode || 'delta_sync',
-        lakebase_instance_type: lineItem.lakebase_instance_type || 'small',
+        vector_capacity_millions: lineItem.vector_capacity_millions || 1,
+        lakebase_cu: lineItem.lakebase_cu || 1,
         lakebase_storage_gb: lineItem.lakebase_storage_gb || 100,
+        lakebase_ha_nodes: lineItem.lakebase_ha_nodes || 0,
+        lakebase_backup_retention_days: lineItem.lakebase_backup_retention_days || 7,
         fmapi_provider: lineItem.fmapi_provider || 'databricks',
         fmapi_model: lineItem.fmapi_model || '',
+        fmapi_endpoint_type: lineItem.fmapi_endpoint_type || 'pay_per_token',
+        fmapi_context_length: lineItem.fmapi_context_length || '4k',
+        fmapi_provisioned_type: lineItem.fmapi_provisioned_type || 'throughput',
         fmapi_input_tokens_per_month: lineItem.fmapi_input_tokens_per_month || 0,
         fmapi_output_tokens_per_month: lineItem.fmapi_output_tokens_per_month || 0,
-        hours_per_day: lineItem.hours_per_day || 8,
-        days_per_month: lineItem.days_per_month || 22,
         runs_per_day: lineItem.runs_per_day || 1,
         avg_runtime_minutes: lineItem.avg_runtime_minutes || 30,
+        days_per_month: lineItem.days_per_month || 22,
+        driver_pricing_tier: lineItem.driver_pricing_tier || 'on_demand',
+        worker_pricing_tier: lineItem.worker_pricing_tier || 'on_demand',
         vm_pricing_tier: lineItem.vm_pricing_tier || 'on_demand',
         vm_payment_option: lineItem.vm_payment_option || 'no_upfront',
         notes: lineItem.notes || ''
@@ -108,17 +138,17 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       updateLineItemLocal(lineItem.line_item_id, {
         vm_pricing_tier: form.vm_pricing_tier,
         vm_payment_option: form.vm_payment_option,
-        spot_enabled: form.spot_enabled,
+        spot_percentage: form.spot_percentage,
         driver_node_type: form.driver_node_type,
         worker_node_type: form.worker_node_type,
         num_workers: form.num_workers,
-        hours_per_day: form.hours_per_day,
         days_per_month: form.days_per_month,
         runs_per_day: form.runs_per_day,
         avg_runtime_minutes: form.avg_runtime_minutes,
-        is_serverless: form.is_serverless,
+        serverless_enabled: form.serverless_enabled,
         photon_enabled: form.photon_enabled,
         dbsql_warehouse_size: form.dbsql_warehouse_size,
+        lakebase_cu: form.lakebase_cu,
       })
       onSave?.() // Mark estimate as having unsaved changes
     }
@@ -127,17 +157,17 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     lineItem?.line_item_id,
     form.vm_pricing_tier,
     form.vm_payment_option,
-    form.spot_enabled,
+    form.spot_percentage,
     form.driver_node_type,
     form.worker_node_type,
     form.num_workers,
-    form.hours_per_day,
     form.days_per_month,
     form.runs_per_day,
     form.avg_runtime_minutes,
-    form.is_serverless,
+    form.serverless_enabled,
     form.photon_enabled,
     form.dbsql_warehouse_size,
+    form.lakebase_cu,
     updateLineItemLocal,
   ])
   
@@ -147,7 +177,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   const computedSku = (): string | null => {
     if (!selectedWorkloadType) return null
     
-    if (form.is_serverless && selectedWorkloadType.sku_product_type_serverless) {
+    if (form.serverless_enabled && selectedWorkloadType.sku_product_type_serverless) {
       return selectedWorkloadType.sku_product_type_serverless
     }
     if (form.photon_enabled && selectedWorkloadType.sku_product_type_photon) {
@@ -166,22 +196,142 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     
     setIsSaving(true)
     try {
-      const data = {
-        ...form,
-        selected_sku: computedSku()
+      // Build data object - only include fields relevant to the workload type
+      // Set non-relevant fields to null to satisfy database constraints
+      const data: Partial<LineItem> & { estimate_id?: string } = {
+        workload_name: form.workload_name,
+        workload_type: form.workload_type,
+        notes: form.notes || null,
+        cloud: selectedCloud?.toUpperCase() || null,
+        days_per_month: form.days_per_month,
+      }
+      
+      // Serverless fields
+      if (selectedWorkloadType?.show_serverless_toggle) {
+        data.serverless_enabled = form.serverless_enabled
+        data.serverless_mode = form.serverless_enabled ? form.serverless_mode : null
+      } else {
+        data.serverless_enabled = false
+        data.serverless_mode = null
+      }
+      
+      // Classic compute config
+      if (selectedWorkloadType?.show_compute_config && !form.serverless_enabled) {
+        data.photon_enabled = form.photon_enabled
+        data.driver_node_type = form.driver_node_type || null
+        data.worker_node_type = form.worker_node_type || null
+        data.num_workers = form.num_workers
+        data.autoscale_enabled = form.autoscale_enabled
+        data.autoscale_min_workers = form.autoscale_enabled ? form.autoscale_min_workers : null
+        data.autoscale_max_workers = form.autoscale_enabled ? form.autoscale_max_workers : null
+        data.driver_pricing_tier = form.driver_pricing_tier
+        data.worker_pricing_tier = form.worker_pricing_tier
+        data.vm_pricing_tier = form.vm_pricing_tier
+        data.vm_payment_option = form.vm_payment_option
+        data.spot_percentage = form.spot_percentage
+      } else {
+        data.photon_enabled = false
+        data.driver_node_type = null
+        data.worker_node_type = null
+        data.num_workers = null
+        data.autoscale_enabled = false
+        data.autoscale_min_workers = null
+        data.autoscale_max_workers = null
+        data.driver_pricing_tier = null
+        data.worker_pricing_tier = null
+        data.vm_pricing_tier = null
+        data.vm_payment_option = null
+        data.spot_percentage = 0
+      }
+      
+      // DLT config
+      if (selectedWorkloadType?.show_dlt_config) {
+        data.dlt_edition = form.dlt_edition
+        data.dlt_pipeline_mode = form.dlt_pipeline_mode
+      } else {
+        data.dlt_edition = null
+        data.dlt_pipeline_mode = null
+      }
+      
+      // DBSQL config
+      if (selectedWorkloadType?.show_dbsql_config) {
+        data.dbsql_warehouse_type = form.dbsql_warehouse_type
+        data.dbsql_warehouse_size = form.dbsql_warehouse_size
+        data.dbsql_num_clusters = form.dbsql_num_clusters
+      } else {
+        data.dbsql_warehouse_type = null
+        data.dbsql_warehouse_size = null
+        data.dbsql_num_clusters = null
+      }
+      
+      // Vector Search config
+      if (selectedWorkloadType?.show_vector_search_mode) {
+        data.vector_search_mode = form.vector_search_mode
+        data.vector_capacity_millions = form.vector_capacity_millions
+      } else {
+        data.vector_search_mode = null
+        data.vector_capacity_millions = null
+      }
+      
+      // Lakebase config
+      if (selectedWorkloadType?.show_lakebase_config) {
+        data.lakebase_cu = form.lakebase_cu
+        data.lakebase_storage_gb = form.lakebase_storage_gb
+        data.lakebase_ha_nodes = form.lakebase_ha_nodes
+        data.lakebase_backup_retention_days = form.lakebase_backup_retention_days
+      } else {
+        data.lakebase_cu = null
+        data.lakebase_storage_gb = null
+        data.lakebase_ha_nodes = null
+        data.lakebase_backup_retention_days = null
+      }
+      
+      // FMAPI config
+      if (selectedWorkloadType?.show_fmapi_config) {
+        data.fmapi_provider = form.fmapi_provider
+        data.fmapi_model = form.fmapi_model || null
+        data.fmapi_endpoint_type = form.fmapi_endpoint_type
+        data.fmapi_context_length = form.fmapi_context_length
+        data.fmapi_provisioned_type = form.fmapi_provisioned_type
+        data.fmapi_input_tokens_per_month = form.fmapi_input_tokens_per_month
+        data.fmapi_output_tokens_per_month = form.fmapi_output_tokens_per_month
+      } else {
+        data.fmapi_provider = null
+        data.fmapi_model = null
+        data.fmapi_endpoint_type = null
+        data.fmapi_context_length = null
+        data.fmapi_provisioned_type = null
+        data.fmapi_input_tokens_per_month = null
+        data.fmapi_output_tokens_per_month = null
+      }
+      
+      // Usage config
+      if (selectedWorkloadType?.show_usage_runs) {
+        data.runs_per_day = form.runs_per_day
+      } else {
+        data.runs_per_day = null
+      }
+      
+      // Avg Runtime - for Jobs, All Purpose, DLT, and SQL Warehouse
+      if (selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) {
+        data.avg_runtime_minutes = form.avg_runtime_minutes
+      } else {
+        data.avg_runtime_minutes = null
       }
       
       if (lineItem) {
         await updateLineItem(lineItem.line_item_id, data)
         toast.success('Workload updated')
       } else {
-        await createLineItem({ ...data, estimate_id: estimateId })
+        data.estimate_id = estimateId
+        await createLineItem(data as LineItem)
         toast.success('Workload added')
       }
       fetchLineItems(estimateId)
       onSave?.()
       onClose()
-    } catch {
+    } catch (err) {
+      console.error('Failed to save workload:', err)
       toast.error('Failed to save')
     } finally {
       setIsSaving(false)
@@ -189,7 +339,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   }
   
   // Show VM config for classic compute (not serverless)
-  const showVMConfig = selectedWorkloadType?.show_compute_config && !form.is_serverless
+  const showVMConfig = selectedWorkloadType?.show_compute_config && !form.serverless_enabled
+  
+  // Check if spot is enabled (percentage > 0)
+  const spotEnabled = form.spot_percentage > 0
   
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -211,7 +364,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>Workload Type</label>
           <select
             value={form.workload_type}
-            onChange={(e) => setForm(f => ({ ...f, workload_type: e.target.value, is_serverless: false, photon_enabled: false }))}
+            onChange={(e) => setForm(f => ({ ...f, workload_type: e.target.value, serverless_enabled: false, photon_enabled: false }))}
             className="w-full"
           >
             {workloadTypes.map(wt => (
@@ -235,8 +388,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       )}
       
       {/* Feature Toggles Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Serverless Toggle - on the left */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* Serverless Toggle - left */}
         {selectedWorkloadType?.show_serverless_toggle && (
           <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
             <div className="flex items-center justify-between">
@@ -246,21 +399,18 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </div>
               <button
                 type="button"
-                onClick={() => setForm(f => ({ ...f, is_serverless: !f.is_serverless, spot_enabled: false }))}
-                className={clsx('toggle', form.is_serverless ? 'toggle-checked' : 'toggle-unchecked')}
+                onClick={() => setForm(f => ({ ...f, serverless_enabled: !f.serverless_enabled, spot_percentage: 0, cluster_autoscaling_enabled: false }))}
+                className={clsx('toggle', form.serverless_enabled ? 'toggle-checked' : 'toggle-unchecked')}
               >
-                <span className={clsx('toggle-knob', form.is_serverless ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
+                <span className={clsx('toggle-knob', form.serverless_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
               </button>
             </div>
           </div>
         )}
         
-        {/* Photon Toggle - on the right */}
-        {selectedWorkloadType?.show_photon_toggle && !form.is_serverless && (
-          <div className={clsx(
-            "p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]",
-            !selectedWorkloadType?.show_serverless_toggle && "sm:col-start-2"
-          )}>
+        {/* Photon Toggle - middle */}
+        {selectedWorkloadType?.show_photon_toggle && !form.serverless_enabled && (
+          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <BoltIcon className="w-4 h-4 text-orange-600 dark:text-orange-500" />
@@ -276,6 +426,30 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             </div>
           </div>
         )}
+        
+        {/* Autoscaling Toggle - right (for classic compute only) */}
+        {selectedWorkloadType?.show_compute_config && !form.serverless_enabled && (
+          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CloudIcon className="w-4 h-4 text-blue-500" />
+                <span className="text-sm text-[var(--text-secondary)]">Autoscaling</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ 
+                  ...f, 
+                  cluster_autoscaling_enabled: !f.cluster_autoscaling_enabled,
+                  // When enabling, set max to current num_workers
+                  max_clusters: !f.cluster_autoscaling_enabled ? f.num_workers : f.max_clusters
+                }))}
+                className={clsx('toggle', form.cluster_autoscaling_enabled ? 'toggle-checked' : 'toggle-unchecked')}
+              >
+                <span className={clsx('toggle-knob', form.cluster_autoscaling_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Configuration Grid */}
@@ -283,6 +457,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* Classic Compute Config */}
         {showVMConfig && (
           <>
+            {/* Row 1: Driver Node | Worker Node | Spot Workers */}
             <div>
               <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Driver Node</label>
               <select
@@ -315,33 +490,102 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Workers</label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={form.num_workers}
-                onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
-                className="w-full text-sm"
-              />
+            {/* Spot Workers Toggle - 3rd column */}
+            <div className="flex items-end">
+              <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] w-full">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CurrencyDollarIcon className="w-4 h-4 text-yellow-500 dark:text-yellow-400" />
+                    <div>
+                      <span className="text-sm text-[var(--text-secondary)]">Spot Workers</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, spot_percentage: f.spot_percentage > 0 ? 0 : 100 }))}
+                    className={clsx('toggle', spotEnabled ? 'toggle-checked' : 'toggle-unchecked')}
+                  >
+                    <span className={clsx('toggle-knob', spotEnabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
+                  </button>
+                </div>
+              </div>
             </div>
             
-            {/* VM Pricing Tier */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">VM Pricing Tier</label>
-              <select
-                value={form.vm_pricing_tier}
-                onChange={(e) => setForm(f => ({ ...f, vm_pricing_tier: e.target.value }))}
-                className="w-full text-sm"
-              >
-                {vmPricingTiers.map(tier => (
-                  <option key={tier.id} value={tier.id}>
-                    {tier.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Row 2: Number of Workers | VM Pricing Tier | Runs/Day OR Min Clusters | Max Clusters | VM Pricing Tier */}
+            {!form.cluster_autoscaling_enabled ? (
+              <>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Workers</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={form.num_workers}
+                    onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
+                    className="w-full text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">VM Pricing Tier</label>
+                  <select
+                    value={form.vm_pricing_tier}
+                    onChange={(e) => setForm(f => ({ ...f, vm_pricing_tier: e.target.value }))}
+                    className="w-full text-sm"
+                  >
+                    {vmPricingTiers.map(tier => (
+                      <option key={tier.id} value={tier.id}>
+                        {tier.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Min Clusters</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={form.max_clusters}
+                    value={form.min_clusters}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1
+                      setForm(f => ({ ...f, min_clusters: val, max_clusters: Math.max(f.max_clusters, val) }))
+                    }}
+                    className="w-full text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Max Clusters</label>
+                  <input
+                    type="number"
+                    min={form.min_clusters}
+                    max={100}
+                    value={form.max_clusters}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1
+                      setForm(f => ({ ...f, max_clusters: Math.max(f.min_clusters, val) }))
+                    }}
+                    className="w-full text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">VM Pricing Tier</label>
+                  <select
+                    value={form.vm_pricing_tier}
+                    onChange={(e) => setForm(f => ({ ...f, vm_pricing_tier: e.target.value }))}
+                    className="w-full text-sm"
+                  >
+                    {vmPricingTiers.map(tier => (
+                      <option key={tier.id} value={tier.id}>
+                        {tier.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
             
             {/* Payment Option (AWS Reserved Instances only) */}
             {selectedCloud === 'aws' && form.vm_pricing_tier.startsWith('reserved') && (
@@ -389,6 +633,55 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 <option value="continuous">Continuous</option>
               </select>
             </div>
+            {/* Autoscaling Toggle for DLT */}
+            <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CloudIcon className="w-4 h-4 text-blue-500" />
+                  <span className="text-sm text-[var(--text-secondary)]">Autoscaling</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, dlt_autoscaling_enabled: !f.dlt_autoscaling_enabled }))}
+                  className={clsx('toggle', form.dlt_autoscaling_enabled ? 'toggle-checked' : 'toggle-unchecked')}
+                >
+                  <span className={clsx('toggle-knob', form.dlt_autoscaling_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
+                </button>
+              </div>
+            </div>
+            {/* Min/Max Clusters for DLT - only shown when autoscaling enabled */}
+            {form.dlt_autoscaling_enabled && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Min Clusters</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={form.dlt_max_clusters}
+                    value={form.dlt_min_clusters}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1
+                      setForm(f => ({ ...f, dlt_min_clusters: val, dlt_max_clusters: Math.max(f.dlt_max_clusters, val) }))
+                    }}
+                    className="w-full text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Max Clusters</label>
+                  <input
+                    type="number"
+                    min={form.dlt_min_clusters}
+                    max={100}
+                    value={form.dlt_max_clusters}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1
+                      setForm(f => ({ ...f, dlt_max_clusters: Math.max(f.dlt_min_clusters, val) }))
+                    }}
+                    className="w-full text-sm"
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
         
@@ -418,6 +711,17 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                   <option key={size.id} value={size.id}>{size.name} ({size.dbu_per_hour} DBU/hr)</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Clusters</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={form.dbsql_num_clusters}
+                onChange={(e) => setForm(f => ({ ...f, dbsql_num_clusters: parseInt(e.target.value) || 1 }))}
+                className="w-full text-sm"
+              />
             </div>
           </>
         )}
@@ -459,17 +763,15 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {selectedWorkloadType?.show_lakebase_config && (
           <>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
-              <select
-                value={form.lakebase_instance_type}
-                onChange={(e) => setForm(f => ({ ...f, lakebase_instance_type: e.target.value }))}
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Compute Units (CU)</label>
+              <input
+                type="number"
+                min={1}
+                max={128}
+                value={form.lakebase_cu}
+                onChange={(e) => setForm(f => ({ ...f, lakebase_cu: parseInt(e.target.value) || 1 }))}
                 className="w-full text-sm"
-              >
-                <option value="small">Small (2 vCPU)</option>
-                <option value="medium">Medium (4 vCPU)</option>
-                <option value="large">Large (8 vCPU)</option>
-                <option value="xlarge">X-Large (16 vCPU)</option>
-              </select>
+              />
             </div>
             <div>
               <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Storage (GB)</label>
@@ -484,106 +786,46 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           </>
         )}
         
-        {/* Usage - Hours */}
-        {selectedWorkloadType?.show_usage_hours && (
-          <>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Hours/Day</label>
-              <input
-                type="number"
-                min={0}
-                max={24}
-                step={0.5}
-                value={form.hours_per_day}
-                onChange={(e) => setForm(f => ({ ...f, hours_per_day: parseFloat(e.target.value) || 0 }))}
-                className="w-full text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Days/Month</label>
-              <input
-                type="number"
-                min={1}
-                max={31}
-                value={form.days_per_month}
-                onChange={(e) => setForm(f => ({ ...f, days_per_month: parseInt(e.target.value) || 22 }))}
-                className="w-full text-sm"
-              />
-            </div>
-            {/* Spot VMs Toggle - Only for classic compute */}
-            {showVMConfig && (
-              <div className="flex items-end">
-                <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] w-full">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CurrencyDollarIcon className="w-4 h-4 text-yellow-500 dark:text-yellow-400" />
-                      <div>
-                        <span className="text-sm text-[var(--text-secondary)]">Spot Workers</span>
-                        <p className="text-xs text-[var(--text-muted)]">Driver stays on-demand</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, spot_enabled: !f.spot_enabled }))}
-                      className={clsx('toggle', form.spot_enabled ? 'toggle-checked' : 'toggle-unchecked')}
-                    >
-                      <span className={clsx('toggle-knob', form.spot_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-        
         {/* Usage - Runs */}
         {selectedWorkloadType?.show_usage_runs && (
-          <>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Runs/Day</label>
-              <input
-                type="number"
-                min={0}
-                value={form.runs_per_day}
-                onChange={(e) => setForm(f => ({ ...f, runs_per_day: parseInt(e.target.value) || 0 }))}
-                className="w-full text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Avg Runtime (min)</label>
-              <input
-                type="number"
-                min={0}
-                value={form.avg_runtime_minutes}
-                onChange={(e) => setForm(f => ({ ...f, avg_runtime_minutes: parseInt(e.target.value) || 0 }))}
-                className="w-full text-sm"
-              />
-            </div>
-            {/* Spot VMs Toggle - Only for classic compute, beside Avg Runtime */}
-            {showVMConfig && (
-              <div className="flex items-end">
-                <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] w-full">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CurrencyDollarIcon className="w-4 h-4 text-yellow-500 dark:text-yellow-400" />
-                      <div>
-                        <span className="text-sm text-[var(--text-secondary)]">Spot Workers</span>
-                        <p className="text-xs text-[var(--text-muted)]">Driver stays on-demand</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, spot_enabled: !f.spot_enabled }))}
-                      className={clsx('toggle', form.spot_enabled ? 'toggle-checked' : 'toggle-unchecked')}
-                    >
-                      <span className={clsx('toggle-knob', form.spot_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Runs/Day</label>
+            <input
+              type="number"
+              min={0}
+              value={form.runs_per_day}
+              onChange={(e) => setForm(f => ({ ...f, runs_per_day: parseInt(e.target.value) || 0 }))}
+              className="w-full text-sm"
+            />
+          </div>
         )}
+        
+        {/* Avg Runtime - for Jobs, All Purpose, DLT, and SQL Warehouse */}
+        {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Avg Runtime (min)</label>
+            <input
+              type="number"
+              min={0}
+              value={form.avg_runtime_minutes}
+              onChange={(e) => setForm(f => ({ ...f, avg_runtime_minutes: parseInt(e.target.value) || 0 }))}
+              className="w-full text-sm"
+            />
+          </div>
+        )}
+        
+        {/* Days per month - common field */}
+        <div>
+          <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Days/Month</label>
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={form.days_per_month}
+            onChange={(e) => setForm(f => ({ ...f, days_per_month: parseInt(e.target.value) || 22 }))}
+            className="w-full text-sm"
+          />
+        </div>
         
         {/* Usage - Tokens */}
         {selectedWorkloadType?.show_usage_tokens && (

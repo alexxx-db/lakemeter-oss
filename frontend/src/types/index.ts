@@ -14,9 +14,10 @@ export interface Estimate {
   estimate_id: string
   estimate_name: string
   owner_user_id?: string
-  customer_sfdc_id?: string
+  sfdc_account_id?: string  // Salesforce Account ID
   customer_name?: string
-  uco_opportunity_id?: string
+  opportunity_id?: string  // Salesforce Opportunity ID
+  uco_id?: string  // Salesforce Use Case ID
   cloud?: string
   region?: string
   tier?: string
@@ -42,6 +43,9 @@ export interface EstimateListItem {
   estimate_id: string
   estimate_name: string
   customer_name?: string
+  sfdc_account_id?: string
+  opportunity_id?: string
+  uco_id?: string
   cloud?: string
   region?: string
   tier?: string
@@ -58,19 +62,20 @@ export interface LineItem {
   display_order: number
   workload_name: string
   workload_type?: string
+  cloud?: string
   
   // Serverless toggle
-  is_serverless?: boolean
-  serverless_performance_mode?: string
+  serverless_enabled?: boolean
+  serverless_mode?: string
   
   // Classic Compute Configuration
+  photon_enabled?: boolean
   driver_node_type?: string
   worker_node_type?: string
   num_workers?: number
   autoscale_enabled?: boolean
   autoscale_min_workers?: number
   autoscale_max_workers?: number
-  photon_enabled?: boolean
   
   // DLT Configuration
   dlt_edition?: string
@@ -86,14 +91,13 @@ export interface LineItem {
   serverless_size?: string
   
   // Vector Search Configuration
-  vector_search_endpoint_type?: string
   vector_search_mode?: string
+  vector_capacity_millions?: number
   
   // Lakebase Configuration
-  lakebase_instance_type?: string
-  lakebase_storage_gb?: number
   lakebase_cu?: number
-  lakebase_ha_enabled?: boolean
+  lakebase_storage_gb?: number
+  lakebase_ha_nodes?: number
   lakebase_backup_retention_days?: number
   
   // Foundation Model API Configuration
@@ -101,23 +105,21 @@ export interface LineItem {
   fmapi_model?: string
   fmapi_endpoint_type?: string
   fmapi_context_length?: string
+  fmapi_provisioned_type?: string
   fmapi_input_tokens_per_month?: number
   fmapi_output_tokens_per_month?: number
   
   // Usage Configuration
-  hours_per_day?: number
-  days_per_month?: number
   runs_per_day?: number
   avg_runtime_minutes?: number
+  days_per_month?: number
   
   // Pricing Configuration
+  driver_pricing_tier?: string
+  worker_pricing_tier?: string
   vm_pricing_tier?: string
   vm_payment_option?: string
-  spot_enabled?: boolean
   spot_percentage?: number
-  
-  // Selected SKU
-  selected_sku?: string
   
   // Additional Configuration
   workload_config?: Record<string, unknown>

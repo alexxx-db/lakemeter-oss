@@ -8,49 +8,45 @@ from sqlalchemy.orm import Session
 import xlsxwriter
 
 from app.database import get_db
-from app.models import Estimate, LineItem
-from app.routes.estimates import get_demo_estimates
-from app.routes.line_items import get_demo_line_items
+from app.models import Estimate, LineItem, User
+from app.models.sharing import Sharing
+from app.auth import get_current_user
 
 router = APIRouter(prefix="/export", tags=["export"])
 
 
-def _check_demo_mode(db: Session) -> bool:
-    """Check if we should use demo mode."""
-    try:
-        db.execute("SELECT 1")
-        return False
-    except Exception:
-        return True
+def _check_estimate_access(estimate_id: UUID, user: User, db: Session) -> Estimate:
+    """Check if user has access to an estimate."""
+    estimate = db.query(Estimate).filter(
+        Estimate.estimate_id == estimate_id,
+        Estimate.is_deleted == False
+    ).first()
+    
+    if not estimate:
+        raise HTTPException(status_code=404, detail="Estimate not found")
+    
+    is_owner = estimate.owner_user_id == user.user_id
+    is_shared = db.query(Sharing).filter(
+        Sharing.estimate_id == estimate_id,
+        Sharing.shared_with_user_id == user.user_id
+    ).first() is not None
+    
+    if not is_owner and not is_shared:
+        raise HTTPException(status_code=404, detail="Estimate not found")
+    
+    return estimate
 
 
 @router.get("/estimate/{estimate_id}/excel")
 def export_estimate_to_excel(
     estimate_id: UUID,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Export an estimate to Excel format."""
-    str_id = str(estimate_id)
+    """Export an estimate to Excel format. User must have access to the estimate."""
+    estimate = _check_estimate_access(estimate_id, current_user, db)
     
-    if _check_demo_mode(db):
-        demo_estimates = get_demo_estimates()
-        demo_line_items = get_demo_line_items()
-        
-        if str_id not in demo_estimates:
-            raise HTTPException(status_code=404, detail="Estimate not found")
-        
-        estimate = demo_estimates[str_id]
-        line_items = [item for item in demo_line_items.values() if item.get("estimate_id") == str_id]
-    else:
-        estimate = db.query(Estimate).filter(
-            Estimate.estimate_id == estimate_id,
-            Estimate.is_deleted == False
-        ).first()
-        
-        if not estimate:
-            raise HTTPException(status_code=404, detail="Estimate not found")
-        
-        line_items = estimate.line_items
+    line_items = estimate.line_items
     
     # Create Excel file in memory
     output = BytesIO()
@@ -85,11 +81,9 @@ def export_estimate_to_excel(
         'valign': 'vcenter'
     })
     
-    # Helper to get value from dict or object
+    # Helper to get value from object
     def get_val(obj, key, default=''):
-        if isinstance(obj, dict):
-            return obj.get(key, default)
-        return getattr(obj, key, default)
+        return getattr(obj, key, default) or default
     
     # Summary sheet
     summary_sheet = workbook.add_worksheet('Summary')
@@ -113,11 +107,11 @@ def export_estimate_to_excel(
     
     summary_data = [
         ['Estimate Name', estimate_name],
-        ['Customer Name', customer_name or ''],
-        ['Cloud Provider', cloud or ''],
-        ['Region', region or ''],
-        ['Tier', tier or ''],
-        ['Status', status or ''],
+        ['Customer Name', customer_name],
+        ['Cloud Provider', cloud],
+        ['Region', region],
+        ['Tier', tier],
+        ['Status', status],
         ['Version', version],
         ['Created', created_at],
         ['Last Updated', updated_at],
@@ -140,7 +134,7 @@ def export_estimate_to_excel(
     
     headers = [
         '#', 'Workload Name', 'Type', 'Serverless', 'Worker Node',
-        'Workers', 'Photon', 'Hours/Day', 'Days/Month', 'SKU', 'Notes'
+        'Workers', 'Photon', 'Runs/Day', 'Days/Month', 'SKU', 'Notes'
     ]
     
     for col, header in enumerate(headers):
@@ -150,13 +144,13 @@ def export_estimate_to_excel(
         items_sheet.write(row, 0, get_val(item, 'display_order', row) + 1, cell_format)
         items_sheet.write(row, 1, get_val(item, 'workload_name', ''), cell_format)
         items_sheet.write(row, 2, get_val(item, 'workload_type', ''), cell_format)
-        items_sheet.write(row, 3, 'Yes' if get_val(item, 'is_serverless') else 'No', cell_format)
+        items_sheet.write(row, 3, 'Yes' if get_val(item, 'serverless_enabled') else 'No', cell_format)
         items_sheet.write(row, 4, get_val(item, 'worker_node_type', ''), cell_format)
         items_sheet.write(row, 5, get_val(item, 'num_workers', 0) or 0, number_format)
         items_sheet.write(row, 6, 'Yes' if get_val(item, 'photon_enabled') else 'No', cell_format)
-        items_sheet.write(row, 7, float(get_val(item, 'hours_per_day', 0) or 0), number_format)
+        items_sheet.write(row, 7, get_val(item, 'runs_per_day', 0) or 0, number_format)
         items_sheet.write(row, 8, get_val(item, 'days_per_month', 0) or 0, number_format)
-        items_sheet.write(row, 9, get_val(item, 'selected_sku', ''), cell_format)
+        items_sheet.write(row, 9, get_val(item, 'workload_type', ''), cell_format)
         items_sheet.write(row, 10, get_val(item, 'notes', ''), cell_format)
     
     workbook.close()
@@ -176,17 +170,24 @@ def export_estimate_to_excel(
 
 @router.get("/estimates/excel")
 def export_all_estimates_to_excel(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Export all estimates summary to Excel."""
-    if _check_demo_mode(db):
-        demo_estimates = get_demo_estimates()
-        demo_line_items = get_demo_line_items()
-        estimates = list(demo_estimates.values())
-    else:
-        estimates = db.query(Estimate).filter(
-            Estimate.is_deleted == False
-        ).order_by(Estimate.updated_at.desc()).all()
+    """Export all estimates summary to Excel (only user's estimates)."""
+    from sqlalchemy import or_
+    
+    # Get estimates user has access to
+    shared_estimate_ids = db.query(Sharing.estimate_id).filter(
+        Sharing.shared_with_user_id == current_user.user_id
+    ).subquery()
+    
+    estimates = db.query(Estimate).filter(
+        Estimate.is_deleted == False,
+        or_(
+            Estimate.owner_user_id == current_user.user_id,
+            Estimate.estimate_id.in_(shared_estimate_ids)
+        )
+    ).order_by(Estimate.updated_at.desc()).all()
     
     output = BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
@@ -217,9 +218,7 @@ def export_all_estimates_to_excel(
         sheet.write(0, col, header, header_format)
     
     def get_val(obj, key, default=''):
-        if isinstance(obj, dict):
-            return obj.get(key, default)
-        return getattr(obj, key, default)
+        return getattr(obj, key, default) or default
     
     for row, est in enumerate(estimates, start=1):
         created = get_val(est, 'created_at', '')

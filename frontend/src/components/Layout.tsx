@@ -6,11 +6,13 @@ import {
   SunIcon,
   MoonIcon,
   ComputerDesktopIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  UserCircleIcon
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import { useState, useRef, useEffect } from 'react'
 import { useTheme, Theme } from '../hooks/useTheme'
+import { useStore } from '../store/useStore'
 
 const navigation = [
   { name: 'Estimates', href: '/', icon: Squares2X2Icon },
@@ -36,6 +38,13 @@ export default function Layout() {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   
+  const { currentUser, isAuthenticated, authError, fetchCurrentUser } = useStore()
+  
+  // Fetch current user on mount
+  useEffect(() => {
+    fetchCurrentUser()
+  }, [fetchCurrentUser])
+  
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -49,6 +58,38 @@ export default function Layout() {
   
   const currentTheme = themeOptions.find(t => t.value === theme) || themeOptions[2]
   const CurrentIcon = currentTheme.icon
+  
+  // Show auth error screen if not authenticated
+  if (authError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-8" style={{ backgroundColor: 'var(--bg-primary)' }}>
+        <div 
+          className="max-w-md w-full p-8 rounded-xl border text-center"
+          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
+        >
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center bg-orange-500/10">
+            <DatabricksLogo />
+          </div>
+          <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
+            Authentication Required
+          </h1>
+          <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
+            {authError}
+          </p>
+          <div 
+            className="p-4 rounded-lg text-sm text-left"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          >
+            <p className="font-medium mb-2" style={{ color: 'var(--text-primary)' }}>For local development:</p>
+            <p className="mb-2">Set the <code className="px-1.5 py-0.5 rounded bg-black/20">LOCAL_DEV_EMAIL</code> environment variable:</p>
+            <code className="block p-2 rounded bg-black/30 text-orange-400 text-xs">
+              LOCAL_DEV_EMAIL=your.email@databricks.com
+            </code>
+          </div>
+        </div>
+      </div>
+    )
+  }
   
   return (
     <div className="min-h-screen flex flex-col transition-colors duration-200" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -109,6 +150,23 @@ export default function Layout() {
                   )
                 })}
               </nav>
+              
+              {/* User Info */}
+              {isAuthenticated && currentUser && (
+                <div 
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border"
+                  style={{ 
+                    backgroundColor: 'var(--bg-tertiary)', 
+                    borderColor: 'var(--border-primary)',
+                    color: 'var(--text-secondary)'
+                  }}
+                >
+                  <UserCircleIcon className="w-4 h-4" />
+                  <span className="text-sm hidden md:inline max-w-[150px] truncate">
+                    {currentUser.full_name || currentUser.email.split('@')[0]}
+                  </span>
+                </div>
+              )}
               
               {/* Theme Dropdown */}
               <div className="relative" ref={dropdownRef}>

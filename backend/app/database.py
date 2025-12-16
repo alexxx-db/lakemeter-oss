@@ -1,74 +1,100 @@
-"""Database connection and session management."""
+"""
+Database connection and session management.
+
+Supports automatic OAuth token refresh for Lakebase using Service Principal M2M flow.
+Reference: https://docs.databricks.com/aws/en/oltp/instances/authentication
+"""
+from urllib.parse import quote_plus
+from fastapi import HTTPException
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from app.config import settings
 
-# Get database URL
-database_url = settings.get_database_url
 
-# Create database engine with error handling
-engine = None
-SessionLocal = None
+# Base class for models (defined early so models can import it)
+Base = declarative_base()
 
-try:
-    if "localhost/demo" not in database_url:
+
+def _get_database_url() -> str:
+    """Build database URL from token manager."""
+    from app.auth.token_manager import token_manager
+    
+    if not token_manager:
+        raise Exception("Token manager not initialized. Check DATABRICKS_HOST and DATABRICKS_SECRETS_SCOPE.")
+    
+    params = token_manager.get_connection_params()
+    
+    if not params["password"]:
+        raise Exception("No valid OAuth token available. Run 'databricks auth login' to authenticate.")
+    
+    # URL-encode credentials
+    encoded_user = quote_plus(params["user"])
+    encoded_password = quote_plus(params["password"])
+    
+    return (
+        f"postgresql://{encoded_user}:{encoded_password}"
+        f"@{params['host']}:{params['port']}/{params['dbname']}"
+        f"?sslmode={params['sslmode']}"
+    )
+
+
+def _create_engine_with_token_refresh():
+    """Create SQLAlchemy engine with automatic token refresh."""
+    try:
+        database_url = _get_database_url()
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
+        raise
+    
+    try:
         engine = create_engine(
             database_url,
             pool_pre_ping=True,
             pool_size=5,
             max_overflow=10,
-            connect_args={
-                "sslmode": "require"
-            } if "sslmode" not in database_url else {}
+            pool_recycle=1800,
+            connect_args={"sslmode": "require"}
         )
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        
+        # Test connection
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        
         print(f"✓ Database engine created for Lakebase")
-    else:
-        print("⚠ No database password set - running in demo mode")
-        print("  Set PGPASSWORD environment variable to connect to Lakebase")
-except Exception as e:
-    print(f"⚠ Could not create database engine: {e}")
-    print("  Running in demo mode")
-    engine = None
-    SessionLocal = None
-
-# Base class for models
-Base = declarative_base()
+        
+        session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        return engine, session_local
+        
+    except Exception as e:
+        print(f"❌ Could not create database engine: {e}")
+        raise
 
 
-class DemoSession:
-    """Dummy session for demo mode when no database is available."""
-    def execute(self, *args, **kwargs):
-        raise Exception("Demo mode - no database")
+# Initialize engine and session factory
+engine, SessionLocal = _create_engine_with_token_refresh()
+
+
+def refresh_engine():
+    """Refresh the database engine with a new token."""
+    global engine, SessionLocal
     
-    def query(self, *args, **kwargs):
-        raise Exception("Demo mode - no database")
+    from app.auth.token_manager import token_manager
     
-    def add(self, *args, **kwargs):
-        pass
+    if token_manager:
+        token_manager._token = None
+        token_manager._expires_at = None
     
-    def commit(self):
-        pass
-    
-    def refresh(self, *args, **kwargs):
-        pass
-    
-    def close(self):
-        pass
+    engine, SessionLocal = _create_engine_with_token_refresh()
+    return engine is not None
 
 
 def get_db():
     """Dependency to get database session."""
     if SessionLocal is None:
-        db = DemoSession()
-        try:
-            yield db
-        finally:
-            db.close()
-    else:
-        db = SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
+        raise HTTPException(status_code=503, detail="Database not connected")
+    
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

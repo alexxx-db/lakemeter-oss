@@ -16,9 +16,10 @@ class Estimate(Base):
     estimate_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     estimate_name = Column(String(500), nullable=False)
     owner_user_id = Column(UUID(as_uuid=True), ForeignKey("lakemeter.users.user_id"))
-    customer_sfdc_id = Column(String(18))
+    sfdc_account_id = Column(String(18))  # Salesforce Account ID
     customer_name = Column(String(255))
-    uco_opportunity_id = Column(String(18))
+    opportunity_id = Column(String(18))  # Salesforce Opportunity ID
+    uco_id = Column(String(18))  # Salesforce Use Case ID
     cloud = Column(String(50))
     region = Column(String(50))
     tier = Column(String(20))
@@ -37,5 +38,3 @@ class Estimate(Base):
     template = relationship("Template", back_populates="estimates")
     sharing = relationship("Sharing", back_populates="estimate", cascade="all, delete-orphan")
     conversations = relationship("ConversationMessage", back_populates="estimate", cascade="all, delete-orphan")
-
-

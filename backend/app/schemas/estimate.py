@@ -8,9 +8,10 @@ from pydantic import BaseModel
 class EstimateBase(BaseModel):
     """Base estimate schema."""
     estimate_name: str
-    customer_sfdc_id: Optional[str] = None
+    sfdc_account_id: Optional[str] = None  # Salesforce Account ID
     customer_name: Optional[str] = None
-    uco_opportunity_id: Optional[str] = None
+    opportunity_id: Optional[str] = None  # Salesforce Opportunity ID
+    uco_id: Optional[str] = None  # Salesforce Use Case ID
     cloud: Optional[str] = None
     region: Optional[str] = None
     tier: Optional[str] = None
@@ -26,9 +27,10 @@ class EstimateCreate(EstimateBase):
 class EstimateUpdate(BaseModel):
     """Schema for updating an estimate."""
     estimate_name: Optional[str] = None
-    customer_sfdc_id: Optional[str] = None
+    sfdc_account_id: Optional[str] = None
     customer_name: Optional[str] = None
-    uco_opportunity_id: Optional[str] = None
+    opportunity_id: Optional[str] = None
+    uco_id: Optional[str] = None
     cloud: Optional[str] = None
     region: Optional[str] = None
     tier: Optional[str] = None
@@ -68,6 +70,9 @@ class EstimateListResponse(BaseModel):
     estimate_id: UUID
     estimate_name: str
     customer_name: Optional[str] = None
+    sfdc_account_id: Optional[str] = None
+    opportunity_id: Optional[str] = None
+    uco_id: Optional[str] = None
     cloud: Optional[str] = None
     region: Optional[str] = None
     tier: Optional[str] = None
@@ -79,5 +84,3 @@ class EstimateListResponse(BaseModel):
     
     class Config:
         from_attributes = True
-
-

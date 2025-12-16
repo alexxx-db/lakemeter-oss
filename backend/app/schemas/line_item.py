@@ -11,19 +11,20 @@ class LineItemBase(BaseModel):
     workload_name: str
     workload_type: Optional[str] = None
     display_order: Optional[int] = 0
+    cloud: Optional[str] = None
     
     # Serverless toggle
-    is_serverless: Optional[bool] = False
-    serverless_performance_mode: Optional[str] = None
+    serverless_enabled: Optional[bool] = False
+    serverless_mode: Optional[str] = None
     
     # Classic Compute Configuration
+    photon_enabled: Optional[bool] = False
     driver_node_type: Optional[str] = None
     worker_node_type: Optional[str] = None
     num_workers: Optional[int] = 1
     autoscale_enabled: Optional[bool] = False
     autoscale_min_workers: Optional[int] = None
     autoscale_max_workers: Optional[int] = None
-    photon_enabled: Optional[bool] = False
     
     # DLT Configuration
     dlt_edition: Optional[str] = None
@@ -32,36 +33,42 @@ class LineItemBase(BaseModel):
     # DBSQL Configuration
     dbsql_warehouse_type: Optional[str] = None
     dbsql_warehouse_size: Optional[str] = None
+    dbsql_num_clusters: Optional[int] = None
+    
+    # Serverless Products Configuration
+    serverless_product: Optional[str] = None
+    serverless_size: Optional[str] = None
     
     # Vector Search Configuration
-    vector_search_endpoint_type: Optional[str] = None
     vector_search_mode: Optional[str] = None
-    
-    # Lakebase Configuration
-    lakebase_instance_type: Optional[str] = None
-    lakebase_storage_gb: Optional[int] = None
+    vector_capacity_millions: Optional[int] = None
     
     # Foundation Model API Configuration
     fmapi_provider: Optional[str] = None
     fmapi_model: Optional[str] = None
     fmapi_endpoint_type: Optional[str] = None
     fmapi_context_length: Optional[str] = None
+    fmapi_provisioned_type: Optional[str] = None
     fmapi_input_tokens_per_month: Optional[int] = None
     fmapi_output_tokens_per_month: Optional[int] = None
     
+    # Lakebase Configuration
+    lakebase_cu: Optional[int] = None
+    lakebase_storage_gb: Optional[int] = None
+    lakebase_ha_nodes: Optional[int] = None
+    lakebase_backup_retention_days: Optional[int] = None
+    
     # Usage Configuration
-    hours_per_day: Optional[Decimal] = None
-    days_per_month: Optional[int] = 22
     runs_per_day: Optional[int] = None
     avg_runtime_minutes: Optional[int] = None
+    days_per_month: Optional[int] = 22
     
     # Pricing Configuration
+    driver_pricing_tier: Optional[str] = None
+    worker_pricing_tier: Optional[str] = None
     vm_pricing_tier: Optional[str] = None
     vm_payment_option: Optional[str] = None
     spot_percentage: Optional[int] = 0
-    
-    # Selected SKU
-    selected_sku: Optional[str] = None
     
     # Additional Configuration
     workload_config: Optional[Dict[str, Any]] = None
@@ -78,19 +85,20 @@ class LineItemUpdate(BaseModel):
     workload_name: Optional[str] = None
     workload_type: Optional[str] = None
     display_order: Optional[int] = None
+    cloud: Optional[str] = None
     
     # Serverless toggle
-    is_serverless: Optional[bool] = None
-    serverless_performance_mode: Optional[str] = None
+    serverless_enabled: Optional[bool] = None
+    serverless_mode: Optional[str] = None
     
     # Classic Compute Configuration
+    photon_enabled: Optional[bool] = None
     driver_node_type: Optional[str] = None
     worker_node_type: Optional[str] = None
     num_workers: Optional[int] = None
     autoscale_enabled: Optional[bool] = None
     autoscale_min_workers: Optional[int] = None
     autoscale_max_workers: Optional[int] = None
-    photon_enabled: Optional[bool] = None
     
     # DLT Configuration
     dlt_edition: Optional[str] = None
@@ -99,36 +107,42 @@ class LineItemUpdate(BaseModel):
     # DBSQL Configuration
     dbsql_warehouse_type: Optional[str] = None
     dbsql_warehouse_size: Optional[str] = None
+    dbsql_num_clusters: Optional[int] = None
+    
+    # Serverless Products Configuration
+    serverless_product: Optional[str] = None
+    serverless_size: Optional[str] = None
     
     # Vector Search Configuration
-    vector_search_endpoint_type: Optional[str] = None
     vector_search_mode: Optional[str] = None
-    
-    # Lakebase Configuration
-    lakebase_instance_type: Optional[str] = None
-    lakebase_storage_gb: Optional[int] = None
+    vector_capacity_millions: Optional[int] = None
     
     # Foundation Model API Configuration
     fmapi_provider: Optional[str] = None
     fmapi_model: Optional[str] = None
     fmapi_endpoint_type: Optional[str] = None
     fmapi_context_length: Optional[str] = None
+    fmapi_provisioned_type: Optional[str] = None
     fmapi_input_tokens_per_month: Optional[int] = None
     fmapi_output_tokens_per_month: Optional[int] = None
     
+    # Lakebase Configuration
+    lakebase_cu: Optional[int] = None
+    lakebase_storage_gb: Optional[int] = None
+    lakebase_ha_nodes: Optional[int] = None
+    lakebase_backup_retention_days: Optional[int] = None
+    
     # Usage Configuration
-    hours_per_day: Optional[Decimal] = None
-    days_per_month: Optional[int] = None
     runs_per_day: Optional[int] = None
     avg_runtime_minutes: Optional[int] = None
+    days_per_month: Optional[int] = None
     
     # Pricing Configuration
+    driver_pricing_tier: Optional[str] = None
+    worker_pricing_tier: Optional[str] = None
     vm_pricing_tier: Optional[str] = None
     vm_payment_option: Optional[str] = None
     spot_percentage: Optional[int] = None
-    
-    # Selected SKU
-    selected_sku: Optional[str] = None
     
     # Additional Configuration
     workload_config: Optional[Dict[str, Any]] = None

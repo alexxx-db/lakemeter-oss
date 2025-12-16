@@ -167,13 +167,13 @@ export default function Calculator() {
   const [isLoadingSfOpportunities, setIsLoadingSfOpportunities] = useState(false)
   const [isLoadingSfUseCases, setIsLoadingSfUseCases] = useState(false)
   
-  // Form state
+  // Form state - using correct column names
   const [formData, setFormData] = useState({
     estimate_name: '',
     customer_name: '',
-    customer_sfdc_id: '',  // Salesforce Account ID
-    uco_opportunity_id: '',  // Salesforce Opportunity ID
-    use_case_id: '',  // Salesforce Use Case ID
+    sfdc_account_id: '',  // Salesforce Account ID
+    opportunity_id: '',  // Salesforce Opportunity ID
+    uco_id: '',  // Salesforce Use Case ID
     cloud: 'aws',
     region: '',
     tier: ''  // No default - must be selected
@@ -226,7 +226,7 @@ export default function Calculator() {
       setIsLoadingSfOpportunities(true)
       try {
         const opportunities = await fetchSalesforceOpportunities({ 
-          account_id: formData.customer_sfdc_id || undefined,
+          account_id: formData.sfdc_account_id || undefined,
           search: sfOpportunitySearch || undefined,
           limit: 1000 
         })
@@ -239,7 +239,7 @@ export default function Calculator() {
     }, 300)
     
     return () => clearTimeout(timeoutId)
-  }, [formData.customer_sfdc_id, sfOpportunitySearch])
+  }, [formData.sfdc_account_id, sfOpportunitySearch])
   
   // Fetch Salesforce use cases when account is selected or search changes
   useEffect(() => {
@@ -247,7 +247,7 @@ export default function Calculator() {
       setIsLoadingSfUseCases(true)
       try {
         const useCases = await fetchSalesforceUseCases({ 
-          account_id: formData.customer_sfdc_id || undefined,
+          account_id: formData.sfdc_account_id || undefined,
           search: sfUseCaseSearch || undefined,
           limit: 1000 
         })
@@ -260,7 +260,7 @@ export default function Calculator() {
     }, 300)
     
     return () => clearTimeout(timeoutId)
-  }, [formData.customer_sfdc_id, sfUseCaseSearch])
+  }, [formData.sfdc_account_id, sfUseCaseSearch])
   
   // Fetch VM pricing when cloud or region changes
   useEffect(() => {
@@ -281,15 +281,16 @@ export default function Calculator() {
       setFormData({
         estimate_name: currentEstimate.estimate_name,
         customer_name: currentEstimate.customer_name || '',
-        customer_sfdc_id: currentEstimate.customer_sfdc_id || '',
-        uco_opportunity_id: currentEstimate.uco_opportunity_id || '',
-        use_case_id: '', // Not stored in estimate yet
-        cloud: currentEstimate.cloud || 'aws',
+        sfdc_account_id: currentEstimate.sfdc_account_id || '',
+        opportunity_id: currentEstimate.opportunity_id || '',
+        uco_id: currentEstimate.uco_id || '',
+        // Convert to lowercase for UI matching (DB stores uppercase)
+        cloud: (currentEstimate.cloud || 'aws').toLowerCase(),
         region: currentEstimate.region || '',
-        tier: currentEstimate.tier || ''
+        tier: (currentEstimate.tier || '').toLowerCase()
       })
       if (currentEstimate.cloud) {
-        setSelectedCloud(currentEstimate.cloud)
+        setSelectedCloud(currentEstimate.cloud.toLowerCase())
       }
     }
   }, [currentEstimate, id, setSelectedCloud])
@@ -334,7 +335,7 @@ export default function Calculator() {
     
     switch (item.workload_type) {
       case 'JOBS':
-        if (item.is_serverless) {
+        if (item.serverless_enabled) {
           productType = 'JOBS_SERVERLESS_COMPUTE'
         } else if (item.photon_enabled) {
           productType = 'JOBS_COMPUTE_(PHOTON)'
@@ -344,7 +345,7 @@ export default function Calculator() {
         break
       
       case 'ALL_PURPOSE':
-        if (item.is_serverless) {
+        if (item.serverless_enabled) {
           productType = 'INTERACTIVE_SERVERLESS_COMPUTE'
         } else if (item.photon_enabled) {
           productType = 'ALL_PURPOSE_COMPUTE_(PHOTON)'
@@ -354,7 +355,7 @@ export default function Calculator() {
         break
       
       case 'DLT':
-        if (item.is_serverless) {
+        if (item.serverless_enabled) {
           productType = 'DELTA_LIVE_TABLES_SERVERLESS'
         } else {
           productType = `DLT_${dltEdition}_COMPUTE`
@@ -414,16 +415,16 @@ export default function Calculator() {
     const workerDBURate = INSTANCE_DBU_RATES[item.worker_node_type || ''] || 0.5
     
     // Photon multiplier (only for classic compute, serverless includes Photon)
-    const photonMultiplier = (!item.is_serverless && item.photon_enabled) ? 1.3 : 1.0
+    const photonMultiplier = (!item.serverless_enabled && item.photon_enabled) ? 1.3 : 1.0
     
     // Serverless mode multiplier (performance = 2x, standard = 1x)
-    const serverlessMultiplier = (item.is_serverless && item.serverless_performance_mode === 'performance') ? 2 : 1
+    const serverlessMultiplier = (item.serverless_enabled && item.serverless_mode === 'performance') ? 2 : 1
     
     switch (item.workload_type) {
       case 'ALL_PURPOSE':
       case 'JOBS':
       case 'DLT':
-        if (item.is_serverless) {
+        if (item.serverless_enabled) {
           // Serverless compute: (driver + workers) × serverless_multiplier
           // No VM costs for serverless
           dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * serverlessMultiplier
@@ -439,7 +440,7 @@ export default function Calculator() {
           const driverVMCostPerHour = getVMPrice(cloud, region, item.driver_node_type || '', pricingTier, paymentOption)
           
           // Worker VM cost (spot if enabled, otherwise selected pricing tier)
-          const workerPricingTier = item.spot_enabled ? 'spot' : pricingTier
+                          const workerPricingTier = (item.spot_percentage && item.spot_percentage > 0) ? 'spot' : pricingTier
           const workerVMCostPerHour = getVMPrice(cloud, region, item.worker_node_type || '', workerPricingTier, paymentOption)
           
           // Total VM cost per hour
@@ -531,12 +532,19 @@ export default function Calculator() {
     
     setIsSaving(true)
     try {
+      // Convert cloud and tier to uppercase for database constraints
+      const dataToSave = {
+        ...formData,
+        cloud: formData.cloud.toUpperCase(),
+        tier: formData.tier.toUpperCase()
+      }
+      
       if (id && currentEstimate) {
-        await updateEstimate(id, formData)
+        await updateEstimate(id, dataToSave)
         setHasUnsavedChanges(false)
         toast.success('All changes saved')
       } else {
-        const newEstimate = await createEstimate(formData)
+        const newEstimate = await createEstimate(dataToSave)
         setHasUnsavedChanges(false)
         navigate(`/calculator/${newEstimate.estimate_id}`, { replace: true })
         toast.success('Estimate created')
@@ -603,15 +611,15 @@ export default function Calculator() {
   
   const getSelectedSku = (item: LineItem) => {
     const wt = workloadTypes.find(w => w.workload_type === item.workload_type)
-    if (!wt) return item.selected_sku
+    if (!wt) return 'N/A'
     
-    if (item.is_serverless && wt.sku_product_type_serverless) {
+    if (item.serverless_enabled && wt.sku_product_type_serverless) {
       return wt.sku_product_type_serverless
     }
     if (item.photon_enabled && wt.sku_product_type_photon) {
       return wt.sku_product_type_photon
     }
-    return wt.sku_product_type_standard || item.selected_sku
+    return wt.sku_product_type_standard || 'N/A'
   }
   
   const formatCurrency = (amount: number) => {
@@ -640,11 +648,13 @@ export default function Calculator() {
     return null
   }
   
+  // Check if opportunity OR use case is selected (at least one required)
+  const hasOpportunityOrUseCase = Boolean(formData.opportunity_id || formData.uco_id)
+  
   // Validation: check if all required fields are filled
   const canCreateEstimate = formData.estimate_name.trim() && 
-    formData.customer_sfdc_id && 
-    formData.uco_opportunity_id && 
-    formData.use_case_id &&
+    formData.sfdc_account_id && 
+    hasOpportunityOrUseCase &&
     formData.region && 
     formData.tier
   
@@ -652,9 +662,8 @@ export default function Calculator() {
   const getMissingFields = () => {
     const missing: string[] = []
     if (!formData.estimate_name.trim()) missing.push('Estimate Name')
-    if (!formData.customer_sfdc_id) missing.push('Salesforce Account')
-    if (!formData.uco_opportunity_id) missing.push('Opportunity')
-    if (!formData.use_case_id) missing.push('Use Case')
+    if (!formData.sfdc_account_id) missing.push('Salesforce Account')
+    if (!hasOpportunityOrUseCase) missing.push('Opportunity or Use Case')
     if (!formData.region) missing.push('Region')
     if (!formData.tier) missing.push('Databricks Tier')
     return missing
@@ -789,15 +798,15 @@ export default function Calculator() {
                         value: a.salesforce_account_id,
                         label: a.salesforce_account_name || a.salesforce_account_id
                       }))}
-                      value={formData.customer_sfdc_id}
+                      value={formData.sfdc_account_id}
                       onChange={(value) => {
                         const selectedAccount = sfAccounts.find(a => a.salesforce_account_id === value)
                         setFormData(prev => ({ 
                           ...prev, 
-                          customer_sfdc_id: value,
+                          sfdc_account_id: value,
                           customer_name: selectedAccount?.salesforce_account_name || '',
-                          uco_opportunity_id: '',
-                          use_case_id: ''
+                          opportunity_id: '',
+                          uco_id: ''
                         }))
                         setSfOpportunitySearch('')
                         setSfUseCaseSearch('')
@@ -814,8 +823,8 @@ export default function Calculator() {
                   {/* Opportunity Selection */}
                   <div>
                     <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                      Opportunity <span className="text-red-500">*</span>
-                      {!formData.customer_sfdc_id && (
+                      Opportunity
+                      {!formData.sfdc_account_id && (
                         <span className="text-[var(--text-muted)] text-[10px] ml-1">(select account first)</span>
                       )}
                     </label>
@@ -824,31 +833,28 @@ export default function Calculator() {
                         value: o.id,
                         label: o.name || o.id
                       }))}
-                      value={formData.uco_opportunity_id}
+                      value={formData.opportunity_id}
                       onChange={(value) => {
                         setFormData(prev => ({ 
                           ...prev, 
-                          uco_opportunity_id: value,
-                          use_case_id: '' // Clear use case when opportunity changes
+                          opportunity_id: value
                         }))
-                        setSfUseCaseSearch('')
                         markAsChanged()
                       }}
                       onSearchChange={setSfOpportunitySearch}
-                      placeholder={formData.customer_sfdc_id ? "Select opportunity..." : "Select account first"}
+                      placeholder={formData.sfdc_account_id ? "Select opportunity..." : "Select account first"}
                       searchPlaceholder="Search opportunities..."
                       isLoading={isLoadingSfOpportunities}
-                      disabled={!formData.customer_sfdc_id}
-                      required
+                      disabled={!formData.sfdc_account_id}
                     />
                   </div>
                   
                   {/* Use Case Selection */}
                   <div>
                     <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                      Use Case <span className="text-red-500">*</span>
-                      {!formData.uco_opportunity_id && (
-                        <span className="text-[var(--text-muted)] text-[10px] ml-1">(select opportunity first)</span>
+                      Use Case
+                      {!formData.sfdc_account_id && (
+                        <span className="text-[var(--text-muted)] text-[10px] ml-1">(select account first)</span>
                       )}
                     </label>
                     <SearchableSelect
@@ -856,17 +862,16 @@ export default function Calculator() {
                         value: uc.salesforce_use_case_id,
                         label: uc.salesforce_use_case_name || uc.salesforce_use_case_id
                       }))}
-                      value={formData.use_case_id}
+                      value={formData.uco_id}
                       onChange={(value) => {
-                        setFormData(prev => ({ ...prev, use_case_id: value }))
+                        setFormData(prev => ({ ...prev, uco_id: value }))
                         markAsChanged()
                       }}
                       onSearchChange={setSfUseCaseSearch}
-                      placeholder={formData.uco_opportunity_id ? "Select use case..." : "Select opportunity first"}
+                      placeholder={formData.sfdc_account_id ? "Select use case..." : "Select account first"}
                       searchPlaceholder="Search use cases..."
                       isLoading={isLoadingSfUseCases}
-                      disabled={!formData.uco_opportunity_id}
-                      required
+                      disabled={!formData.sfdc_account_id}
                     />
                   </div>
                 </div>
@@ -998,7 +1003,7 @@ export default function Calculator() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h4 className="font-semibold truncate text-[var(--text-primary)]">{item.workload_name}</h4>
-                              {item.is_serverless && (
+                              {item.serverless_enabled && (
                                 <span className="badge badge-teal">Serverless</span>
                               )}
                               {item.photon_enabled && (
@@ -1007,7 +1012,7 @@ export default function Calculator() {
                                   Photon
                                 </span>
                               )}
-                              {item.spot_enabled && (
+                              {(item.spot_percentage && item.spot_percentage > 0) && (
                                 <span className="badge badge-yellow">
                                   Spot {item.spot_percentage}%
                                 </span>

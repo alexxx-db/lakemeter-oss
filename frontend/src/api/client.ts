@@ -15,7 +15,8 @@ import type {
   VMInstanceType,
   SalesforceAccount,
   SalesforceOpportunity,
-  SalesforceUseCase
+  SalesforceUseCase,
+  User
 } from '../types'
 
 const api = axios.create({
@@ -25,9 +26,36 @@ const api = axios.create({
   },
 })
 
+// Response interceptor to handle authentication errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // User is not authenticated
+      // When deployed to Databricks Apps, this shouldn't happen as auth is handled at the platform level
+      // But for local development, we can show a helpful message
+      console.error('Authentication required. Please access through Databricks Apps or set LOCAL_DEV_EMAIL.')
+    }
+    return Promise.reject(error)
+  }
+)
+
+// Current User
+export interface CurrentUser {
+  user_id: string
+  email: string
+  full_name: string | null
+  role: string | null
+}
+
+export const fetchCurrentUser = async (): Promise<CurrentUser> => {
+  const { data } = await api.get('/estimates/me/info')
+  return data
+}
+
 // Estimates
 export const fetchEstimates = async (params?: { status?: string; cloud?: string }): Promise<EstimateListItem[]> => {
-  const { data } = await api.get('/estimates', { params })
+  const { data } = await api.get('/estimates/', { params })
   return data
 }
 
@@ -37,7 +65,7 @@ export const fetchEstimate = async (id: string): Promise<Estimate> => {
 }
 
 export const createEstimate = async (estimate: Partial<Estimate>): Promise<Estimate> => {
-  const { data } = await api.post('/estimates', estimate)
+  const { data } = await api.post('/estimates/', estimate)
   return data
 }
 
@@ -62,7 +90,7 @@ export const fetchLineItems = async (estimateId: string): Promise<LineItem[]> =>
 }
 
 export const createLineItem = async (lineItem: Partial<LineItem> & { estimate_id: string }): Promise<LineItem> => {
-  const { data } = await api.post('/line-items', lineItem)
+  const { data } = await api.post('/line-items/', lineItem)
   return data
 }
 
