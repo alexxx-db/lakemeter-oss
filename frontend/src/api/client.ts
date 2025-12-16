@@ -16,7 +16,10 @@ import type {
   SalesforceAccount,
   SalesforceOpportunity,
   SalesforceUseCase,
-  User
+  User,
+  ModelServingGPUType,
+  FMAPIDatabricksConfig,
+  FMAPIProprietaryConfig
 } from '../types'
 
 const api = axios.create({
@@ -132,6 +135,24 @@ export const fetchDLTEditions = async (): Promise<DLTEdition[]> => {
 
 export const fetchFMAPIModels = async (): Promise<FMAPIProvider[]> => {
   const { data } = await api.get('/reference/fmapi-models')
+  return data
+}
+
+// Model Serving GPU Types (by cloud)
+export const fetchModelServingGPUTypes = async (cloud: string): Promise<ModelServingGPUType[]> => {
+  const { data } = await api.get(`/reference/model-serving-gpu-types/${cloud}`)
+  return data
+}
+
+// Foundation Models (Databricks) configuration
+export const fetchFMAPIDatabricksConfig = async (): Promise<FMAPIDatabricksConfig> => {
+  const { data } = await api.get('/reference/fmapi-databricks')
+  return data
+}
+
+// Foundation Models (Proprietary) configuration
+export const fetchFMAPIProprietaryConfig = async (): Promise<FMAPIProprietaryConfig> => {
+  const { data } = await api.get('/reference/fmapi-proprietary')
   return data
 }
 

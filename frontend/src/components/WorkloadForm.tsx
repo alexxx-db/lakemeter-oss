@@ -19,8 +19,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     instanceTypes, 
     dbsqlSizes, 
     dltEditions, 
-    fmapiProviders,
     vmPaymentOptions,
+    modelServingGPUTypes,
+    fmapiDatabricksConfig,
+    fmapiProprietaryConfig,
     selectedCloud,
     createLineItem,
     updateLineItem,
@@ -37,44 +39,35 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     driver_node_type: '',
     worker_node_type: '',
     num_workers: 2,
-    autoscale_enabled: false,
-    autoscale_min_workers: 1,
-    autoscale_max_workers: 8,
     photon_enabled: false,
-    spot_percentage: 0,  // 0 = off, >0 = percentage of workers using spot
-    // Cluster autoscaling for Jobs/All Purpose
-    cluster_autoscaling_enabled: false,
-    min_clusters: 1,
-    max_clusters: 2,
     dlt_edition: 'pro',
-    // Cluster autoscaling for DLT
-    dlt_autoscaling_enabled: false,
-    dlt_min_clusters: 1,
-    dlt_max_clusters: 1,
-    dlt_pipeline_mode: 'triggered',
     dbsql_warehouse_type: 'serverless',
     dbsql_warehouse_size: 'small',
     dbsql_num_clusters: 1,
-    vector_search_mode: 'delta_sync',
+    dbsql_vm_pricing_tier: 'on_demand',
+    dbsql_vm_payment_option: 'no_upfront',
+    vector_search_mode: 'standard',
     vector_capacity_millions: 1,
+    model_serving_gpu_type: 'cpu',
+    model_serving_num_endpoints: 1,
     lakebase_cu: 1,
     lakebase_storage_gb: 100,
     lakebase_ha_nodes: 0,
     lakebase_backup_retention_days: 7,
-    fmapi_provider: 'databricks',
-    fmapi_model: '',
-    fmapi_endpoint_type: 'pay_per_token',
-    fmapi_context_length: '4k',
-    fmapi_provisioned_type: 'throughput',
-    fmapi_input_tokens_per_month: 0,
-    fmapi_output_tokens_per_month: 0,
+    fmapi_provider: 'anthropic',
+    fmapi_model: 'llama-3-3-70b',
+    fmapi_endpoint_type: 'global',  // global, in_geo (for proprietary)
+    fmapi_context_length: 'all',
+    fmapi_rate_type: 'input_token',  // input_token, output_token, cache_read, cache_write
+    fmapi_quantity: 0,  // quantity in millions (M)
     runs_per_day: 1,
     avg_runtime_minutes: 30,
     days_per_month: 22,
+    hours_per_month: 0,
     driver_pricing_tier: 'on_demand',
     worker_pricing_tier: 'spot',
-    vm_pricing_tier: 'on_demand',
-    vm_payment_option: 'no_upfront',
+    driver_payment_option: 'no_upfront',
+    worker_payment_option: 'no_upfront',
     notes: ''
   })
   
@@ -88,44 +81,35 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         driver_node_type: lineItem.driver_node_type || '',
         worker_node_type: lineItem.worker_node_type || '',
         num_workers: lineItem.num_workers || 2,
-        autoscale_enabled: lineItem.autoscale_enabled || false,
-        autoscale_min_workers: lineItem.autoscale_min_workers || 1,
-        autoscale_max_workers: lineItem.autoscale_max_workers || 8,
         photon_enabled: lineItem.photon_enabled || false,
-        spot_percentage: lineItem.spot_percentage || 0,
-        // Cluster autoscaling for Jobs/All Purpose
-        cluster_autoscaling_enabled: false, // Default off, can be derived from data
-        min_clusters: 1,
-        max_clusters: lineItem.num_workers || 2,
         dlt_edition: lineItem.dlt_edition || 'pro',
-        // Cluster autoscaling for DLT
-        dlt_autoscaling_enabled: false,
-        dlt_min_clusters: 1,
-        dlt_max_clusters: 1,
-        dlt_pipeline_mode: lineItem.dlt_pipeline_mode || 'triggered',
         dbsql_warehouse_type: lineItem.dbsql_warehouse_type || 'serverless',
         dbsql_warehouse_size: lineItem.dbsql_warehouse_size || 'small',
         dbsql_num_clusters: lineItem.dbsql_num_clusters || 1,
-        vector_search_mode: lineItem.vector_search_mode || 'delta_sync',
+        dbsql_vm_pricing_tier: lineItem.dbsql_vm_pricing_tier || 'on_demand',
+        dbsql_vm_payment_option: lineItem.dbsql_vm_payment_option || 'no_upfront',
+        vector_search_mode: lineItem.vector_search_mode || 'standard',
         vector_capacity_millions: lineItem.vector_capacity_millions || 1,
+        model_serving_gpu_type: lineItem.model_serving_gpu_type || 'cpu',
+        model_serving_num_endpoints: 1,
         lakebase_cu: lineItem.lakebase_cu || 1,
         lakebase_storage_gb: lineItem.lakebase_storage_gb || 100,
         lakebase_ha_nodes: lineItem.lakebase_ha_nodes || 0,
         lakebase_backup_retention_days: lineItem.lakebase_backup_retention_days || 7,
-        fmapi_provider: lineItem.fmapi_provider || 'databricks',
-        fmapi_model: lineItem.fmapi_model || '',
-        fmapi_endpoint_type: lineItem.fmapi_endpoint_type || 'pay_per_token',
-        fmapi_context_length: lineItem.fmapi_context_length || '4k',
-        fmapi_provisioned_type: lineItem.fmapi_provisioned_type || 'throughput',
-        fmapi_input_tokens_per_month: lineItem.fmapi_input_tokens_per_month || 0,
-        fmapi_output_tokens_per_month: lineItem.fmapi_output_tokens_per_month || 0,
+        fmapi_provider: lineItem.fmapi_provider || 'anthropic',
+        fmapi_model: lineItem.fmapi_model || 'llama-3-3-70b',
+        fmapi_endpoint_type: lineItem.fmapi_endpoint_type || 'global',
+        fmapi_context_length: lineItem.fmapi_context_length || 'all',
+        fmapi_rate_type: lineItem.fmapi_rate_type || 'input_token',
+        fmapi_quantity: lineItem.fmapi_quantity || 0,
         runs_per_day: lineItem.runs_per_day || 1,
         avg_runtime_minutes: lineItem.avg_runtime_minutes || 30,
         days_per_month: lineItem.days_per_month || 22,
+        hours_per_month: lineItem.hours_per_month || 0,
         driver_pricing_tier: lineItem.driver_pricing_tier || 'on_demand',
         worker_pricing_tier: lineItem.worker_pricing_tier || 'spot',
-        vm_pricing_tier: lineItem.vm_pricing_tier || 'on_demand',
-        vm_payment_option: lineItem.vm_payment_option || 'no_upfront',
+        driver_payment_option: lineItem.driver_payment_option || 'no_upfront',
+        worker_payment_option: lineItem.worker_payment_option || 'no_upfront',
         notes: lineItem.notes || ''
       })
     }
@@ -135,9 +119,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   useEffect(() => {
     if (lineItem) {
       updateLineItemLocal(lineItem.line_item_id, {
-        vm_pricing_tier: form.vm_pricing_tier,
-        vm_payment_option: form.vm_payment_option,
-        spot_percentage: form.spot_percentage,
+        driver_pricing_tier: form.driver_pricing_tier,
+        worker_pricing_tier: form.worker_pricing_tier,
         driver_node_type: form.driver_node_type,
         worker_node_type: form.worker_node_type,
         num_workers: form.num_workers,
@@ -146,7 +129,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         avg_runtime_minutes: form.avg_runtime_minutes,
         serverless_enabled: form.serverless_enabled,
         photon_enabled: form.photon_enabled,
-        dbsql_warehouse_size: form.dbsql_warehouse_size,
+        dbsql_warehouse_size: form.workload_type === 'DBSQL' ? form.dbsql_warehouse_size : undefined,
         lakebase_cu: form.lakebase_cu,
       })
       onSave?.() // Mark estimate as having unsaved changes
@@ -154,9 +137,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     lineItem?.line_item_id,
-    form.vm_pricing_tier,
-    form.vm_payment_option,
-    form.spot_percentage,
+    form.driver_pricing_tier,
+    form.worker_pricing_tier,
     form.driver_node_type,
     form.worker_node_type,
     form.num_workers,
@@ -166,12 +148,12 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     form.serverless_enabled,
     form.photon_enabled,
     form.dbsql_warehouse_size,
+    form.workload_type,
     form.lakebase_cu,
     updateLineItemLocal,
   ])
   
   const selectedWorkloadType: WorkloadType | undefined = workloadTypes.find(w => w.workload_type === form.workload_type)
-  const selectedFmapiProvider = fmapiProviders.find(p => p.provider === form.fmapi_provider)
   
   const computedSku = (): string | null => {
     if (!selectedWorkloadType) return null
@@ -214,42 +196,32 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         data.serverless_mode = null
       }
       
-      // Classic compute config
-      if (selectedWorkloadType?.show_compute_config && !form.serverless_enabled) {
-        data.photon_enabled = form.photon_enabled
+      // Compute config (both serverless and classic)
+      if (selectedWorkloadType?.show_compute_config) {
+        data.photon_enabled = form.serverless_enabled ? false : form.photon_enabled
         data.driver_node_type = form.driver_node_type || null
         data.worker_node_type = form.worker_node_type || null
         data.num_workers = form.num_workers
-        data.autoscale_enabled = form.autoscale_enabled
-        data.autoscale_min_workers = form.autoscale_enabled ? form.autoscale_min_workers : null
-        data.autoscale_max_workers = form.autoscale_enabled ? form.autoscale_max_workers : null
         data.driver_pricing_tier = form.driver_pricing_tier
         data.worker_pricing_tier = form.worker_pricing_tier
-        data.vm_pricing_tier = form.vm_pricing_tier
-        data.vm_payment_option = form.vm_payment_option
-        data.spot_percentage = form.spot_percentage
+        data.driver_payment_option = form.driver_payment_option
+        data.worker_payment_option = form.worker_payment_option
       } else {
         data.photon_enabled = false
         data.driver_node_type = null
         data.worker_node_type = null
         data.num_workers = null
-        data.autoscale_enabled = false
-        data.autoscale_min_workers = null
-        data.autoscale_max_workers = null
         data.driver_pricing_tier = null
         data.worker_pricing_tier = null
-        data.vm_pricing_tier = null
-        data.vm_payment_option = null
-        data.spot_percentage = 0
+        data.driver_payment_option = null
+        data.worker_payment_option = null
       }
       
       // DLT config
       if (selectedWorkloadType?.show_dlt_config) {
         data.dlt_edition = form.dlt_edition
-        data.dlt_pipeline_mode = form.dlt_pipeline_mode
       } else {
         data.dlt_edition = null
-        data.dlt_pipeline_mode = null
       }
       
       // DBSQL config
@@ -257,10 +229,14 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         data.dbsql_warehouse_type = form.dbsql_warehouse_type
         data.dbsql_warehouse_size = form.dbsql_warehouse_size
         data.dbsql_num_clusters = form.dbsql_num_clusters
+        data.dbsql_vm_pricing_tier = form.dbsql_vm_pricing_tier
+        data.dbsql_vm_payment_option = form.dbsql_vm_payment_option
       } else {
         data.dbsql_warehouse_type = null
         data.dbsql_warehouse_size = null
         data.dbsql_num_clusters = null
+        data.dbsql_vm_pricing_tier = null
+        data.dbsql_vm_payment_option = null
       }
       
       // Vector Search config
@@ -270,6 +246,13 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       } else {
         data.vector_search_mode = null
         data.vector_capacity_millions = null
+      }
+      
+      // Model Serving config
+      if (form.workload_type === 'MODEL_SERVING') {
+        data.model_serving_gpu_type = form.model_serving_gpu_type
+      } else {
+        data.model_serving_gpu_type = null
       }
       
       // Lakebase config
@@ -291,17 +274,22 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         data.fmapi_model = form.fmapi_model || null
         data.fmapi_endpoint_type = form.fmapi_endpoint_type
         data.fmapi_context_length = form.fmapi_context_length
-        data.fmapi_provisioned_type = form.fmapi_provisioned_type
-        data.fmapi_input_tokens_per_month = form.fmapi_input_tokens_per_month
-        data.fmapi_output_tokens_per_month = form.fmapi_output_tokens_per_month
+        data.fmapi_rate_type = form.fmapi_rate_type
+        data.fmapi_quantity = form.fmapi_quantity
       } else {
         data.fmapi_provider = null
         data.fmapi_model = null
         data.fmapi_endpoint_type = null
         data.fmapi_context_length = null
-        data.fmapi_provisioned_type = null
-        data.fmapi_input_tokens_per_month = null
-        data.fmapi_output_tokens_per_month = null
+        data.fmapi_rate_type = null
+        data.fmapi_quantity = null
+      }
+      
+      // Hours per month - for workloads that need it
+      if (selectedWorkloadType?.show_usage_hours) {
+        data.hours_per_month = form.hours_per_month
+      } else {
+        data.hours_per_month = null
       }
       
       // Usage config
@@ -337,8 +325,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     }
   }
   
-  // Show VM config for classic compute (not serverless)
-  const showVMConfig = selectedWorkloadType?.show_compute_config && !form.serverless_enabled
+  // Show VM config for compute workloads (both serverless and classic)
+  const showVMConfig = selectedWorkloadType?.show_compute_config
   
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -502,53 +490,60 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             
-            {/* Payment Option (AWS Reserved Instances only) */}
+            {/* Payment Options (AWS Reserved Instances only) */}
             {selectedCloud === 'aws' && (form.driver_pricing_tier.startsWith('reserved') || form.worker_pricing_tier.startsWith('reserved')) && (
-              <div>
-                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
-                <select
-                  value={form.vm_payment_option}
-                  onChange={(e) => setForm(f => ({ ...f, vm_payment_option: e.target.value }))}
-                  className="w-full text-sm"
-                >
-                  {vmPaymentOptions.map(opt => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <>
+                {form.driver_pricing_tier.startsWith('reserved') && (
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Driver Payment Option</label>
+                    <select
+                      value={form.driver_payment_option}
+                      onChange={(e) => setForm(f => ({ ...f, driver_payment_option: e.target.value }))}
+                      className="w-full text-sm"
+                    >
+                      {vmPaymentOptions.map(opt => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {form.worker_pricing_tier.startsWith('reserved') && (
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Worker Payment Option</label>
+                    <select
+                      value={form.worker_payment_option}
+                      onChange={(e) => setForm(f => ({ ...f, worker_payment_option: e.target.value }))}
+                      className="w-full text-sm"
+                    >
+                      {vmPaymentOptions.map(opt => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
         
         {/* DLT Config */}
         {selectedWorkloadType?.show_dlt_config && (
-          <>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">DLT Edition</label>
-              <select
-                value={form.dlt_edition}
-                onChange={(e) => setForm(f => ({ ...f, dlt_edition: e.target.value }))}
-                className="w-full text-sm"
-              >
-                {dltEditions.map(ed => (
-                  <option key={ed.id} value={ed.id}>{ed.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pipeline Mode</label>
-              <select
-                value={form.dlt_pipeline_mode}
-                onChange={(e) => setForm(f => ({ ...f, dlt_pipeline_mode: e.target.value }))}
-                className="w-full text-sm"
-              >
-                <option value="triggered">Triggered</option>
-                <option value="continuous">Continuous</option>
-              </select>
-            </div>
-          </>
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">DLT Edition</label>
+            <select
+              value={form.dlt_edition}
+              onChange={(e) => setForm(f => ({ ...f, dlt_edition: e.target.value }))}
+              className="w-full text-sm"
+            >
+              {dltEditions.map(ed => (
+                <option key={ed.id} value={ed.id}>{ed.name}</option>
+              ))}
+            </select>
+          </div>
         )}
         
         {/* DBSQL Config */}
@@ -592,9 +587,134 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           </>
         )}
         
-        {/* FMAPI Config */}
-        {selectedWorkloadType?.show_fmapi_config && (
+        {/* Vector Search Config */}
+        {selectedWorkloadType?.show_vector_search_mode && (
           <>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Vector Search Type</label>
+              <select
+                value={form.vector_search_mode}
+                onChange={(e) => setForm(f => ({ ...f, vector_search_mode: e.target.value }))}
+                className="w-full text-sm"
+              >
+                <option value="standard">Standard (4 DBU/hr per 2M vectors)</option>
+                <option value="storage_optimized">Storage Optimized (18.29 DBU/hr per 64M vectors)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Capacity Units (Millions)</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={form.vector_capacity_millions}
+                onChange={(e) => setForm(f => ({ ...f, vector_capacity_millions: parseInt(e.target.value) || 1 }))}
+                className="w-full text-sm"
+              />
+            </div>
+          </>
+        )}
+        
+        {/* Model Serving Config */}
+        {form.workload_type === 'MODEL_SERVING' && (
+          <>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Endpoint Type</label>
+              <select
+                value={form.model_serving_gpu_type}
+                onChange={(e) => setForm(f => ({ ...f, model_serving_gpu_type: e.target.value }))}
+                className="w-full text-sm"
+              >
+                {modelServingGPUTypes.map(gpu => (
+                  <option key={gpu.id} value={gpu.id}>
+                    {gpu.name} ({gpu.dbu_per_hour} DBU/hr)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Endpoints</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={form.model_serving_num_endpoints}
+                onChange={(e) => setForm(f => ({ ...f, model_serving_num_endpoints: parseInt(e.target.value) || 1 }))}
+                className="w-full text-sm"
+              />
+            </div>
+          </>
+        )}
+        
+        {/* FMAPI Config - Foundation Models (Databricks) */}
+        {selectedWorkloadType?.show_fmapi_config && form.workload_type === 'FMAPI_DATABRICKS' && (
+          <>
+            {/* Row 1: Model | Rate Type */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Model</label>
+              <select
+                value={form.fmapi_model}
+                onChange={(e) => setForm(f => ({ ...f, fmapi_model: e.target.value }))}
+                className="w-full text-sm"
+              >
+                {fmapiDatabricksConfig && (
+                  <>
+                    <optgroup label="LLMs">
+                      {fmapiDatabricksConfig.models.llm.map(model => (
+                        <option key={model.id} value={model.id}>{model.name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Embedding Models">
+                      {fmapiDatabricksConfig.models.embedding.map(model => (
+                        <option key={model.id} value={model.id}>{model.name}</option>
+                      ))}
+                    </optgroup>
+                  </>
+                )}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Rate Type</label>
+              <select
+                value={form.fmapi_rate_type}
+                onChange={(e) => setForm(f => ({ ...f, fmapi_rate_type: e.target.value }))}
+                className="w-full text-sm"
+              >
+                <option value="input_token">Input Token</option>
+                {/* Only show output tokens for LLMs, not embedding models */}
+                {!['gte', 'bge-large'].includes(form.fmapi_model) && (
+                  <option value="output_token">Output Token</option>
+                )}
+              </select>
+            </div>
+            
+            {/* Row 2: Quantity */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Quantity (M/month)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={form.fmapi_quantity}
+                onChange={(e) => setForm(f => ({ ...f, fmapi_quantity: parseFloat(e.target.value) || 0 }))}
+                className="w-full text-sm"
+                placeholder="e.g., 10 = 10M tokens"
+              />
+            </div>
+            
+            {/* Info: Add multiple line items for complete endpoint cost */}
+            <div className="col-span-full p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                <strong>Tip:</strong> Add separate workloads for Input Token and Output Token to calculate total cost.
+              </p>
+            </div>
+          </>
+        )}
+        
+        {/* FMAPI Config - Foundation Models (Proprietary) */}
+        {selectedWorkloadType?.show_fmapi_config && form.workload_type === 'FMAPI_PROPRIETARY' && (
+          <>
+            {/* Row 1: Provider | Model */}
             <div>
               <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Provider</label>
               <select
@@ -602,11 +722,15 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, fmapi_provider: e.target.value, fmapi_model: '' }))}
                 className="w-full text-sm"
               >
-                {fmapiProviders.map(p => (
-                  <option key={p.provider} value={p.provider}>
-                    {p.provider.charAt(0).toUpperCase() + p.provider.slice(1)}
-                  </option>
-                ))}
+                {fmapiProprietaryConfig?.providers.map(provider => (
+                  <option key={provider.id} value={provider.id}>{provider.name}</option>
+                )) || (
+                  <>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="google">Google</option>
+                  </>
+                )}
               </select>
             </div>
             <div>
@@ -617,10 +741,85 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 className="w-full text-sm"
               >
                 <option value="">Select model</option>
-                {selectedFmapiProvider?.models.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
+                {fmapiProprietaryConfig?.providers
+                  .find(p => p.id === form.fmapi_provider)
+                  ?.models.map(model => (
+                    <option key={model.id} value={model.id}>{model.name}</option>
+                  ))
+                }
               </select>
+            </div>
+            
+            {/* Row 2: Endpoint Type | Context Length */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Endpoint Type</label>
+              <select
+                value={form.fmapi_endpoint_type}
+                onChange={(e) => setForm(f => ({ ...f, fmapi_endpoint_type: e.target.value }))}
+                className="w-full text-sm"
+              >
+                {fmapiProprietaryConfig?.endpoint_types.map(type => (
+                  <option key={type.id} value={type.id}>{type.name}</option>
+                )) || (
+                  <>
+                    <option value="global">Global</option>
+                    <option value="in_geo">In-Geo (Regional)</option>
+                  </>
+                )}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Context Length</label>
+              <select
+                value={form.fmapi_context_length}
+                onChange={(e) => setForm(f => ({ ...f, fmapi_context_length: e.target.value }))}
+                className="w-full text-sm"
+              >
+                {fmapiProprietaryConfig?.context_lengths.map(length => (
+                  <option key={length.id} value={length.id}>{length.name}</option>
+                )) || (
+                  <>
+                    <option value="all">All</option>
+                    <option value="short">Short</option>
+                    <option value="long">Long</option>
+                  </>
+                )}
+              </select>
+            </div>
+            
+            {/* Row 3: Rate Type | Quantity */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Rate Type</label>
+              <select
+                value={form.fmapi_rate_type}
+                onChange={(e) => setForm(f => ({ ...f, fmapi_rate_type: e.target.value }))}
+                className="w-full text-sm"
+              >
+                <option value="input_token">Input Token</option>
+                <option value="output_token">Output Token</option>
+                <option value="cache_read">Cache Read</option>
+                <option value="cache_write">Cache Write</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Quantity (M/month)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={form.fmapi_quantity}
+                onChange={(e) => setForm(f => ({ ...f, fmapi_quantity: parseFloat(e.target.value) || 0 }))}
+                className="w-full text-sm"
+                placeholder="e.g., 10 = 10M tokens"
+              />
+            </div>
+            
+            {/* Info: Add multiple line items for complete endpoint cost */}
+            <div className="col-span-full p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                <strong>Tip:</strong> Add separate workloads for each rate type (Input Token, Output Token, Cache Read, Cache Write) 
+                to calculate the total cost of your Foundation Model endpoint.
+              </p>
             </div>
           </>
         )}
@@ -680,46 +879,21 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           </div>
         )}
         
-        {/* Days per month - common field */}
-        <div>
-          <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Days/Month</label>
-          <input
-            type="number"
-            min={1}
-            max={31}
-            value={form.days_per_month}
-            onChange={(e) => setForm(f => ({ ...f, days_per_month: parseInt(e.target.value) || 22 }))}
-            className="w-full text-sm"
-          />
-        </div>
-        
-        {/* Usage - Tokens */}
-        {selectedWorkloadType?.show_usage_tokens && (
-          <>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Input Tokens/Mo (M)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.1}
-                value={form.fmapi_input_tokens_per_month / 1000000}
-                onChange={(e) => setForm(f => ({ ...f, fmapi_input_tokens_per_month: (parseFloat(e.target.value) || 0) * 1000000 }))}
-                className="w-full text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Output Tokens/Mo (M)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.1}
-                value={form.fmapi_output_tokens_per_month / 1000000}
-                onChange={(e) => setForm(f => ({ ...f, fmapi_output_tokens_per_month: (parseFloat(e.target.value) || 0) * 1000000 }))}
-                className="w-full text-sm"
-              />
-            </div>
-          </>
+        {/* Days per month - hide for all FMAPI types (handled inline for provisioned, not needed for pay-per-token/batch) */}
+        {!selectedWorkloadType?.show_fmapi_config && (
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Days/Month</label>
+            <input
+              type="number"
+              min={1}
+              max={31}
+              value={form.days_per_month}
+              onChange={(e) => setForm(f => ({ ...f, days_per_month: parseInt(e.target.value) || 22 }))}
+              className="w-full text-sm"
+            />
+          </div>
         )}
+        
       </div>
       
       {/* Notes */}

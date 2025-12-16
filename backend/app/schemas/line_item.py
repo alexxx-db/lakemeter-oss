@@ -1,8 +1,8 @@
 """Line Item schemas."""
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional, Dict, Any
 from uuid import UUID
-from decimal import Decimal
 from pydantic import BaseModel
 
 
@@ -22,35 +22,31 @@ class LineItemBase(BaseModel):
     driver_node_type: Optional[str] = None
     worker_node_type: Optional[str] = None
     num_workers: Optional[int] = 1
-    autoscale_enabled: Optional[bool] = False
-    autoscale_min_workers: Optional[int] = None
-    autoscale_max_workers: Optional[int] = None
     
     # DLT Configuration
     dlt_edition: Optional[str] = None
-    dlt_pipeline_mode: Optional[str] = None
     
     # DBSQL Configuration
     dbsql_warehouse_type: Optional[str] = None
     dbsql_warehouse_size: Optional[str] = None
     dbsql_num_clusters: Optional[int] = None
-    
-    # Serverless Products Configuration
-    serverless_product: Optional[str] = None
-    serverless_size: Optional[str] = None
+    dbsql_vm_pricing_tier: Optional[str] = None
+    dbsql_vm_payment_option: Optional[str] = None
     
     # Vector Search Configuration
     vector_search_mode: Optional[str] = None
     vector_capacity_millions: Optional[int] = None
     
-    # Foundation Model API Configuration
+    # Model Serving Configuration
+    model_serving_gpu_type: Optional[str] = None
+    
+    # Foundation Model API Configuration (Proprietary)
     fmapi_provider: Optional[str] = None
     fmapi_model: Optional[str] = None
     fmapi_endpoint_type: Optional[str] = None
     fmapi_context_length: Optional[str] = None
-    fmapi_provisioned_type: Optional[str] = None
-    fmapi_input_tokens_per_month: Optional[int] = None
-    fmapi_output_tokens_per_month: Optional[int] = None
+    fmapi_rate_type: Optional[str] = None  # input_token, output_token, cache_read, cache_write
+    fmapi_quantity: Optional[Decimal] = None  # quantity in millions (M)
     
     # Lakebase Configuration
     lakebase_cu: Optional[int] = None
@@ -62,13 +58,13 @@ class LineItemBase(BaseModel):
     runs_per_day: Optional[int] = None
     avg_runtime_minutes: Optional[int] = None
     days_per_month: Optional[int] = 22
+    hours_per_month: Optional[int] = None
     
     # Pricing Configuration
     driver_pricing_tier: Optional[str] = None
     worker_pricing_tier: Optional[str] = None
-    vm_pricing_tier: Optional[str] = None
-    vm_payment_option: Optional[str] = None
-    spot_percentage: Optional[int] = 0
+    driver_payment_option: Optional[str] = None
+    worker_payment_option: Optional[str] = None
     
     # Additional Configuration
     workload_config: Optional[Dict[str, Any]] = None
@@ -96,35 +92,31 @@ class LineItemUpdate(BaseModel):
     driver_node_type: Optional[str] = None
     worker_node_type: Optional[str] = None
     num_workers: Optional[int] = None
-    autoscale_enabled: Optional[bool] = None
-    autoscale_min_workers: Optional[int] = None
-    autoscale_max_workers: Optional[int] = None
     
     # DLT Configuration
     dlt_edition: Optional[str] = None
-    dlt_pipeline_mode: Optional[str] = None
     
     # DBSQL Configuration
     dbsql_warehouse_type: Optional[str] = None
     dbsql_warehouse_size: Optional[str] = None
     dbsql_num_clusters: Optional[int] = None
-    
-    # Serverless Products Configuration
-    serverless_product: Optional[str] = None
-    serverless_size: Optional[str] = None
+    dbsql_vm_pricing_tier: Optional[str] = None
+    dbsql_vm_payment_option: Optional[str] = None
     
     # Vector Search Configuration
     vector_search_mode: Optional[str] = None
     vector_capacity_millions: Optional[int] = None
     
-    # Foundation Model API Configuration
+    # Model Serving Configuration
+    model_serving_gpu_type: Optional[str] = None
+    
+    # Foundation Model API Configuration (Proprietary)
     fmapi_provider: Optional[str] = None
     fmapi_model: Optional[str] = None
     fmapi_endpoint_type: Optional[str] = None
     fmapi_context_length: Optional[str] = None
-    fmapi_provisioned_type: Optional[str] = None
-    fmapi_input_tokens_per_month: Optional[int] = None
-    fmapi_output_tokens_per_month: Optional[int] = None
+    fmapi_rate_type: Optional[str] = None
+    fmapi_quantity: Optional[Decimal] = None
     
     # Lakebase Configuration
     lakebase_cu: Optional[int] = None
@@ -136,13 +128,13 @@ class LineItemUpdate(BaseModel):
     runs_per_day: Optional[int] = None
     avg_runtime_minutes: Optional[int] = None
     days_per_month: Optional[int] = None
+    hours_per_month: Optional[int] = None
     
     # Pricing Configuration
     driver_pricing_tier: Optional[str] = None
     worker_pricing_tier: Optional[str] = None
-    vm_pricing_tier: Optional[str] = None
-    vm_payment_option: Optional[str] = None
-    spot_percentage: Optional[int] = None
+    driver_payment_option: Optional[str] = None
+    worker_payment_option: Optional[str] = None
     
     # Additional Configuration
     workload_config: Optional[Dict[str, Any]] = None

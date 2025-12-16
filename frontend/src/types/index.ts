@@ -73,26 +73,23 @@ export interface LineItem {
   driver_node_type?: string
   worker_node_type?: string
   num_workers?: number
-  autoscale_enabled?: boolean
-  autoscale_min_workers?: number
-  autoscale_max_workers?: number
   
   // DLT Configuration
   dlt_edition?: string
-  dlt_pipeline_mode?: string
   
   // DBSQL Configuration
   dbsql_warehouse_type?: string
   dbsql_warehouse_size?: string
   dbsql_num_clusters?: number
-  
-  // Serverless Products Configuration
-  serverless_product?: string
-  serverless_size?: string
+  dbsql_vm_pricing_tier?: string
+  dbsql_vm_payment_option?: string
   
   // Vector Search Configuration
   vector_search_mode?: string
   vector_capacity_millions?: number
+  
+  // Model Serving Configuration
+  model_serving_gpu_type?: string
   
   // Lakebase Configuration
   lakebase_cu?: number
@@ -100,26 +97,25 @@ export interface LineItem {
   lakebase_ha_nodes?: number
   lakebase_backup_retention_days?: number
   
-  // Foundation Model API Configuration
+  // Foundation Model API Configuration (Proprietary)
   fmapi_provider?: string
   fmapi_model?: string
   fmapi_endpoint_type?: string
   fmapi_context_length?: string
-  fmapi_provisioned_type?: string
-  fmapi_input_tokens_per_month?: number
-  fmapi_output_tokens_per_month?: number
+  fmapi_rate_type?: string  // input_token, output_token, cache_read, cache_write
+  fmapi_quantity?: number   // quantity in millions (M)
   
   // Usage Configuration
   runs_per_day?: number
   avg_runtime_minutes?: number
   days_per_month?: number
+  hours_per_month?: number
   
   // Pricing Configuration
   driver_pricing_tier?: string
   worker_pricing_tier?: string
-  vm_pricing_tier?: string
-  vm_payment_option?: string
-  spot_percentage?: number
+  driver_payment_option?: string
+  worker_payment_option?: string
   
   // Additional Configuration
   workload_config?: Record<string, unknown>
@@ -127,6 +123,13 @@ export interface LineItem {
   
   created_at: string
   updated_at: string
+}
+
+// FMAPI Rate Types for Foundation Model (Proprietary)
+export interface FMAPIRateType {
+  id: string
+  name: string
+  description?: string
 }
 
 export interface WorkloadType {
@@ -198,8 +201,66 @@ export interface FMAPIProvider {
 export interface FMAPIModel {
   id: string
   name: string
-  input_price_per_million: number
-  output_price_per_million: number
+  input_price_per_million?: number
+  output_price_per_million?: number
+}
+
+// Model Serving GPU Types
+export interface ModelServingGPUType {
+  id: string
+  name: string
+  dbu_per_hour: number
+  description?: string
+}
+
+// Foundation Models (Databricks) Configuration
+export interface FMAPIDatabricksConfig {
+  model_types: FMAPIDatabricksModelType[]
+  models: {
+    llm: FMAPIModelOption[]
+    embedding: FMAPIModelOption[]
+  }
+  inference_types: FMAPIInferenceType[]
+}
+
+export interface FMAPIDatabricksModelType {
+  id: string
+  name: string
+  has_output_tokens: boolean
+}
+
+export interface FMAPIModelOption {
+  id: string
+  name: string
+}
+
+export interface FMAPIInferenceType {
+  id: string
+  name: string
+  description?: string
+}
+
+// Foundation Models (Proprietary) Configuration
+export interface FMAPIProprietaryConfig {
+  providers: FMAPIProprietaryProvider[]
+  endpoint_types: FMAPIEndpointType[]
+  context_lengths: FMAPIContextLength[]
+}
+
+export interface FMAPIProprietaryProvider {
+  id: string
+  name: string
+  models: FMAPIModelOption[]
+}
+
+export interface FMAPIEndpointType {
+  id: string
+  name: string
+}
+
+export interface FMAPIContextLength {
+  id: string
+  name: string
 }
 
 // VM Pricing types

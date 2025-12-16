@@ -11,7 +11,10 @@ import type {
   FMAPIProvider,
   VMPricing,
   VMPricingTier,
-  VMPaymentOption
+  VMPaymentOption,
+  ModelServingGPUType,
+  FMAPIDatabricksConfig,
+  FMAPIProprietaryConfig
 } from '../types'
 import * as api from '../api/client'
 import type { CurrentUser } from '../api/client'
@@ -38,6 +41,11 @@ interface Store {
   fmapiProviders: FMAPIProvider[]
   selectedCloud: string
   selectedRegion: string
+  
+  // Model Serving & Foundation Models Reference Data
+  modelServingGPUTypes: ModelServingGPUType[]
+  fmapiDatabricksConfig: FMAPIDatabricksConfig | null
+  fmapiProprietaryConfig: FMAPIProprietaryConfig | null
   
   // VM Pricing Data
   vmPricing: VMPricing[]
@@ -68,6 +76,7 @@ interface Store {
   // Actions - Reference Data
   fetchReferenceData: () => Promise<void>
   fetchInstanceTypes: (cloud: string) => Promise<void>
+  fetchModelServingGPUTypes: (cloud: string) => Promise<void>
   setSelectedCloud: (cloud: string) => void
   setSelectedRegion: (region: string) => void
   
@@ -99,6 +108,11 @@ export const useStore = create<Store>((set, get) => ({
   fmapiProviders: [],
   selectedCloud: 'aws',
   selectedRegion: '',
+  
+  // Model Serving & Foundation Models
+  modelServingGPUTypes: [],
+  fmapiDatabricksConfig: null,
+  fmapiProprietaryConfig: null,
   
   // VM Pricing
   vmPricing: [],
@@ -283,14 +297,26 @@ export const useStore = create<Store>((set, get) => ({
   // Reference Data
   fetchReferenceData: async () => {
     try {
-      const [workloadTypes, cloudProviders, dbsqlSizes, dltEditions, fmapiProviders, vmPricingTiers, vmPaymentOptions] = await Promise.all([
+      const [
+        workloadTypes, 
+        cloudProviders, 
+        dbsqlSizes, 
+        dltEditions, 
+        fmapiProviders, 
+        vmPricingTiers, 
+        vmPaymentOptions,
+        fmapiDatabricksConfig,
+        fmapiProprietaryConfig
+      ] = await Promise.all([
         api.fetchWorkloadTypes(),
         api.fetchCloudProviders(),
         api.fetchDBSQLSizes(),
         api.fetchDLTEditions(),
         api.fetchFMAPIModels(),
         api.fetchVMPricingTiers(),
-        api.fetchVMPaymentOptions()
+        api.fetchVMPaymentOptions(),
+        api.fetchFMAPIDatabricksConfig(),
+        api.fetchFMAPIProprietaryConfig()
       ])
       
       set({ 
@@ -300,12 +326,17 @@ export const useStore = create<Store>((set, get) => ({
         dltEditions, 
         fmapiProviders,
         vmPricingTiers,
-        vmPaymentOptions
+        vmPaymentOptions,
+        fmapiDatabricksConfig,
+        fmapiProprietaryConfig
       })
       
-      // Fetch instance types for default cloud
-      const instanceTypes = await api.fetchInstanceTypes('aws')
-      set({ instanceTypes })
+      // Fetch instance types and model serving GPU types for default cloud
+      const [instanceTypes, modelServingGPUTypes] = await Promise.all([
+        api.fetchInstanceTypes('aws'),
+        api.fetchModelServingGPUTypes('aws')
+      ])
+      set({ instanceTypes, modelServingGPUTypes })
     } catch (error) {
       console.error('Failed to fetch reference data:', error)
       set({ error: 'Failed to load reference data from server' })
@@ -321,9 +352,19 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   
+  fetchModelServingGPUTypes: async (cloud) => {
+    try {
+      const modelServingGPUTypes = await api.fetchModelServingGPUTypes(cloud)
+      set({ modelServingGPUTypes })
+    } catch (error) {
+      console.error('Failed to fetch model serving GPU types:', error)
+    }
+  },
+  
   setSelectedCloud: (cloud) => {
     set({ selectedCloud: cloud })
     get().fetchInstanceTypes(cloud)
+    get().fetchModelServingGPUTypes(cloud)
     // Also fetch VM pricing for the new cloud
     get().fetchVMPricing(cloud, get().selectedRegion || undefined)
   },

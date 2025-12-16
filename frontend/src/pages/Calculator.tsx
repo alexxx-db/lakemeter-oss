@@ -1072,7 +1072,7 @@ export default function Calculator() {
                               <p className="text-[var(--text-primary)]">{item.num_workers}× {item.worker_node_type}</p>
                             </div>
                           )}
-                          {item.dbsql_warehouse_size && (
+                          {item.workload_type === 'DBSQL' && item.dbsql_warehouse_size && (
                             <div>
                               <span className="text-[var(--text-muted)]">Warehouse</span>
                               <p className="text-[var(--text-primary)]">{item.dbsql_warehouse_size}</p>

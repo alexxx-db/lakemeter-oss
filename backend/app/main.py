@@ -251,24 +251,143 @@ def get_dlt_editions():
 
 @app.get("/api/v1/reference/fmapi-models")
 def get_foundation_models():
-    """Get available foundation models for FMAPI."""
+    """Get available foundation models for FMAPI (legacy endpoint)."""
+    # Keep for backwards compatibility
     return [
         {"provider": "databricks", "models": [
-            {"id": "dbrx-instruct", "name": "DBRX Instruct", "input_price_per_million": 0.75, "output_price_per_million": 2.25},
-            {"id": "llama-3-70b-instruct", "name": "Llama 3 70B Instruct", "input_price_per_million": 1.00, "output_price_per_million": 3.00},
-            {"id": "llama-3-8b-instruct", "name": "Llama 3 8B Instruct", "input_price_per_million": 0.10, "output_price_per_million": 0.25},
-            {"id": "mixtral-8x7b-instruct", "name": "Mixtral 8x7B Instruct", "input_price_per_million": 0.50, "output_price_per_million": 1.00},
+            {"id": "llama-4-maverick", "name": "Llama 4 Maverick"},
+            {"id": "llama-3-3-70b", "name": "Llama 3.3 70B"},
         ]},
         {"provider": "openai", "models": [
-            {"id": "gpt-4o", "name": "GPT-4o", "input_price_per_million": 5.00, "output_price_per_million": 15.00},
-            {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "input_price_per_million": 0.15, "output_price_per_million": 0.60},
-            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "input_price_per_million": 10.00, "output_price_per_million": 30.00},
+            {"id": "gpt-5", "name": "GPT-5"},
+            {"id": "gpt-5-mini", "name": "GPT-5 Mini"},
         ]},
         {"provider": "anthropic", "models": [
-            {"id": "claude-3-5-sonnet", "name": "Claude 3.5 Sonnet", "input_price_per_million": 3.00, "output_price_per_million": 15.00},
-            {"id": "claude-3-opus", "name": "Claude 3 Opus", "input_price_per_million": 15.00, "output_price_per_million": 75.00},
-            {"id": "claude-3-haiku", "name": "Claude 3 Haiku", "input_price_per_million": 0.25, "output_price_per_million": 1.25},
+            {"id": "claude-sonnet-4-5", "name": "Claude Sonnet 4.5"},
+            {"id": "claude-opus-4", "name": "Claude Opus 4"},
         ]},
     ]
+
+
+# ============================================================================
+# Model Serving GPU Types (by cloud)
+# Source: lakemeter.sync_product_serverless_rates WHERE product = 'model_serving'
+# ============================================================================
+@app.get("/api/v1/reference/model-serving-gpu-types/{cloud}")
+def get_model_serving_gpu_types(cloud: str):
+    """Get available Model Serving GPU types for a cloud provider."""
+    gpu_types = {
+        "aws": [
+            {"id": "cpu", "name": "CPU", "dbu_per_hour": 1, "description": "1 concurrent request/hr = 1 DBU/hr"},
+            {"id": "gpu_small_t4", "name": "GPU Small - T4", "dbu_per_hour": 10.48, "description": "Small - T4 or equivalent"},
+            {"id": "gpu_medium_a10g_1x", "name": "GPU Medium - A10G x1", "dbu_per_hour": 20, "description": "Medium - A10G x 1GPU"},
+            {"id": "gpu_medium_a10g_4x", "name": "GPU Medium 4X - A10G x4", "dbu_per_hour": 112, "description": "Medium 4X - A10G x 4GPU"},
+            {"id": "gpu_medium_a10g_8x", "name": "GPU Medium 8X - A10G x8", "dbu_per_hour": 290.8, "description": "Medium 8X - A10G x 8GPU"},
+            {"id": "gpu_xlarge_a100_40gb_8x", "name": "GPU XLarge - A100 40GB x8", "dbu_per_hour": 538.4, "description": "XLarge - A100 40GB x 8GPU"},
+            {"id": "gpu_xlarge_a100_80gb_8x", "name": "GPU XLarge - A100 80GB x8", "dbu_per_hour": 628, "description": "XLarge - A100 80GB x 8GPU"},
+        ],
+        "azure": [
+            {"id": "cpu", "name": "CPU", "dbu_per_hour": 1, "description": "1 concurrent request/hr = 1 DBU/hr"},
+            {"id": "gpu_small_t4", "name": "GPU Small - T4", "dbu_per_hour": 10.48, "description": "Small - T4 or equivalent"},
+            {"id": "gpu_xlarge_a100_80gb_1x", "name": "GPU XLarge - A100 80GB x1", "dbu_per_hour": 78.6, "description": "XLarge - A100 80GB x 1GPU"},
+            {"id": "gpu_2xlarge_a100_80gb_2x", "name": "GPU 2XLarge - A100 80GB x2", "dbu_per_hour": 157.2, "description": "2XLarge - A100 80GB x 2GPU"},
+            {"id": "gpu_4xlarge_a100_80gb_4x", "name": "GPU 4XLarge - A100 80GB x4", "dbu_per_hour": 314.4, "description": "4XLarge - A100 80GB x 4GPU"},
+        ],
+        "gcp": [
+            {"id": "cpu", "name": "CPU", "dbu_per_hour": 1, "description": "1 concurrent request/hr = 1 DBU/hr"},
+            {"id": "gpu_medium_g2_standard_8", "name": "GPU Medium - G2 Standard 8 x1", "dbu_per_hour": 5, "description": "Medium - G2 Standard 8 x 1GPU"},
+        ],
+    }
+    return gpu_types.get(cloud.lower(), [{"id": "cpu", "name": "CPU", "dbu_per_hour": 1}])
+
+
+# ============================================================================
+# Foundation Models (Databricks)
+# Source: lakemeter.sync_product_fmapi_databricks
+# ============================================================================
+@app.get("/api/v1/reference/fmapi-databricks")
+def get_fmapi_databricks():
+    """Get Foundation Models (Databricks) configuration options."""
+    return {
+        "model_types": [
+            {"id": "llm", "name": "LLMs", "has_output_tokens": True},
+            {"id": "embedding", "name": "Embedding Models", "has_output_tokens": False},
+        ],
+        "models": {
+            "llm": [
+                {"id": "llama-4-maverick", "name": "Llama 4 Maverick"},
+                {"id": "llama-3-3-70b", "name": "Llama 3.3 70B"},
+                {"id": "llama-3-1-8b", "name": "Llama 3.1 8B"},
+                {"id": "llama-3-2-3b", "name": "Llama 3.2 3B"},
+                {"id": "llama-3-2-1b", "name": "Llama 3.2 1B"},
+                {"id": "gpt-oss-120b", "name": "GPT-OSS 120B"},
+                {"id": "gpt-oss-20b", "name": "GPT-OSS 20B"},
+                {"id": "gemma-3-12b", "name": "Gemma 3 12B"},
+            ],
+            "embedding": [
+                {"id": "bge-large", "name": "BGE Large"},
+                {"id": "gte", "name": "GTE"},
+            ],
+        },
+        "inference_types": [
+            {"id": "pay_per_token", "name": "Pay-Per-Token", "description": "Pay based on input/output tokens"},
+            {"id": "provisioned_throughput", "name": "Provisioned Throughput", "description": "Reserved capacity with hourly billing"},
+            {"id": "batch_inference", "name": "Batch Inference", "description": "Batch processing at lower cost"},
+        ],
+    }
+
+
+# ============================================================================
+# Foundation Models (Proprietary)
+# Source: lakemeter.sync_product_fmapi_proprietary
+# ============================================================================
+@app.get("/api/v1/reference/fmapi-proprietary")
+def get_fmapi_proprietary():
+    """Get Foundation Models (Proprietary) configuration options."""
+    return {
+        "providers": [
+            {
+                "id": "anthropic",
+                "name": "Anthropic",
+                "models": [
+                    {"id": "claude-sonnet-4-5", "name": "Claude Sonnet 4.5"},
+                    {"id": "claude-sonnet-4-1", "name": "Claude Sonnet 4.1"},
+                    {"id": "claude-sonnet-4", "name": "Claude Sonnet 4"},
+                    {"id": "claude-sonnet-3-7", "name": "Claude Sonnet 3.7"},
+                    {"id": "claude-opus-4-5", "name": "Claude Opus 4.5"},
+                    {"id": "claude-opus-4-1", "name": "Claude Opus 4.1"},
+                    {"id": "claude-opus-4", "name": "Claude Opus 4"},
+                    {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5"},
+                ],
+            },
+            {
+                "id": "openai",
+                "name": "OpenAI",
+                "models": [
+                    {"id": "gpt-5", "name": "GPT-5"},
+                    {"id": "gpt-5-1", "name": "GPT-5.1"},
+                    {"id": "gpt-5-mini", "name": "GPT-5 Mini"},
+                    {"id": "gpt-5-nano", "name": "GPT-5 Nano"},
+                ],
+            },
+            {
+                "id": "google",
+                "name": "Google",
+                "models": [
+                    {"id": "gemini-2-5-pro", "name": "Gemini 2.5 Pro"},
+                    {"id": "gemini-2-5-flash", "name": "Gemini 2.5 Flash"},
+                ],
+            },
+        ],
+        "endpoint_types": [
+            {"id": "global", "name": "Global"},
+            {"id": "in_geo", "name": "In-Geo (Regional)"},
+        ],
+        "context_lengths": [
+            {"id": "all", "name": "All"},
+            {"id": "short", "name": "Short"},
+            {"id": "long", "name": "Long"},
+        ],
+    }
 
 

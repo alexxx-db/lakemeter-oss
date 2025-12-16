@@ -1,8 +1,8 @@
 """Line Item model for estimate workloads."""
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, Numeric, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSON, BIGINT
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, Numeric
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -29,35 +29,31 @@ class LineItem(Base):
     driver_node_type = Column(String(100))
     worker_node_type = Column(String(100))
     num_workers = Column(Integer, default=1)
-    autoscale_enabled = Column(Boolean, default=False)
-    autoscale_min_workers = Column(Integer)
-    autoscale_max_workers = Column(Integer)
     
     # DLT Configuration
     dlt_edition = Column(String(20))  # core, pro, advanced
-    dlt_pipeline_mode = Column(String(20))  # triggered, continuous
     
     # DBSQL Configuration
     dbsql_warehouse_type = Column(String(20))  # classic, pro, serverless
     dbsql_warehouse_size = Column(String(20))  # 2x-small, x-small, small, medium, large, x-large, etc.
     dbsql_num_clusters = Column(Integer, default=1)
-    
-    # Serverless Products Configuration
-    serverless_product = Column(String(50))
-    serverless_size = Column(String(20))
+    dbsql_vm_pricing_tier = Column(String(20))  # on-demand, 1yr, 3yr
+    dbsql_vm_payment_option = Column(String(20))  # no-upfront, partial-upfront, all-upfront
     
     # Vector Search Configuration
-    vector_search_mode = Column(String(20))  # delta_sync, direct_access
+    vector_search_mode = Column(String(20))  # standard, storage_optimized
     vector_capacity_millions = Column(Integer)
     
-    # Foundation Model API Configuration
-    fmapi_provider = Column(String(50))
-    fmapi_model = Column(String(100))
-    fmapi_endpoint_type = Column(String(20))
-    fmapi_context_length = Column(String(20))
-    fmapi_provisioned_type = Column(String(50))
-    fmapi_input_tokens_per_month = Column(BIGINT)
-    fmapi_output_tokens_per_month = Column(BIGINT)
+    # Model Serving Configuration
+    model_serving_gpu_type = Column(String(50))  # cpu, gpu_small_t4, gpu_medium_a10g_1x, etc.
+    
+    # Foundation Model API Configuration (Proprietary)
+    fmapi_provider = Column(String(50))  # anthropic, openai, google
+    fmapi_model = Column(String(100))  # claude-sonnet-4-5, gpt-5, etc.
+    fmapi_endpoint_type = Column(String(20))  # global, in_geo
+    fmapi_context_length = Column(String(20))  # all, short, long
+    fmapi_rate_type = Column(String(20))  # input_token, output_token, cache_read, cache_write
+    fmapi_quantity = Column(Numeric(18, 2))  # quantity in millions (M)
     
     # Lakebase Configuration
     lakebase_cu = Column(Integer)
@@ -69,13 +65,13 @@ class LineItem(Base):
     runs_per_day = Column(Integer)
     avg_runtime_minutes = Column(Integer)
     days_per_month = Column(Integer, default=22)
+    hours_per_month = Column(Integer)
     
     # Pricing Configuration
-    driver_pricing_tier = Column(String(20))
-    worker_pricing_tier = Column(String(20))
-    vm_pricing_tier = Column(String(20))  # on-demand, 1yr, 3yr
-    vm_payment_option = Column(String(20))  # no-upfront, partial-upfront, all-upfront
-    spot_percentage = Column(Integer, default=0)
+    driver_pricing_tier = Column(String(20))  # on-demand, 1yr, 3yr
+    worker_pricing_tier = Column(String(20))  # spot, on-demand, 1yr, 3yr
+    driver_payment_option = Column(String(20))  # no-upfront, partial-upfront, all-upfront
+    worker_payment_option = Column(String(20))  # no-upfront, partial-upfront, all-upfront
     
     # Additional Configuration
     workload_config = Column(JSON)  # Flexible JSON for additional config
