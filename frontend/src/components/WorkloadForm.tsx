@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BoltIcon, CloudIcon, InformationCircleIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline'
+import { BoltIcon, CloudIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { useStore } from '../store/useStore'
@@ -20,7 +20,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     dbsqlSizes, 
     dltEditions, 
     fmapiProviders,
-    vmPricingTiers,
     vmPaymentOptions,
     selectedCloud,
     createLineItem,
@@ -73,7 +72,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     avg_runtime_minutes: 30,
     days_per_month: 22,
     driver_pricing_tier: 'on_demand',
-    worker_pricing_tier: 'on_demand',
+    worker_pricing_tier: 'spot',
     vm_pricing_tier: 'on_demand',
     vm_payment_option: 'no_upfront',
     notes: ''
@@ -124,7 +123,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         avg_runtime_minutes: lineItem.avg_runtime_minutes || 30,
         days_per_month: lineItem.days_per_month || 22,
         driver_pricing_tier: lineItem.driver_pricing_tier || 'on_demand',
-        worker_pricing_tier: lineItem.worker_pricing_tier || 'on_demand',
+        worker_pricing_tier: lineItem.worker_pricing_tier || 'spot',
         vm_pricing_tier: lineItem.vm_pricing_tier || 'on_demand',
         vm_payment_option: lineItem.vm_payment_option || 'no_upfront',
         notes: lineItem.notes || ''
@@ -341,9 +340,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   // Show VM config for classic compute (not serverless)
   const showVMConfig = selectedWorkloadType?.show_compute_config && !form.serverless_enabled
   
-  // Check if spot is enabled (percentage > 0)
-  const spotEnabled = form.spot_percentage > 0
-  
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Basic Info */}
@@ -388,7 +384,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       )}
       
       {/* Feature Toggles Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Serverless Toggle - left */}
         {selectedWorkloadType?.show_serverless_toggle && (
           <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
@@ -399,7 +395,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </div>
               <button
                 type="button"
-                onClick={() => setForm(f => ({ ...f, serverless_enabled: !f.serverless_enabled, spot_percentage: 0, cluster_autoscaling_enabled: false }))}
+                onClick={() => setForm(f => ({ ...f, serverless_enabled: !f.serverless_enabled }))}
                 className={clsx('toggle', form.serverless_enabled ? 'toggle-checked' : 'toggle-unchecked')}
               >
                 <span className={clsx('toggle-knob', form.serverless_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
@@ -408,7 +404,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           </div>
         )}
         
-        {/* Photon Toggle - middle */}
+        {/* Photon Toggle - right */}
         {selectedWorkloadType?.show_photon_toggle && !form.serverless_enabled && (
           <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
             <div className="flex items-center justify-between">
@@ -426,30 +422,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             </div>
           </div>
         )}
-        
-        {/* Autoscaling Toggle - right (for classic compute only) */}
-        {selectedWorkloadType?.show_compute_config && !form.serverless_enabled && (
-          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CloudIcon className="w-4 h-4 text-blue-500" />
-                <span className="text-sm text-[var(--text-secondary)]">Autoscaling</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setForm(f => ({ 
-                  ...f, 
-                  cluster_autoscaling_enabled: !f.cluster_autoscaling_enabled,
-                  // When enabling, set max to current num_workers
-                  max_clusters: !f.cluster_autoscaling_enabled ? f.num_workers : f.max_clusters
-                }))}
-                className={clsx('toggle', form.cluster_autoscaling_enabled ? 'toggle-checked' : 'toggle-unchecked')}
-              >
-                <span className={clsx('toggle-knob', form.cluster_autoscaling_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
       
       {/* Configuration Grid */}
@@ -457,7 +429,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* Classic Compute Config */}
         {showVMConfig && (
           <>
-            {/* Row 1: Driver Node | Worker Node | Spot Workers */}
+            {/* Row 1: Driver Node | Worker Node | Number of Workers */}
             <div>
               <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Driver Node</label>
               <select
@@ -490,105 +462,48 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             
-            {/* Spot Workers Toggle - 3rd column */}
-            <div className="flex items-end">
-              <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] w-full">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CurrencyDollarIcon className="w-4 h-4 text-yellow-500 dark:text-yellow-400" />
-                    <div>
-                      <span className="text-sm text-[var(--text-secondary)]">Spot Workers</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, spot_percentage: f.spot_percentage > 0 ? 0 : 100 }))}
-                    className={clsx('toggle', spotEnabled ? 'toggle-checked' : 'toggle-unchecked')}
-                  >
-                    <span className={clsx('toggle-knob', spotEnabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
-                  </button>
-                </div>
-              </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Workers</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={form.num_workers}
+                onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
+                className="w-full text-sm"
+              />
             </div>
             
-            {/* Row 2: Number of Workers | VM Pricing Tier | Runs/Day OR Min Clusters | Max Clusters | VM Pricing Tier */}
-            {!form.cluster_autoscaling_enabled ? (
-              <>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Workers</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={form.num_workers}
-                    onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
-                    className="w-full text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">VM Pricing Tier</label>
-                  <select
-                    value={form.vm_pricing_tier}
-                    onChange={(e) => setForm(f => ({ ...f, vm_pricing_tier: e.target.value }))}
-                    className="w-full text-sm"
-                  >
-                    {vmPricingTiers.map(tier => (
-                      <option key={tier.id} value={tier.id}>
-                        {tier.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Min Clusters</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={form.max_clusters}
-                    value={form.min_clusters}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 1
-                      setForm(f => ({ ...f, min_clusters: val, max_clusters: Math.max(f.max_clusters, val) }))
-                    }}
-                    className="w-full text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Max Clusters</label>
-                  <input
-                    type="number"
-                    min={form.min_clusters}
-                    max={100}
-                    value={form.max_clusters}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 1
-                      setForm(f => ({ ...f, max_clusters: Math.max(f.min_clusters, val) }))
-                    }}
-                    className="w-full text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">VM Pricing Tier</label>
-                  <select
-                    value={form.vm_pricing_tier}
-                    onChange={(e) => setForm(f => ({ ...f, vm_pricing_tier: e.target.value }))}
-                    className="w-full text-sm"
-                  >
-                    {vmPricingTiers.map(tier => (
-                      <option key={tier.id} value={tier.id}>
-                        {tier.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
+            {/* Row 2: Driver Pricing Tier | Worker Pricing Tier */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Driver Pricing Tier</label>
+              <select
+                value={form.driver_pricing_tier}
+                onChange={(e) => setForm(f => ({ ...f, driver_pricing_tier: e.target.value }))}
+                className="w-full text-sm"
+              >
+                <option value="on_demand">On-Demand</option>
+                <option value="reserved_1yr">1-Year Reserved</option>
+                <option value="reserved_3yr">3-Year Reserved</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Worker Pricing Tier</label>
+              <select
+                value={form.worker_pricing_tier}
+                onChange={(e) => setForm(f => ({ ...f, worker_pricing_tier: e.target.value }))}
+                className="w-full text-sm"
+              >
+                <option value="spot">Spot Instances</option>
+                <option value="on_demand">On-Demand</option>
+                <option value="reserved_1yr">1-Year Reserved</option>
+                <option value="reserved_3yr">3-Year Reserved</option>
+              </select>
+            </div>
             
             {/* Payment Option (AWS Reserved Instances only) */}
-            {selectedCloud === 'aws' && form.vm_pricing_tier.startsWith('reserved') && (
+            {selectedCloud === 'aws' && (form.driver_pricing_tier.startsWith('reserved') || form.worker_pricing_tier.startsWith('reserved')) && (
               <div>
                 <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
                 <select
@@ -633,55 +548,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 <option value="continuous">Continuous</option>
               </select>
             </div>
-            {/* Autoscaling Toggle for DLT */}
-            <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CloudIcon className="w-4 h-4 text-blue-500" />
-                  <span className="text-sm text-[var(--text-secondary)]">Autoscaling</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, dlt_autoscaling_enabled: !f.dlt_autoscaling_enabled }))}
-                  className={clsx('toggle', form.dlt_autoscaling_enabled ? 'toggle-checked' : 'toggle-unchecked')}
-                >
-                  <span className={clsx('toggle-knob', form.dlt_autoscaling_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
-                </button>
-              </div>
-            </div>
-            {/* Min/Max Clusters for DLT - only shown when autoscaling enabled */}
-            {form.dlt_autoscaling_enabled && (
-              <>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Min Clusters</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={form.dlt_max_clusters}
-                    value={form.dlt_min_clusters}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 1
-                      setForm(f => ({ ...f, dlt_min_clusters: val, dlt_max_clusters: Math.max(f.dlt_max_clusters, val) }))
-                    }}
-                    className="w-full text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Max Clusters</label>
-                  <input
-                    type="number"
-                    min={form.dlt_min_clusters}
-                    max={100}
-                    value={form.dlt_max_clusters}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 1
-                      setForm(f => ({ ...f, dlt_max_clusters: Math.max(f.dlt_min_clusters, val) }))
-                    }}
-                    className="w-full text-sm"
-                  />
-                </div>
-              </>
-            )}
           </>
         )}
         
