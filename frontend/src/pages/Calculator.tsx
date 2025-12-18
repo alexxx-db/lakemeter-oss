@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -14,9 +14,7 @@ import {
   CurrencyDollarIcon,
   ServerStackIcon,
   ExclamationTriangleIcon,
-  BuildingOfficeIcon,
-  BriefcaseIcon,
-  DocumentTextIcon
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -25,7 +23,9 @@ import {
   exportEstimateToExcel,
   fetchSalesforceAccounts,
   fetchSalesforceOpportunities,
-  fetchSalesforceUseCases
+  fetchSalesforceUseCases,
+  fetchRegions,
+  type RegionResponse
 } from '../api/client'
 import { saveAs } from 'file-saver'
 import WorkloadForm from '../components/WorkloadForm'
@@ -117,10 +117,10 @@ const INSTANCE_DBU_RATES: Record<string, number> = {
 }
 
 
-// DBSQL warehouse DBU rates
+// DBSQL warehouse DBU rates (keys must match database CHECK constraint: chk_dbsql_warehouse_size)
 const DBSQL_DBU_RATES: Record<string, number> = {
-  '2x-small': 2, 'x-small': 4, 'small': 8, 'medium': 16,
-  'large': 32, 'x-large': 64, '2x-large': 128, '3x-large': 192, '4x-large': 256
+  '2X-Small': 2, 'X-Small': 4, 'Small': 8, 'Medium': 16,
+  'Large': 32, 'X-Large': 64, '2X-Large': 128, '3X-Large': 192, '4X-Large': 256
 }
 
 interface CostBreakdown {
@@ -137,7 +137,6 @@ export default function Calculator() {
     currentEstimate,
     lineItems,
     workloadTypes,
-    cloudProviders,
     fetchEstimate,
     fetchLineItems,
     fetchReferenceData,
@@ -147,7 +146,15 @@ export default function Calculator() {
     setSelectedCloud,
     setSelectedRegion,
     fetchVMPricing,
-    getVMPrice
+    getVMPrice,
+    // Cost calculation from API
+    workloadCosts,
+    calculateAllWorkloadCosts,
+    // DBU Rates
+    dbuRatesMap,
+    fetchDBURates,
+    // State management
+    clearEstimateState
   } = useStore()
   
   const [isSaving, setIsSaving] = useState(false)
@@ -155,6 +162,9 @@ export default function Calculator() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [isLoadingEstimate, setIsLoadingEstimate] = useState(false)
+  const [isLoadingLineItems, setIsLoadingLineItems] = useState(false)
+  const [lineItemsLoaded, setLineItemsLoaded] = useState(false)
   
   // Salesforce data
   const [sfAccounts, setSfAccounts] = useState<SalesforceAccount[]>([])
@@ -166,6 +176,10 @@ export default function Calculator() {
   const [isLoadingSfAccounts, setIsLoadingSfAccounts] = useState(false)
   const [isLoadingSfOpportunities, setIsLoadingSfOpportunities] = useState(false)
   const [isLoadingSfUseCases, setIsLoadingSfUseCases] = useState(false)
+  
+  // Regions data (fetched from API based on cloud)
+  const [regions, setRegions] = useState<RegionResponse[]>([])
+  const [isLoadingRegions, setIsLoadingRegions] = useState(false)
   
   // Form state - using correct column names
   const [formData, setFormData] = useState({
@@ -222,12 +236,16 @@ export default function Calculator() {
   
   // Fetch Salesforce opportunities when account is selected or search changes
   useEffect(() => {
+    if (!formData.sfdc_account_id) {
+      setSfOpportunities([])
+      return
+    }
+    
     const timeoutId = setTimeout(async () => {
       setIsLoadingSfOpportunities(true)
       try {
         const opportunities = await fetchSalesforceOpportunities({ 
-          account_id: formData.sfdc_account_id || undefined,
-          search: sfOpportunitySearch || undefined,
+          account_id: formData.sfdc_account_id,
           limit: 1000 
         })
         setSfOpportunities(opportunities)
@@ -243,12 +261,16 @@ export default function Calculator() {
   
   // Fetch Salesforce use cases when account is selected or search changes
   useEffect(() => {
+    if (!formData.sfdc_account_id) {
+      setSfUseCases([])
+      return
+    }
+    
     const timeoutId = setTimeout(async () => {
       setIsLoadingSfUseCases(true)
       try {
         const useCases = await fetchSalesforceUseCases({ 
-          account_id: formData.sfdc_account_id || undefined,
-          search: sfUseCaseSearch || undefined,
+          account_id: formData.sfdc_account_id,
           limit: 1000 
         })
         setSfUseCases(useCases)
@@ -269,15 +291,79 @@ export default function Calculator() {
     }
   }, [formData.cloud, formData.region, fetchVMPricing])
   
+  // Cache regions by cloud provider to avoid repeated API calls
+  const regionsCacheRef = useRef<Record<string, RegionResponse[]>>({})
+  
+  // Fetch regions when cloud changes (with caching)
   useEffect(() => {
-    if (id) {
-      fetchEstimate(id)
-      fetchLineItems(id)
+    const loadRegions = async () => {
+      if (!formData.cloud) return
+      
+      const cacheKey = formData.cloud.toLowerCase()
+      
+      // Check cache first
+      if (regionsCacheRef.current[cacheKey]) {
+        setRegions(regionsCacheRef.current[cacheKey])
+        return
+      }
+      
+      setIsLoadingRegions(true)
+      try {
+        const fetchedRegions = await fetchRegions(formData.cloud)
+        regionsCacheRef.current[cacheKey] = fetchedRegions // Cache it
+        setRegions(fetchedRegions)
+      } catch (error) {
+        console.error('Failed to fetch regions:', error)
+        setRegions([])
+      } finally {
+        setIsLoadingRegions(false)
+      }
     }
-  }, [id, fetchEstimate, fetchLineItems])
+    
+    loadRegions()
+  }, [formData.cloud])
   
   useEffect(() => {
+    const loadEstimateData = async () => {
+      if (id) {
+        setIsLoadingEstimate(true)
+        setIsLoadingLineItems(true)
+        setLineItemsLoaded(false)
+        try {
+          await fetchEstimate(id)
+        } finally {
+          setIsLoadingEstimate(false)
+        }
+        try {
+          await fetchLineItems(id)
+        } finally {
+          setIsLoadingLineItems(false)
+          setLineItemsLoaded(true)
+        }
+      } else {
+        // Creating new estimate - immediately clear any stale data from previous estimate
+        clearEstimateState()
+        setLineItemsLoaded(false)
+      }
+    }
+    loadEstimateData()
+  }, [id, fetchEstimate, fetchLineItems, clearEstimateState])
+  
+  // Default form values for new estimates
+  const defaultEstimateFormData = {
+    estimate_name: '',
+    customer_name: '',
+    sfdc_account_id: '',
+    opportunity_id: '',
+    uco_id: '',
+    cloud: 'aws',
+    region: '',
+    tier: ''
+  }
+
+  useEffect(() => {
     if (currentEstimate && id) {
+      // Editing existing estimate - load saved values
       setFormData({
         estimate_name: currentEstimate.estimate_name,
         customer_name: currentEstimate.customer_name || '',
@@ -292,20 +378,83 @@ export default function Calculator() {
       if (currentEstimate.cloud) {
         setSelectedCloud(currentEstimate.cloud.toLowerCase())
       }
+    } else if (!id) {
+      // Creating new estimate - reset to defaults
+      setFormData(defaultEstimateFormData)
+      setSelectedCloud('aws')
+      setHasUnsavedChanges(false)
     }
   }, [currentEstimate, id, setSelectedCloud])
   
-  const selectedCloudProvider = cloudProviders.find(c => c.id === formData.cloud)
+  // Fetch DBU rates when cloud/region/tier changes
+  useEffect(() => {
+    if (formData.cloud && formData.region && formData.tier) {
+      fetchDBURates(formData.cloud.toUpperCase(), formData.region, formData.tier.toUpperCase())
+    }
+  }, [formData.cloud, formData.region, formData.tier, fetchDBURates])
+  
+  // Calculate costs for all workloads when lineItems or pricing config changes (debounced)
+  // IMPORTANT: Must wait for currentEstimate to be loaded since calculateAllWorkloadCosts uses it
+  const costCalcTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  useEffect(() => {
+    // Ensure currentEstimate is loaded (not null) before calculating costs
+    // The store's calculateAllWorkloadCosts reads cloud/region/tier from currentEstimate
+    if (id && currentEstimate && lineItems.length > 0 && currentEstimate.cloud && currentEstimate.region && currentEstimate.tier) {
+      // Debounce cost calculations to avoid excessive API calls
+      if (costCalcTimeoutRef.current) {
+        clearTimeout(costCalcTimeoutRef.current)
+      }
+      costCalcTimeoutRef.current = setTimeout(() => {
+        calculateAllWorkloadCosts(id)
+      }, 300) // 300ms debounce
+    }
+    
+    return () => {
+      if (costCalcTimeoutRef.current) {
+        clearTimeout(costCalcTimeoutRef.current)
+      }
+    }
+  }, [id, currentEstimate, lineItems, calculateAllWorkloadCosts])
   
   // Check if required fields are set for workload creation
   const canAddWorkload = Boolean(formData.region && formData.tier)
   
   // Calculate cost for a single line item with full breakdown
-  // Logic matches the v_line_items_with_costs SQL view
+  // Prefers API-calculated costs, falls back to local calculation
   const calculateItemCost = (item: LineItem): CostBreakdown => {
+    // Check if we have API-calculated cost for this item
+    const apiResponse = workloadCosts[item.line_item_id]
+    if (apiResponse?.success && apiResponse?.data) {
+      const data = apiResponse.data
+      
+      // Handle different response formats:
+      // - Standard compute workloads: { dbu_calculation, vm_costs, total_cost: { cost_per_month } }
+      // - FMAPI/token-based workloads: { cost: { total_cost } }
+      // - DBSQL workloads: { dbu_costs, vm_costs, total_cost: { cost_per_month } }
+      const totalCost = data.total_cost?.cost_per_month ?? data.cost?.total_cost ?? 0
+      const dbuCost = data.dbu_calculation?.dbu_cost_per_month ?? data.dbu_costs?.dbu_cost_per_month ?? 0
+      const monthlyDBUs = data.dbu_calculation?.dbu_per_month ?? data.dbu_costs?.dbu_per_month ?? 0
+      
+      // If API returned 0 cost for FMAPI workloads, fall back to local calculation
+      // (External API may not have pricing data configured)
+      const isFMAPIWorkload = item.workload_type === 'FMAPI_DATABRICKS' || item.workload_type === 'FMAPI_PROPRIETARY'
+      if (isFMAPIWorkload && totalCost === 0) {
+        // Continue to local calculation below
+      } else {
+        return {
+          monthlyDBUs,
+          dbuCost,
+          vmCost: data.vm_costs?.vm_cost_per_month || 0,
+          totalCost
+        }
+      }
+    }
+    
+    // Fall back to local calculation if API cost not available
     const cloud = formData.cloud || 'aws'
     const region = formData.region // No default - must be set
-    const pricing = DBU_PRICING[cloud] || DBU_PRICING.aws
+    // Try to use dynamic DBU rates first, fall back to hardcoded
+    const pricing = Object.keys(dbuRatesMap).length > 0 ? dbuRatesMap : (DBU_PRICING[cloud] || DBU_PRICING.aws)
     const numWorkers = item.num_workers || 0
     
     // If no region selected, return zero costs
@@ -319,10 +468,12 @@ export default function Calculator() {
     // ========================================
     let hoursPerMonth = 0
     if (item.workload_type !== 'FMAPI_DATABRICKS' && item.workload_type !== 'FMAPI_PROPRIETARY') {
-      if (item.runs_per_day && item.avg_runtime_minutes) {
+      if (item.hours_per_month) {
+        // Direct hours input
+        hoursPerMonth = item.hours_per_month
+      } else if (item.runs_per_day && item.avg_runtime_minutes) {
+        // Calculate from runs: runs_per_day * (avg_runtime_minutes / 60) * days_per_month
         hoursPerMonth = (item.runs_per_day * (item.avg_runtime_minutes / 60)) * (item.days_per_month || 30)
-      } else if (item.hours_per_day) {
-        hoursPerMonth = (item.hours_per_day || 8) * (item.days_per_month || 30)
       }
     }
     
@@ -331,7 +482,7 @@ export default function Calculator() {
     // Matches the SQL view's CASE logic
     // ========================================
     let productType = ''
-    const dltEdition = (item.dlt_edition || 'core').toUpperCase()
+    const dltEdition = item.dlt_edition || 'CORE'
     
     switch (item.workload_type) {
       case 'JOBS':
@@ -366,7 +517,7 @@ export default function Calculator() {
         break
       
       case 'DBSQL':
-        const warehouseType = (item.dbsql_warehouse_type || 'serverless').toUpperCase()
+        const warehouseType = item.dbsql_warehouse_type || 'SERVERLESS'
         if (warehouseType === 'SERVERLESS') {
           productType = 'SERVERLESS_SQL_COMPUTE'
         } else if (warehouseType === 'PRO') {
@@ -433,15 +584,16 @@ export default function Calculator() {
           dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier
           
           // VM costs for classic compute
-          const pricingTier = item.vm_pricing_tier || 'on_demand'
-          const paymentOption = item.vm_payment_option || 'no_upfront'
+          const driverPricingTier = item.driver_pricing_tier || 'on_demand'
+          const driverPaymentOption = item.driver_payment_option || 'NA'
+          const workerPricingTier = item.worker_pricing_tier || 'spot'
+          const workerPaymentOption = item.worker_payment_option || 'NA'
           
           // Driver VM cost
-          const driverVMCostPerHour = getVMPrice(cloud, region, item.driver_node_type || '', pricingTier, paymentOption)
+          const driverVMCostPerHour = getVMPrice(cloud, region, item.driver_node_type || '', driverPricingTier, driverPaymentOption)
           
-          // Worker VM cost (spot if enabled, otherwise selected pricing tier)
-                          const workerPricingTier = (item.spot_percentage && item.spot_percentage > 0) ? 'spot' : pricingTier
-          const workerVMCostPerHour = getVMPrice(cloud, region, item.worker_node_type || '', workerPricingTier, paymentOption)
+          // Worker VM cost
+          const workerVMCostPerHour = getVMPrice(cloud, region, item.worker_node_type || '', workerPricingTier, workerPaymentOption)
           
           // Total VM cost per hour
           const totalVMCostPerHour = driverVMCostPerHour + (workerVMCostPerHour * numWorkers)
@@ -452,7 +604,7 @@ export default function Calculator() {
       
       case 'DBSQL':
         // DBSQL: lookup DBU per hour from warehouse size
-        const warehouseDBUs = DBSQL_DBU_RATES[item.dbsql_warehouse_size || 'small'] || 8
+        const warehouseDBUs = DBSQL_DBU_RATES[item.dbsql_warehouse_size || 'Small'] || 8
         dbuPerHour = warehouseDBUs * (item.dbsql_num_clusters || 1)
         monthlyDBUs = dbuPerHour * hoursPerMonth
         // No VM costs for DBSQL
@@ -474,15 +626,23 @@ export default function Calculator() {
       
       case 'FMAPI_DATABRICKS':
       case 'FMAPI_PROPRIETARY':
-        // Token-based pricing: DBU calculated from tokens, not hourly
-        // Input tokens: tokens / 1M * rate
-        // Output tokens: tokens / 1M * rate
-        const inputTokens = (item.fmapi_input_tokens_per_month || 0) / 1000000
-        const outputTokens = (item.fmapi_output_tokens_per_month || 0) / 1000000
-        // Default token pricing (would come from sync_product_fmapi_* tables)
-        const inputTokenRate = 1.0 // DBU per million input tokens
-        const outputTokenRate = 3.0 // DBU per million output tokens
-        monthlyDBUs = (inputTokens * inputTokenRate) + (outputTokens * outputTokenRate)
+        // Two pricing models:
+        // 1. Token-based: quantity is in millions, rate_type determines pricing
+        // 2. Provisioned: quantity is hours, rate_type is provisioned_scaling or provisioned_entry
+        const fmapiQuantity = item.fmapi_quantity || 0
+        const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(item.fmapi_rate_type || '')
+        
+        if (isProvisioned) {
+          // Provisioned throughput: Cost = hours × DBU/hour × DBU price
+          // Default DBU rates for provisioned (would come from pricing tables)
+          const provisionedDbuPerHour = item.fmapi_rate_type === 'provisioned_scaling' ? 200 : 50 // Example rates
+          monthlyDBUs = fmapiQuantity * provisionedDbuPerHour
+        } else {
+          // Token-based: Cost = (quantity / 1M) × DBU per 1M tokens × DBU price
+          // Default token pricing (would come from sync_product_fmapi_* tables)
+          const tokenRate = item.fmapi_rate_type === 'output_token' ? 3.0 : 1.0 // DBU per million tokens
+          monthlyDBUs = fmapiQuantity * tokenRate
+        }
         break
       
       default:
@@ -639,13 +799,129 @@ export default function Calculator() {
   
   // Get usage summary for a workload
   const getUsageSummary = (item: LineItem) => {
+    if (item.hours_per_month) {
+      return `${item.hours_per_month}h/month`
+    }
     if (item.runs_per_day) {
       return `${item.runs_per_day} runs/day × ${item.avg_runtime_minutes || 30}min`
     }
-    if (item.hours_per_day) {
-      return `${item.hours_per_day}h/day × ${item.days_per_month || 22}d`
-    }
     return null
+  }
+  
+  // Get workload-specific summary details
+  const getWorkloadSummaryDetails = (item: LineItem): { label: string; value: string }[] => {
+    const details: { label: string; value: string }[] = []
+    
+    // Add serverless mode for compute workloads when serverless is enabled
+    if (['JOBS', 'ALL_PURPOSE', 'DLT'].includes(item.workload_type || '') && item.serverless_enabled) {
+      details.push({ 
+        label: 'Mode', 
+        value: item.serverless_mode === 'performance' ? 'Performance' : 'Standard'
+      })
+    }
+    
+    switch (item.workload_type) {
+      case 'VECTOR_SEARCH':
+        if (item.vector_search_mode) {
+          details.push({ 
+            label: 'Mode', 
+            value: item.vector_search_mode === 'storage_optimized' ? 'Storage Optimized' : 'Standard'
+          })
+        }
+        if (item.vector_capacity_millions) {
+          details.push({ label: 'Capacity', value: `${item.vector_capacity_millions}M vectors` })
+        }
+        break
+        
+      case 'MODEL_SERVING':
+        if (item.model_serving_gpu_type) {
+          const gpuLabels: Record<string, string> = {
+            'cpu': 'CPU',
+            'gpu_small_t4': 'GPU Small (T4)',
+            'gpu_medium_a10g_1x': 'GPU Medium (A10G)',
+            'gpu_large_a10g_4x': 'GPU Large (4x A10G)',
+            'gpu_medium_a100_1x': 'GPU A100',
+            'gpu_large_a100_2x': 'GPU A100 (2x)',
+            'gpu_small': 'GPU Small',
+            'gpu_medium': 'GPU Medium',
+            'gpu_large': 'GPU Large'
+          }
+          details.push({ label: 'Endpoint', value: gpuLabels[item.model_serving_gpu_type] || item.model_serving_gpu_type })
+        }
+        break
+        
+      case 'LAKEBASE':
+        if (item.lakebase_cu) {
+          details.push({ label: 'CU', value: `${item.lakebase_cu}` })
+        }
+        if (item.lakebase_ha_nodes) {
+          details.push({ label: 'Nodes', value: `${item.lakebase_ha_nodes}${item.lakebase_ha_nodes > 1 ? ' (HA)' : ''}` })
+        }
+        if (item.lakebase_storage_gb) {
+          details.push({ label: 'Storage', value: `${item.lakebase_storage_gb} GB` })
+        }
+        break
+        
+      case 'FMAPI_DATABRICKS':
+        if (item.fmapi_model) {
+          details.push({ label: 'Model', value: item.fmapi_model })
+        }
+        if (item.fmapi_rate_type) {
+          const rateLabels: Record<string, string> = {
+            'input_token': 'Input Tokens',
+            'output_token': 'Output Tokens',
+            'provisioned_scaling': 'Provisioned Scaling',
+            'provisioned_entry': 'Provisioned Entry'
+          }
+          details.push({ label: 'Rate', value: rateLabels[item.fmapi_rate_type] || item.fmapi_rate_type })
+        }
+        if (item.fmapi_quantity) {
+          const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(item.fmapi_rate_type || '')
+          details.push({ 
+            label: isProvisioned ? 'Hours' : 'Quantity', 
+            value: isProvisioned ? `${item.fmapi_quantity}h/mo` : `${item.fmapi_quantity}M` 
+          })
+        }
+        break
+        
+      case 'FMAPI_PROPRIETARY':
+        if (item.fmapi_provider && item.fmapi_model) {
+          details.push({ label: 'Model', value: `${item.fmapi_provider}/${item.fmapi_model}` })
+        }
+        if (item.fmapi_rate_type) {
+          const rateLabels: Record<string, string> = {
+            'input_token': 'Input',
+            'output_token': 'Output',
+            'cache_read': 'Cache Read',
+            'cache_write': 'Cache Write'
+          }
+          details.push({ label: 'Rate', value: rateLabels[item.fmapi_rate_type] || item.fmapi_rate_type })
+        }
+        if (item.fmapi_quantity) {
+          details.push({ label: 'Quantity', value: `${item.fmapi_quantity}M tokens` })
+        }
+        break
+        
+      case 'DLT':
+        if (item.dlt_edition) {
+          details.push({ label: 'Edition', value: item.dlt_edition })
+        }
+        break
+        
+      case 'DBSQL':
+        if (item.dbsql_warehouse_type) {
+          details.push({ label: 'Type', value: item.dbsql_warehouse_type })
+        }
+        if (item.dbsql_warehouse_size) {
+          details.push({ label: 'Size', value: item.dbsql_warehouse_size })
+        }
+        if (item.dbsql_num_clusters && item.dbsql_num_clusters > 1) {
+          details.push({ label: 'Clusters', value: `${item.dbsql_num_clusters}` })
+        }
+        break
+    }
+    
+    return details
   }
   
   // Check if opportunity OR use case is selected (at least one required)
@@ -669,6 +945,68 @@ export default function Calculator() {
     return missing
   }
   
+  // Show loading state when loading an existing estimate
+  if (id && isLoadingEstimate && !currentEstimate) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            onClick={() => navigate('/estimates')}
+            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <ArrowLeftIcon className="w-5 h-5" />
+          </button>
+          <div className="h-7 w-48 bg-[var(--bg-tertiary)] rounded animate-pulse"></div>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Content Skeleton */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Config Card Skeleton */}
+            <div className="card p-5">
+              <div className="h-5 w-32 bg-[var(--bg-tertiary)] rounded animate-pulse mb-4"></div>
+              <div className="grid grid-cols-3 gap-3 mb-6">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-16 bg-[var(--bg-tertiary)] rounded-xl animate-pulse"></div>
+                ))}
+              </div>
+              <div className="space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-10 bg-[var(--bg-tertiary)] rounded animate-pulse"></div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Workloads Skeleton */}
+            <div className="space-y-4">
+              <div className="h-6 w-28 bg-[var(--bg-tertiary)] rounded animate-pulse"></div>
+              <div className="card p-8">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="relative">
+                    <div className="w-12 h-12 rounded-full border-4 border-[var(--border-primary)] border-t-orange-500 animate-spin"></div>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-[var(--text-primary)]">Loading estimate...</p>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">Please wait while we fetch your data</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Summary Sidebar Skeleton */}
+          <div className="lg:col-span-1">
+            <div className="card p-5 space-y-4">
+              <div className="h-5 w-20 bg-[var(--bg-tertiary)] rounded animate-pulse"></div>
+              <div className="h-24 bg-[var(--bg-tertiary)] rounded animate-pulse"></div>
+              <div className="h-12 bg-[var(--bg-tertiary)] rounded animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
@@ -753,7 +1091,13 @@ export default function Calculator() {
                     <button
                       key={cloud.id}
                       onClick={() => {
-                        setFormData(prev => ({ ...prev, cloud: cloud.id, region: '' }))
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          cloud: cloud.id, 
+                          region: '',
+                          // Reset tier if switching to Azure and current tier is 'enterprise' (not available on Azure)
+                          tier: (cloud.id === 'azure' && prev.tier === 'enterprise') ? '' : prev.tier
+                        }))
                         setSelectedCloud(cloud.id)
                         markAsChanged()
                       }}
@@ -912,9 +1256,11 @@ export default function Calculator() {
                         !formData.region && "border-orange-500/50 ring-1 ring-orange-500/30"
                       )}
                     >
-                      <option value="">Select region</option>
-                      {selectedCloudProvider?.regions.map(region => (
-                        <option key={region.id} value={region.id}>{region.name}</option>
+                      <option value="">{isLoadingRegions ? 'Loading regions...' : 'Select region'}</option>
+                      {regions.map(region => (
+                        <option key={region.region_code} value={region.region_code}>
+                          {region.region_code} ({region.sku_region})
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -937,7 +1283,9 @@ export default function Calculator() {
                       <option value="">Select tier</option>
                       <option value="standard">Standard</option>
                       <option value="premium">Premium</option>
-                      <option value="enterprise">Enterprise</option>
+                      {formData.cloud !== 'azure' && (
+                        <option value="enterprise">Enterprise</option>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -983,6 +1331,18 @@ export default function Calculator() {
                   Create Estimate
                 </button>
               </div>
+            ) : isLoadingLineItems && !lineItemsLoaded ? (
+              <div className="card p-8 text-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="relative">
+                    <div className="w-12 h-12 rounded-full border-4 border-[var(--border-primary)] border-t-orange-500 animate-spin"></div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[var(--text-primary)]">Loading workloads...</p>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">Fetching line items for this estimate</p>
+                  </div>
+                </div>
+              </div>
             ) : (
               <>
                 {/* Existing Workloads */}
@@ -1023,9 +1383,12 @@ export default function Calculator() {
                                   Photon
                                 </span>
                               )}
-                              {(item.spot_percentage && item.spot_percentage > 0) && (
+                              {/* Show Spot Workers badge only for non-serverless compute workloads */}
+                              {item.worker_pricing_tier === 'spot' && 
+                               !item.serverless_enabled && 
+                               ['JOBS', 'ALL_PURPOSE', 'DLT'].includes(item.workload_type || '') && (
                                 <span className="badge badge-yellow">
-                                  Spot {item.spot_percentage}%
+                                  Spot Workers
                                 </span>
                               )}
                             </div>
@@ -1067,28 +1430,41 @@ export default function Calculator() {
                             <span className="text-[var(--text-muted)]">DBU Cost</span>
                             <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
                           </div>
-                          <div>
-                            <span className="text-[var(--text-muted)]">VM Cost</span>
-                            <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
-                          </div>
-                          {item.driver_node_type && (
+                          {/* Hide VM Cost for serverless workloads */}
+                          {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'].includes(item.workload_type || '') && (
                             <div>
-                              <span className="text-[var(--text-muted)]">Driver</span>
-                              <p className="font-mono text-[var(--text-primary)]">{item.driver_node_type}</p>
+                              <span className="text-[var(--text-muted)]">VM Cost</span>
+                              <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
                             </div>
                           )}
-                          {item.worker_node_type && (
-                            <div>
-                              <span className="text-[var(--text-muted)]">Workers</span>
-                              <p className="text-[var(--text-primary)]">{item.num_workers}× {item.worker_node_type}</p>
-                            </div>
+                          
+                          {/* Compute workloads: show driver/worker nodes */}
+                          {(item.workload_type === 'JOBS' || item.workload_type === 'ALL_PURPOSE' || item.workload_type === 'DLT') && (
+                            <>
+                              {item.driver_node_type && (
+                                <div>
+                                  <span className="text-[var(--text-muted)]">Driver</span>
+                                  <p className="font-mono text-[var(--text-primary)] text-[10px]">{item.driver_node_type}</p>
+                                </div>
+                              )}
+                              {item.worker_node_type && (
+                                <div>
+                                  <span className="text-[var(--text-muted)]">Workers</span>
+                                  <p className="text-[var(--text-primary)]">{item.num_workers}× <span className="font-mono text-[10px]">{item.worker_node_type}</span></p>
+                                </div>
+                              )}
+                            </>
                           )}
-                          {item.workload_type === 'DBSQL' && item.dbsql_warehouse_size && (
-                            <div>
-                              <span className="text-[var(--text-muted)]">Warehouse</span>
-                              <p className="text-[var(--text-primary)]">{item.dbsql_warehouse_size}</p>
+                          
+                          {/* Workload-specific details */}
+                          {getWorkloadSummaryDetails(item).map((detail, idx) => (
+                            <div key={idx}>
+                              <span className="text-[var(--text-muted)]">{detail.label}</span>
+                              <p className="text-[var(--text-primary)]">{detail.value}</p>
                             </div>
-                          )}
+                          ))}
+                          
+                          {/* Usage summary */}
                           {usageSummary && (
                             <div>
                               <span className="text-[var(--text-muted)]">Usage</span>

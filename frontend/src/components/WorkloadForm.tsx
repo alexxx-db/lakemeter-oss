@@ -14,11 +14,11 @@ interface Props {
   inline?: boolean
 }
 
-export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, inline = false }: Props) {
+export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, inline: _inline = false }: Props) {
   const { 
     workloadTypes, 
     instanceTypes, 
-    dbsqlSizes, 
+    dbsqlSizes: storeDbsqlSizes, 
     dltEditions, 
     vmPaymentOptions,
     modelServingGPUTypes,
@@ -31,7 +31,116 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     fetchLineItems
   } = useStore()
   
+  // Fallback DBSQL sizes if store hasn't loaded yet
+  const defaultDbsqlSizes = [
+    { id: '2X-Small', name: '2X-Small', dbu_per_hour: 2 },
+    { id: 'X-Small', name: 'X-Small', dbu_per_hour: 4 },
+    { id: 'Small', name: 'Small', dbu_per_hour: 8 },
+    { id: 'Medium', name: 'Medium', dbu_per_hour: 16 },
+    { id: 'Large', name: 'Large', dbu_per_hour: 32 },
+    { id: 'X-Large', name: 'X-Large', dbu_per_hour: 64 },
+    { id: '2X-Large', name: '2X-Large', dbu_per_hour: 128 },
+    { id: '3X-Large', name: '3X-Large', dbu_per_hour: 256 },
+    { id: '4X-Large', name: '4X-Large', dbu_per_hour: 512 },
+  ]
+  const dbsqlSizes = storeDbsqlSizes.length > 0 ? storeDbsqlSizes : defaultDbsqlSizes
+  
+  // Fallback DLT editions if store hasn't loaded yet
+  const defaultDltEditions = [
+    { id: 'CORE', name: 'Core' },
+    { id: 'PRO', name: 'Pro' },
+    { id: 'ADVANCED', name: 'Advanced' },
+  ]
+  const dltEditionOptions = dltEditions.length > 0 ? dltEditions : defaultDltEditions
+  
+  // Fallback Serverless modes
+  const serverlessModeOptions = [
+    { id: 'standard', name: 'Standard', description: 'Cost-optimized for general workloads' },
+    { id: 'performance', name: 'Performance', description: 'Optimized for faster execution' },
+  ]
+  
+  // Fallback FMAPI Databricks config if store hasn't loaded yet
+  const defaultFmapiDatabricksConfig = {
+    model_types: [
+      { id: 'llm', name: 'LLMs', has_output_tokens: true },
+      { id: 'embedding', name: 'Embedding Models', has_output_tokens: false },
+    ],
+    models: {
+      llm: [
+        { id: 'llama-4-maverick', name: 'Llama 4 Maverick' },
+        { id: 'llama-3-3-70b', name: 'Llama 3.3 70B' },
+        { id: 'llama-3-1-8b', name: 'Llama 3.1 8B' },
+        { id: 'llama-3-2-3b', name: 'Llama 3.2 3B' },
+        { id: 'llama-3-2-1b', name: 'Llama 3.2 1B' },
+        { id: 'gpt-oss-120b', name: 'GPT-OSS 120B' },
+        { id: 'gpt-oss-20b', name: 'GPT-OSS 20B' },
+        { id: 'gemma-3-12b', name: 'Gemma 3 12B' },
+      ],
+      embedding: [
+        { id: 'bge-large', name: 'BGE Large' },
+        { id: 'gte', name: 'GTE' },
+      ],
+    },
+    inference_types: [
+      { id: 'pay_per_token', name: 'Pay-Per-Token' },
+      { id: 'provisioned_throughput', name: 'Provisioned Throughput' },
+      { id: 'batch_inference', name: 'Batch Inference' },
+    ],
+  }
+  const fmapiDatabricksModels = fmapiDatabricksConfig || defaultFmapiDatabricksConfig
+  
+  // Fallback FMAPI Proprietary config if store hasn't loaded yet
+  // Models from lakemeter.sync_product_fmapi_proprietary
+  const defaultFmapiProprietaryConfig = {
+    providers: [
+      {
+        id: 'anthropic',
+        name: 'Anthropic',
+        models: [
+          { id: 'claude-sonnet-3-7', name: 'Claude Sonnet 3.7' },
+          { id: 'claude-sonnet-4', name: 'Claude Sonnet 4' },
+          { id: 'claude-sonnet-4-1', name: 'Claude Sonnet 4.1' },
+          { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' },
+          { id: 'claude-opus-4', name: 'Claude Opus 4' },
+          { id: 'claude-opus-4-1', name: 'Claude Opus 4.1' },
+          { id: 'claude-opus-4-5', name: 'Claude Opus 4.5' },
+          { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5' },
+        ],
+      },
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        models: [
+          { id: 'gpt-5', name: 'GPT-5' },
+          { id: 'gpt-5-1', name: 'GPT-5.1' },
+          { id: 'gpt-5-mini', name: 'GPT-5 Mini' },
+          { id: 'gpt-5-nano', name: 'GPT-5 Nano' },
+        ],
+      },
+      {
+        id: 'google',
+        name: 'Google',
+        models: [
+          { id: 'gemini-2-5-flash', name: 'Gemini 2.5 Flash' },
+          { id: 'gemini-2-5-pro', name: 'Gemini 2.5 Pro' },
+        ],
+      },
+    ],
+    endpoint_types: [
+      { id: 'global', name: 'Global' },
+      { id: 'in_geo', name: 'In-Geo (Regional)' },
+    ],
+    context_lengths: [
+      { id: 'all', name: 'All' },
+      { id: 'short', name: 'Short' },
+      { id: 'long', name: 'Long' },
+    ],
+  }
+  const fmapiProprietaryModels = fmapiProprietaryConfig || defaultFmapiProprietaryConfig
+  
   const [isSaving, setIsSaving] = useState(false)
+  const [useDirectHours, setUseDirectHours] = useState(false)  // Toggle between run-based and hours-based input
+  const [isFormInitialized, setIsFormInitialized] = useState(!lineItem)  // True if no lineItem (new form) or after loading
   const [form, setForm] = useState({
     workload_name: '',
     workload_type: 'JOBS',
@@ -41,9 +150,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     worker_node_type: '',
     num_workers: 2,
     photon_enabled: false,
-    dlt_edition: 'pro',
-    dbsql_warehouse_type: 'serverless',
-    dbsql_warehouse_size: 'small',
+    dlt_edition: 'PRO',
+    dbsql_warehouse_type: 'SERVERLESS',
+    dbsql_warehouse_size: 'Small',
     dbsql_num_clusters: 1,
     dbsql_vm_pricing_tier: 'on_demand',
     dbsql_vm_payment_option: 'no_upfront',
@@ -53,7 +162,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     model_serving_num_endpoints: 1,
     lakebase_cu: 1,
     lakebase_storage_gb: 100,
-    lakebase_ha_nodes: 0,
+    lakebase_ha_nodes: 1,
     lakebase_backup_retention_days: 7,
     fmapi_provider: 'anthropic',
     fmapi_model: 'llama-3-3-70b',
@@ -72,8 +181,50 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     notes: ''
   })
   
+  // Default form values for new workloads
+  const defaultFormValues = {
+    workload_name: '',
+    workload_type: 'JOBS',
+    serverless_enabled: false,
+    serverless_mode: 'standard',
+    driver_node_type: '',
+    worker_node_type: '',
+    num_workers: 2,
+    photon_enabled: false,
+    dlt_edition: 'PRO',
+    dbsql_warehouse_type: 'SERVERLESS',
+    dbsql_warehouse_size: 'Small',
+    dbsql_num_clusters: 1,
+    dbsql_vm_pricing_tier: 'on_demand',
+    dbsql_vm_payment_option: 'no_upfront',
+    vector_search_mode: 'standard',
+    vector_capacity_millions: 1,
+    model_serving_gpu_type: 'cpu',
+    model_serving_num_endpoints: 1,
+    lakebase_cu: 1,
+    lakebase_storage_gb: 100,
+    lakebase_ha_nodes: 1,
+    lakebase_backup_retention_days: 7,
+    fmapi_provider: 'anthropic',
+    fmapi_model: 'llama-3-3-70b',
+    fmapi_endpoint_type: 'global',
+    fmapi_context_length: 'all',
+    fmapi_rate_type: 'input_token',
+    fmapi_quantity: 0,
+    runs_per_day: 1,
+    avg_runtime_minutes: 30,
+    days_per_month: 22,
+    hours_per_month: 0,
+    driver_pricing_tier: 'on_demand',
+    worker_pricing_tier: 'spot',
+    driver_payment_option: 'no_upfront',
+    worker_payment_option: 'no_upfront',
+    notes: ''
+  }
+
   useEffect(() => {
     if (lineItem) {
+      // Editing existing line item - load saved values
       setForm({
         workload_name: lineItem.workload_name || '',
         workload_type: lineItem.workload_type || 'JOBS',
@@ -83,9 +234,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         worker_node_type: lineItem.worker_node_type || '',
         num_workers: lineItem.num_workers || 2,
         photon_enabled: lineItem.photon_enabled || false,
-        dlt_edition: lineItem.dlt_edition || 'pro',
-        dbsql_warehouse_type: lineItem.dbsql_warehouse_type || 'serverless',
-        dbsql_warehouse_size: lineItem.dbsql_warehouse_size || 'small',
+        dlt_edition: lineItem.dlt_edition || 'PRO',
+        dbsql_warehouse_type: lineItem.dbsql_warehouse_type || 'SERVERLESS',
+        dbsql_warehouse_size: lineItem.dbsql_warehouse_size || 'Small',
         dbsql_num_clusters: lineItem.dbsql_num_clusters || 1,
         dbsql_vm_pricing_tier: lineItem.dbsql_vm_pricing_tier || 'on_demand',
         dbsql_vm_payment_option: lineItem.dbsql_vm_payment_option || 'no_upfront',
@@ -95,7 +246,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         model_serving_num_endpoints: 1,
         lakebase_cu: lineItem.lakebase_cu || 1,
         lakebase_storage_gb: lineItem.lakebase_storage_gb || 100,
-        lakebase_ha_nodes: lineItem.lakebase_ha_nodes || 0,
+        lakebase_ha_nodes: lineItem.lakebase_ha_nodes || 1,
         lakebase_backup_retention_days: lineItem.lakebase_backup_retention_days || 7,
         fmapi_provider: lineItem.fmapi_provider || 'anthropic',
         fmapi_model: lineItem.fmapi_model || 'llama-3-3-70b',
@@ -109,35 +260,53 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         hours_per_month: lineItem.hours_per_month || 0,
         driver_pricing_tier: lineItem.driver_pricing_tier || 'on_demand',
         worker_pricing_tier: lineItem.worker_pricing_tier || 'spot',
-        driver_payment_option: lineItem.driver_payment_option || 'no_upfront',
-        worker_payment_option: lineItem.worker_payment_option || 'no_upfront',
+        driver_payment_option: lineItem.driver_payment_option || 'NA',
+        worker_payment_option: lineItem.worker_payment_option || 'NA',
         notes: lineItem.notes || ''
       })
+      
+      // Determine if lineItem was saved with direct hours
+      const hasDirectHours = Boolean(lineItem.hours_per_month && lineItem.hours_per_month > 0 && !lineItem.runs_per_day)
+      setUseDirectHours(hasDirectHours)
+      
+      // Mark form as initialized after loading from lineItem
+      setIsFormInitialized(true)
+    } else {
+      // Creating new line item - reset to defaults
+      setForm(defaultFormValues)
+      setUseDirectHours(false)
+      setIsFormInitialized(true)
     }
-  }, [lineItem])
+  }, [lineItem?.line_item_id]) // Use line_item_id to detect when switching between items
   
   // Update line item locally for real-time cost preview when pricing-related fields change
+  // Only run after form has been initialized to prevent overwriting saved values with defaults
   useEffect(() => {
-    if (lineItem) {
+    if (lineItem && isFormInitialized) {
+      // Only include compute-specific fields for compute workloads (JOBS, ALL_PURPOSE, DLT)
+      const isComputeWorkload = ['JOBS', 'ALL_PURPOSE', 'DLT'].includes(form.workload_type)
+      
       updateLineItemLocal(lineItem.line_item_id, {
-        driver_pricing_tier: form.driver_pricing_tier,
-        worker_pricing_tier: form.worker_pricing_tier,
-        driver_node_type: form.driver_node_type,
-        worker_node_type: form.worker_node_type,
-        num_workers: form.num_workers,
+        // Only set pricing tiers and node types for compute workloads
+        driver_pricing_tier: isComputeWorkload ? form.driver_pricing_tier : undefined,
+        worker_pricing_tier: isComputeWorkload ? form.worker_pricing_tier : undefined,
+        driver_node_type: isComputeWorkload ? form.driver_node_type : undefined,
+        worker_node_type: isComputeWorkload ? form.worker_node_type : undefined,
+        num_workers: isComputeWorkload ? form.num_workers : undefined,
         days_per_month: form.days_per_month,
         runs_per_day: form.runs_per_day,
         avg_runtime_minutes: form.avg_runtime_minutes,
-        serverless_enabled: form.serverless_enabled,
-        photon_enabled: form.photon_enabled,
+        serverless_enabled: isComputeWorkload ? form.serverless_enabled : undefined,
+        photon_enabled: isComputeWorkload ? form.photon_enabled : undefined,
         dbsql_warehouse_size: form.workload_type === 'DBSQL' ? form.dbsql_warehouse_size : undefined,
-        lakebase_cu: form.lakebase_cu,
+        lakebase_cu: form.workload_type === 'LAKEBASE' ? form.lakebase_cu : undefined,
       })
       onSave?.() // Mark estimate as having unsaved changes
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     lineItem?.line_item_id,
+    isFormInitialized,
     form.driver_pricing_tier,
     form.worker_pricing_tier,
     form.driver_node_type,
@@ -155,6 +324,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   ])
   
   const selectedWorkloadType: WorkloadType | undefined = workloadTypes.find(w => w.workload_type === form.workload_type)
+  
+  // If workloadTypes is empty or selectedWorkloadType is not found, show loading/error state
+  const isWorkloadTypesLoading = workloadTypes.length === 0
+  const isWorkloadTypeInvalid = !isWorkloadTypesLoading && !selectedWorkloadType && form.workload_type
   
   const computedSku = (): string | null => {
     if (!selectedWorkloadType) return null
@@ -199,14 +372,16 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       
       // Compute config (both serverless and classic)
       if (selectedWorkloadType?.show_compute_config) {
-        data.photon_enabled = form.serverless_enabled ? false : form.photon_enabled
+        // Database constraint: when serverless_enabled is true, photon_enabled must be true
+        // Serverless compute automatically includes Photon acceleration
+        data.photon_enabled = form.serverless_enabled ? true : form.photon_enabled
         data.driver_node_type = form.driver_node_type || null
         data.worker_node_type = form.worker_node_type || null
         data.num_workers = form.num_workers
-        data.driver_pricing_tier = form.driver_pricing_tier
-        data.worker_pricing_tier = form.worker_pricing_tier
-        data.driver_payment_option = form.driver_payment_option
-        data.worker_payment_option = form.worker_payment_option
+        data.driver_pricing_tier = form.driver_pricing_tier || 'on_demand'
+        data.worker_pricing_tier = form.worker_pricing_tier || 'spot'
+        data.driver_payment_option = form.driver_payment_option || 'NA'
+        data.worker_payment_option = form.worker_payment_option || 'NA'
       } else {
         data.photon_enabled = false
         data.driver_node_type = null
@@ -218,8 +393,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         data.worker_payment_option = null
       }
       
-      // DLT config
-      if (selectedWorkloadType?.show_dlt_config) {
+      // DLT config - only include edition for non-serverless DLT
+      if (selectedWorkloadType?.show_dlt_config && !form.serverless_enabled) {
         data.dlt_edition = form.dlt_edition
       } else {
         data.dlt_edition = null
@@ -286,25 +461,42 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         data.fmapi_quantity = null
       }
       
-      // Hours per month - for workloads that need it
-      if (selectedWorkloadType?.show_usage_hours) {
-        data.hours_per_month = form.hours_per_month
-      } else {
-        data.hours_per_month = null
-      }
+      // Hours per month vs Run-based usage
+      // For compute workloads, check if using direct hours
+      const isComputeWorkload = selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config
       
-      // Usage config
-      if (selectedWorkloadType?.show_usage_runs) {
-        data.runs_per_day = form.runs_per_day
-      } else {
+      if (isComputeWorkload) {
+        if (useDirectHours) {
+          // Using direct hours - set hours_per_month and null out run-based fields
+          data.hours_per_month = form.hours_per_month || 730
+          data.runs_per_day = null
+          data.avg_runtime_minutes = null
+          data.days_per_month = null
+        } else {
+          // Using run-based - set run-based fields and null out hours_per_month
+          data.hours_per_month = null
+          data.runs_per_day = selectedWorkloadType?.show_usage_runs ? form.runs_per_day : null
+          data.avg_runtime_minutes = form.avg_runtime_minutes
+          data.days_per_month = form.days_per_month
+        }
+      } else if (selectedWorkloadType?.show_vector_search_mode || form.workload_type === 'MODEL_SERVING' || selectedWorkloadType?.show_lakebase_config) {
+        // For Vector Search, Model Serving, Lakebase - always use hours_per_month
+        data.hours_per_month = form.hours_per_month || 730
         data.runs_per_day = null
-      }
-      
-      // Avg Runtime - for Jobs, All Purpose, DLT, and SQL Warehouse
-      if (selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) {
-        data.avg_runtime_minutes = form.avg_runtime_minutes
-      } else {
         data.avg_runtime_minutes = null
+        data.days_per_month = null
+      } else if (selectedWorkloadType?.show_fmapi_config) {
+        // For FMAPI - use quantity-based, no hours
+        data.hours_per_month = form.hours_per_month || null
+        data.runs_per_day = null
+        data.avg_runtime_minutes = null
+        data.days_per_month = null
+      } else {
+        // Default - null everything
+        data.hours_per_month = null
+        data.runs_per_day = null
+        data.avg_runtime_minutes = null
+        data.days_per_month = null
       }
       
       if (lineItem) {
@@ -329,6 +521,16 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   // Show VM config for compute workloads (both serverless and classic)
   const showVMConfig = selectedWorkloadType?.show_compute_config
   
+  // Show loading state while workload types are being fetched
+  if (isWorkloadTypesLoading) {
+    return (
+      <div className="p-8 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-orange-500 border-t-transparent mx-auto mb-4"></div>
+        <p className="text-sm text-[var(--text-muted)]">Loading workload configuration...</p>
+      </div>
+    )
+  }
+  
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Basic Info */}
@@ -350,7 +552,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           <select
             value={form.workload_type}
             onChange={(e) => setForm(f => ({ ...f, workload_type: e.target.value, serverless_enabled: false, photon_enabled: false }))}
-            className="w-full"
+            className={clsx("w-full", isWorkloadTypeInvalid && "border-red-500")}
           >
             {workloadTypes.map(wt => (
               <option key={wt.workload_type} value={wt.workload_type}>
@@ -358,6 +560,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </option>
             ))}
           </select>
+          {isWorkloadTypeInvalid && (
+            <p className="text-xs text-red-500 mt-1">Unknown workload type: {form.workload_type}</p>
+          )}
         </div>
       </div>
       
@@ -376,11 +581,22 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Serverless Toggle - left */}
         {selectedWorkloadType?.show_serverless_toggle && (
-          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+          <div className={clsx(
+            "p-3 rounded-lg border transition-all",
+            form.serverless_enabled 
+              ? "bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-700" 
+              : "bg-[var(--bg-tertiary)] border-[var(--border-primary)]"
+          )}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CloudIcon className="w-4 h-4 text-teal-500 dark:text-teal-400" />
-                <span className="text-sm text-[var(--text-secondary)]">Serverless</span>
+                <CloudIcon className={clsx(
+                  "w-4 h-4",
+                  form.serverless_enabled ? "text-teal-600 dark:text-teal-400" : "text-teal-500 dark:text-teal-400"
+                )} />
+                <span className={clsx(
+                  "text-sm",
+                  form.serverless_enabled ? "text-teal-700 dark:text-teal-300 font-medium" : "text-[var(--text-secondary)]"
+                )}>Serverless</span>
               </div>
               <button
                 type="button"
@@ -390,117 +606,129 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 <span className={clsx('toggle-knob', form.serverless_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
               </button>
             </div>
+            
+            {/* Serverless Mode Dropdown - appears when serverless is enabled */}
+            {form.serverless_enabled && (
+              <div className="mt-3 pt-3 border-t border-teal-200 dark:border-teal-700">
+                <label className="block text-xs font-medium mb-1.5 text-teal-700 dark:text-teal-300">Serverless Mode</label>
+                <select
+                  value={form.serverless_mode}
+                  onChange={(e) => setForm(f => ({ ...f, serverless_mode: e.target.value }))}
+                  className="w-full text-sm bg-white dark:bg-slate-800 border-teal-200 dark:border-teal-600"
+                >
+                  {serverlessModeOptions.map(mode => (
+                    <option key={mode.id} value={mode.id}>{mode.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs mt-1 text-teal-600 dark:text-teal-400">
+                  {serverlessModeOptions.find(m => m.id === form.serverless_mode)?.description}
+                </p>
+              </div>
+            )}
           </div>
         )}
         
         {/* Photon Toggle - right */}
-        {selectedWorkloadType?.show_photon_toggle && !form.serverless_enabled && (
-          <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+        {selectedWorkloadType?.show_photon_toggle && (
+          <div className={clsx(
+            "p-3 rounded-lg border transition-all",
+            (form.photon_enabled || form.serverless_enabled)
+              ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700"
+              : "bg-[var(--bg-tertiary)] border-[var(--border-primary)]"
+          )}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <BoltIcon className="w-4 h-4 text-orange-600 dark:text-orange-500" />
-                <span className="text-sm text-[var(--text-secondary)]">Photon</span>
+                <BoltIcon className={clsx(
+                  "w-4 h-4",
+                  (form.photon_enabled || form.serverless_enabled) ? "text-orange-600 dark:text-orange-400" : "text-orange-600 dark:text-orange-500"
+                )} />
+                <span className={clsx(
+                  "text-sm",
+                  (form.photon_enabled || form.serverless_enabled) ? "text-orange-700 dark:text-orange-300 font-medium" : "text-[var(--text-secondary)]"
+                )}>Photon</span>
+                {form.serverless_enabled && (
+                  <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">Auto</span>
+                )}
               </div>
               <button
                 type="button"
-                onClick={() => setForm(f => ({ ...f, photon_enabled: !f.photon_enabled }))}
-                className={clsx('toggle', form.photon_enabled ? 'toggle-checked' : 'toggle-unchecked')}
+                onClick={() => !form.serverless_enabled && setForm(f => ({ ...f, photon_enabled: !f.photon_enabled }))}
+                disabled={form.serverless_enabled}
+                className={clsx(
+                  'toggle', 
+                  (form.photon_enabled || form.serverless_enabled) ? 'toggle-checked' : 'toggle-unchecked',
+                  form.serverless_enabled && 'opacity-60 cursor-not-allowed'
+                )}
               >
-                <span className={clsx('toggle-knob', form.photon_enabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
+                <span className={clsx(
+                  'toggle-knob', 
+                  (form.photon_enabled || form.serverless_enabled) ? 'toggle-knob-checked' : 'toggle-knob-unchecked'
+                )} />
               </button>
             </div>
+            {(form.photon_enabled || form.serverless_enabled) && (
+              <p className="text-xs mt-2 text-orange-600 dark:text-orange-400">
+                Photon acceleration enabled for faster query execution
+              </p>
+            )}
           </div>
         )}
       </div>
       
-      {/* Configuration Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Classic Compute Config */}
-        {showVMConfig && (
-          <>
-            {/* Row 1: Driver Node | Worker Node | Number of Workers */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Driver Node (VM)</label>
-              <SearchableSelect
-                options={instanceTypes.map(it => ({
-                  value: it.id,
-                  label: it.vcpus && it.memory_gb 
-                    ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
-                    : it.name,
-                  group: it.instance_family || 'General Purpose'
-                }))}
-                value={form.driver_node_type}
-                onChange={(value) => setForm(f => ({ ...f, driver_node_type: value }))}
-                placeholder="Select type..."
-                searchPlaceholder="Search instance types..."
-                grouped
-              />
+      {/* VM Configuration - Driver & Worker Sections */}
+      {showVMConfig && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Driver Configuration Card */}
+          <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border-primary)]">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+              <h4 className="text-sm font-semibold text-[var(--text-primary)]">Driver Node</h4>
+              <span className="text-xs text-[var(--text-muted)]">(1 node)</span>
             </div>
             
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Worker Node (VM)</label>
-              <SearchableSelect
-                options={instanceTypes.map(it => ({
-                  value: it.id,
-                  label: it.vcpus && it.memory_gb 
-                    ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
-                    : it.name,
-                  group: it.instance_family || 'General Purpose'
-                }))}
-                value={form.worker_node_type}
-                onChange={(value) => setForm(f => ({ ...f, worker_node_type: value }))}
-                placeholder="Select type..."
-                searchPlaceholder="Search instance types..."
-                grouped
-              />
-            </div>
-            
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Workers</label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={form.num_workers}
-                onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
-                className="w-full text-sm"
-              />
-            </div>
-            
-            {/* Row 2: Driver Pricing Tier | Worker Pricing Tier */}
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Driver Pricing Tier</label>
-              <select
-                value={form.driver_pricing_tier}
-                onChange={(e) => setForm(f => ({ ...f, driver_pricing_tier: e.target.value }))}
-                className="w-full text-sm"
-              >
-                <option value="on_demand">On-Demand</option>
-                <option value="reserved_1yr">1-Year Reserved</option>
-                <option value="reserved_3yr">3-Year Reserved</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Worker Pricing Tier</label>
-              <select
-                value={form.worker_pricing_tier}
-                onChange={(e) => setForm(f => ({ ...f, worker_pricing_tier: e.target.value }))}
-                className="w-full text-sm"
-              >
-                <option value="spot">Spot Instances</option>
-                <option value="on_demand">On-Demand</option>
-                <option value="reserved_1yr">1-Year Reserved</option>
-                <option value="reserved_3yr">3-Year Reserved</option>
-              </select>
-            </div>
-            
-            {/* Payment Options (AWS Reserved Instances only) */}
-            {selectedCloud === 'aws' && (form.driver_pricing_tier.startsWith('reserved') || form.worker_pricing_tier.startsWith('reserved')) && (
-              <>
-                {form.driver_pricing_tier.startsWith('reserved') && (
+            <div className="space-y-3">
+              {/* Instance Type */}
+              <div>
+                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
+                <SearchableSelect
+                  options={instanceTypes.map(it => ({
+                    value: it.id,
+                    label: it.vcpus && it.memory_gb 
+                      ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
+                      : it.name,
+                    group: it.instance_family || 'General Purpose'
+                  }))}
+                  value={form.driver_node_type}
+                  onChange={(value) => setForm(f => ({ ...f, driver_node_type: value }))}
+                  placeholder="Select type..."
+                  searchPlaceholder="Search instance types..."
+                  grouped
+                />
+              </div>
+              
+              {/* Pricing Tier & Payment Option Row */}
+              <div className={clsx(
+                "grid gap-3",
+                selectedCloud === 'aws' && form.driver_pricing_tier.startsWith('reserved') 
+                  ? "grid-cols-2" 
+                  : "grid-cols-1"
+              )}>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
+                  <select
+                    value={form.driver_pricing_tier}
+                    onChange={(e) => setForm(f => ({ ...f, driver_pricing_tier: e.target.value }))}
+                    className="w-full text-sm"
+                  >
+                    <option value="on_demand">On-Demand</option>
+                    <option value="reserved_1y">1-Year Reserved</option>
+                    <option value="reserved_3y">3-Year Reserved</option>
+                  </select>
+                </div>
+                
+                {selectedCloud === 'aws' && form.driver_pricing_tier.startsWith('reserved') && (
                   <div>
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Driver Payment Option</label>
+                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
                     <select
                       value={form.driver_payment_option}
                       onChange={(e) => setForm(f => ({ ...f, driver_payment_option: e.target.value }))}
@@ -514,9 +742,75 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                     </select>
                   </div>
                 )}
-                {form.worker_pricing_tier.startsWith('reserved') && (
+              </div>
+            </div>
+          </div>
+          
+          {/* Worker Configuration Card */}
+          <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border-primary)]">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+              <h4 className="text-sm font-semibold text-[var(--text-primary)]">Worker Nodes</h4>
+              <span className="text-xs text-[var(--text-muted)]">({form.num_workers} node{form.num_workers !== 1 ? 's' : ''})</span>
+            </div>
+            
+            <div className="space-y-3">
+              {/* Instance Type & Count Row */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
+                  <SearchableSelect
+                    options={instanceTypes.map(it => ({
+                      value: it.id,
+                      label: it.vcpus && it.memory_gb 
+                        ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
+                        : it.name,
+                      group: it.instance_family || 'General Purpose'
+                    }))}
+                    value={form.worker_node_type}
+                    onChange={(value) => setForm(f => ({ ...f, worker_node_type: value }))}
+                    placeholder="Select type..."
+                    searchPlaceholder="Search instance types..."
+                    grouped
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Count</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={form.num_workers}
+                    onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
+                    className="w-full text-sm"
+                  />
+                </div>
+              </div>
+              
+              {/* Pricing Tier & Payment Option Row */}
+              <div className={clsx(
+                "grid gap-3",
+                selectedCloud === 'aws' && form.worker_pricing_tier.startsWith('reserved') 
+                  ? "grid-cols-2" 
+                  : "grid-cols-1"
+              )}>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
+                  <select
+                    value={form.worker_pricing_tier}
+                    onChange={(e) => setForm(f => ({ ...f, worker_pricing_tier: e.target.value }))}
+                    className="w-full text-sm"
+                  >
+                    <option value="spot">Spot Instances</option>
+                    <option value="on_demand">On-Demand</option>
+                    <option value="reserved_1y">1-Year Reserved</option>
+                    <option value="reserved_3y">3-Year Reserved</option>
+                  </select>
+                </div>
+                
+                {selectedCloud === 'aws' && form.worker_pricing_tier.startsWith('reserved') && (
                   <div>
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Worker Payment Option</label>
+                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
                     <select
                       value={form.worker_payment_option}
                       onChange={(e) => setForm(f => ({ ...f, worker_payment_option: e.target.value }))}
@@ -530,13 +824,21 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                     </select>
                   </div>
                 )}
-              </>
-            )}
-          </>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Other Configuration Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Placeholder for grid alignment when VM config is shown */}
+        {showVMConfig && (
+          <></>
         )}
         
-        {/* DLT Config */}
-        {selectedWorkloadType?.show_dlt_config && (
+        {/* DLT Config - hide when serverless is enabled (serverless DLT doesn't have edition selection) */}
+        {selectedWorkloadType?.show_dlt_config && !form.serverless_enabled && (
           <div>
             <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">DLT Edition</label>
             <select
@@ -544,7 +846,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               onChange={(e) => setForm(f => ({ ...f, dlt_edition: e.target.value }))}
               className="w-full text-sm"
             >
-              {dltEditions.map(ed => (
+              {dltEditionOptions.map(ed => (
                 <option key={ed.id} value={ed.id}>{ed.name}</option>
               ))}
             </select>
@@ -561,9 +863,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, dbsql_warehouse_type: e.target.value }))}
                 className="w-full text-sm"
               >
-                <option value="serverless">Serverless</option>
-                <option value="pro">Pro</option>
-                <option value="classic">Classic</option>
+                <option value="SERVERLESS">Serverless</option>
+                <option value="PRO">Pro</option>
+                <option value="CLASSIC">Classic</option>
               </select>
             </div>
             <div>
@@ -662,20 +964,16 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, fmapi_model: e.target.value }))}
                 className="w-full text-sm"
               >
-                {fmapiDatabricksConfig && (
-                  <>
-                    <optgroup label="LLMs">
-                      {fmapiDatabricksConfig.models.llm.map(model => (
-                        <option key={model.id} value={model.id}>{model.name}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Embedding Models">
-                      {fmapiDatabricksConfig.models.embedding.map(model => (
-                        <option key={model.id} value={model.id}>{model.name}</option>
-                      ))}
-                    </optgroup>
-                  </>
-                )}
+                <optgroup label="LLMs">
+                  {fmapiDatabricksModels.models.llm.map(model => (
+                    <option key={model.id} value={model.id}>{model.name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Embedding Models">
+                  {fmapiDatabricksModels.models.embedding.map(model => (
+                    <option key={model.id} value={model.id}>{model.name}</option>
+                  ))}
+                </optgroup>
               </select>
             </div>
             <div>
@@ -685,32 +983,48 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, fmapi_rate_type: e.target.value }))}
                 className="w-full text-sm"
               >
-                <option value="input_token">Input Token</option>
-                {/* Only show output tokens for LLMs, not embedding models */}
-                {!['gte', 'bge-large'].includes(form.fmapi_model) && (
-                  <option value="output_token">Output Token</option>
-                )}
+                <optgroup label="Token-based">
+                  <option value="input_token">Input Token</option>
+                  {/* Only show output tokens for LLMs, not embedding models */}
+                  {!['gte', 'bge-large'].includes(form.fmapi_model) && (
+                    <option value="output_token">Output Token</option>
+                  )}
+                </optgroup>
+                <optgroup label="Provisioned">
+                  <option value="provisioned_scaling">Provisioned Scaling</option>
+                  <option value="provisioned_entry">Provisioned Entry</option>
+                </optgroup>
               </select>
             </div>
             
-            {/* Row 2: Quantity */}
+            {/* Row 2: Quantity - different label based on rate type */}
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Quantity (M/month)</label>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                {['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) 
+                  ? 'Hours/Month' 
+                  : 'Quantity (M tokens/month)'}
+              </label>
               <input
                 type="number"
                 min={0}
-                step={0.1}
+                step={['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) ? 1 : 0.1}
                 value={form.fmapi_quantity}
                 onChange={(e) => setForm(f => ({ ...f, fmapi_quantity: parseFloat(e.target.value) || 0 }))}
                 className="w-full text-sm"
-                placeholder="e.g., 10 = 10M tokens"
+                placeholder={['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) 
+                  ? 'e.g., 730 = 24/7' 
+                  : 'e.g., 10 = 10M tokens'}
               />
             </div>
             
             {/* Info: Add multiple line items for complete endpoint cost */}
             <div className="col-span-full p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
               <p className="text-xs text-blue-700 dark:text-blue-300">
-                <strong>Tip:</strong> Add separate workloads for Input Token and Output Token to calculate total cost.
+                {['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) ? (
+                  <><strong>Provisioned Throughput:</strong> Cost = hours × DBU/hour × DBU price</>
+                ) : (
+                  <><strong>Tip:</strong> Add separate workloads for Input Token and Output Token to calculate total cost.</>
+                )}
               </p>
             </div>
           </>
@@ -727,15 +1041,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, fmapi_provider: e.target.value, fmapi_model: '' }))}
                 className="w-full text-sm"
               >
-                {fmapiProprietaryConfig?.providers.map(provider => (
+                {fmapiProprietaryModels.providers.map(provider => (
                   <option key={provider.id} value={provider.id}>{provider.name}</option>
-                )) || (
-                  <>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="google">Google</option>
-                  </>
-                )}
+                ))}
               </select>
             </div>
             <div>
@@ -746,7 +1054,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 className="w-full text-sm"
               >
                 <option value="">Select model</option>
-                {fmapiProprietaryConfig?.providers
+                {fmapiProprietaryModels.providers
                   .find(p => p.id === form.fmapi_provider)
                   ?.models.map(model => (
                     <option key={model.id} value={model.id}>{model.name}</option>
@@ -763,14 +1071,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, fmapi_endpoint_type: e.target.value }))}
                 className="w-full text-sm"
               >
-                {fmapiProprietaryConfig?.endpoint_types.map(type => (
+                {fmapiProprietaryModels.endpoint_types.map(type => (
                   <option key={type.id} value={type.id}>{type.name}</option>
-                )) || (
-                  <>
-                    <option value="global">Global</option>
-                    <option value="in_geo">In-Geo (Regional)</option>
-                  </>
-                )}
+                ))}
               </select>
             </div>
             <div>
@@ -780,15 +1083,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, fmapi_context_length: e.target.value }))}
                 className="w-full text-sm"
               >
-                {fmapiProprietaryConfig?.context_lengths.map(length => (
+                {fmapiProprietaryModels.context_lengths.map(length => (
                   <option key={length.id} value={length.id}>{length.name}</option>
-                )) || (
-                  <>
-                    <option value="all">All</option>
-                    <option value="short">Short</option>
-                    <option value="long">Long</option>
-                  </>
-                )}
+                ))}
               </select>
             </div>
             
@@ -837,64 +1134,152 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               <input
                 type="number"
                 min={1}
-                max={128}
+                max={8}
                 value={form.lakebase_cu}
                 onChange={(e) => setForm(f => ({ ...f, lakebase_cu: parseInt(e.target.value) || 1 }))}
                 className="w-full text-sm"
               />
+              <span className="text-xs text-[var(--text-muted)]">1, 2, 4, or 8</span>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Nodes</label>
+              <input
+                type="number"
+                min={1}
+                max={3}
+                value={form.lakebase_ha_nodes}
+                onChange={(e) => setForm(f => ({ ...f, lakebase_ha_nodes: parseInt(e.target.value) || 1 }))}
+                className="w-full text-sm"
+              />
+              <span className="text-xs text-[var(--text-muted)]">1-3 (HA requires 2+)</span>
             </div>
             <div>
               <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Storage (GB)</label>
               <input
                 type="number"
-                min={10}
+                min={100}
+                max={10000}
                 value={form.lakebase_storage_gb}
                 onChange={(e) => setForm(f => ({ ...f, lakebase_storage_gb: parseInt(e.target.value) || 100 }))}
                 className="w-full text-sm"
               />
+              <span className="text-xs text-[var(--text-muted)]">100-10,000 GB</span>
             </div>
           </>
         )}
         
-        {/* Usage - Runs */}
-        {selectedWorkloadType?.show_usage_runs && (
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Runs/Day</label>
-            <input
-              type="number"
-              min={0}
-              value={form.runs_per_day}
-              onChange={(e) => setForm(f => ({ ...f, runs_per_day: parseInt(e.target.value) || 0 }))}
-              className="w-full text-sm"
-            />
-          </div>
-        )}
-        
-        {/* Avg Runtime - for Jobs, All Purpose, DLT, and SQL Warehouse */}
+        {/* Usage Input Method Toggle - for compute workloads only */}
         {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Avg Runtime (min)</label>
-            <input
-              type="number"
-              min={0}
-              value={form.avg_runtime_minutes}
-              onChange={(e) => setForm(f => ({ ...f, avg_runtime_minutes: parseInt(e.target.value) || 0 }))}
-              className="w-full text-sm"
-            />
+          <div className="col-span-full">
+            <div className="flex items-center gap-4 mb-3">
+              <span className="text-xs font-medium text-[var(--text-secondary)]">Usage Input Method:</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUseDirectHours(false)}
+                  className={clsx(
+                    "px-3 py-1 text-xs rounded-l-md border transition-colors",
+                    !useDirectHours 
+                      ? "bg-orange-500 text-white border-orange-500" 
+                      : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]"
+                  )}
+                >
+                  Run-Based
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseDirectHours(true)}
+                  className={clsx(
+                    "px-3 py-1 text-xs rounded-r-md border-y border-r transition-colors",
+                    useDirectHours 
+                      ? "bg-orange-500 text-white border-orange-500" 
+                      : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]"
+                  )}
+                >
+                  Direct Hours
+                </button>
+              </div>
+            </div>
           </div>
         )}
         
-        {/* Days per month - hide for all FMAPI types (handled inline for provisioned, not needed for pay-per-token/batch) */}
-        {!selectedWorkloadType?.show_fmapi_config && (
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Days/Month</label>
+        {/* Run-based usage inputs */}
+        {!useDirectHours && (
+          <>
+            {/* Usage - Runs */}
+            {selectedWorkloadType?.show_usage_runs && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Runs/Day</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.runs_per_day}
+                  onChange={(e) => setForm(f => ({ ...f, runs_per_day: parseInt(e.target.value) || 0 }))}
+                  className="w-full text-sm"
+                />
+              </div>
+            )}
+            
+            {/* Avg Runtime - for Jobs, All Purpose, DLT, and SQL Warehouse */}
+            {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Avg Runtime (min)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.avg_runtime_minutes}
+                  onChange={(e) => setForm(f => ({ ...f, avg_runtime_minutes: parseInt(e.target.value) || 0 }))}
+                  className="w-full text-sm"
+                />
+              </div>
+            )}
+            
+            {/* Days per month - hide for FMAPI, Vector Search, Model Serving, Lakebase (they use hours_per_month directly) */}
+            {!selectedWorkloadType?.show_fmapi_config && !selectedWorkloadType?.show_vector_search_mode && !selectedWorkloadType?.show_lakebase_config && form.workload_type !== 'MODEL_SERVING' && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Days/Month</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={form.days_per_month}
+                  onChange={(e) => setForm(f => ({ ...f, days_per_month: parseInt(e.target.value) || 22 }))}
+                  className="w-full text-sm"
+                />
+              </div>
+            )}
+          </>
+        )}
+        
+        {/* Direct hours input */}
+        {useDirectHours && (selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
+          <div className="col-span-full md:col-span-1">
+            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Hours/Month</label>
             <input
               type="number"
-              min={1}
-              max={31}
-              value={form.days_per_month}
-              onChange={(e) => setForm(f => ({ ...f, days_per_month: parseInt(e.target.value) || 22 }))}
+              min={0}
+              max={744}
+              value={form.hours_per_month || 730}
+              onChange={(e) => setForm(f => ({ ...f, hours_per_month: parseFloat(e.target.value) || 0 }))}
               className="w-full text-sm"
+              placeholder="730 = 24/7"
+            />
+            <p className="text-xs text-[var(--text-muted)] mt-1">730 = 24/7 monthly operation</p>
+          </div>
+        )}
+        
+        {/* For Vector Search, Model Serving, and Lakebase - always show direct hours */}
+        {(selectedWorkloadType?.show_vector_search_mode || form.workload_type === 'MODEL_SERVING' || selectedWorkloadType?.show_lakebase_config) && (
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Hours/Month</label>
+            <input
+              type="number"
+              min={0}
+              max={744}
+              value={form.hours_per_month || 730}
+              onChange={(e) => setForm(f => ({ ...f, hours_per_month: parseFloat(e.target.value) || 0 }))}
+              className="w-full text-sm"
+              placeholder="730 = 24/7"
             />
           </div>
         )}

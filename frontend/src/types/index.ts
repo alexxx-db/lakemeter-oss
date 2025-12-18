@@ -61,65 +61,65 @@ export interface LineItem {
   estimate_id: string
   display_order: number
   workload_name: string
-  workload_type?: string
-  cloud?: string
+  workload_type?: string | null
+  cloud?: string | null
   
   // Serverless toggle
-  serverless_enabled?: boolean
-  serverless_mode?: string
+  serverless_enabled?: boolean | null
+  serverless_mode?: string | null
   
   // Classic Compute Configuration
-  photon_enabled?: boolean
-  driver_node_type?: string
-  worker_node_type?: string
-  num_workers?: number
+  photon_enabled?: boolean | null
+  driver_node_type?: string | null
+  worker_node_type?: string | null
+  num_workers?: number | null
   
   // DLT Configuration
-  dlt_edition?: string
+  dlt_edition?: string | null
   
   // DBSQL Configuration
-  dbsql_warehouse_type?: string
-  dbsql_warehouse_size?: string
-  dbsql_num_clusters?: number
-  dbsql_vm_pricing_tier?: string
-  dbsql_vm_payment_option?: string
+  dbsql_warehouse_type?: string | null
+  dbsql_warehouse_size?: string | null
+  dbsql_num_clusters?: number | null
+  dbsql_vm_pricing_tier?: string | null
+  dbsql_vm_payment_option?: string | null
   
   // Vector Search Configuration
-  vector_search_mode?: string
-  vector_capacity_millions?: number
+  vector_search_mode?: string | null
+  vector_capacity_millions?: number | null
   
   // Model Serving Configuration
-  model_serving_gpu_type?: string
+  model_serving_gpu_type?: string | null
   
   // Lakebase Configuration
-  lakebase_cu?: number
-  lakebase_storage_gb?: number
-  lakebase_ha_nodes?: number
-  lakebase_backup_retention_days?: number
+  lakebase_cu?: number | null
+  lakebase_storage_gb?: number | null
+  lakebase_ha_nodes?: number | null
+  lakebase_backup_retention_days?: number | null
   
   // Foundation Model API Configuration (Proprietary)
-  fmapi_provider?: string
-  fmapi_model?: string
-  fmapi_endpoint_type?: string
-  fmapi_context_length?: string
-  fmapi_rate_type?: string  // input_token, output_token, cache_read, cache_write
-  fmapi_quantity?: number   // quantity in millions (M)
+  fmapi_provider?: string | null
+  fmapi_model?: string | null
+  fmapi_endpoint_type?: string | null
+  fmapi_context_length?: string | null
+  fmapi_rate_type?: string | null  // input_token, output_token, cache_read, cache_write
+  fmapi_quantity?: number | null   // quantity in millions (M)
   
   // Usage Configuration
-  runs_per_day?: number
-  avg_runtime_minutes?: number
-  days_per_month?: number
-  hours_per_month?: number
+  runs_per_day?: number | null
+  avg_runtime_minutes?: number | null
+  days_per_month?: number | null
+  hours_per_month?: number | null
   
   // Pricing Configuration
-  driver_pricing_tier?: string
-  worker_pricing_tier?: string
-  driver_payment_option?: string
-  worker_payment_option?: string
+  driver_pricing_tier?: string | null
+  worker_pricing_tier?: string | null
+  driver_payment_option?: string | null
+  worker_payment_option?: string | null
   
   // Additional Configuration
-  workload_config?: Record<string, unknown>
-  notes?: string
+  workload_config?: Record<string, unknown> | null
+  notes?: string | null
   
   created_at: string
   updated_at: string

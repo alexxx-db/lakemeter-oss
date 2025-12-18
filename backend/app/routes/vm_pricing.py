@@ -1,6 +1,6 @@
 """VM Pricing API routes - fetches data from Lakebase sync_pricing_vm_costs table."""
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import distinct, func
 
@@ -63,14 +63,49 @@ DEFAULT_VM_PRICING = {
 
 
 @router.get("/", response_model=List[VMPricingResponse])
-def list_vm_pricing(
+async def list_vm_pricing(
+    request: Request,
     cloud: str = Query(..., description="Cloud provider (aws, azure, gcp)"),
-    region: Optional[str] = Query(None, description="Cloud region"),
+    region: Optional[str] = Query(None, description="Cloud region (region_code format, e.g., ap-southeast-1)"),
     instance_type: Optional[str] = Query(None, description="Instance type"),
     pricing_tier: Optional[str] = Query(None, description="Pricing tier (on_demand, spot, reserved_1y, reserved_3y)"),
     db: Session = Depends(get_db)
 ):
-    """Get VM pricing data from Lakebase, with optional filters."""
+    """Get VM pricing data. Tries external API first, falls back to Lakebase/defaults."""
+    from app.external_api import LakemeterAPIClient, get_user_token
+    
+    # First try external API (most accurate with region_code support)
+    if region:
+        try:
+            user_token = get_user_token(request)
+            client = LakemeterAPIClient(user_token=user_token)
+            result = await client.get_vm_costs(cloud, region, instance_type, pricing_tier)
+            
+            if result.get("success") and result.get("data", {}).get("pricing_options"):
+                # Convert external API format to our format
+                data = result["data"]
+                pricing_options = data.get("pricing_options", [])
+                return [
+                    {
+                        "cloud": cloud.upper(),
+                        "region": region,
+                        "instance_type": data.get("instance_type", instance_type),
+                        "pricing_tier": opt.get("pricing_tier", "on_demand"),
+                        "payment_option": opt.get("payment_option", "NA"),
+                        "cost_per_hour": opt.get("cost_per_hour", 0),
+                        "currency": "USD",
+                        "source": "external_api",
+                        "fetched_at": None,
+                        "updated_at": None
+                    }
+                    for opt in pricing_options
+                    if not pricing_tier or opt.get("pricing_tier") == pricing_tier
+                ]
+        except Exception as e:
+            # External API failed, continue to try Lakebase
+            pass
+    
+    # Try Lakebase as fallback
     try:
         query = db.query(VMPricing).filter(VMPricing.cloud == cloud.upper())
         

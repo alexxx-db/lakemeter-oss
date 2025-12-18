@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { 
@@ -9,7 +9,8 @@ import {
   FolderIcon,
   CloudIcon,
   MagnifyingGlassIcon,
-  CalendarIcon
+  CalendarIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -34,9 +35,19 @@ export default function Estimates() {
   const { estimates, isLoading, fetchEstimates, deleteEstimate, duplicateEstimate } = useStore()
   const [isExporting, setIsExporting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [isRefreshing, setIsRefreshing] = useState(false)
   
+  // Fetch estimates on mount - uses SWR pattern (shows cached data, refreshes in background)
   useEffect(() => {
     fetchEstimates()
+  }, [fetchEstimates])
+  
+  // Manual refresh function
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    await fetchEstimates(true) // Force refresh
+    setIsRefreshing(false)
+    toast.success('Refreshed')
   }, [fetchEstimates])
   
   const filteredEstimates = estimates.filter(e => 
@@ -97,6 +108,15 @@ export default function Estimates() {
         </div>
         
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="btn btn-ghost p-2"
+            title="Refresh estimates"
+          >
+            <ArrowPathIcon className={clsx("w-5 h-5", isRefreshing && "animate-spin")} />
+          </button>
+          
           <button
             onClick={handleExportAll}
             disabled={isExporting || estimates.length === 0}

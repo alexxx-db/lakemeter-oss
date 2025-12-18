@@ -13,7 +13,9 @@ from app.routes import (
     users_router,
     export_router,
     vm_pricing_router,
-    salesforce_router
+    salesforce_router,
+    calculate_router,
+    reference_router
 )
 
 # Create FastAPI application
@@ -42,6 +44,8 @@ app.include_router(users_router, prefix="/api/v1")
 app.include_router(export_router, prefix="/api/v1")
 app.include_router(vm_pricing_router, prefix="/api/v1")
 app.include_router(salesforce_router, prefix="/api/v1")
+app.include_router(calculate_router, prefix="/api/v1")
+app.include_router(reference_router, prefix="/api/v1")
 
 
 @app.get("/")
@@ -168,6 +172,59 @@ def get_cloud_providers(db: Session = Depends(get_db)):
     return DEFAULT_CLOUD_PROVIDERS
 
 
+@app.get("/api/v1/regions")
+def get_regions(cloud: str, db: Session = Depends(get_db)):
+    """Get available regions for a cloud provider from Lakebase.
+    
+    Queries the SKU region map table directly.
+    
+    Returns regions in the format:
+    {
+        "success": true,
+        "data": {
+            "cloud": "AWS",
+            "count": 17,
+            "regions": [{"region_code": "us-east-1", "sku_region": "US_EAST_N_VIRGINIA"}, ...]
+        }
+    }
+    """
+    try:
+        # Get regions from SKU region map in Lakebase
+        results = db.query(
+            SKURegionMap.region_code,
+            SKURegionMap.sku_region
+        ).filter(
+            SKURegionMap.cloud == cloud.upper()
+        ).order_by(SKURegionMap.sku_region).all()
+        
+        regions = [
+            {
+                "region_code": row.region_code,
+                "sku_region": row.sku_region
+            }
+            for row in results
+        ]
+        
+        return {
+            "success": True,
+            "data": {
+                "cloud": cloud.upper(),
+                "count": len(regions),
+                "regions": regions
+            }
+        }
+    except Exception as e:
+        print(f"Error fetching regions from Lakebase: {e}")
+        return {
+            "success": False,
+            "data": {
+                "cloud": cloud.upper(),
+                "count": 0,
+                "regions": []
+            }
+        }
+
+
 @app.get("/api/v1/reference/tiers")
 def get_pricing_tiers():
     """Get available pricing tiers."""
@@ -175,6 +232,252 @@ def get_pricing_tiers():
         {"id": "standard", "name": "Standard", "description": "Standard tier for development and small workloads"},
         {"id": "premium", "name": "Premium", "description": "Premium tier with advanced features"},
         {"id": "enterprise", "name": "Enterprise", "description": "Enterprise tier with full features and support"},
+    ]
+
+
+# ============================================================================
+# Reference Data Endpoints (for frontend store compatibility)
+# ============================================================================
+
+@app.get("/api/v1/reference/clouds")
+def get_clouds_reference():
+    """Get available cloud providers."""
+    return [
+        {"id": "aws", "name": "Amazon Web Services"},
+        {"id": "azure", "name": "Microsoft Azure"},
+        {"id": "gcp", "name": "Google Cloud Platform"},
+    ]
+
+
+@app.get("/api/v1/dbsql/warehouse-sizes")
+def get_dbsql_warehouse_sizes_endpoint():
+    """Get DBSQL warehouse sizes."""
+    return [
+        {"id": "2X-Small", "name": "2X-Small", "dbu_per_hour": 2},
+        {"id": "X-Small", "name": "X-Small", "dbu_per_hour": 4},
+        {"id": "Small", "name": "Small", "dbu_per_hour": 8},
+        {"id": "Medium", "name": "Medium", "dbu_per_hour": 16},
+        {"id": "Large", "name": "Large", "dbu_per_hour": 32},
+        {"id": "X-Large", "name": "X-Large", "dbu_per_hour": 64},
+        {"id": "2X-Large", "name": "2X-Large", "dbu_per_hour": 128},
+        {"id": "3X-Large", "name": "3X-Large", "dbu_per_hour": 256},
+        {"id": "4X-Large", "name": "4X-Large", "dbu_per_hour": 512},
+    ]
+
+
+@app.get("/api/v1/dlt/editions")
+def get_dlt_editions():
+    """Get DLT editions."""
+    return [
+        {"id": "CORE", "name": "Core"},
+        {"id": "PRO", "name": "Pro"},
+        {"id": "ADVANCED", "name": "Advanced"},
+    ]
+
+
+@app.get("/api/v1/serverless/modes")
+def get_serverless_modes():
+    """Get serverless modes."""
+    return [
+        {"mode": "standard", "multiplier": 1.0, "description": "Standard serverless mode"},
+        {"mode": "performance", "multiplier": 1.3, "description": "Performance serverless mode with higher throughput"},
+    ]
+
+
+@app.get("/api/v1/instances/types")
+def get_instance_types_endpoint(cloud: str, region: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get available instance types for a cloud provider."""
+    from app.models.instance_dbu_rates import InstanceDBURates
+    
+    try:
+        query = db.query(InstanceDBURates).filter(
+            InstanceDBURates.cloud == cloud.upper(),
+            InstanceDBURates.is_active == True
+        )
+        
+        results = query.order_by(
+            InstanceDBURates.instance_family, 
+            InstanceDBURates.vcpus,
+            InstanceDBURates.instance_type
+        ).all()
+        
+        if results:
+            return [
+                {
+                    "id": r.instance_type,
+                    "name": r.instance_type,
+                    "vcpus": r.vcpus or 0,
+                    "memory_gb": r.memory_gb or 0,
+                    "dbu_rate": r.dbu_rate or 0,
+                    "instance_family": r.instance_family or "General Purpose"
+                }
+                for r in results
+            ]
+    except Exception as e:
+        print(f"Warning: Could not fetch instance types from database: {e}")
+    
+    # Fallback
+    return [
+        {"id": "m5.xlarge", "name": "m5.xlarge", "vcpus": 4, "memory_gb": 16, "dbu_rate": 0.5, "instance_family": "General Purpose"},
+        {"id": "m5.2xlarge", "name": "m5.2xlarge", "vcpus": 8, "memory_gb": 32, "dbu_rate": 1.0, "instance_family": "General Purpose"},
+        {"id": "c5.xlarge", "name": "c5.xlarge", "vcpus": 4, "memory_gb": 8, "dbu_rate": 0.5, "instance_family": "Compute Optimized"},
+    ]
+
+
+@app.get("/api/v1/instances/families")
+def get_instance_families():
+    """Get instance family categories."""
+    return ["General Purpose", "Compute Optimized", "Memory Optimized", "Storage Optimized", "GPU"]
+
+
+@app.get("/api/v1/model-serving/gpu-types")
+def get_model_serving_gpu_types_endpoint(cloud: str):
+    """Get GPU types for model serving."""
+    gpu_types = {
+        "aws": [
+            {"id": "cpu", "name": "CPU", "dbu_per_hour": 1},
+            {"id": "gpu_small_t4", "name": "GPU Small - T4", "dbu_per_hour": 10.48},
+            {"id": "gpu_medium_a10g_1x", "name": "GPU Medium - A10G 1x", "dbu_per_hour": 20},
+            {"id": "gpu_medium_a10g_4x", "name": "GPU Medium - A10G 4x", "dbu_per_hour": 112},
+            {"id": "gpu_medium_a10g_8x", "name": "GPU Medium - A10G 8x", "dbu_per_hour": 290.8},
+            {"id": "gpu_xlarge_a100_40gb_8x", "name": "GPU XLarge - A100 40GB 8x", "dbu_per_hour": 538.4},
+            {"id": "gpu_xlarge_a100_80gb_8x", "name": "GPU XLarge - A100 80GB 8x", "dbu_per_hour": 628},
+        ],
+        "azure": [
+            {"id": "cpu", "name": "CPU", "dbu_per_hour": 1},
+            {"id": "gpu_small_t4", "name": "GPU Small - T4", "dbu_per_hour": 10.48},
+            {"id": "gpu_xlarge_a100_80gb_1x", "name": "GPU XLarge - A100 80GB 1x", "dbu_per_hour": 78.5},
+            {"id": "gpu_2xlarge_a100_80gb_2x", "name": "GPU 2XLarge - A100 80GB 2x", "dbu_per_hour": 157},
+            {"id": "gpu_4xlarge_a100_80gb_4x", "name": "GPU 4XLarge - A100 80GB 4x", "dbu_per_hour": 314},
+        ],
+        "gcp": [
+            {"id": "cpu", "name": "CPU", "dbu_per_hour": 1},
+            {"id": "gpu_medium_g2_standard_8", "name": "GPU Medium - G2 Standard 8", "dbu_per_hour": 5},
+        ],
+    }
+    return gpu_types.get(cloud.lower(), [{"id": "cpu", "name": "CPU", "dbu_per_hour": 1}])
+
+
+@app.get("/api/v1/photon/multipliers")
+def get_photon_multipliers(cloud: str, sku_type: Optional[str] = None):
+    """Get Photon multipliers by SKU type."""
+    multipliers = [
+        {"sku_type": "JOBS", "multiplier": 2.0, "category": "Compute"},
+        {"sku_type": "ALL_PURPOSE", "multiplier": 2.0, "category": "Compute"},
+        {"sku_type": "DLT", "multiplier": 2.0, "category": "Pipelines"},
+        {"sku_type": "DBSQL", "multiplier": 1.0, "category": "SQL"},
+    ]
+    if sku_type:
+        return [m for m in multipliers if m["sku_type"].upper() == sku_type.upper()]
+    return multipliers
+
+
+@app.get("/api/v1/dbsql/warehouse-types")
+def get_dbsql_warehouse_types():
+    """Get DBSQL warehouse types."""
+    return ["CLASSIC", "PRO", "SERVERLESS"]
+
+
+@app.get("/api/v1/fmapi/databricks-models/list")
+def get_fmapi_databricks_models_list():
+    """Get list of Databricks FMAPI model names."""
+    return [
+        "llama-4-maverick",
+        "llama-3-3-70b",
+        "llama-3-1-8b",
+        "llama-3-2-3b",
+        "llama-3-2-1b",
+        "gpt-oss-120b",
+        "gpt-oss-20b",
+        "gemma-3-12b",
+        "bge-large",
+        "gte",
+    ]
+
+
+@app.get("/api/v1/pricing/dbu-rates")
+def get_dbu_rates(cloud: str, region: str, tier: str, product_type: Optional[str] = None):
+    """Get DBU rates for pricing calculations.
+    
+    Returns DBU prices per product type for the given cloud/region/tier combination.
+    """
+    # Default DBU rates by product type and tier
+    # These are representative rates - actual rates come from lakemeter.sync_product_dbu_rates
+    base_rates = {
+        "PREMIUM": {
+            "JOBS": 0.15,
+            "JOBS_LIGHT": 0.07,
+            "ALL_PURPOSE": 0.55,
+            "DLT_CORE": 0.20,
+            "DLT_PRO": 0.25,
+            "DLT_ADVANCED": 0.36,
+            "DBSQL_CLASSIC": 0.22,
+            "DBSQL_PRO": 0.55,
+            "DBSQL_SERVERLESS": 0.70,
+            "MODEL_SERVING": 0.07,
+            "VECTOR_SEARCH": 0.07,
+            "FMAPI_DATABRICKS": 0.07,
+            "FMAPI_PROPRIETARY": 0.07,
+            "LAKEBASE": 0.07,
+        },
+        "STANDARD": {
+            "JOBS": 0.10,
+            "JOBS_LIGHT": 0.05,
+            "ALL_PURPOSE": 0.40,
+            "DLT_CORE": 0.15,
+            "DLT_PRO": 0.20,
+            "DLT_ADVANCED": 0.30,
+            "DBSQL_CLASSIC": 0.15,
+            "DBSQL_PRO": 0.40,
+            "DBSQL_SERVERLESS": 0.55,
+            "MODEL_SERVING": 0.05,
+            "VECTOR_SEARCH": 0.05,
+            "FMAPI_DATABRICKS": 0.05,
+            "FMAPI_PROPRIETARY": 0.05,
+            "LAKEBASE": 0.05,
+        },
+        "ENTERPRISE": {
+            "JOBS": 0.20,
+            "JOBS_LIGHT": 0.10,
+            "ALL_PURPOSE": 0.65,
+            "DLT_CORE": 0.25,
+            "DLT_PRO": 0.30,
+            "DLT_ADVANCED": 0.42,
+            "DBSQL_CLASSIC": 0.30,
+            "DBSQL_PRO": 0.65,
+            "DBSQL_SERVERLESS": 0.85,
+            "MODEL_SERVING": 0.10,
+            "VECTOR_SEARCH": 0.10,
+            "FMAPI_DATABRICKS": 0.10,
+            "FMAPI_PROPRIETARY": 0.10,
+            "LAKEBASE": 0.10,
+        },
+    }
+    
+    tier_upper = tier.upper()
+    rates = base_rates.get(tier_upper, base_rates["PREMIUM"])
+    
+    if product_type:
+        # Return single rate for specified product type
+        price = rates.get(product_type.upper(), 0.10)
+        return [{"product_type": product_type.upper(), "dbu_price": price, "currency": "USD"}]
+    
+    # Return all rates
+    return [
+        {"product_type": pt, "dbu_price": price, "currency": "USD"}
+        for pt, price in rates.items()
+    ]
+
+
+@app.get("/api/v1/pricing/product-types")
+def get_product_types(cloud: str, region: str, tier: str):
+    """Get available product types for DBU pricing."""
+    return [
+        "JOBS", "JOBS_LIGHT", "ALL_PURPOSE",
+        "DLT_CORE", "DLT_PRO", "DLT_ADVANCED",
+        "DBSQL_CLASSIC", "DBSQL_PRO", "DBSQL_SERVERLESS",
+        "MODEL_SERVING", "VECTOR_SEARCH",
+        "FMAPI_DATABRICKS", "FMAPI_PROPRIETARY", "LAKEBASE"
     ]
 
 
@@ -250,26 +553,28 @@ def get_instance_types(cloud: str, region: Optional[str] = None, db: Session = D
 @app.get("/api/v1/reference/dbsql-sizes")
 def get_dbsql_warehouse_sizes():
     """Get available SQL Warehouse sizes."""
+    # Values must match database CHECK constraint: chk_dbsql_warehouse_size
     return [
-        {"id": "2x-small", "name": "2X-Small", "dbu_per_hour": 2},
-        {"id": "x-small", "name": "X-Small", "dbu_per_hour": 4},
-        {"id": "small", "name": "Small", "dbu_per_hour": 8},
-        {"id": "medium", "name": "Medium", "dbu_per_hour": 16},
-        {"id": "large", "name": "Large", "dbu_per_hour": 32},
-        {"id": "x-large", "name": "X-Large", "dbu_per_hour": 64},
-        {"id": "2x-large", "name": "2X-Large", "dbu_per_hour": 128},
-        {"id": "3x-large", "name": "3X-Large", "dbu_per_hour": 192},
-        {"id": "4x-large", "name": "4X-Large", "dbu_per_hour": 256},
+        {"id": "2X-Small", "name": "2X-Small", "dbu_per_hour": 2},
+        {"id": "X-Small", "name": "X-Small", "dbu_per_hour": 4},
+        {"id": "Small", "name": "Small", "dbu_per_hour": 8},
+        {"id": "Medium", "name": "Medium", "dbu_per_hour": 16},
+        {"id": "Large", "name": "Large", "dbu_per_hour": 32},
+        {"id": "X-Large", "name": "X-Large", "dbu_per_hour": 64},
+        {"id": "2X-Large", "name": "2X-Large", "dbu_per_hour": 128},
+        {"id": "3X-Large", "name": "3X-Large", "dbu_per_hour": 192},
+        {"id": "4X-Large", "name": "4X-Large", "dbu_per_hour": 256},
     ]
 
 
 @app.get("/api/v1/reference/dlt-editions")
 def get_dlt_editions():
     """Get available DLT editions."""
+    # Values must match database CHECK constraint: chk_dlt_edition
     return [
-        {"id": "core", "name": "Core", "dbu_multiplier": 1.0},
-        {"id": "pro", "name": "Pro", "dbu_multiplier": 1.5},
-        {"id": "advanced", "name": "Advanced", "dbu_multiplier": 2.0},
+        {"id": "CORE", "name": "Core", "dbu_multiplier": 1.0},
+        {"id": "PRO", "name": "Pro", "dbu_multiplier": 1.5},
+        {"id": "ADVANCED", "name": "Advanced", "dbu_multiplier": 2.0},
     ]
 
 
