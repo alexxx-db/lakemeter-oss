@@ -3,6 +3,7 @@ import { BoltIcon, CloudIcon, InformationCircleIcon } from '@heroicons/react/24/
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { useStore } from '../store/useStore'
+import SearchableSelect from './SearchableSelect'
 import type { LineItem, WorkloadType } from '../types'
 
 interface Props {
@@ -419,35 +420,39 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           <>
             {/* Row 1: Driver Node | Worker Node | Number of Workers */}
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Driver Node</label>
-              <select
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Driver Node (VM)</label>
+              <SearchableSelect
+                options={instanceTypes.map(it => ({
+                  value: it.id,
+                  label: it.vcpus && it.memory_gb 
+                    ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
+                    : it.name,
+                  group: it.instance_family || 'General Purpose'
+                }))}
                 value={form.driver_node_type}
-                onChange={(e) => setForm(f => ({ ...f, driver_node_type: e.target.value }))}
-                className="w-full text-sm"
-              >
-                <option value="">Select type</option>
-                {instanceTypes.map(it => (
-                  <option key={it.id} value={it.id}>
-                    {it.name} ({it.vcpus}vCPU, {it.memory_gb}GB)
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setForm(f => ({ ...f, driver_node_type: value }))}
+                placeholder="Select type..."
+                searchPlaceholder="Search instance types..."
+                grouped
+              />
             </div>
             
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Worker Node</label>
-              <select
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Worker Node (VM)</label>
+              <SearchableSelect
+                options={instanceTypes.map(it => ({
+                  value: it.id,
+                  label: it.vcpus && it.memory_gb 
+                    ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
+                    : it.name,
+                  group: it.instance_family || 'General Purpose'
+                }))}
                 value={form.worker_node_type}
-                onChange={(e) => setForm(f => ({ ...f, worker_node_type: e.target.value }))}
-                className="w-full text-sm"
-              >
-                <option value="">Select type</option>
-                {instanceTypes.map(it => (
-                  <option key={it.id} value={it.id}>
-                    {it.name} ({it.vcpus}vCPU, {it.memory_gb}GB)
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setForm(f => ({ ...f, worker_node_type: value }))}
+                placeholder="Select type..."
+                searchPlaceholder="Search instance types..."
+                grouped
+              />
             </div>
             
             <div>
@@ -828,7 +833,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {selectedWorkloadType?.show_lakebase_config && (
           <>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Compute Units (CU)</label>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Capacity Units (CU)</label>
               <input
                 type="number"
                 min={1}

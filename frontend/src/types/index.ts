@@ -179,6 +179,7 @@ export interface InstanceType {
   memory_gb: number
   dbu_rate: number
   gpu?: boolean
+  instance_family?: string
 }
 
 export interface DBSQLSize {

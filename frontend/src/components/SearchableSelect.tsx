@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import clsx from 'clsx'
 import { ChevronDownIcon, XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 
 interface Option {
   value: string
   label: string
+  group?: string  // Optional group for categorization
 }
 
 interface SearchableSelectProps {
@@ -18,6 +19,7 @@ interface SearchableSelectProps {
   disabled?: boolean
   required?: boolean
   className?: string
+  grouped?: boolean  // Enable grouped display
 }
 
 export default function SearchableSelect({
@@ -30,7 +32,8 @@ export default function SearchableSelect({
   isLoading = false,
   disabled = false,
   required = false,
-  className
+  className,
+  grouped = false
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -42,8 +45,37 @@ export default function SearchableSelect({
   
   // Filter options based on search
   const filteredOptions = search
-    ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
+    ? options.filter(o => 
+        o.label.toLowerCase().includes(search.toLowerCase()) ||
+        o.group?.toLowerCase().includes(search.toLowerCase())
+      )
     : options
+
+  // Group options by their group property
+  const groupedOptions = useMemo(() => {
+    if (!grouped) return null
+    
+    const groups: { [key: string]: Option[] } = {}
+    filteredOptions.forEach(option => {
+      const groupName = option.group || 'Other'
+      if (!groups[groupName]) {
+        groups[groupName] = []
+      }
+      groups[groupName].push(option)
+    })
+    
+    // Sort groups alphabetically, but put "General Purpose" first if it exists
+    const sortedGroupNames = Object.keys(groups).sort((a, b) => {
+      if (a === 'General Purpose') return -1
+      if (b === 'General Purpose') return 1
+      return a.localeCompare(b)
+    })
+    
+    return sortedGroupNames.map(name => ({
+      name,
+      options: groups[name]
+    }))
+  }, [filteredOptions, grouped])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -136,13 +168,40 @@ export default function SearchableSelect({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-50 w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-lg max-h-72 overflow-auto">
           {isLoading ? (
             <div className="px-3 py-2 text-sm text-[var(--text-muted)]">Loading...</div>
           ) : filteredOptions.length === 0 ? (
             <div className="px-3 py-2 text-sm text-[var(--text-muted)]">
               {search ? 'No results found' : 'No options available'}
             </div>
+          ) : grouped && groupedOptions ? (
+            <>
+              <div className="px-3 py-1.5 text-xs text-[var(--text-muted)] border-b border-[var(--border-primary)]">
+                {filteredOptions.length} result{filteredOptions.length !== 1 ? 's' : ''}
+              </div>
+              {groupedOptions.map((group) => (
+                <div key={group.name}>
+                  <div className="px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] bg-[var(--bg-tertiary)] sticky top-0 border-b border-[var(--border-primary)]">
+                    {group.name}
+                  </div>
+                  {group.options.map((option) => (
+                    <div
+                      key={option.value}
+                      onClick={() => handleSelect(option.value)}
+                      className={clsx(
+                        "px-3 py-2 text-sm cursor-pointer transition-colors",
+                        option.value === value
+                          ? "bg-orange-500/10 text-orange-500"
+                          : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
+                      )}
+                    >
+                      {option.label}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
           ) : (
             <>
               <div className="px-3 py-1.5 text-xs text-[var(--text-muted)] border-b border-[var(--border-primary)]">

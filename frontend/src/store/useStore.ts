@@ -75,7 +75,7 @@ interface Store {
   
   // Actions - Reference Data
   fetchReferenceData: () => Promise<void>
-  fetchInstanceTypes: (cloud: string) => Promise<void>
+  fetchInstanceTypes: (cloud: string, region?: string) => Promise<void>
   fetchModelServingGPUTypes: (cloud: string) => Promise<void>
   setSelectedCloud: (cloud: string) => void
   setSelectedRegion: (region: string) => void
@@ -343,9 +343,9 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   
-  fetchInstanceTypes: async (cloud) => {
+  fetchInstanceTypes: async (cloud, region) => {
     try {
-      const instanceTypes = await api.fetchInstanceTypes(cloud)
+      const instanceTypes = await api.fetchInstanceTypes(cloud, region)
       set({ instanceTypes, selectedCloud: cloud })
     } catch (error) {
       console.error('Failed to fetch instance types:', error)
@@ -363,16 +363,20 @@ export const useStore = create<Store>((set, get) => ({
   
   setSelectedCloud: (cloud) => {
     set({ selectedCloud: cloud })
-    get().fetchInstanceTypes(cloud)
+    const region = get().selectedRegion
+    get().fetchInstanceTypes(cloud, region || undefined)
     get().fetchModelServingGPUTypes(cloud)
     // Also fetch VM pricing for the new cloud
-    get().fetchVMPricing(cloud, get().selectedRegion || undefined)
+    get().fetchVMPricing(cloud, region || undefined)
   },
   
   setSelectedRegion: (region) => {
     set({ selectedRegion: region })
+    const cloud = get().selectedCloud
+    // Re-fetch instance types for the new region
+    get().fetchInstanceTypes(cloud, region || undefined)
     // Fetch VM pricing for the selected region
-    get().fetchVMPricing(get().selectedCloud, region || undefined)
+    get().fetchVMPricing(cloud, region || undefined)
   },
   
   // VM Pricing

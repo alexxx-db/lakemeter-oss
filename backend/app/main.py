@@ -1,8 +1,11 @@
 """FastAPI main application entry point."""
-from fastapi import FastAPI
+from typing import Optional
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import get_db
 from app.routes import (
     estimates_router,
     line_items_router,
@@ -176,51 +179,72 @@ def get_pricing_tiers():
 
 
 @app.get("/api/v1/reference/instance-types/{cloud}")
-def get_instance_types(cloud: str):
-    """Get available instance types for a cloud provider."""
-    instance_types = {
+def get_instance_types(cloud: str, region: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get available instance types for a cloud provider with family grouping.
+    
+    Fetches from lakemeter.sync_ref_instance_dbu_rates table which has vcpus, memory_gb, and instance_family.
+    """
+    from app.models.instance_dbu_rates import InstanceDBURates
+    
+    try:
+        # Query instance types with full details from the reference table
+        query = db.query(InstanceDBURates).filter(
+            InstanceDBURates.cloud == cloud.upper(),
+            InstanceDBURates.is_active == True
+        )
+        
+        results = query.order_by(
+            InstanceDBURates.instance_family, 
+            InstanceDBURates.vcpus,
+            InstanceDBURates.instance_type
+        ).all()
+        
+        if results:
+            return [
+                {
+                    "id": r.instance_type,
+                    "name": r.instance_type,
+                    "vcpus": r.vcpus or 0,
+                    "memory_gb": r.memory_gb or 0,
+                    "dbu_rate": r.dbu_rate or 0,
+                    "instance_family": r.instance_family or "General Purpose"
+                }
+                for r in results
+            ]
+    except Exception as e:
+        print(f"Warning: Could not fetch instance types from database: {e}")
+    
+    # Fallback to hardcoded list if database query fails
+    fallback_instance_types = {
         "aws": [
-            {"id": "i3.xlarge", "name": "i3.xlarge", "vcpus": 4, "memory_gb": 30.5, "dbu_rate": 0.75},
-            {"id": "i3.2xlarge", "name": "i3.2xlarge", "vcpus": 8, "memory_gb": 61, "dbu_rate": 1.5},
-            {"id": "i3.4xlarge", "name": "i3.4xlarge", "vcpus": 16, "memory_gb": 122, "dbu_rate": 3.0},
-            {"id": "i3.8xlarge", "name": "i3.8xlarge", "vcpus": 32, "memory_gb": 244, "dbu_rate": 6.0},
-            {"id": "i3.16xlarge", "name": "i3.16xlarge", "vcpus": 64, "memory_gb": 488, "dbu_rate": 12.0},
-            {"id": "m5.large", "name": "m5.large", "vcpus": 2, "memory_gb": 8, "dbu_rate": 0.25},
-            {"id": "m5.xlarge", "name": "m5.xlarge", "vcpus": 4, "memory_gb": 16, "dbu_rate": 0.5},
-            {"id": "m5.2xlarge", "name": "m5.2xlarge", "vcpus": 8, "memory_gb": 32, "dbu_rate": 1.0},
-            {"id": "m5.4xlarge", "name": "m5.4xlarge", "vcpus": 16, "memory_gb": 64, "dbu_rate": 2.0},
-            {"id": "r5.large", "name": "r5.large", "vcpus": 2, "memory_gb": 16, "dbu_rate": 0.35},
-            {"id": "r5.xlarge", "name": "r5.xlarge", "vcpus": 4, "memory_gb": 32, "dbu_rate": 0.69},
-            {"id": "r5.2xlarge", "name": "r5.2xlarge", "vcpus": 8, "memory_gb": 64, "dbu_rate": 1.38},
-            {"id": "c5.xlarge", "name": "c5.xlarge", "vcpus": 4, "memory_gb": 8, "dbu_rate": 0.44},
-            {"id": "c5.2xlarge", "name": "c5.2xlarge", "vcpus": 8, "memory_gb": 16, "dbu_rate": 0.88},
-            {"id": "p3.2xlarge", "name": "p3.2xlarge (GPU)", "vcpus": 8, "memory_gb": 61, "dbu_rate": 5.5, "gpu": True},
-            {"id": "p3.8xlarge", "name": "p3.8xlarge (GPU)", "vcpus": 32, "memory_gb": 244, "dbu_rate": 22.0, "gpu": True},
+            {"id": "i3.xlarge", "name": "i3.xlarge", "vcpus": 4, "memory_gb": 30.5, "dbu_rate": 0.75, "instance_family": "Storage Optimized"},
+            {"id": "i3.2xlarge", "name": "i3.2xlarge", "vcpus": 8, "memory_gb": 61, "dbu_rate": 1.5, "instance_family": "Storage Optimized"},
+            {"id": "m5.large", "name": "m5.large", "vcpus": 2, "memory_gb": 8, "dbu_rate": 0.25, "instance_family": "General Purpose"},
+            {"id": "m5.xlarge", "name": "m5.xlarge", "vcpus": 4, "memory_gb": 16, "dbu_rate": 0.5, "instance_family": "General Purpose"},
+            {"id": "m5.2xlarge", "name": "m5.2xlarge", "vcpus": 8, "memory_gb": 32, "dbu_rate": 1.0, "instance_family": "General Purpose"},
+            {"id": "c5.xlarge", "name": "c5.xlarge", "vcpus": 4, "memory_gb": 8, "dbu_rate": 0.5, "instance_family": "Compute Optimized"},
+            {"id": "c5.2xlarge", "name": "c5.2xlarge", "vcpus": 8, "memory_gb": 16, "dbu_rate": 1.0, "instance_family": "Compute Optimized"},
+            {"id": "r5.large", "name": "r5.large", "vcpus": 2, "memory_gb": 16, "dbu_rate": 0.35, "instance_family": "Memory Optimized"},
+            {"id": "r5.xlarge", "name": "r5.xlarge", "vcpus": 4, "memory_gb": 32, "dbu_rate": 0.69, "instance_family": "Memory Optimized"},
         ],
         "azure": [
-            {"id": "Standard_DS3_v2", "name": "Standard_DS3_v2", "vcpus": 4, "memory_gb": 14, "dbu_rate": 0.75},
-            {"id": "Standard_DS4_v2", "name": "Standard_DS4_v2", "vcpus": 8, "memory_gb": 28, "dbu_rate": 1.5},
-            {"id": "Standard_DS5_v2", "name": "Standard_DS5_v2", "vcpus": 16, "memory_gb": 56, "dbu_rate": 3.0},
-            {"id": "Standard_D4s_v3", "name": "Standard_D4s_v3", "vcpus": 4, "memory_gb": 16, "dbu_rate": 0.5},
-            {"id": "Standard_D8s_v3", "name": "Standard_D8s_v3", "vcpus": 8, "memory_gb": 32, "dbu_rate": 1.0},
-            {"id": "Standard_D16s_v3", "name": "Standard_D16s_v3", "vcpus": 16, "memory_gb": 64, "dbu_rate": 2.0},
-            {"id": "Standard_E4s_v3", "name": "Standard_E4s_v3", "vcpus": 4, "memory_gb": 32, "dbu_rate": 0.69},
-            {"id": "Standard_E8s_v3", "name": "Standard_E8s_v3", "vcpus": 8, "memory_gb": 64, "dbu_rate": 1.38},
-            {"id": "Standard_L8s_v2", "name": "Standard_L8s_v2", "vcpus": 8, "memory_gb": 64, "dbu_rate": 1.5},
-            {"id": "Standard_NC6s_v3", "name": "Standard_NC6s_v3 (GPU)", "vcpus": 6, "memory_gb": 112, "dbu_rate": 5.5, "gpu": True},
+            {"id": "Standard_DS3_v2", "name": "Standard_DS3_v2", "vcpus": 4, "memory_gb": 14, "dbu_rate": 0.75, "instance_family": "General Purpose"},
+            {"id": "Standard_DS4_v2", "name": "Standard_DS4_v2", "vcpus": 8, "memory_gb": 28, "dbu_rate": 1.5, "instance_family": "General Purpose"},
+            {"id": "Standard_D4s_v3", "name": "Standard_D4s_v3", "vcpus": 4, "memory_gb": 16, "dbu_rate": 0.5, "instance_family": "General Purpose"},
+            {"id": "Standard_D8s_v3", "name": "Standard_D8s_v3", "vcpus": 8, "memory_gb": 32, "dbu_rate": 1.0, "instance_family": "General Purpose"},
+            {"id": "Standard_E4s_v3", "name": "Standard_E4s_v3", "vcpus": 4, "memory_gb": 32, "dbu_rate": 0.75, "instance_family": "Memory Optimized"},
+            {"id": "Standard_F4s_v2", "name": "Standard_F4s_v2", "vcpus": 4, "memory_gb": 8, "dbu_rate": 0.5, "instance_family": "Compute Optimized"},
         ],
         "gcp": [
-            {"id": "n1-standard-4", "name": "n1-standard-4", "vcpus": 4, "memory_gb": 15, "dbu_rate": 0.5},
-            {"id": "n1-standard-8", "name": "n1-standard-8", "vcpus": 8, "memory_gb": 30, "dbu_rate": 1.0},
-            {"id": "n1-standard-16", "name": "n1-standard-16", "vcpus": 16, "memory_gb": 60, "dbu_rate": 2.0},
-            {"id": "n1-standard-32", "name": "n1-standard-32", "vcpus": 32, "memory_gb": 120, "dbu_rate": 4.0},
-            {"id": "n1-highmem-4", "name": "n1-highmem-4", "vcpus": 4, "memory_gb": 26, "dbu_rate": 0.69},
-            {"id": "n1-highmem-8", "name": "n1-highmem-8", "vcpus": 8, "memory_gb": 52, "dbu_rate": 1.38},
-            {"id": "n2-standard-4", "name": "n2-standard-4", "vcpus": 4, "memory_gb": 16, "dbu_rate": 0.5},
-            {"id": "n2-standard-8", "name": "n2-standard-8", "vcpus": 8, "memory_gb": 32, "dbu_rate": 1.0},
+            {"id": "n1-standard-4", "name": "n1-standard-4", "vcpus": 4, "memory_gb": 15, "dbu_rate": 0.5, "instance_family": "General Purpose"},
+            {"id": "n1-standard-8", "name": "n1-standard-8", "vcpus": 8, "memory_gb": 30, "dbu_rate": 1.0, "instance_family": "General Purpose"},
+            {"id": "n2-standard-4", "name": "n2-standard-4", "vcpus": 4, "memory_gb": 16, "dbu_rate": 0.5, "instance_family": "General Purpose"},
+            {"id": "n2-standard-8", "name": "n2-standard-8", "vcpus": 8, "memory_gb": 32, "dbu_rate": 1.0, "instance_family": "General Purpose"},
+            {"id": "n2-highmem-4", "name": "n2-highmem-4", "vcpus": 4, "memory_gb": 32, "dbu_rate": 0.75, "instance_family": "Memory Optimized"},
+            {"id": "n2-highcpu-4", "name": "n2-highcpu-4", "vcpus": 4, "memory_gb": 4, "dbu_rate": 0.4, "instance_family": "Compute Optimized"},
         ]
     }
-    return instance_types.get(cloud, [])
+    return fallback_instance_types.get(cloud.lower(), [])
 
 
 @app.get("/api/v1/reference/dbsql-sizes")

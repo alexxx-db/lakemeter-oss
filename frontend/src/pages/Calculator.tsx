@@ -794,17 +794,28 @@ export default function Calculator() {
                       Salesforce Account <span className="text-red-500">*</span>
                     </label>
                     <SearchableSelect
-                      options={sfAccounts.map(a => ({
-                        value: a.salesforce_account_id,
-                        label: a.salesforce_account_name || a.salesforce_account_id
-                      }))}
+                      options={(() => {
+                        // Build options from search results
+                        const searchOptions = sfAccounts.map(a => ({
+                          value: a.salesforce_account_id,
+                          label: a.salesforce_account_name || a.salesforce_account_id
+                        }))
+                        // If we have a saved account that's not in search results, add it
+                        if (formData.sfdc_account_id && formData.customer_name) {
+                          const existsInSearch = sfAccounts.some(a => a.salesforce_account_id === formData.sfdc_account_id)
+                          if (!existsInSearch) {
+                            return [{ value: formData.sfdc_account_id, label: formData.customer_name }, ...searchOptions]
+                          }
+                        }
+                        return searchOptions
+                      })()}
                       value={formData.sfdc_account_id}
                       onChange={(value) => {
                         const selectedAccount = sfAccounts.find(a => a.salesforce_account_id === value)
                         setFormData(prev => ({ 
                           ...prev, 
                           sfdc_account_id: value,
-                          customer_name: selectedAccount?.salesforce_account_name || '',
+                          customer_name: selectedAccount?.salesforce_account_name || prev.customer_name,
                           opportunity_id: '',
                           uco_id: ''
                         }))

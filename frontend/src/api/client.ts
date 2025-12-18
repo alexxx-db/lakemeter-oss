@@ -118,8 +118,9 @@ export const fetchCloudProviders = async (): Promise<CloudProvider[]> => {
   return data
 }
 
-export const fetchInstanceTypes = async (cloud: string): Promise<InstanceType[]> => {
-  const { data } = await api.get(`/reference/instance-types/${cloud}`)
+export const fetchInstanceTypes = async (cloud: string, region?: string): Promise<InstanceType[]> => {
+  const params = region ? { region } : {}
+  const { data } = await api.get(`/reference/instance-types/${cloud}`, { params })
   return data
 }
 

@@ -10,6 +10,7 @@ from app.models.decision_record import DecisionRecord
 from app.models.vm_pricing import VMPricing
 from app.models.sku_region_map import SKURegionMap
 from app.models.salesforce import SalesforceAccount, SalesforceOpportunity, SalesforceUseCase
+from app.models.instance_dbu_rates import InstanceDBURates
 
 __all__ = [
     "User",
@@ -25,6 +26,7 @@ __all__ = [
     "SalesforceAccount",
     "SalesforceOpportunity",
     "SalesforceUseCase",
+    "InstanceDBURates",
 ]
 
 
