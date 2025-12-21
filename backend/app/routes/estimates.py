@@ -3,7 +3,7 @@ from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 
 from app.database import get_db
 from app.models import Estimate, LineItem, User
@@ -12,13 +12,16 @@ from app.schemas import (
     EstimateCreate,
     EstimateUpdate,
     EstimateResponse,
-    EstimateListResponse
+    EstimateListResponse,
+    EstimateWithLineItemsResponse,
+    LineItemResponse
 )
 from app.auth import get_current_user
 
 router = APIRouter(prefix="/estimates", tags=["estimates"])
 
 
+@router.get("", response_model=List[EstimateListResponse])
 @router.get("/", response_model=List[EstimateListResponse])
 def list_estimates(
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -33,19 +36,35 @@ def list_estimates(
     - User is the owner (owner_user_id)
     - Estimate is shared with the user (via Sharing table)
     """
-    # Base query: not deleted
-    query = db.query(Estimate).filter(Estimate.is_deleted == False)
+    # Use a single efficient query with LEFT JOIN to count line items
+    # This avoids N+1 query problem
+    line_item_count_subquery = (
+        db.query(
+            LineItem.estimate_id,
+            func.count(LineItem.line_item_id).label('line_item_count')
+        )
+        .group_by(LineItem.estimate_id)
+        .subquery()
+    )
     
-    # Filter by ownership or sharing
-    # User can see estimates they own OR that are shared with them
+    # Shared estimates subquery
     shared_estimate_ids = db.query(Sharing.estimate_id).filter(
         Sharing.shared_with_user_id == current_user.user_id
     ).subquery()
     
-    query = query.filter(
-        or_(
-            Estimate.owner_user_id == current_user.user_id,
-            Estimate.estimate_id.in_(shared_estimate_ids)
+    # Main query with join for line item count
+    query = (
+        db.query(
+            Estimate,
+            func.coalesce(line_item_count_subquery.c.line_item_count, 0).label('line_item_count')
+        )
+        .outerjoin(line_item_count_subquery, Estimate.estimate_id == line_item_count_subquery.c.estimate_id)
+        .filter(Estimate.is_deleted == False)
+        .filter(
+            or_(
+                Estimate.owner_user_id == current_user.user_id,
+                Estimate.estimate_id.in_(shared_estimate_ids)
+            )
         )
     )
     
@@ -62,7 +81,7 @@ def list_estimates(
             )
         )
     
-    estimates = query.order_by(Estimate.updated_at.desc()).all()
+    results = query.order_by(Estimate.updated_at.desc()).all()
     
     return [
         EstimateListResponse(
@@ -77,11 +96,11 @@ def list_estimates(
             tier=e.tier,
             status=e.status,
             version=e.version,
-            line_item_count=len(e.line_items),
+            line_item_count=line_count,
             created_at=e.created_at,
             updated_at=e.updated_at
         )
-        for e in estimates
+        for e, line_count in results
     ]
 
 
@@ -158,6 +177,29 @@ def get_estimate(
     """Get an estimate by ID if user has access."""
     estimate = _get_estimate_for_user(estimate_id, current_user, db)
     return estimate
+
+
+@router.get("/{estimate_id}/full")
+def get_estimate_with_line_items(
+    estimate_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get estimate with all line items in a single optimized query.
+    Returns both estimate details and full line items to avoid multiple round trips.
+    """
+    estimate = _get_estimate_for_user(estimate_id, current_user, db)
+    
+    # Get full line items in same query context
+    line_items = db.query(LineItem).filter(
+        LineItem.estimate_id == estimate_id
+    ).order_by(LineItem.display_order).all()
+    
+    return {
+        "estimate": EstimateWithLineItemsResponse.model_validate(estimate),
+        "line_items": [LineItemResponse.model_validate(item) for item in line_items]
+    }
 
 
 @router.put("/{estimate_id}", response_model=EstimateResponse)

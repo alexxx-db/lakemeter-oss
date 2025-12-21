@@ -62,6 +62,7 @@ DEFAULT_VM_PRICING = {
 }
 
 
+@router.get("", response_model=List[VMPricingResponse])
 @router.get("/", response_model=List[VMPricingResponse])
 async def list_vm_pricing(
     request: Request,

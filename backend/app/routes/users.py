@@ -11,6 +11,7 @@ from app.schemas import UserCreate, UserUpdate, UserResponse
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+@router.get("", response_model=List[UserResponse])
 @router.get("/", response_model=List[UserResponse])
 def list_users(
     skip: int = 0,

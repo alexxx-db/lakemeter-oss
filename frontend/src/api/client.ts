@@ -68,6 +68,12 @@ export const fetchEstimate = async (id: string): Promise<Estimate> => {
   return data
 }
 
+// Optimized: Fetch estimate + line items in a single request
+export const fetchEstimateWithLineItems = async (id: string): Promise<{ estimate: Estimate; line_items: LineItem[] }> => {
+  const { data } = await api.get(`/estimates/${id}/full`)
+  return data
+}
+
 export const createEstimate = async (estimate: Partial<Estimate>): Promise<Estimate> => {
   const { data } = await api.post('/estimates/', estimate)
   return data

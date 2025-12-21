@@ -5,6 +5,7 @@ import {
   PlusIcon,
   ArrowDownTrayIcon,
   ArrowLeftIcon,
+  ArrowPathIcon,
   CheckIcon,
   TrashIcon,
   ChevronDownIcon,
@@ -24,7 +25,6 @@ import {
   fetchSalesforceAccounts,
   fetchSalesforceOpportunities,
   fetchSalesforceUseCases,
-  fetchRegions,
   type RegionResponse
 } from '../api/client'
 import { saveAs } from 'file-saver'
@@ -137,9 +137,13 @@ export default function Calculator() {
     currentEstimate,
     lineItems,
     workloadTypes,
-    fetchEstimate,
-    fetchLineItems,
+    fetchEstimateWithLineItems,
     fetchReferenceData,
+    clearReferenceCache,
+    isLoadingReferenceData,
+    isReferenceDataLoaded,
+    regionsMap,
+    getRegionsForCloud,
     createEstimate,
     updateEstimate,
     deleteLineItem,
@@ -150,6 +154,8 @@ export default function Calculator() {
     // Cost calculation from API
     workloadCosts,
     calculateAllWorkloadCosts,
+    isCalculatingCost,
+    calculatingCostIds,
     // DBU Rates
     dbuRatesMap,
     fetchDBURates,
@@ -291,37 +297,27 @@ export default function Calculator() {
     }
   }, [formData.cloud, formData.region, fetchVMPricing])
   
-  // Cache regions by cloud provider to avoid repeated API calls
-  const regionsCacheRef = useRef<Record<string, RegionResponse[]>>({})
-  
-  // Fetch regions when cloud changes (with caching)
+  // Use cached regions from store (pre-loaded for all clouds)
+  // This is instant - no API call needed when switching clouds
   useEffect(() => {
-    const loadRegions = async () => {
-      if (!formData.cloud) return
-      
-      const cacheKey = formData.cloud.toLowerCase()
-      
-      // Check cache first
-      if (regionsCacheRef.current[cacheKey]) {
-        setRegions(regionsCacheRef.current[cacheKey])
-        return
-      }
-      
-      setIsLoadingRegions(true)
-      try {
-        const fetchedRegions = await fetchRegions(formData.cloud)
-        regionsCacheRef.current[cacheKey] = fetchedRegions // Cache it
-        setRegions(fetchedRegions)
-      } catch (error) {
-        console.error('Failed to fetch regions:', error)
-        setRegions([])
-      } finally {
-        setIsLoadingRegions(false)
-      }
-    }
+    if (!formData.cloud) return
     
-    loadRegions()
-  }, [formData.cloud])
+    // Get regions from store cache (instant lookup)
+    const cachedRegions = getRegionsForCloud(formData.cloud)
+    
+    if (cachedRegions.length > 0) {
+      // Have cached regions - use them instantly
+      setRegions(cachedRegions)
+      setIsLoadingRegions(false)
+    } else if (!isReferenceDataLoaded) {
+      // Still loading reference data
+      setIsLoadingRegions(true)
+    } else {
+      // Reference data loaded but no regions for this cloud
+      setRegions([])
+      setIsLoadingRegions(false)
+    }
+  }, [formData.cloud, regionsMap, isReferenceDataLoaded, getRegionsForCloud])
   
   useEffect(() => {
     const loadEstimateData = async () => {
@@ -329,14 +325,14 @@ export default function Calculator() {
         setIsLoadingEstimate(true)
         setIsLoadingLineItems(true)
         setLineItemsLoaded(false)
+        
+        // Use combined endpoint for single round-trip (much faster)
         try {
-          await fetchEstimate(id)
+          await fetchEstimateWithLineItems(id)
+        } catch (error) {
+          console.error('Error loading estimate data:', error)
         } finally {
           setIsLoadingEstimate(false)
-        }
-        try {
-          await fetchLineItems(id)
-        } finally {
           setIsLoadingLineItems(false)
           setLineItemsLoaded(true)
         }
@@ -347,7 +343,7 @@ export default function Calculator() {
       }
     }
     loadEstimateData()
-  }, [id, fetchEstimate, fetchLineItems, clearEstimateState])
+  }, [id, fetchEstimateWithLineItems, clearEstimateState])
   
   // Default form values for new estimates
   const defaultEstimateFormData = {
@@ -732,6 +728,17 @@ export default function Calculator() {
     }
   }
   
+  const handleRefreshData = async () => {
+    clearReferenceCache()
+    toast.loading('Refreshing pricing data...', { id: 'refresh-data' })
+    try {
+      await fetchReferenceData(true) // Force refresh
+      toast.success('Pricing data refreshed', { id: 'refresh-data' })
+    } catch {
+      toast.error('Failed to refresh data', { id: 'refresh-data' })
+    }
+  }
+  
   const handleDeleteLineItem = async (item: LineItem) => {
     if (window.confirm(`Delete "${item.workload_name}"?`)) {
       try {
@@ -856,9 +863,6 @@ export default function Calculator() {
         }
         if (item.lakebase_ha_nodes) {
           details.push({ label: 'Nodes', value: `${item.lakebase_ha_nodes}${item.lakebase_ha_nodes > 1 ? ' (HA)' : ''}` })
-        }
-        if (item.lakebase_storage_gb) {
-          details.push({ label: 'Storage', value: `${item.lakebase_storage_gb} GB` })
         }
         break
         
@@ -1045,6 +1049,15 @@ export default function Calculator() {
         
         <div className="flex items-center gap-2">
           <button
+            onClick={handleRefreshData}
+            disabled={isLoadingReferenceData}
+            title="Refresh pricing data from server"
+            className="btn btn-ghost text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
+            <ArrowPathIcon className={clsx("w-4 h-4", isLoadingReferenceData && "animate-spin")} />
+          </button>
+          
+          <button
             onClick={handleExport}
             disabled={isExporting || !id}
             className="btn btn-secondary"
@@ -1139,6 +1152,8 @@ export default function Calculator() {
                     </label>
                     <SearchableSelect
                       options={(() => {
+                        // Show loading state if still loading
+                        if (isLoadingSfAccounts && sfAccounts.length === 0) return []
                         // Build options from search results
                         const searchOptions = sfAccounts.map(a => ({
                           value: a.salesforce_account_id,
@@ -1168,7 +1183,7 @@ export default function Calculator() {
                         markAsChanged()
                       }}
                       onSearchChange={setSfAccountSearch}
-                      placeholder="Select account..."
+                      placeholder={isLoadingSfAccounts ? "Loading accounts..." : "Select account..."}
                       searchPlaceholder="Search accounts..."
                       isLoading={isLoadingSfAccounts}
                       required
@@ -1197,7 +1212,7 @@ export default function Calculator() {
                         markAsChanged()
                       }}
                       onSearchChange={setSfOpportunitySearch}
-                      placeholder={formData.sfdc_account_id ? "Select opportunity..." : "Select account first"}
+                      placeholder={!formData.sfdc_account_id ? "Select account first" : isLoadingSfOpportunities ? "Loading opportunities..." : "Select opportunity..."}
                       searchPlaceholder="Search opportunities..."
                       isLoading={isLoadingSfOpportunities}
                       disabled={!formData.sfdc_account_id}
@@ -1223,7 +1238,7 @@ export default function Calculator() {
                         markAsChanged()
                       }}
                       onSearchChange={setSfUseCaseSearch}
-                      placeholder={formData.sfdc_account_id ? "Select use case..." : "Select account first"}
+                      placeholder={!formData.sfdc_account_id ? "Select account first" : isLoadingSfUseCases ? "Loading use cases..." : "Select use case..."}
                       searchPlaceholder="Search use cases..."
                       isLoading={isLoadingSfUseCases}
                       disabled={!formData.sfdc_account_id}
@@ -1347,6 +1362,7 @@ export default function Calculator() {
               <>
                 {/* Existing Workloads */}
                 {lineItems.map((item, index) => {
+                  const isItemLoading = calculatingCostIds.has(item.line_item_id)
                   const costs = calculateItemCost(item)
                   const isExpanded = expandedItems.has(item.line_item_id)
                   const sku = getSelectedSku(item)
@@ -1400,9 +1416,18 @@ export default function Calculator() {
                           </div>
                           
                           {/* Cost */}
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-orange-500">{formatCurrency(costs.totalCost)}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs/mo</p>
+                          <div className="text-right min-w-[100px]">
+                            {isItemLoading && !workloadCosts[item.line_item_id] ? (
+                              <>
+                                <div className="h-7 w-24 bg-[var(--bg-tertiary)] rounded animate-pulse mb-1 ml-auto" />
+                                <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse ml-auto" />
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-lg font-bold text-orange-500">{formatCurrency(costs.totalCost)}</p>
+                                <p className="text-xs text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs/mo</p>
+                              </>
+                            )}
                           </div>
                           
                           {/* Actions */}
@@ -1428,13 +1453,21 @@ export default function Calculator() {
                         <div className="mt-3 pt-3 border-t border-[var(--border-primary)] grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
                           <div>
                             <span className="text-[var(--text-muted)]">DBU Cost</span>
-                            <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
+                            {isItemLoading && !workloadCosts[item.line_item_id] ? (
+                              <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse mt-0.5" />
+                            ) : (
+                              <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
+                            )}
                           </div>
                           {/* Hide VM Cost for serverless workloads */}
                           {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'].includes(item.workload_type || '') && (
                             <div>
                               <span className="text-[var(--text-muted)]">VM Cost</span>
-                              <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
+                              {isItemLoading && !workloadCosts[item.line_item_id] ? (
+                                <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse mt-0.5" />
+                              ) : (
+                                <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
+                              )}
                             </div>
                           )}
                           
@@ -1546,6 +1579,9 @@ export default function Calculator() {
             <h3 className="section-title flex items-center gap-2 mb-5">
               <CurrencyDollarIcon className="w-4 h-4" />
               Cost Summary
+              {(isCalculatingCost || (isLoadingLineItems && !lineItemsLoaded)) && (
+                <div className="w-4 h-4 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin ml-auto" />
+              )}
             </h3>
             
             {!canAddWorkload ? (
@@ -1553,38 +1589,101 @@ export default function Calculator() {
                 <ExclamationTriangleIcon className="w-10 h-10 mx-auto mb-2 text-orange-500" />
                 <p className="text-sm text-[var(--text-muted)]">Select a region and tier to see cost estimates</p>
               </div>
-            ) : lineItems.length > 0 ? (
+            ) : (isLoadingLineItems && !lineItemsLoaded) ? (
+              /* Loading line items state */
               <div className="space-y-4">
-                {/* DBU Cost */}
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-orange-500" />
                     <span className="text-sm text-[var(--text-secondary)]">DBU Cost</span>
                   </div>
-                  <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</span>
+                  <div className="h-5 w-20 bg-[var(--bg-tertiary)] rounded animate-pulse" />
                 </div>
-                
-                {/* VM Cost */}
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-orange-400" />
                     <span className="text-sm text-[var(--text-secondary)]">VM Cost</span>
                   </div>
-                  <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</span>
+                  <div className="h-5 w-20 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                </div>
+                <div className="border-t border-[var(--border-primary)] pt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-semibold text-[var(--text-primary)]">Monthly Total</span>
+                    <div className="h-8 w-28 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-[var(--text-muted)]">Annual Total</span>
+                    <div className="h-5 w-24 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-[var(--border-primary)]">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-[var(--text-muted)]">Total DBUs/month</span>
+                    <div className="h-5 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                  </div>
+                </div>
+                <p className="text-xs text-center text-[var(--text-muted)] pt-2">Loading workloads...</p>
+              </div>
+            ) : lineItems.length > 0 ? (
+              <div className="space-y-4">
+                {/* Progress indicator when calculating */}
+                {isCalculatingCost && (
+                  <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-3 py-2 rounded-lg">
+                    <div className="w-3 h-3 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
+                    <span>Calculating {calculatingCostIds.size} of {lineItems.length} workloads...</span>
+                  </div>
+                )}
+                
+                {/* DBU Cost - Always show progressive value */}
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-orange-500" />
+                    <span className="text-sm text-[var(--text-secondary)]">DBU Cost</span>
+                  </div>
+                  <span className={clsx(
+                    "font-semibold text-[var(--text-primary)]",
+                    isCalculatingCost && "opacity-70"
+                  )}>
+                    {formatCurrency(totalCosts.totalDBUCost)}
+                  </span>
+                </div>
+                
+                {/* VM Cost - Always show progressive value */}
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-orange-400" />
+                    <span className="text-sm text-[var(--text-secondary)]">VM Cost</span>
+                  </div>
+                  <span className={clsx(
+                    "font-semibold text-[var(--text-primary)]",
+                    isCalculatingCost && "opacity-70"
+                  )}>
+                    {formatCurrency(totalCosts.totalVMCost)}
+                  </span>
                 </div>
                 
                 {/* Divider */}
                 <div className="border-t border-[var(--border-primary)] pt-4">
-                  {/* Monthly Total */}
+                  {/* Monthly Total - Always show progressive value */}
                   <div className="flex justify-between items-center mb-2">
                     <span className="font-semibold text-[var(--text-primary)]">Monthly Total</span>
-                    <span className="text-2xl font-bold text-orange-500">{formatCurrency(totalCosts.totalCost)}</span>
+                    <span className={clsx(
+                      "text-2xl font-bold text-orange-500",
+                      isCalculatingCost && "opacity-70"
+                    )}>
+                      {formatCurrency(totalCosts.totalCost)}
+                    </span>
                   </div>
                   
                   {/* Annual Total */}
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-[var(--text-muted)]">Annual Total</span>
-                    <span className="font-medium text-[var(--text-secondary)]">{formatCurrency(totalCosts.totalCost * 12)}</span>
+                    <span className={clsx(
+                      "font-medium text-[var(--text-secondary)]",
+                      isCalculatingCost && "opacity-70"
+                    )}>
+                      {formatCurrency(totalCosts.totalCost * 12)}
+                    </span>
                   </div>
                 </div>
                 
@@ -1592,7 +1691,12 @@ export default function Calculator() {
                 <div className="pt-3 border-t border-[var(--border-primary)]">
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-[var(--text-muted)]">Total DBUs/month</span>
-                    <span className="font-mono text-[var(--text-secondary)]">{formatNumber(totalCosts.totalDBUs)}</span>
+                    <span className={clsx(
+                      "font-mono text-[var(--text-secondary)]",
+                      isCalculatingCost && "opacity-70"
+                    )}>
+                      {formatNumber(totalCosts.totalDBUs)}
+                    </span>
                   </div>
                 </div>
                 
@@ -1602,11 +1706,16 @@ export default function Calculator() {
                     <p className="text-xs font-medium uppercase tracking-wider mb-3 text-[var(--text-muted)]">By Workload</p>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {lineItems.map(item => {
+                        const isThisItemLoading = calculatingCostIds.has(item.line_item_id)
                         const costs = calculateItemCost(item)
                         return (
                           <div key={item.line_item_id} className="flex justify-between text-sm">
                             <span className="text-[var(--text-secondary)] truncate pr-2 max-w-[140px]">{item.workload_name}</span>
-                            <span className="font-medium text-[var(--text-primary)]">{formatCurrency(costs.totalCost)}</span>
+                            {isThisItemLoading && !workloadCosts[item.line_item_id] ? (
+                              <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                            ) : (
+                              <span className="font-medium text-[var(--text-primary)]">{formatCurrency(costs.totalCost)}</span>
+                            )}
                           </div>
                         )
                       })}

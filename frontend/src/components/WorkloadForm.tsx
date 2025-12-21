@@ -59,6 +59,14 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     { id: 'performance', name: 'Performance', description: 'Optimized for faster execution' },
   ]
   
+  // Fallback VM Payment Options for AWS Reserved instances
+  const defaultVmPaymentOptions = [
+    { id: 'no_upfront', name: 'No Upfront' },
+    { id: 'partial_upfront', name: 'Partial Upfront' },
+    { id: 'all_upfront', name: 'All Upfront' },
+  ]
+  const paymentOptions = vmPaymentOptions.length > 0 ? vmPaymentOptions : defaultVmPaymentOptions
+  
   // Fallback FMAPI Databricks config if store hasn't loaded yet
   const defaultFmapiDatabricksConfig = {
     model_types: [
@@ -434,7 +442,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       // Lakebase config
       if (selectedWorkloadType?.show_lakebase_config) {
         data.lakebase_cu = form.lakebase_cu
-        data.lakebase_storage_gb = form.lakebase_storage_gb
+        data.lakebase_storage_gb = null  // Storage is not used for Lakebase pricing
         data.lakebase_ha_nodes = form.lakebase_ha_nodes
         data.lakebase_backup_retention_days = form.lakebase_backup_retention_days
       } else {
@@ -734,7 +742,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                       onChange={(e) => setForm(f => ({ ...f, driver_payment_option: e.target.value }))}
                       className="w-full text-sm"
                     >
-                      {vmPaymentOptions.map(opt => (
+                      {paymentOptions.map(opt => (
                         <option key={opt.id} value={opt.id}>
                           {opt.name}
                         </option>
@@ -816,7 +824,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                       onChange={(e) => setForm(f => ({ ...f, worker_payment_option: e.target.value }))}
                       className="w-full text-sm"
                     >
-                      {vmPaymentOptions.map(opt => (
+                      {paymentOptions.map(opt => (
                         <option key={opt.id} value={opt.id}>
                           {opt.name}
                         </option>
@@ -1152,18 +1160,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 className="w-full text-sm"
               />
               <span className="text-xs text-[var(--text-muted)]">1-3 (HA requires 2+)</span>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Storage (GB)</label>
-              <input
-                type="number"
-                min={100}
-                max={10000}
-                value={form.lakebase_storage_gb}
-                onChange={(e) => setForm(f => ({ ...f, lakebase_storage_gb: parseInt(e.target.value) || 100 }))}
-                className="w-full text-sm"
-              />
-              <span className="text-xs text-[var(--text-muted)]">100-10,000 GB</span>
             </div>
           </>
         )}

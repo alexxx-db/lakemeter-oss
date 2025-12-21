@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { 
@@ -8,7 +8,8 @@ import {
   DocumentDuplicateIcon,
   FolderIcon,
   ServerStackIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -27,9 +28,19 @@ export default function Dashboard() {
   const { estimates, isLoading, fetchEstimates, deleteEstimate, duplicateEstimate } = useStore()
   const [isExporting, setIsExporting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [isRefreshing, setIsRefreshing] = useState(false)
   
+  // Fetch estimates using SWR pattern (shows cached data immediately, refreshes in background)
   useEffect(() => {
-    fetchEstimates()
+    fetchEstimates() // Uses SWR - returns cached immediately, refreshes if stale
+  }, [fetchEstimates])
+  
+  // Manual refresh handler
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    await fetchEstimates(true) // Force refresh
+    setIsRefreshing(false)
+    toast.success('Refreshed')
   }, [fetchEstimates])
   
   const filteredEstimates = estimates.filter(e => 
@@ -101,6 +112,15 @@ export default function Dashboard() {
         
         <div className="flex items-center gap-2">
           <button
+            onClick={handleRefresh}
+            disabled={isRefreshing || isLoading}
+            className="btn btn-ghost p-2"
+            title="Refresh estimates"
+          >
+            <ArrowPathIcon className={clsx("w-5 h-5", (isRefreshing || isLoading) && "animate-spin")} />
+          </button>
+          
+          <button
             onClick={handleExportAll}
             disabled={isExporting || estimates.length === 0}
             className="btn btn-secondary"
@@ -129,7 +149,8 @@ export default function Dashboard() {
       </div>
       
       {/* Estimates Grid */}
-      {isLoading ? (
+      {/* Only show skeleton when loading AND no cached data */}
+      {isLoading && estimates.length === 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="card p-5 animate-pulse">

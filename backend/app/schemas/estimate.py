@@ -84,3 +84,20 @@ class EstimateListResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class EstimateWithLineItemsResponse(EstimateBase):
+    """Schema for estimate with full line items - optimized single-query response."""
+    estimate_id: UUID
+    owner_user_id: Optional[UUID] = None
+    version: int
+    template_id: Optional[UUID] = None
+    original_prompt: Optional[str] = None
+    is_deleted: bool
+    created_at: datetime
+    updated_at: datetime
+    updated_by: Optional[UUID] = None
+    # Full line items are passed separately, not as nested response
+    
+    class Config:
+        from_attributes = True

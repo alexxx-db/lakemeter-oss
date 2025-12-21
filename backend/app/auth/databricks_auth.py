@@ -70,11 +70,20 @@ def get_or_create_user(db: Session, email: str, full_name: Optional[str] = None)
     user = db.query(User).filter(User.email == email).first()
     
     if user:
-        # Update last login
-        user.last_login_at = datetime.utcnow()
-        if full_name and not user.full_name:
-            user.full_name = full_name
-        db.commit()
+        # Only update last_login if it's been > 5 minutes (avoid excessive DB writes)
+        now = datetime.utcnow()
+        should_update = (
+            user.last_login_at is None or 
+            (now - user.last_login_at).total_seconds() > 300  # 5 minutes
+        )
+        
+        if should_update or (full_name and not user.full_name):
+            if should_update:
+                user.last_login_at = now
+            if full_name and not user.full_name:
+                user.full_name = full_name
+            db.commit()
+        
         return user
     
     # Create new user

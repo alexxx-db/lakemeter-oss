@@ -27,6 +27,146 @@ import type {
   PhotonMultiplier
 } from '../api/client'
 
+// =============================================================================
+// LOCAL STORAGE CACHE UTILITIES
+// =============================================================================
+const CACHE_VERSION = 'v1'
+const CACHE_KEY = `lakemeter_reference_data_${CACHE_VERSION}`
+const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+
+interface CachedReferenceData {
+  workloadTypes: WorkloadType[]
+  cloudProviders: CloudProvider[]
+  dbsqlSizes: DBSQLSize[]
+  dltEditions: DLTEdition[]
+  fmapiProviders: FMAPIProvider[]
+  vmPricingTiers: VMPricingTier[]
+  vmPaymentOptions: VMPaymentOption[]
+  fmapiDatabricksConfig: FMAPIDatabricksConfig | null
+  fmapiProprietaryConfig: FMAPIProprietaryConfig | null
+  serverlessModes: ServerlessMode[]
+  instanceTypes: InstanceType[]
+  modelServingGPUTypes: ModelServingGPUType[]
+  regions: Region[]
+  // Multi-cloud regions cache
+  regionsMap: Record<string, Region[]>
+  photonMultipliers: PhotonMultiplier[]
+  instanceFamilies: string[]
+  dbsqlWarehouseTypes: string[]
+  fmapiDatabricksModels: string[]
+  timestamp: number
+}
+
+function getCachedReferenceData(): CachedReferenceData | null {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY)
+    if (!cached) return null
+    
+    const data: CachedReferenceData = JSON.parse(cached)
+    
+    // Validate TTL
+    if (Date.now() - data.timestamp > CACHE_TTL) {
+      console.log('[Cache] Reference data expired, will refresh')
+      localStorage.removeItem(CACHE_KEY)
+      return null
+    }
+    
+    // Validate required fields exist
+    if (!data.workloadTypes || !data.cloudProviders) {
+      console.warn('[Cache] Invalid cache structure, clearing')
+      localStorage.removeItem(CACHE_KEY)
+      return null
+    }
+    
+    // Check for regionsMap (new cache format) or regions (old format)
+    if (!data.regionsMap && !data.regions) {
+      console.warn('[Cache] No regions data in cache, clearing')
+      localStorage.removeItem(CACHE_KEY)
+      return null
+    }
+    
+    console.log('[Cache] Using cached reference data (age:', Math.round((Date.now() - data.timestamp) / 1000 / 60), 'minutes)')
+    return data
+  } catch (e) {
+    console.warn('[Cache] Failed to parse cache, clearing:', e)
+    localStorage.removeItem(CACHE_KEY)
+    return null
+  }
+}
+
+function setCachedReferenceData(data: Omit<CachedReferenceData, 'timestamp'>): void {
+  try {
+    const cacheData: CachedReferenceData = {
+      ...data,
+      timestamp: Date.now()
+    }
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+    console.log('[Cache] Saved reference data to localStorage')
+  } catch (e) {
+    console.warn('[Cache] Failed to save to localStorage:', e)
+  }
+}
+
+function clearReferenceDataCache(): void {
+  try {
+    localStorage.removeItem(CACHE_KEY)
+    console.log('[Cache] Cleared reference data cache')
+  } catch (e) {
+    console.warn('[Cache] Failed to clear cache:', e)
+  }
+}
+
+// =============================================================================
+// HARDCODED STATIC DATA (rarely changes)
+// =============================================================================
+const STATIC_CLOUD_PROVIDERS: CloudProvider[] = [
+  { cloud: 'aws', display_name: 'AWS', code: 'AWS' },
+  { cloud: 'azure', display_name: 'Azure', code: 'AZURE' },
+  { cloud: 'gcp', display_name: 'GCP', code: 'GCP' }
+]
+
+const STATIC_DBSQL_SIZES: DBSQLSize[] = [
+  { size: '2X-Small', min_clusters: 1, max_clusters: 1 },
+  { size: 'X-Small', min_clusters: 1, max_clusters: 1 },
+  { size: 'Small', min_clusters: 1, max_clusters: 1 },
+  { size: 'Medium', min_clusters: 1, max_clusters: 1 },
+  { size: 'Large', min_clusters: 1, max_clusters: 1 },
+  { size: 'X-Large', min_clusters: 1, max_clusters: 1 },
+  { size: '2X-Large', min_clusters: 1, max_clusters: 1 },
+  { size: '3X-Large', min_clusters: 1, max_clusters: 1 },
+  { size: '4X-Large', min_clusters: 1, max_clusters: 1 }
+]
+
+const STATIC_DLT_EDITIONS: DLTEdition[] = [
+  { edition: 'CORE', display_name: 'Core' },
+  { edition: 'PRO', display_name: 'Pro' },
+  { edition: 'ADVANCED', display_name: 'Advanced' }
+]
+
+const STATIC_VM_PRICING_TIERS: VMPricingTier[] = [
+  { tier: 'on_demand', display_name: 'On Demand' },
+  { tier: '1yr_reserved', display_name: '1-Year Reserved' },
+  { tier: '3yr_reserved', display_name: '3-Year Reserved' }
+]
+
+const STATIC_VM_PAYMENT_OPTIONS: VMPaymentOption[] = [
+  { option: 'no_upfront', display_name: 'No Upfront' },
+  { option: 'partial_upfront', display_name: 'Partial Upfront' },
+  { option: 'all_upfront', display_name: 'All Upfront' }
+]
+
+const STATIC_SERVERLESS_MODES: ServerlessMode[] = [
+  { mode: 'standard', display_name: 'Standard' },
+  { mode: 'performance', display_name: 'Performance' }
+]
+
+const STATIC_FMAPI_PROVIDERS: FMAPIProvider[] = [
+  { provider: 'databricks', display_name: 'Databricks' },
+  { provider: 'openai', display_name: 'OpenAI' },
+  { provider: 'anthropic', display_name: 'Anthropic' },
+  { provider: 'google', display_name: 'Google' }
+]
+
 interface Store {
   // Current User
   currentUser: CurrentUser | null
@@ -44,6 +184,7 @@ interface Store {
   workloadTypes: WorkloadType[]
   cloudProviders: CloudProvider[]
   regions: Region[]
+  regionsMap: Record<string, Region[]>  // Multi-cloud regions cache { aws: [], azure: [], gcp: [] }
   tiers: Tier[]
   instanceTypes: InstanceType[]
   instanceFamilies: string[]
@@ -76,6 +217,7 @@ interface Store {
   // Cost Calculations (NEW)
   workloadCosts: Record<string, CostCalculationResponse>  // Map of line_item_id -> cost
   isCalculatingCost: boolean
+  calculatingCostIds: Set<string>  // Track which individual line items are calculating
   
   // Actions - Auth
   fetchCurrentUser: () => Promise<void>
@@ -84,6 +226,7 @@ interface Store {
   // Actions - Estimates
   fetchEstimates: (forceRefresh?: boolean) => Promise<void>
   fetchEstimate: (id: string) => Promise<void>
+  fetchEstimateWithLineItems: (id: string) => Promise<void>  // Optimized combined fetch
   createEstimate: (estimate: Partial<Estimate>) => Promise<Estimate>
   updateEstimate: (id: string, estimate: Partial<Estimate>) => Promise<Estimate>
   deleteEstimate: (id: string) => Promise<void>
@@ -99,7 +242,11 @@ interface Store {
   deleteLineItem: (id: string) => Promise<void>
   
   // Actions - Reference Data
-  fetchReferenceData: () => Promise<void>
+  fetchReferenceData: (forceRefresh?: boolean) => Promise<void>
+  clearReferenceCache: () => void
+  isReferenceDataLoaded: boolean
+  isLoadingReferenceData: boolean
+  getRegionsForCloud: (cloud: string) => Region[]  // Get cached regions for a specific cloud
   fetchRegions: (cloud: string) => Promise<void>
   fetchTiers: (cloud?: string) => Promise<void>
   fetchInstanceTypes: (cloud: string, region?: string) => Promise<void>
@@ -125,6 +272,7 @@ interface Store {
   calculateWorkloadCost: (lineItem: LineItem, estimateCloud: string, estimateRegion: string, estimateTier: string) => Promise<CostCalculationResponse | null>
   calculateAllWorkloadCosts: (estimateId: string) => Promise<void>
   clearWorkloadCosts: () => void
+  isItemCalculating: (lineItemId: string) => boolean
   
   // UI State
   clearError: () => void
@@ -154,15 +302,17 @@ export const useStore = create<Store>((set, get) => ({
     { workload_type: 'FMAPI_PROPRIETARY', display_name: 'Foundation Models (Proprietary)', description: 'External foundation model APIs', sku_product_type_standard: 'FOUNDATION_MODEL_TRAINING', show_fmapi_config: true },
     { workload_type: 'LAKEBASE', display_name: 'Lakebase', description: 'Database workloads', sku_product_type_standard: 'DATABASE_SERVERLESS_COMPUTE', show_lakebase_config: true },
   ] as WorkloadType[],
-  cloudProviders: [],
+  // Use static data as defaults - instant display, no waiting for API
+  cloudProviders: STATIC_CLOUD_PROVIDERS,
   regions: [],
+  regionsMap: {},  // Multi-cloud regions: { aws: [], azure: [], gcp: [] }
   tiers: [],
   instanceTypes: [],
   instanceFamilies: [],
-  dbsqlSizes: [],
+  dbsqlSizes: STATIC_DBSQL_SIZES,
   dbsqlWarehouseTypes: [],
-  dltEditions: [],
-  fmapiProviders: [],
+  dltEditions: STATIC_DLT_EDITIONS,
+  fmapiProviders: STATIC_FMAPI_PROVIDERS,
   fmapiDatabricksModels: [],
   selectedCloud: 'aws',
   selectedRegion: '',
@@ -175,21 +325,26 @@ export const useStore = create<Store>((set, get) => ({
   
   // VM Pricing
   vmPricing: [],
-  vmPricingTiers: [],
-  vmPaymentOptions: [],
+  vmPricingTiers: STATIC_VM_PRICING_TIERS,
+  vmPaymentOptions: STATIC_VM_PAYMENT_OPTIONS,
   vmPricingMap: {},
   
   // DBU Rates & Pricing
   dbuRates: [],
   dbuRatesMap: {},
-  serverlessModes: [],
+  serverlessModes: STATIC_SERVERLESS_MODES,
   photonMultipliers: [],
   
   // Cost Calculations
   workloadCosts: {},
   isCalculatingCost: false,
+  calculatingCostIds: new Set<string>(),
   
-  // Caching
+  // Reference Data Loading State
+  isReferenceDataLoaded: false,
+  isLoadingReferenceData: false,
+  
+  // Caching (in-memory for session-specific data)
   _regionsCache: {} as Record<string, { data: any[]; timestamp: number }>,
   _dbuRatesCache: {} as Record<string, { data: any; timestamp: number }>,
   _instanceTypesCache: {} as Record<string, { data: any[]; timestamp: number }>,
@@ -257,6 +412,21 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const estimate = await api.fetchEstimate(id)
       set({ currentEstimate: estimate, isLoading: false })
+    } catch (error) {
+      set({ error: 'Failed to fetch estimate', isLoading: false })
+    }
+  },
+  
+  // Optimized: Fetch estimate + line items in one API call
+  fetchEstimateWithLineItems: async (id: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const { estimate, line_items } = await api.fetchEstimateWithLineItems(id)
+      set({ 
+        currentEstimate: estimate, 
+        lineItems: line_items,
+        isLoading: false 
+      })
     } catch (error) {
       set({ error: 'Failed to fetch estimate', isLoading: false })
     }
@@ -406,8 +576,58 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   
-  // Reference Data
-  fetchReferenceData: async () => {
+  // Reference Data (with localStorage caching)
+  fetchReferenceData: async (forceRefresh = false) => {
+    // Check if already loaded or loading (prevent duplicate calls)
+    const state = get()
+    if (state.isLoadingReferenceData) {
+      console.log('[RefData] Already loading, skipping duplicate call')
+      return
+    }
+    
+    // Skip if already loaded from cache (unless force refresh)
+    if (!forceRefresh && state.isReferenceDataLoaded) {
+      console.log('[RefData] Already loaded, skipping')
+      return
+    }
+    
+    // Try to use localStorage cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cached = getCachedReferenceData()
+      if (cached) {
+        console.log('[RefData] Using localStorage cache')
+        // Reconstruct regionsMap from cache (support both old and new format)
+        const regionsMap = cached.regionsMap || { aws: cached.regions || [] }
+        set({ 
+          workloadTypes: cached.workloadTypes || state.workloadTypes,
+          cloudProviders: cached.cloudProviders || STATIC_CLOUD_PROVIDERS,
+          dbsqlSizes: cached.dbsqlSizes || STATIC_DBSQL_SIZES,
+          dltEditions: cached.dltEditions || STATIC_DLT_EDITIONS,
+          fmapiProviders: cached.fmapiProviders || STATIC_FMAPI_PROVIDERS,
+          vmPricingTiers: cached.vmPricingTiers || STATIC_VM_PRICING_TIERS,
+          vmPaymentOptions: cached.vmPaymentOptions || STATIC_VM_PAYMENT_OPTIONS,
+          fmapiDatabricksConfig: cached.fmapiDatabricksConfig,
+          fmapiProprietaryConfig: cached.fmapiProprietaryConfig,
+          serverlessModes: cached.serverlessModes || STATIC_SERVERLESS_MODES,
+          instanceTypes: cached.instanceTypes || [],
+          modelServingGPUTypes: cached.modelServingGPUTypes || [],
+          regions: cached.regions || regionsMap['aws'] || [],
+          regionsMap,
+          photonMultipliers: cached.photonMultipliers || [],
+          instanceFamilies: cached.instanceFamilies || [],
+          dbsqlWarehouseTypes: cached.dbsqlWarehouseTypes || [],
+          fmapiDatabricksModels: cached.fmapiDatabricksModels || [],
+          isReferenceDataLoaded: true,
+          isLoadingReferenceData: false
+        })
+        return
+      }
+    }
+    
+    // No cache or force refresh - fetch from API
+    console.log('[RefData] Fetching from API (forceRefresh:', forceRefresh, ')')
+    set({ isLoadingReferenceData: true })
+    
     try {
       const [
         workloadTypes, 
@@ -421,16 +641,16 @@ export const useStore = create<Store>((set, get) => ({
         fmapiProprietaryConfig,
         serverlessModes
       ] = await Promise.all([
-        api.fetchWorkloadTypes(),
-        api.fetchCloudProviders(),
-        api.fetchDBSQLSizes(),
-        api.fetchDLTEditions(),
-        api.fetchFMAPIModels(),
-        api.fetchVMPricingTiers(),
-        api.fetchVMPaymentOptions(),
-        api.fetchFMAPIDatabricksConfig(),
-        api.fetchFMAPIProprietaryConfig(),
-        api.fetchServerlessModes()
+        api.fetchWorkloadTypes().catch(() => state.workloadTypes),
+        api.fetchCloudProviders().catch(() => STATIC_CLOUD_PROVIDERS),
+        api.fetchDBSQLSizes().catch(() => STATIC_DBSQL_SIZES),
+        api.fetchDLTEditions().catch(() => STATIC_DLT_EDITIONS),
+        api.fetchFMAPIModels().catch(() => STATIC_FMAPI_PROVIDERS),
+        api.fetchVMPricingTiers().catch(() => STATIC_VM_PRICING_TIERS),
+        api.fetchVMPaymentOptions().catch(() => STATIC_VM_PAYMENT_OPTIONS),
+        api.fetchFMAPIDatabricksConfig().catch(() => null),
+        api.fetchFMAPIProprietaryConfig().catch(() => null),
+        api.fetchServerlessModes().catch(() => STATIC_SERVERLESS_MODES)
       ])
       
       set({ 
@@ -446,31 +666,79 @@ export const useStore = create<Store>((set, get) => ({
         serverlessModes
       })
       
-      // Fetch cloud-specific data for default cloud (AWS)
+      // Fetch cloud-specific data for default cloud (AWS) + regions for ALL clouds
       const defaultCloud = 'aws'
-      const [instanceTypes, modelServingGPUTypes, regions, photonMultipliers] = await Promise.all([
-        api.fetchInstanceTypes(defaultCloud),
-        api.fetchModelServingGPUTypes(defaultCloud),
-        api.fetchRegions(defaultCloud),
+      const [instanceTypes, modelServingGPUTypes, awsRegions, azureRegions, gcpRegions, photonMultipliers] = await Promise.all([
+        api.fetchInstanceTypes(defaultCloud).catch(() => []),
+        api.fetchModelServingGPUTypes(defaultCloud).catch(() => []),
+        api.fetchRegions('aws').catch(() => []),
+        api.fetchRegions('azure').catch(() => []),
+        api.fetchRegions('gcp').catch(() => []),
         api.fetchPhotonMultipliers(defaultCloud).catch(() => [])
       ])
-      set({ instanceTypes, modelServingGPUTypes, regions, photonMultipliers })
+      const regionsMap = { aws: awsRegions, azure: azureRegions, gcp: gcpRegions }
+      const regions = awsRegions // Default to AWS regions for backwards compatibility
+      set({ instanceTypes, modelServingGPUTypes, regions, regionsMap, photonMultipliers })
+      console.log('[RefData] Loaded regions for all clouds:', { aws: awsRegions.length, azure: azureRegions.length, gcp: gcpRegions.length })
       
       // Also try to fetch instance families and DBSQL warehouse types
+      let instanceFamilies: string[] = []
+      let dbsqlWarehouseTypes: string[] = []
+      let fmapiDatabricksModels: string[] = []
       try {
-        const [instanceFamilies, dbsqlWarehouseTypes, fmapiDatabricksModels] = await Promise.all([
-          api.fetchInstanceFamilies(),
-          api.fetchDBSQLWarehouseTypes(),
-          api.fetchFMAPIDatabricksModelsList()
+        const results = await Promise.all([
+          api.fetchInstanceFamilies().catch(() => []),
+          api.fetchDBSQLWarehouseTypes().catch(() => []),
+          api.fetchFMAPIDatabricksModelsList().catch(() => [])
         ])
+        instanceFamilies = results[0]
+        dbsqlWarehouseTypes = results[1]
+        fmapiDatabricksModels = results[2]
         set({ instanceFamilies, dbsqlWarehouseTypes, fmapiDatabricksModels })
       } catch (e) {
         console.warn('Some reference data endpoints not available:', e)
       }
+      
+      // Save to localStorage cache (including all cloud regions)
+      setCachedReferenceData({
+        workloadTypes,
+        cloudProviders,
+        dbsqlSizes,
+        dltEditions,
+        fmapiProviders,
+        vmPricingTiers,
+        vmPaymentOptions,
+        fmapiDatabricksConfig,
+        fmapiProprietaryConfig,
+        serverlessModes,
+        instanceTypes,
+        modelServingGPUTypes,
+        regions,
+        regionsMap,
+        photonMultipliers,
+        instanceFamilies,
+        dbsqlWarehouseTypes,
+        fmapiDatabricksModels
+      })
+      
+      set({ isReferenceDataLoaded: true, isLoadingReferenceData: false })
     } catch (error) {
       console.error('Failed to fetch reference data:', error)
-      set({ error: 'Failed to load reference data from server' })
+      // Keep using static defaults, don't set error that blocks UI
+      set({ isReferenceDataLoaded: true, isLoadingReferenceData: false })
     }
+  },
+  
+  clearReferenceCache: () => {
+    clearReferenceDataCache()
+    set({ isReferenceDataLoaded: false })
+  },
+  
+  // Get cached regions for a specific cloud (instant, no API call)
+  getRegionsForCloud: (cloud: string) => {
+    const state = get()
+    const cloudKey = cloud.toLowerCase()
+    return state.regionsMap[cloudKey] || []
   },
   
   fetchRegions: async (cloud) => {
@@ -704,7 +972,10 @@ export const useStore = create<Store>((set, get) => ({
       return null
     }
     
-    set({ isCalculatingCost: true })
+    // Mark this specific item as calculating (if not already tracked by calculateAllWorkloadCosts)
+    set((state) => ({
+      calculatingCostIds: new Set([...state.calculatingCostIds, lineItem.line_item_id])
+    }))
     
     try {
       // Build the request parameters based on workload type
@@ -885,19 +1156,31 @@ export const useStore = create<Store>((set, get) => ({
       }
       
       if (result) {
-        set((state) => ({
-          workloadCosts: {
-            ...state.workloadCosts,
-            [lineItem.line_item_id]: result
-          },
-          isCalculatingCost: false
-        }))
+        set((state) => {
+          const newCalcIds = new Set(state.calculatingCostIds)
+          newCalcIds.delete(lineItem.line_item_id)
+          return {
+            workloadCosts: {
+              ...state.workloadCosts,
+              [lineItem.line_item_id]: result
+            },
+            calculatingCostIds: newCalcIds,
+            isCalculatingCost: newCalcIds.size > 0
+          }
+        })
       }
       
       return result
     } catch (error) {
       console.error('Failed to calculate workload cost:', error)
-      set({ isCalculatingCost: false })
+      set((state) => {
+        const newCalcIds = new Set(state.calculatingCostIds)
+        newCalcIds.delete(lineItem.line_item_id)
+        return { 
+          calculatingCostIds: newCalcIds,
+          isCalculatingCost: newCalcIds.size > 0
+        }
+      })
       return null
     }
   },
@@ -913,15 +1196,51 @@ export const useStore = create<Store>((set, get) => ({
     
     const estimateLineItems = lineItems.filter(li => li.estimate_id === estimateId)
     
-    // Calculate costs for all line items in parallel
-    await Promise.all(
-      estimateLineItems.map(lineItem => 
-        get().calculateWorkloadCost(lineItem, estimateCloud, estimateRegion, estimateTier)
+    if (estimateLineItems.length === 0) return
+    
+    // Mark all items as calculating (for optimistic UI)
+    const allIds = new Set(estimateLineItems.map(li => li.line_item_id))
+    set({ isCalculatingCost: true, calculatingCostIds: allIds })
+    
+    // Process in chunks of 6 (browser connection limit per origin)
+    const CHUNK_SIZE = 6
+    const chunks: LineItem[][] = []
+    for (let i = 0; i < estimateLineItems.length; i += CHUNK_SIZE) {
+      chunks.push(estimateLineItems.slice(i, i + CHUNK_SIZE))
+    }
+    
+    // Process chunks sequentially, items within chunk in parallel
+    // This ensures progressive loading: first 6 complete, then next 6, etc.
+    for (const chunk of chunks) {
+      await Promise.all(
+        chunk.map(async (lineItem) => {
+          try {
+            await get().calculateWorkloadCost(lineItem, estimateCloud, estimateRegion, estimateTier)
+          } finally {
+            // Remove this item from calculating set (progressive update)
+            set((state) => {
+              const newSet = new Set(state.calculatingCostIds)
+              newSet.delete(lineItem.line_item_id)
+              return { 
+                calculatingCostIds: newSet,
+                // Only set isCalculatingCost to false when ALL are done
+                isCalculatingCost: newSet.size > 0
+              }
+            })
+          }
+        })
       )
-    )
+    }
+    
+    // Ensure final state is clean
+    set({ isCalculatingCost: false, calculatingCostIds: new Set() })
   },
   
-  clearWorkloadCosts: () => set({ workloadCosts: {} }),
+  clearWorkloadCosts: () => set({ workloadCosts: {}, calculatingCostIds: new Set() }),
+  
+  isItemCalculating: (lineItemId: string) => {
+    return get().calculatingCostIds.has(lineItemId)
+  },
   
   clearError: () => set({ error: null })
 }))

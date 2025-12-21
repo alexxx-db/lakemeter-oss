@@ -19,12 +19,14 @@ from app.routes import (
 )
 
 # Create FastAPI application
+# redirect_slashes=False prevents automatic redirects that break CORS
 app = FastAPI(
     title="Lakemeter API",
     description="Databricks Pricing Calculator API - Estimate and manage Databricks workload costs",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    redirect_slashes=False
 )
 
 # Configure CORS

@@ -221,6 +221,7 @@ DEFAULT_WORKLOAD_TYPES = [
 ]
 
 
+@router.get("", response_model=List[WorkloadTypeResponse])
 @router.get("/", response_model=List[WorkloadTypeResponse])
 def list_workload_types(
     db: Session = Depends(get_db)
