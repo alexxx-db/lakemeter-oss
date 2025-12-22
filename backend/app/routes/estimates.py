@@ -1,7 +1,7 @@
 """Estimates API routes."""
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 
@@ -319,12 +319,20 @@ def duplicate_estimate(
 
 @router.get("/me/info")
 def get_current_user_info(
-    current_user: User = Depends(get_current_user)
+    request: Request
 ):
-    """Get the current authenticated user's info."""
+    """Get the current authenticated user's info from headers (no DB required)."""
+    from app.auth.databricks_auth import get_user_from_headers
+    
+    email, display_name = get_user_from_headers(request)
+    
+    if not email:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
     return {
-        "user_id": str(current_user.user_id),
-        "email": current_user.email,
-        "full_name": current_user.full_name,
-        "role": current_user.role
+        "user_id": email,  # Use email as ID when DB not available
+        "email": email,
+        "full_name": display_name or email.split("@")[0],
+        "role": "user"
     }
