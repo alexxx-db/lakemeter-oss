@@ -72,8 +72,13 @@ def _create_engine_with_token_refresh():
         raise
 
 
-# Initialize engine and session factory
-engine, SessionLocal = _create_engine_with_token_refresh()
+# Initialize engine and session factory (fault-tolerant)
+try:
+    engine, SessionLocal = _create_engine_with_token_refresh()
+except Exception as e:
+    log_error(f"Database initialization failed (will retry on first request): {e}")
+    engine = None
+    SessionLocal = None
 
 
 def refresh_engine():

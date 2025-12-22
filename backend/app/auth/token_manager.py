@@ -206,6 +206,10 @@ def init_token_manager():
     token_manager = LakebaseTokenManager()
 
 
-# Initialize on module load
-init_token_manager()
+# Initialize on module load (fault-tolerant)
+try:
+    init_token_manager()
+except Exception as e:
+    _log_error(f"Token manager initialization failed: {e}")
+    _log_error("App will start but database operations will fail until auth is configured")
 
