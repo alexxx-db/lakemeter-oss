@@ -7,10 +7,35 @@ command:
   - "cd backend && PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 env:
+  # App environment
   - name: "ENVIRONMENT"
     value: "production"
-  - name: "DATABRICKS_HOST"
-    value: "{{databricks_host}}"
   - name: "CORS_ORIGINS"
     value: ""
+    
+  # Databricks workspace (auto-populated by Databricks Apps)
+  - name: "DATABRICKS_HOST"
+    value: "https://fe-vm-lakemeter.cloud.databricks.com"
+  
+  # Secrets scope containing SP credentials
+  - name: "DATABRICKS_SECRETS_SCOPE"
+    value: "lakemeter-secrets"
+  - name: "SP_CLIENT_ID_KEY"
+    value: "sp_clientid"
+  - name: "SP_SECRET_KEY"
+    value: "sp_secret"
+  
+  # Lakebase database configuration
+  - name: "LAKEBASE_INSTANCE_NAME"
+    value: "instance-364041a4-0aae-44df-bbc6-37ac84169dfe"
+  - name: "DB_HOST"
+    value: "instance-364041a4-0aae-44df-bbc6-37ac84169dfe.database.cloud.databricks.com"
+  - name: "DB_USER"
+    value: "junyi.tiong@databricks.com"
+  - name: "DB_NAME"
+    value: "lakemeter_pricing"
+  - name: "DB_PORT"
+    value: "5432"
+  - name: "DB_SSLMODE"
+    value: "require"
 
