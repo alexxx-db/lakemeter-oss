@@ -880,6 +880,42 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 className="w-full text-sm"
               />
             </div>
+            
+            {/* Pricing Tier - only for Pro and Classic warehouse types */}
+            {(form.dbsql_warehouse_type === 'PRO' || form.dbsql_warehouse_type === 'CLASSIC') && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
+                <select
+                  value={form.dbsql_vm_pricing_tier}
+                  onChange={(e) => setForm(f => ({ ...f, dbsql_vm_pricing_tier: e.target.value }))}
+                  className="w-full text-sm"
+                >
+                  <option value="on_demand">On-Demand</option>
+                  <option value="reserved_1y">1-Year Reserved</option>
+                  <option value="reserved_3y">3-Year Reserved</option>
+                </select>
+              </div>
+            )}
+            
+            {/* Payment Option - only for AWS and reserved pricing tiers */}
+            {(form.dbsql_warehouse_type === 'PRO' || form.dbsql_warehouse_type === 'CLASSIC') && 
+             selectedCloud === 'aws' && 
+             form.dbsql_vm_pricing_tier.startsWith('reserved') && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
+                <select
+                  value={form.dbsql_vm_payment_option}
+                  onChange={(e) => setForm(f => ({ ...f, dbsql_vm_payment_option: e.target.value }))}
+                  className="w-full text-sm"
+                >
+                  {paymentOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </>
         )}
         
