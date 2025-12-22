@@ -88,6 +88,7 @@ def debug_headers(request: Request):
 def debug_database():
     """Debug endpoint to check database connection status."""
     import os
+    import uuid
     from app.auth.token_manager import token_manager
     
     result = {
@@ -103,6 +104,7 @@ def debug_database():
         "workspace_client_status": "NOT INITIALIZED",
         "sp_credentials_status": "NOT FETCHED",
         "token_status": "NO TOKEN",
+        "token_error": None,
         "database_status": "NOT CONNECTED",
     }
     
@@ -114,10 +116,26 @@ def debug_database():
         
         if token_manager._sp_client_id and token_manager._sp_client_secret:
             result["sp_credentials_status"] = "FETCHED"
+            result["sp_client_id_preview"] = token_manager._sp_client_id[:8] + "..." if token_manager._sp_client_id else None
         
-        token = token_manager.get_token()
-        if token:
-            result["token_status"] = f"VALID (length: {len(token)})"
+        # Try to generate token and capture error
+        try:
+            from databricks.sdk import WorkspaceClient
+            sp_client = WorkspaceClient(
+                host=token_manager.databricks_host,
+                client_id=token_manager._sp_client_id,
+                client_secret=token_manager._sp_client_secret
+            )
+            credential = sp_client.database.generate_database_credential(
+                request_id=str(uuid.uuid4()),
+                instance_names=[token_manager.lakebase_instance_name]
+            )
+            if credential and credential.token:
+                result["token_status"] = f"GENERATED (length: {len(credential.token)})"
+                token_manager._token = credential.token
+        except Exception as e:
+            result["token_status"] = "GENERATION FAILED"
+            result["token_error"] = str(e)
         
         # Try to test database connection
         try:
