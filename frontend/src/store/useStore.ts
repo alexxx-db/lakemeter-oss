@@ -30,7 +30,7 @@ import type {
 // =============================================================================
 // LOCAL STORAGE CACHE UTILITIES
 // =============================================================================
-const CACHE_VERSION = 'v1'
+const CACHE_VERSION = 'v2'  // Bumped to invalidate stale DBSQL DBU/hr values
 const CACHE_KEY = `lakemeter_reference_data_${CACHE_VERSION}`
 const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
 
