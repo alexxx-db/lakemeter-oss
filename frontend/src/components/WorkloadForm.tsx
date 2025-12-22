@@ -845,18 +845,63 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* DBSQL Config */}
         {selectedWorkloadType?.show_dbsql_config && (
           <>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Warehouse Type</label>
-              <select
-                value={form.dbsql_warehouse_type}
-                onChange={(e) => setForm(f => ({ ...f, dbsql_warehouse_type: e.target.value }))}
-                className="w-full text-sm"
-              >
-                <option value="SERVERLESS">Serverless</option>
-                <option value="PRO">Pro</option>
-                <option value="CLASSIC">Classic</option>
-              </select>
+            {/* Serverless Toggle for DBSQL - similar to Jobs/All Purpose */}
+            <div className="col-span-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Serverless Toggle */}
+                <div className={clsx(
+                  "p-3 rounded-lg border transition-all",
+                  form.dbsql_warehouse_type === 'SERVERLESS'
+                    ? "bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-700" 
+                    : "bg-[var(--bg-tertiary)] border-[var(--border-primary)]"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CloudIcon className={clsx(
+                        "w-4 h-4",
+                        form.dbsql_warehouse_type === 'SERVERLESS' ? "text-teal-600 dark:text-teal-400" : "text-teal-500 dark:text-teal-400"
+                      )} />
+                      <span className={clsx(
+                        "text-sm",
+                        form.dbsql_warehouse_type === 'SERVERLESS' ? "text-teal-700 dark:text-teal-300 font-medium" : "text-[var(--text-secondary)]"
+                      )}>Serverless</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ 
+                        ...f, 
+                        dbsql_warehouse_type: f.dbsql_warehouse_type === 'SERVERLESS' ? 'PRO' : 'SERVERLESS' 
+                      }))}
+                      className={clsx('toggle', form.dbsql_warehouse_type === 'SERVERLESS' ? 'toggle-checked' : 'toggle-unchecked')}
+                    >
+                      <span className={clsx('toggle-knob', form.dbsql_warehouse_type === 'SERVERLESS' ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
+                    </button>
+                  </div>
+                  
+                  {form.dbsql_warehouse_type === 'SERVERLESS' && (
+                    <p className="text-xs text-teal-600 dark:text-teal-400 mt-2">
+                      Fully managed SQL compute
+                    </p>
+                  )}
+                </div>
+                
+                {/* Warehouse Type dropdown - only when not serverless */}
+                {form.dbsql_warehouse_type !== 'SERVERLESS' && (
+                  <div className="p-3 rounded-lg border bg-[var(--bg-tertiary)] border-[var(--border-primary)]">
+                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Warehouse Type</label>
+                    <select
+                      value={form.dbsql_warehouse_type}
+                      onChange={(e) => setForm(f => ({ ...f, dbsql_warehouse_type: e.target.value }))}
+                      className="w-full text-sm"
+                    >
+                      <option value="PRO">Pro</option>
+                      <option value="CLASSIC">Classic</option>
+                    </select>
+                  </div>
+                )}
+              </div>
             </div>
+            
             <div>
               <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Size</label>
               <select

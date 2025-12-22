@@ -1413,7 +1413,7 @@ export default function Calculator() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h4 className="font-semibold truncate text-[var(--text-primary)]">{item.workload_name}</h4>
-                              {item.serverless_enabled && (
+                              {(item.serverless_enabled || (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')) && (
                                 <span className="badge badge-teal">Serverless</span>
                               )}
                               {item.photon_enabled && (
