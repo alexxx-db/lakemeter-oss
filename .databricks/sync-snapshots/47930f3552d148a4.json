@@ -73,7 +73,7 @@
     "frontend/src/pages/Dashboard.tsx": "2025-12-22T04:20:21.129623209+08:00",
     "frontend/src/pages/EstimateDetail.tsx": "2025-12-16T17:25:07.484925244+08:00",
     "frontend/src/pages/Estimates.tsx": "2025-12-22T04:20:21.149669399+08:00",
-    "frontend/src/store/useStore.ts": "2025-12-22T21:47:57.529621382+08:00",
+    "frontend/src/store/useStore.ts": "2025-12-22T21:49:23.210504841+08:00",
     "frontend/src/types/index.ts": "2025-12-22T20:47:18.483524662+08:00",
     "frontend/tailwind.config.js": "2025-12-16T17:25:07.487060715+08:00",
     "frontend/tsconfig.json": "2025-12-16T17:25:07.487461217+08:00",
