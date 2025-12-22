@@ -1,61 +1,26 @@
 """FastAPI main application entry point."""
 import os
-import sys
-import traceback
 from pathlib import Path
 from typing import Optional
+from fastapi import FastAPI, Depends, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
-# Print startup info for debugging
-print(f"[STARTUP] Python version: {sys.version}", flush=True)
-print(f"[STARTUP] Working directory: {os.getcwd()}", flush=True)
-print(f"[STARTUP] PYTHONPATH: {os.environ.get('PYTHONPATH', 'not set')}", flush=True)
-
-try:
-    from fastapi import FastAPI, Depends, Request
-    from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.staticfiles import StaticFiles
-    from fastapi.responses import FileResponse
-    from sqlalchemy.orm import Session
-    print("[STARTUP] FastAPI/SQLAlchemy imports OK", flush=True)
-except Exception as e:
-    print(f"[STARTUP] FastAPI/SQLAlchemy import failed: {e}", flush=True)
-    traceback.print_exc()
-    raise
-
-try:
-    from app.config import settings, setup_logging, log_info, log_warning, log_error
-    print("[STARTUP] Config imports OK", flush=True)
-except Exception as e:
-    print(f"[STARTUP] Config import failed: {e}", flush=True)
-    traceback.print_exc()
-    raise
-
-try:
-    from app.database import get_db
-    print("[STARTUP] Database imports OK", flush=True)
-except Exception as e:
-    print(f"[STARTUP] Database import failed: {e}", flush=True)
-    traceback.print_exc()
-    # Don't raise - let app start without DB
-    get_db = None
-
-try:
-    from app.routes import (
-        estimates_router,
-        line_items_router,
-        workload_types_router,
-        users_router,
-        export_router,
-        vm_pricing_router,
-        salesforce_router,
-        calculate_router,
-        reference_router
-    )
-    print("[STARTUP] Router imports OK", flush=True)
-except Exception as e:
-    print(f"[STARTUP] Router import failed: {e}", flush=True)
-    traceback.print_exc()
-    raise
+from app.config import settings, setup_logging, log_info, log_warning, log_error
+from app.database import get_db
+from app.routes import (
+    estimates_router,
+    line_items_router,
+    workload_types_router,
+    users_router,
+    export_router,
+    vm_pricing_router,
+    salesforce_router,
+    calculate_router,
+    reference_router
+)
 
 # Initialize logging based on environment
 setup_logging()
