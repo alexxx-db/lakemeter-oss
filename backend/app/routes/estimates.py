@@ -121,6 +121,30 @@ def create_estimate(
     return db_estimate
 
 
+# NOTE: This route MUST be defined BEFORE /{estimate_id} routes to avoid "me" being parsed as UUID
+@router.get("/me/info")
+def get_current_user_info(
+    request: Request
+):
+    """Get the current authenticated user's info from headers (no DB required)."""
+    from app.auth.databricks_auth import get_user_from_headers
+    
+    email, _ = get_user_from_headers(request)
+    
+    if not email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Use email prefix as display name (e.g., "junyi.tiong" from "junyi.tiong@databricks.com")
+    display_name = email.split("@")[0].replace(".", " ").title()
+    
+    return {
+        "user_id": email,
+        "email": email,
+        "full_name": display_name,
+        "role": "user"
+    }
+
+
 def _get_estimate_for_user(
     estimate_id: UUID,
     user: User,
@@ -315,26 +339,3 @@ def duplicate_estimate(
     db.commit()
     db.refresh(new_estimate)
     return new_estimate
-
-
-@router.get("/me/info")
-def get_current_user_info(
-    request: Request
-):
-    """Get the current authenticated user's info from headers (no DB required)."""
-    from app.auth.databricks_auth import get_user_from_headers
-    
-    email, _ = get_user_from_headers(request)
-    
-    if not email:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # Use email prefix as display name (e.g., "junyi.tiong" from "junyi.tiong@databricks.com")
-    display_name = email.split("@")[0].replace(".", " ").title()
-    
-    return {
-        "user_id": email,
-        "email": email,
-        "full_name": display_name,
-        "role": "user"
-    }
