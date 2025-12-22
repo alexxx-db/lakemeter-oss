@@ -273,6 +273,8 @@ interface Store {
   calculateWorkloadCost: (lineItem: LineItem, estimateCloud: string, estimateRegion: string, estimateTier: string) => Promise<CostCalculationResponse | null>
   calculateAllWorkloadCosts: (estimateId: string) => Promise<void>
   clearWorkloadCosts: () => void
+  clearSingleWorkloadCost: (lineItemId: string) => void
+  markItemCalculating: (lineItemId: string) => void
   isItemCalculating: (lineItemId: string) => boolean
   
   // UI State
@@ -1233,6 +1235,17 @@ export const useStore = create<Store>((set, get) => ({
   },
   
   clearWorkloadCosts: () => set({ workloadCosts: {}, calculatingCostIds: new Set() }),
+  
+  clearSingleWorkloadCost: (lineItemId: string) => set((state) => {
+    const newCosts = { ...state.workloadCosts }
+    delete newCosts[lineItemId]
+    return { workloadCosts: newCosts }
+  }),
+  
+  markItemCalculating: (lineItemId: string) => set((state) => ({
+    calculatingCostIds: new Set([...state.calculatingCostIds, lineItemId]),
+    isCalculatingCost: true
+  })),
   
   isItemCalculating: (lineItemId: string) => {
     return get().calculatingCostIds.has(lineItemId)

@@ -27,7 +27,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     selectedCloud,
     createLineItem,
     updateLineItem,
-    fetchLineItems
+    fetchLineItems,
+    clearSingleWorkloadCost,
+    markItemCalculating
   } = useStore()
   
   // Fallback DBSQL sizes if store hasn't loaded yet
@@ -464,11 +466,18 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       }
       
       if (lineItem) {
+        // Clear cached cost and mark as calculating to show loading state
+        clearSingleWorkloadCost(lineItem.line_item_id)
+        markItemCalculating(lineItem.line_item_id)
         await updateLineItem(lineItem.line_item_id, data)
         toast.success('Workload updated')
       } else {
         data.estimate_id = estimateId
-        await createLineItem(data as LineItem)
+        const newItem = await createLineItem(data as LineItem)
+        // Mark new item as calculating
+        if (newItem?.line_item_id) {
+          markItemCalculating(newItem.line_item_id)
+        }
         toast.success('Workload added')
       }
       fetchLineItems(estimateId)
