@@ -145,13 +145,7 @@ class LakebaseTokenManager:
             self._sp_client_secret = None
     
     def _refresh_token(self):
-        """Generate a new OAuth token using Service Principal."""
-        if not self._sp_client_id or not self._sp_client_secret:
-            _log_warning("Cannot refresh token: Service Principal credentials not available.")
-            self._token = None
-            self._expires_at = None
-            return
-
+        """Generate a new OAuth token using Service Principal or app identity."""
         if not self.lakebase_instance_name:
             _log_warning("Cannot refresh token: LAKEBASE_INSTANCE_NAME not set.")
             self._token = None
@@ -159,27 +153,58 @@ class LakebaseTokenManager:
             return
         
         _log_info("Refreshing Lakebase OAuth token...")
-        try:
-            # Initialize a new WorkspaceClient for the Service Principal
-            sp_client = WorkspaceClient(
-                host=self.databricks_host,
-                client_id=self._sp_client_id,
-                client_secret=self._sp_client_secret
-            )
-            
-            credential = sp_client.database.generate_database_credential(
-                request_id=str(uuid.uuid4()),
-                instance_names=[self.lakebase_instance_name]
-            )
-            
-            self._token = credential.token
-            # Set expiration 5 minutes before actual expiry for proactive refresh
-            self._expires_at = datetime.fromisoformat(credential.expiration_time.replace('Z', '+00:00')) - timedelta(minutes=5)
-            _log_info(f"Token refreshed. Expires at: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        except Exception as e:
-            _log_error(f"Failed to refresh token: {e}")
-            self._token = None
-            self._expires_at = None
+        
+        # Try Method 1: Use SP credentials from secrets (preferred for production)
+        if self._sp_client_id and self._sp_client_secret:
+            try:
+                _log_info("Using SP credentials from secrets...")
+                sp_client = WorkspaceClient(
+                    host=self.databricks_host,
+                    client_id=self._sp_client_id,
+                    client_secret=self._sp_client_secret
+                )
+                
+                credential = sp_client.database.generate_database_credential(
+                    request_id=str(uuid.uuid4()),
+                    instance_names=[self.lakebase_instance_name]
+                )
+                
+                self._token = credential.token
+                self._expires_at = datetime.fromisoformat(credential.expiration_time.replace('Z', '+00:00')) - timedelta(minutes=5)
+                _log_info(f"Token refreshed via SP secrets. Expires at: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                return
+            except Exception as e:
+                _log_warning(f"SP secrets token generation failed: {e}")
+        
+        # Try Method 2: Use app's own identity (for Databricks Apps where app SP has DB access)
+        if self._workspace_client:
+            try:
+                _log_info("Using app's own identity for database credential...")
+                credential = self._workspace_client.database.generate_database_credential(
+                    request_id=str(uuid.uuid4()),
+                    instance_names=[self.lakebase_instance_name]
+                )
+                
+                self._token = credential.token
+                self._expires_at = datetime.fromisoformat(credential.expiration_time.replace('Z', '+00:00')) - timedelta(minutes=5)
+                
+                # Update db_user to match the app's SP identity
+                try:
+                    current_user = self._workspace_client.current_user.me()
+                    if current_user.user_name:
+                        self.db_user = current_user.user_name
+                        _log_info(f"Updated DB_USER to app identity: {self.db_user}")
+                except Exception:
+                    pass
+                
+                _log_info(f"Token refreshed via app identity. Expires at: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                return
+            except Exception as e:
+                _log_error(f"App identity token generation failed: {e}")
+        
+        _log_error("All token generation methods failed.")
+        self._token = None
+        self._expires_at = None
     
     def get_token(self) -> Optional[str]:
         """
