@@ -126,15 +126,15 @@ const STATIC_CLOUD_PROVIDERS: CloudProvider[] = [
 ]
 
 const STATIC_DBSQL_SIZES: DBSQLSize[] = [
-  { id: '2X-Small', name: '2X-Small', dbu_per_hour: 2 },
-  { id: 'X-Small', name: 'X-Small', dbu_per_hour: 4 },
-  { id: 'Small', name: 'Small', dbu_per_hour: 8 },
-  { id: 'Medium', name: 'Medium', dbu_per_hour: 16 },
-  { id: 'Large', name: 'Large', dbu_per_hour: 32 },
-  { id: 'X-Large', name: 'X-Large', dbu_per_hour: 64 },
-  { id: '2X-Large', name: '2X-Large', dbu_per_hour: 128 },
-  { id: '3X-Large', name: '3X-Large', dbu_per_hour: 192 },
-  { id: '4X-Large', name: '4X-Large', dbu_per_hour: 256 }
+  { id: '2X-Small', name: '2X-Small', dbu_per_hour: 4 },
+  { id: 'X-Small', name: 'X-Small', dbu_per_hour: 6 },
+  { id: 'Small', name: 'Small', dbu_per_hour: 12 },
+  { id: 'Medium', name: 'Medium', dbu_per_hour: 24 },
+  { id: 'Large', name: 'Large', dbu_per_hour: 40 },
+  { id: 'X-Large', name: 'X-Large', dbu_per_hour: 80 },
+  { id: '2X-Large', name: '2X-Large', dbu_per_hour: 144 },
+  { id: '3X-Large', name: '3X-Large', dbu_per_hour: 272 },
+  { id: '4X-Large', name: '4X-Large', dbu_per_hour: 528 }
 ]
 
 const STATIC_DLT_EDITIONS: DLTEdition[] = [
