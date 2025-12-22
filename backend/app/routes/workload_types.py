@@ -226,15 +226,13 @@ DEFAULT_WORKLOAD_TYPES = [
 def list_workload_types(
     db: Session = Depends(get_db)
 ):
-    """List all workload types from database, fallback to defaults."""
-    try:
-        types = db.query(RefWorkloadType).order_by(RefWorkloadType.display_order).all()
-        if types:
-            return types
-    except Exception:
-        pass
+    """List all workload types - always use defaults to ensure correct configuration.
     
-    # Return default workload types if database query fails or is empty
+    Note: We always use DEFAULT_WORKLOAD_TYPES to ensure the latest configuration
+    (like show_usage_runs) is applied. Database records may have stale values.
+    """
+    # Always return the curated default workload types
+    # This ensures show_usage_runs and other flags are correct
     return [WorkloadTypeResponse(**wt) for wt in DEFAULT_WORKLOAD_TYPES]
 
 
