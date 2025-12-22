@@ -96,13 +96,21 @@ async def debug_external_api(request: Request):
         "final_token_available": bool(get_user_token(request)),
     }
     
-    # Try to make a simple API call to test
+    # Try to make a real calculation API call to test
     try:
         from app.external_api import LakemeterAPIClient
         client = LakemeterAPIClient(user_token=get_user_token(request))
-        clouds = await client.get_clouds()
+        # Test with a simple calculation endpoint
+        test_result = await client.calculate_lakebase({
+            "cloud": "AWS",
+            "region": "us-east-1",
+            "tier": "PREMIUM",
+            "cu_size": 4,
+            "num_nodes": 2,
+            "hours_per_month": 730
+        })
         result["external_api_test"] = "SUCCESS"
-        result["clouds_returned"] = len(clouds.get("clouds", [])) if clouds else 0
+        result["test_cost"] = test_result.get("data", {}).get("total_cost", {}).get("cost_per_month", "N/A")
     except Exception as e:
         result["external_api_test"] = f"FAILED: {str(e)}"
     
