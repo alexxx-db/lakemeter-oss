@@ -18,7 +18,7 @@ from uuid import uuid4
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 
-from app.config import log_info, log_warning
+from app.config import log_info
 
 # Import User model only for type checking to avoid circular import
 if TYPE_CHECKING:
@@ -58,7 +58,6 @@ def get_user_from_headers(request: Request) -> tuple[Optional[str], Optional[str
     for header in EMAIL_HEADERS:
         email = request.headers.get(header)
         if email:
-            log_info(f"Found email in header: {header}")
             break
     
     for header in USER_HEADERS:
