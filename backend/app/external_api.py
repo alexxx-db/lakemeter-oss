@@ -71,21 +71,60 @@ def get_cli_token() -> Optional[str]:
     return None
 
 
+def get_sp_token() -> Optional[str]:
+    """
+    Get Service Principal token for external API authentication.
+    Uses the same SP credentials that authenticate to Lakebase.
+    """
+    try:
+        from app.auth.token_manager import token_manager
+        if token_manager and token_manager._sp_client_id and token_manager._sp_client_secret:
+            from databricks.sdk import WorkspaceClient
+            sp_client = WorkspaceClient(
+                host=token_manager.databricks_host,
+                client_id=token_manager._sp_client_id,
+                client_secret=token_manager._sp_client_secret
+            )
+            # Get OAuth token for API calls
+            auth_headers = sp_client.config.authenticate()
+            if auth_headers:
+                auth_header = auth_headers.get('Authorization', '')
+                if auth_header.startswith('Bearer '):
+                    return auth_header[7:]
+    except Exception as e:
+        log_warning(f"Could not get SP token: {e}")
+    return None
+
+
 def get_user_token(request: Request) -> Optional[str]:
     """
     Get user's OAuth token for external API authentication.
     
     Priority:
-    1. X-Forwarded-Access-Token header (Databricks Apps production)
-    2. Databricks CLI token (local development)
+    1. X-Forwarded-Access-Token header (Databricks Apps production - if available)
+    2. Service Principal token (Databricks Apps - using same SP as Lakebase auth)
+    3. Databricks CLI token (local development)
     """
-    # First try production header
+    # First try production header (may not always be available)
     token = request.headers.get(ACCESS_TOKEN_HEADER)
     if token:
+        log_info("Using X-Forwarded-Access-Token for external API")
         return token
     
+    # Try Service Principal token (for Databricks Apps without user token)
+    sp_token = get_sp_token()
+    if sp_token:
+        log_info("Using Service Principal token for external API")
+        return sp_token
+    
     # Fall back to CLI token for local development
-    return get_cli_token()
+    cli_token = get_cli_token()
+    if cli_token:
+        log_info("Using CLI token for external API")
+        return cli_token
+    
+    log_warning("No token available for external API calls")
+    return None
 
 
 async def call_external_api(

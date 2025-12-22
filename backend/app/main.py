@@ -84,6 +84,31 @@ def debug_headers(request: Request):
     return get_debug_headers(request)
 
 
+@app.get("/api/v1/debug/external-api")
+async def debug_external_api(request: Request):
+    """Debug endpoint to check external API authentication."""
+    from app.external_api import get_user_token, get_sp_token, get_cli_token, ACCESS_TOKEN_HEADER
+    
+    result = {
+        "x_forwarded_access_token_present": ACCESS_TOKEN_HEADER in request.headers,
+        "sp_token_available": bool(get_sp_token()),
+        "cli_token_available": bool(get_cli_token()),
+        "final_token_available": bool(get_user_token(request)),
+    }
+    
+    # Try to make a simple API call to test
+    try:
+        from app.external_api import LakemeterAPIClient
+        client = LakemeterAPIClient(user_token=get_user_token(request))
+        clouds = await client.get_clouds()
+        result["external_api_test"] = "SUCCESS"
+        result["clouds_returned"] = len(clouds.get("clouds", [])) if clouds else 0
+    except Exception as e:
+        result["external_api_test"] = f"FAILED: {str(e)}"
+    
+    return result
+
+
 @app.get("/api/v1/debug/database")
 def debug_database():
     """Debug endpoint to check database connection status."""
