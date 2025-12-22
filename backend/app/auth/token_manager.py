@@ -20,6 +20,20 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Import logging helpers (defined inline to avoid circular import)
+def _log_info(msg: str):
+    """Log info - only in local/dev mode."""
+    if os.getenv("ENVIRONMENT", "local").lower() != "production":
+        print(f"[TokenManager] {msg}")
+
+def _log_warning(msg: str):
+    """Log warning - always."""
+    print(f"[TokenManager] WARNING: {msg}")
+
+def _log_error(msg: str):
+    """Log error - always."""
+    print(f"[TokenManager] ERROR: {msg}")
+
 
 class LakebaseTokenManager:
     """
@@ -61,10 +75,10 @@ class LakebaseTokenManager:
         self._fetch_sp_credentials()
         self.get_token() # Initial token fetch
         
-        print("🔐 LakebaseTokenManager initialized")
-        print(f"   Workspace: {self.databricks_host}")
-        print(f"   Instance: {self.lakebase_instance_name}")
-        print(f"   Secrets scope: {self.secrets_scope}")
+        _log_info("LakebaseTokenManager initialized")
+        _log_info(f"Workspace: {self.databricks_host}")
+        _log_info(f"Instance: {self.lakebase_instance_name}")
+        _log_info(f"Secrets scope: {self.secrets_scope}")
     
     def _init_workspace_client(self):
         """Initialize Databricks WorkspaceClient using CLI auth."""
@@ -76,22 +90,22 @@ class LakebaseTokenManager:
             self._workspace_client = WorkspaceClient(config=config)
             # Test CLI auth by getting current user
             current_user = self._workspace_client.current_user.me()
-            print(f"   ✓ CLI auth: {current_user.user_name}")
+            _log_info(f"CLI auth: {current_user.user_name}")
         except Exception as e:
-            print(f"   ⚠ CLI auth failed: {e}")
+            _log_warning(f"CLI auth failed: {e}")
             self._workspace_client = None
     
     def _fetch_sp_credentials(self):
         """Fetch Service Principal credentials from Databricks secrets."""
         if not self._workspace_client:
-            print("   ⚠ Cannot fetch SP credentials: WorkspaceClient not initialized.")
+            _log_warning("Cannot fetch SP credentials: WorkspaceClient not initialized.")
             return
         
         if not all([self.secrets_scope, self.sp_client_id_key, self.sp_secret_key]):
-            print("   ⚠ Missing secrets configuration (scope/keys). Cannot fetch SP credentials.")
+            _log_warning("Missing secrets configuration (scope/keys). Cannot fetch SP credentials.")
             return
 
-        print("   Fetching SP credentials from secrets...")
+        _log_info("Fetching SP credentials from secrets...")
         try:
             self._sp_client_id = self._workspace_client.secrets.get_secret(
                 scope=self.secrets_scope, key=self.sp_client_id_key
@@ -99,27 +113,27 @@ class LakebaseTokenManager:
             self._sp_client_secret = self._workspace_client.secrets.get_secret(
                 scope=self.secrets_scope, key=self.sp_secret_key
             ).value
-            print("   ✓ SP credentials fetched from secrets.")
+            _log_info("SP credentials fetched from secrets.")
         except Exception as e:
-            print(f"   ⚠ Failed to fetch secrets: {e}")
+            _log_warning(f"Failed to fetch secrets: {e}")
             self._sp_client_id = None
             self._sp_client_secret = None
     
     def _refresh_token(self):
         """Generate a new OAuth token using Service Principal."""
         if not self._sp_client_id or not self._sp_client_secret:
-            print("   ⚠ Cannot refresh token: Service Principal credentials not available.")
+            _log_warning("Cannot refresh token: Service Principal credentials not available.")
             self._token = None
             self._expires_at = None
             return
 
         if not self.lakebase_instance_name:
-            print("   ⚠ Cannot refresh token: LAKEBASE_INSTANCE_NAME not set.")
+            _log_warning("Cannot refresh token: LAKEBASE_INSTANCE_NAME not set.")
             self._token = None
             self._expires_at = None
             return
         
-        print("   Refreshing Lakebase OAuth token...")
+        _log_info("Refreshing Lakebase OAuth token...")
         try:
             # Initialize a new WorkspaceClient for the Service Principal
             sp_client = WorkspaceClient(
@@ -136,9 +150,9 @@ class LakebaseTokenManager:
             self._token = credential.token
             # Set expiration 5 minutes before actual expiry for proactive refresh
             self._expires_at = datetime.fromisoformat(credential.expiration_time.replace('Z', '+00:00')) - timedelta(minutes=5)
-            print(f"   ✓ Token refreshed. Expires at: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            _log_info(f"Token refreshed. Expires at: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         except Exception as e:
-            print(f"   ❌ Failed to refresh token: {e}")
+            _log_error(f"Failed to refresh token: {e}")
             self._token = None
             self._expires_at = None
     

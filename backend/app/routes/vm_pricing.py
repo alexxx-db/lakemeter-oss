@@ -11,6 +11,7 @@ from app.schemas.vm_pricing import (
     VMPricingTierResponse,
     VMPaymentOptionResponse
 )
+from app.config import log_warning
 
 router = APIRouter(prefix="/vm-pricing", tags=["vm-pricing"])
 
@@ -122,7 +123,7 @@ async def list_vm_pricing(
         if results:
             return results
     except Exception as e:
-        print(f"Warning: Could not fetch VM pricing from database: {e}")
+        log_warning(f"Could not fetch VM pricing from database: {e}")
     
     # Return default pricing as fallback
     return _get_default_pricing(cloud, region, instance_type, pricing_tier)
@@ -148,7 +149,7 @@ def get_instance_types_for_region(
         if results:
             return [{"instance_type": r[0]} for r in results]
     except Exception as e:
-        print(f"Warning: Could not fetch instance types from database: {e}")
+        log_warning(f"Could not fetch instance types from database: {e}")
     
     # Return default instance types for the cloud
     cloud_lower = cloud.lower()
@@ -171,7 +172,7 @@ def get_regions_for_cloud(
         if results:
             return [{"region": r[0]} for r in results]
     except Exception as e:
-        print(f"Warning: Could not fetch regions from database: {e}")
+        log_warning(f"Could not fetch regions from database: {e}")
     
     return []
 
@@ -208,7 +209,7 @@ def get_vm_price(
                 "source": result.source
             }
     except Exception as e:
-        print(f"Warning: Could not fetch VM price from database: {e}")
+        log_warning(f"Could not fetch VM price from database: {e}")
     
     # Fallback to default pricing
     cloud_lower = cloud.lower()

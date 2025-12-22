@@ -10,6 +10,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+from app.config import log_info, log_error
+
 
 # Base class for models (defined early so models can import it)
 Base = declarative_base()
@@ -43,7 +45,7 @@ def _create_engine_with_token_refresh():
     try:
         database_url = _get_database_url()
     except Exception as e:
-        print(f"❌ Database initialization failed: {e}")
+        log_error(f"Database initialization failed: {e}")
         raise
     
     try:
@@ -60,13 +62,13 @@ def _create_engine_with_token_refresh():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         
-        print(f"✓ Database engine created for Lakebase")
+        log_info("Database engine created for Lakebase")
         
         session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         return engine, session_local
         
     except Exception as e:
-        print(f"❌ Could not create database engine: {e}")
+        log_error(f"Could not create database engine: {e}")
         raise
 
 

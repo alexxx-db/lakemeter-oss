@@ -10,6 +10,7 @@ from app.schemas.salesforce import (
     SalesforceOpportunityResponse,
     SalesforceUseCaseResponse
 )
+from app.config import log_warning
 
 router = APIRouter(prefix="/salesforce", tags=["salesforce"])
 
@@ -36,7 +37,7 @@ def list_salesforce_accounts(
         return accounts
         
     except Exception as e:
-        print(f"Warning: Could not fetch Salesforce accounts: {e}")
+        log_warning(f"Could not fetch Salesforce accounts: {e}")
         return []
 
 
@@ -54,7 +55,7 @@ def get_salesforce_account(
         if account:
             return account
     except Exception as e:
-        print(f"Warning: Could not fetch Salesforce account: {e}")
+        log_warning(f"Could not fetch Salesforce account: {e}")
     
     return None
 
@@ -85,7 +86,7 @@ def list_salesforce_opportunities(
         return opportunities
         
     except Exception as e:
-        print(f"Warning: Could not fetch Salesforce opportunities: {e}")
+        log_warning(f"Could not fetch Salesforce opportunities: {e}")
         return []
 
 
@@ -103,7 +104,7 @@ def get_salesforce_opportunity(
         if opportunity:
             return opportunity
     except Exception as e:
-        print(f"Warning: Could not fetch Salesforce opportunity: {e}")
+        log_warning(f"Could not fetch Salesforce opportunity: {e}")
     
     return None
 
@@ -134,7 +135,7 @@ def list_salesforce_use_cases(
         return use_cases
         
     except Exception as e:
-        print(f"Warning: Could not fetch Salesforce use cases: {e}")
+        log_warning(f"Could not fetch Salesforce use cases: {e}")
         return []
 
 
@@ -152,7 +153,7 @@ def get_salesforce_use_case(
         if use_case:
             return use_case
     except Exception as e:
-        print(f"Warning: Could not fetch Salesforce use case: {e}")
+        log_warning(f"Could not fetch Salesforce use case: {e}")
     
     return None
 

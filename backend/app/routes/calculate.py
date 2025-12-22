@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
 from app.external_api import LakemeterAPIClient, get_user_token
+from app.config import settings, log_info, log_error
 
 router = APIRouter(prefix="/calculate", tags=["Calculations"])
 
@@ -209,16 +210,17 @@ async def call_external_or_error(
     client = LakemeterAPIClient(user_token=user_token)
     
     try:
-        print(f"[Calculate] Calling {endpoint_name} with data: {data}")
+        log_info(f"[Calculate] Calling {endpoint_name} with data: {data}")
         result = await api_method(data)
-        print(f"[Calculate] {endpoint_name} result: {result}")
+        log_info(f"[Calculate] {endpoint_name} result success")
         return result
     except Exception as e:
         import traceback
         error_msg = str(e)
-        print(f"[Calculate] ERROR in {endpoint_name}: {error_msg}")
-        print(f"[Calculate] Request data was: {data}")
-        traceback.print_exc()
+        log_error(f"[Calculate] ERROR in {endpoint_name}: {error_msg}")
+        log_error(f"[Calculate] Request data was: {data}")
+        if not settings.is_production:
+            traceback.print_exc()
         
         # If 401, explain the auth requirement
         if "401" in error_msg:

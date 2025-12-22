@@ -137,39 +137,40 @@ export interface WorkloadType {
   display_name: string
   description?: string
   
-  // Configuration visibility flags
-  show_compute_config: boolean
-  show_serverless_toggle: boolean
-  show_serverless_performance_mode: boolean
-  show_photon_toggle: boolean
-  show_dlt_config: boolean
-  show_dbsql_config: boolean
-  show_serverless_product: boolean
-  show_fmapi_config: boolean
-  show_lakebase_config: boolean
-  show_vector_search_mode: boolean
-  show_vm_pricing: boolean
-  show_usage_hours: boolean
-  show_usage_runs: boolean
-  show_usage_tokens: boolean
+  // Configuration visibility flags (all optional for flexibility)
+  show_compute_config?: boolean
+  show_serverless_toggle?: boolean
+  show_serverless_performance_mode?: boolean
+  show_photon_toggle?: boolean
+  show_dlt_config?: boolean
+  show_dbsql_config?: boolean
+  show_serverless_product?: boolean
+  show_fmapi_config?: boolean
+  show_lakebase_config?: boolean
+  show_vector_search_mode?: boolean
+  show_vm_pricing?: boolean
+  show_usage_hours?: boolean
+  show_usage_runs?: boolean
+  show_usage_tokens?: boolean
   
   // SKU product types
   sku_product_type_standard?: string
   sku_product_type_photon?: string
   sku_product_type_serverless?: string
   
-  display_order: number
+  display_order?: number
 }
 
 export interface CloudProvider {
-  id: string
-  name: string
-  regions: Region[]
+  cloud: string
+  display_name: string
+  code: string
 }
 
 export interface Region {
-  id: string
-  name: string
+  region_code: string
+  region_name: string
+  cloud: string
 }
 
 export interface InstanceType {
@@ -185,18 +186,24 @@ export interface InstanceType {
 export interface DBSQLSize {
   id: string
   name: string
-  dbu_per_hour: number
+  dbu_per_hour?: number
+  size?: string
+  min_clusters?: number
+  max_clusters?: number
 }
 
 export interface DLTEdition {
   id: string
   name: string
-  dbu_multiplier: number
+  edition?: string
+  display_name?: string
+  dbu_multiplier?: number
 }
 
 export interface FMAPIProvider {
   provider: string
-  models: FMAPIModel[]
+  display_name?: string
+  models?: FMAPIModel[]
 }
 
 export interface FMAPIModel {
@@ -281,13 +288,24 @@ export interface VMPricing {
 export interface VMPricingTier {
   id: string
   name: string
-  description: string
+  tier?: string
+  display_name?: string
+  description?: string
 }
 
 export interface VMPaymentOption {
   id: string
   name: string
-  description: string
+  option?: string
+  display_name?: string
+  description?: string
+}
+
+export interface ServerlessMode {
+  mode: string
+  display_name?: string
+  multiplier?: number
+  description?: string
 }
 
 export interface VMInstanceType {

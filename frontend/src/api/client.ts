@@ -16,7 +16,6 @@ import type {
   SalesforceAccount,
   SalesforceOpportunity,
   SalesforceUseCase,
-  User,
   ModelServingGPUType,
   FMAPIDatabricksConfig,
   FMAPIProprietaryConfig
@@ -389,7 +388,8 @@ export const fetchPhotonMultipliers = async (cloud: string, sku_type?: string): 
 // ============================================================================
 export interface ServerlessMode {
   mode: string
-  multiplier: number
+  multiplier?: number
+  display_name?: string
   description?: string
 }
 
@@ -874,43 +874,43 @@ export const calculateWorkloadCost = async (
   switch (workloadType) {
     case 'JOBS':
       if (serverlessEnabled) {
-        return calculateJobsServerless(params as JobsServerlessRequest)
+        return calculateJobsServerless(params as unknown as JobsServerlessRequest)
       }
-      return calculateJobsClassic(params as JobsClassicRequest)
+      return calculateJobsClassic(params as unknown as JobsClassicRequest)
     
     case 'ALL_PURPOSE':
       if (serverlessEnabled) {
-        return calculateAllPurposeServerless(params as AllPurposeServerlessRequest)
+        return calculateAllPurposeServerless(params as unknown as AllPurposeServerlessRequest)
       }
-      return calculateAllPurposeClassic(params as AllPurposeClassicRequest)
+      return calculateAllPurposeClassic(params as unknown as AllPurposeClassicRequest)
     
     case 'DLT':
       if (serverlessEnabled) {
-        return calculateDLTServerless(params as DLTServerlessRequest)
+        return calculateDLTServerless(params as unknown as DLTServerlessRequest)
       }
-      return calculateDLTClassic(params as DLTClassicRequest)
+      return calculateDLTClassic(params as unknown as DLTClassicRequest)
     
     case 'DBSQL':
       const warehouseType = (params as { warehouse_type?: string }).warehouse_type?.toUpperCase()
       if (warehouseType === 'SERVERLESS') {
-        return calculateDBSQLServerless(params as DBSQLServerlessRequest)
+        return calculateDBSQLServerless(params as unknown as DBSQLServerlessRequest)
       }
-      return calculateDBSQLClassicPro(params as DBSQLClassicProRequest)
+      return calculateDBSQLClassicPro(params as unknown as DBSQLClassicProRequest)
     
     case 'VECTOR_SEARCH':
-      return calculateVectorSearch(params as VectorSearchRequest)
+      return calculateVectorSearch(params as unknown as VectorSearchRequest)
     
     case 'MODEL_SERVING':
-      return calculateModelServing(params as ModelServingRequest)
+      return calculateModelServing(params as unknown as ModelServingRequest)
     
     case 'FMAPI_DATABRICKS':
-      return calculateFMAPIDatabricks(params as FMAPIDatabricksRequest)
+      return calculateFMAPIDatabricks(params as unknown as FMAPIDatabricksRequest)
     
     case 'FMAPI_PROPRIETARY':
-      return calculateFMAPIProprietary(params as FMAPIProprietaryRequest)
+      return calculateFMAPIProprietary(params as unknown as FMAPIProprietaryRequest)
     
     case 'LAKEBASE':
-      return calculateLakebase(params as LakebaseRequest)
+      return calculateLakebase(params as unknown as LakebaseRequest)
     
     default:
       throw new Error(`Unknown workload type: ${workloadType}`)

@@ -18,6 +18,8 @@ from uuid import uuid4
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 
+from app.config import log_info
+
 # Import User model only for type checking to avoid circular import
 if TYPE_CHECKING:
     from app.models.user import User
@@ -99,7 +101,7 @@ def get_or_create_user(db: Session, email: str, full_name: Optional[str] = None)
     db.commit()
     db.refresh(user)
     
-    print(f"✓ Created new user: {email}")
+    log_info(f"Created new user: {email}")
     return user
 
 

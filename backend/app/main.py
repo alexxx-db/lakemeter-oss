@@ -1,10 +1,14 @@
 """FastAPI main application entry point."""
+import os
+from pathlib import Path
 from typing import Optional
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.config import settings, setup_logging, log_info, log_warning, log_error
 from app.database import get_db
 from app.routes import (
     estimates_router,
@@ -18,16 +22,23 @@ from app.routes import (
     reference_router
 )
 
+# Initialize logging based on environment
+setup_logging()
+
 # Create FastAPI application
 # redirect_slashes=False prevents automatic redirects that break CORS
+# Disable docs in production for cleaner deployment
 app = FastAPI(
     title="Lakemeter API",
     description="Databricks Pricing Calculator API - Estimate and manage Databricks workload costs",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
     redirect_slashes=False
 )
+
+# Log startup info
+log_info(f"Starting Lakemeter API (environment: {settings.environment})")
 
 # Configure CORS
 app.add_middleware(
@@ -168,7 +179,7 @@ def get_cloud_providers(db: Session = Depends(get_db)):
             
             return providers
     except Exception as e:
-        print(f"Warning: Could not fetch cloud providers from database: {e}")
+        log_warning(f"Could not fetch cloud providers from database: {e}")
     
     # Return default if database query fails
     return DEFAULT_CLOUD_PROVIDERS
@@ -216,7 +227,7 @@ def get_regions(cloud: str, db: Session = Depends(get_db)):
             }
         }
     except Exception as e:
-        print(f"Error fetching regions from Lakebase: {e}")
+        log_error(f"Error fetching regions from Lakebase: {e}")
         return {
             "success": False,
             "data": {
@@ -316,7 +327,7 @@ def get_instance_types_endpoint(cloud: str, region: Optional[str] = None, db: Se
                 for r in results
             ]
     except Exception as e:
-        print(f"Warning: Could not fetch instance types from database: {e}")
+        log_warning(f"Could not fetch instance types from database: {e}")
     
     # Fallback
     return [
@@ -517,8 +528,8 @@ def get_instance_types(cloud: str, region: Optional[str] = None, db: Session = D
                 for r in results
             ]
     except Exception as e:
-        print(f"Warning: Could not fetch instance types from database: {e}")
-    
+        log_warning(f"Could not fetch instance types from database: {e}")
+
     # Fallback to hardcoded list if database query fails
     fallback_instance_types = {
         "aws": [
@@ -722,3 +733,45 @@ def get_fmapi_proprietary():
     }
 
 
+# =============================================================================
+# Static File Serving for Combined Frontend + Backend Deployment
+# Must be AFTER all API routes
+# =============================================================================
+
+# Path to static files (React build)
+STATIC_DIR = Path(__file__).parent.parent / "static"
+
+# Check if static directory exists (production deployment)
+if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
+    log_info(f"Static files found at {STATIC_DIR}, enabling SPA serving")
+    
+    # Mount static assets (JS, CSS, images)
+    if (STATIC_DIR / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+    
+    # Serve static files at root (favicon, etc.)
+    @app.get("/favicon.ico")
+    async def favicon():
+        favicon_path = STATIC_DIR / "favicon.ico"
+        if favicon_path.exists():
+            return FileResponse(favicon_path)
+        return FileResponse(STATIC_DIR / "databricks-icon.svg")
+    
+    @app.get("/databricks-icon.svg")
+    async def databricks_icon():
+        return FileResponse(STATIC_DIR / "databricks-icon.svg")
+    
+    # SPA catch-all handler - serve index.html for non-API routes
+    # This must be the LAST route defined
+    @app.get("/{full_path:path}")
+    async def serve_spa(request: Request, full_path: str):
+        """Serve React SPA for all non-API routes."""
+        # Don't intercept API routes
+        if full_path.startswith("api/"):
+            return {"error": "Not found"}, 404
+        
+        # Serve index.html for client-side routing
+        return FileResponse(STATIC_DIR / "index.html")
+
+else:
+    log_info("Static files not found - running in API-only mode (local development)")

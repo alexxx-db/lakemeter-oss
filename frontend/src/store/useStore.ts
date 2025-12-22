@@ -20,7 +20,7 @@ import * as api from '../api/client'
 import type { 
   CurrentUser, 
   CostCalculationResponse,
-  Region,
+  RegionResponse,
   Tier,
   DBURate,
   ServerlessMode,
@@ -47,9 +47,9 @@ interface CachedReferenceData {
   serverlessModes: ServerlessMode[]
   instanceTypes: InstanceType[]
   modelServingGPUTypes: ModelServingGPUType[]
-  regions: Region[]
+  regions: RegionResponse[]
   // Multi-cloud regions cache
-  regionsMap: Record<string, Region[]>
+  regionsMap: Record<string, RegionResponse[]>
   photonMultipliers: PhotonMultiplier[]
   instanceFamilies: string[]
   dbsqlWarehouseTypes: string[]
@@ -126,33 +126,33 @@ const STATIC_CLOUD_PROVIDERS: CloudProvider[] = [
 ]
 
 const STATIC_DBSQL_SIZES: DBSQLSize[] = [
-  { size: '2X-Small', min_clusters: 1, max_clusters: 1 },
-  { size: 'X-Small', min_clusters: 1, max_clusters: 1 },
-  { size: 'Small', min_clusters: 1, max_clusters: 1 },
-  { size: 'Medium', min_clusters: 1, max_clusters: 1 },
-  { size: 'Large', min_clusters: 1, max_clusters: 1 },
-  { size: 'X-Large', min_clusters: 1, max_clusters: 1 },
-  { size: '2X-Large', min_clusters: 1, max_clusters: 1 },
-  { size: '3X-Large', min_clusters: 1, max_clusters: 1 },
-  { size: '4X-Large', min_clusters: 1, max_clusters: 1 }
+  { id: '2X-Small', name: '2X-Small', dbu_per_hour: 2 },
+  { id: 'X-Small', name: 'X-Small', dbu_per_hour: 4 },
+  { id: 'Small', name: 'Small', dbu_per_hour: 8 },
+  { id: 'Medium', name: 'Medium', dbu_per_hour: 16 },
+  { id: 'Large', name: 'Large', dbu_per_hour: 32 },
+  { id: 'X-Large', name: 'X-Large', dbu_per_hour: 64 },
+  { id: '2X-Large', name: '2X-Large', dbu_per_hour: 128 },
+  { id: '3X-Large', name: '3X-Large', dbu_per_hour: 192 },
+  { id: '4X-Large', name: '4X-Large', dbu_per_hour: 256 }
 ]
 
 const STATIC_DLT_EDITIONS: DLTEdition[] = [
-  { edition: 'CORE', display_name: 'Core' },
-  { edition: 'PRO', display_name: 'Pro' },
-  { edition: 'ADVANCED', display_name: 'Advanced' }
+  { id: 'CORE', name: 'Core' },
+  { id: 'PRO', name: 'Pro' },
+  { id: 'ADVANCED', name: 'Advanced' }
 ]
 
 const STATIC_VM_PRICING_TIERS: VMPricingTier[] = [
-  { tier: 'on_demand', display_name: 'On Demand' },
-  { tier: '1yr_reserved', display_name: '1-Year Reserved' },
-  { tier: '3yr_reserved', display_name: '3-Year Reserved' }
+  { id: 'on_demand', name: 'On Demand' },
+  { id: '1yr_reserved', name: '1-Year Reserved' },
+  { id: '3yr_reserved', name: '3-Year Reserved' }
 ]
 
 const STATIC_VM_PAYMENT_OPTIONS: VMPaymentOption[] = [
-  { option: 'no_upfront', display_name: 'No Upfront' },
-  { option: 'partial_upfront', display_name: 'Partial Upfront' },
-  { option: 'all_upfront', display_name: 'All Upfront' }
+  { id: 'no_upfront', name: 'No Upfront' },
+  { id: 'partial_upfront', name: 'Partial Upfront' },
+  { id: 'all_upfront', name: 'All Upfront' }
 ]
 
 const STATIC_SERVERLESS_MODES: ServerlessMode[] = [
@@ -179,12 +179,13 @@ interface Store {
   lineItems: LineItem[]
   isLoading: boolean
   error: string | null
+  _estimatesLastFetch: number  // Timestamp for SWR pattern
   
   // Reference Data
   workloadTypes: WorkloadType[]
   cloudProviders: CloudProvider[]
-  regions: Region[]
-  regionsMap: Record<string, Region[]>  // Multi-cloud regions cache { aws: [], azure: [], gcp: [] }
+  regions: RegionResponse[]
+  regionsMap: Record<string, RegionResponse[]>  // Multi-cloud regions cache { aws: [], azure: [], gcp: [] }
   tiers: Tier[]
   instanceTypes: InstanceType[]
   instanceFamilies: string[]
@@ -246,7 +247,7 @@ interface Store {
   clearReferenceCache: () => void
   isReferenceDataLoaded: boolean
   isLoadingReferenceData: boolean
-  getRegionsForCloud: (cloud: string) => Region[]  // Get cached regions for a specific cloud
+  getRegionsForCloud: (cloud: string) => RegionResponse[]  // Get cached regions for a specific cloud
   fetchRegions: (cloud: string) => Promise<void>
   fetchTiers: (cloud?: string) => Promise<void>
   fetchInstanceTypes: (cloud: string, region?: string) => Promise<void>
@@ -383,10 +384,10 @@ export const useStore = create<Store>((set, get) => ({
         // Background refresh - don't show loading spinner
         try {
           const estimates = await api.fetchEstimates()
-          set((state: any) => ({ 
+          set({ 
             estimates,
             _estimatesLastFetch: Date.now()
-          }))
+          })
         } catch (error) {
           console.error('Background refresh failed:', error)
         }
@@ -398,11 +399,11 @@ export const useStore = create<Store>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const estimates = await api.fetchEstimates()
-      set((state: any) => ({ 
+      set({ 
         estimates, 
         isLoading: false,
         _estimatesLastFetch: Date.now()
-      }))
+      })
     } catch (error) {
       set({ error: 'Failed to fetch estimates', isLoading: false })
     }

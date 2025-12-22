@@ -17,6 +17,8 @@ from fastapi import Request
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.core import Config
 
+from app.config import log_info, log_warning
+
 # External API base URL
 LAKEMETER_API_BASE = "https://lakemeter-api-335310294452632.aws.databricksapps.com"
 
@@ -42,7 +44,7 @@ def get_cli_token() -> Optional[str]:
         databricks_profile = os.getenv("DATABRICKS_CONFIG_PROFILE")
         
         if not databricks_host:
-            print("⚠ DATABRICKS_HOST not set, cannot get CLI token")
+            log_warning("DATABRICKS_HOST not set, cannot get CLI token")
             return None
         
         # Initialize config once (SDK handles token caching and refresh)
@@ -51,7 +53,7 @@ def get_cli_token() -> Optional[str]:
                 host=databricks_host,
                 profile=databricks_profile
             )
-            print(f"✓ Initialized Databricks CLI config for {databricks_host}")
+            log_info(f"Initialized Databricks CLI config for {databricks_host}")
         
         # authenticate() returns fresh headers each time, including refreshed tokens
         auth_headers = _cli_config.authenticate()
@@ -62,7 +64,7 @@ def get_cli_token() -> Optional[str]:
                 return auth_header[7:]  # Remove 'Bearer ' prefix
                 
     except Exception as e:
-        print(f"⚠ Could not get CLI token: {e}")
+        log_warning(f"Could not get CLI token: {e}")
         # Clear config cache on error so it re-initializes next time
         _cli_config = None
     
