@@ -27,7 +27,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     selectedCloud,
     createLineItem,
     updateLineItem,
-    updateLineItemLocal,
     fetchLineItems
   } = useStore()
   
@@ -148,7 +147,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   
   const [isSaving, setIsSaving] = useState(false)
   const [useDirectHours, setUseDirectHours] = useState(false)  // Toggle between run-based and hours-based input
-  const [isFormInitialized, setIsFormInitialized] = useState(!lineItem)  // True if no lineItem (new form) or after loading
+  // Note: isFormInitialized state was removed as it was only used for auto-update which caused unnecessary recalculations
   const [form, setForm] = useState({
     workload_name: '',
     workload_type: 'JOBS',
@@ -277,59 +276,16 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       const hasDirectHours = Boolean(lineItem.hours_per_month && lineItem.hours_per_month > 0 && !lineItem.runs_per_day)
       setUseDirectHours(hasDirectHours)
       
-      // Mark form as initialized after loading from lineItem
-      setIsFormInitialized(true)
     } else {
       // Creating new line item - reset to defaults
       setForm(defaultFormValues)
       setUseDirectHours(false)
-      setIsFormInitialized(true)
     }
   }, [lineItem?.line_item_id]) // Use line_item_id to detect when switching between items
   
-  // Update line item locally for real-time cost preview when pricing-related fields change
-  // Only run after form has been initialized to prevent overwriting saved values with defaults
-  useEffect(() => {
-    if (lineItem && isFormInitialized) {
-      // Only include compute-specific fields for compute workloads (JOBS, ALL_PURPOSE, DLT)
-      const isComputeWorkload = ['JOBS', 'ALL_PURPOSE', 'DLT'].includes(form.workload_type)
-      
-      updateLineItemLocal(lineItem.line_item_id, {
-        // Only set pricing tiers and node types for compute workloads
-        driver_pricing_tier: isComputeWorkload ? form.driver_pricing_tier : undefined,
-        worker_pricing_tier: isComputeWorkload ? form.worker_pricing_tier : undefined,
-        driver_node_type: isComputeWorkload ? form.driver_node_type : undefined,
-        worker_node_type: isComputeWorkload ? form.worker_node_type : undefined,
-        num_workers: isComputeWorkload ? form.num_workers : undefined,
-        days_per_month: form.days_per_month,
-        runs_per_day: form.runs_per_day,
-        avg_runtime_minutes: form.avg_runtime_minutes,
-        serverless_enabled: isComputeWorkload ? form.serverless_enabled : undefined,
-        photon_enabled: isComputeWorkload ? form.photon_enabled : undefined,
-        dbsql_warehouse_size: form.workload_type === 'DBSQL' ? form.dbsql_warehouse_size : undefined,
-        lakebase_cu: form.workload_type === 'LAKEBASE' ? form.lakebase_cu : undefined,
-      })
-      onSave?.() // Mark estimate as having unsaved changes
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    lineItem?.line_item_id,
-    isFormInitialized,
-    form.driver_pricing_tier,
-    form.worker_pricing_tier,
-    form.driver_node_type,
-    form.worker_node_type,
-    form.num_workers,
-    form.days_per_month,
-    form.runs_per_day,
-    form.avg_runtime_minutes,
-    form.serverless_enabled,
-    form.photon_enabled,
-    form.dbsql_warehouse_size,
-    form.workload_type,
-    form.lakebase_cu,
-    updateLineItemLocal,
-  ])
+  // NOTE: Removed auto-update useEffect that was calling updateLineItemLocal on every form change
+  // This was causing full cost recalculations every time a field changed.
+  // Now costs are only recalculated after the user clicks "Update Workload" which saves to DB
   
   const selectedWorkloadType: WorkloadType | undefined = workloadTypes.find(w => w.workload_type === form.workload_type)
   
