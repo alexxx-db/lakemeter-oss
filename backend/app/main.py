@@ -61,9 +61,9 @@ app.include_router(calculate_router, prefix="/api/v1")
 app.include_router(reference_router, prefix="/api/v1")
 
 
-@app.get("/")
-def root():
-    """Root endpoint."""
+@app.get("/api")
+def api_root():
+    """API root endpoint."""
     return {
         "name": "Lakemeter API",
         "version": "1.0.0",
@@ -761,6 +761,12 @@ if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
     async def databricks_icon():
         return FileResponse(STATIC_DIR / "databricks-icon.svg")
     
+    # Serve index.html at root
+    @app.get("/")
+    async def serve_root():
+        """Serve React SPA at root."""
+        return FileResponse(STATIC_DIR / "index.html")
+    
     # SPA catch-all handler - serve index.html for non-API routes
     # This must be the LAST route defined
     @app.get("/{full_path:path}")
@@ -775,3 +781,14 @@ if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
 
 else:
     log_info("Static files not found - running in API-only mode (local development)")
+    
+    # In local dev mode, serve API info at root
+    @app.get("/")
+    def root():
+        """Root endpoint (local dev only)."""
+        return {
+            "name": "Lakemeter API",
+            "version": "1.0.0",
+            "description": "Databricks Pricing Calculator API",
+            "mode": "API-only (frontend served separately)"
+        }
