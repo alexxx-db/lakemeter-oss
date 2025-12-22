@@ -84,6 +84,55 @@ def debug_headers(request: Request):
     return get_debug_headers(request)
 
 
+@app.get("/api/v1/debug/database")
+def debug_database():
+    """Debug endpoint to check database connection status."""
+    import os
+    from app.auth.token_manager import token_manager
+    
+    result = {
+        "environment_vars": {
+            "DATABRICKS_HOST": os.getenv("DATABRICKS_HOST", "NOT SET"),
+            "DATABRICKS_SECRETS_SCOPE": os.getenv("DATABRICKS_SECRETS_SCOPE", "NOT SET"),
+            "LAKEBASE_INSTANCE_NAME": os.getenv("LAKEBASE_INSTANCE_NAME", "NOT SET"),
+            "DB_HOST": os.getenv("DB_HOST", "NOT SET"),
+            "DB_USER": os.getenv("DB_USER", "NOT SET"),
+            "DB_NAME": os.getenv("DB_NAME", "NOT SET"),
+        },
+        "token_manager_status": "NOT INITIALIZED",
+        "workspace_client_status": "NOT INITIALIZED",
+        "sp_credentials_status": "NOT FETCHED",
+        "token_status": "NO TOKEN",
+        "database_status": "NOT CONNECTED",
+    }
+    
+    if token_manager:
+        result["token_manager_status"] = "INITIALIZED"
+        
+        if token_manager._workspace_client:
+            result["workspace_client_status"] = "INITIALIZED"
+        
+        if token_manager._sp_client_id and token_manager._sp_client_secret:
+            result["sp_credentials_status"] = "FETCHED"
+        
+        token = token_manager.get_token()
+        if token:
+            result["token_status"] = f"VALID (length: {len(token)})"
+        
+        # Try to test database connection
+        try:
+            from app.database import engine
+            if engine:
+                from sqlalchemy import text
+                with engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                result["database_status"] = "CONNECTED"
+        except Exception as e:
+            result["database_status"] = f"ERROR: {str(e)}"
+    
+    return result
+
+
 # Reference data endpoints
 from fastapi import Depends
 from sqlalchemy.orm import Session

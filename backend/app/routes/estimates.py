@@ -324,15 +324,17 @@ def get_current_user_info(
     """Get the current authenticated user's info from headers (no DB required)."""
     from app.auth.databricks_auth import get_user_from_headers
     
-    email, display_name = get_user_from_headers(request)
+    email, _ = get_user_from_headers(request)
     
     if not email:
-        from fastapi import HTTPException
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    # Use email prefix as display name (e.g., "junyi.tiong" from "junyi.tiong@databricks.com")
+    display_name = email.split("@")[0].replace(".", " ").title()
+    
     return {
-        "user_id": email,  # Use email as ID when DB not available
+        "user_id": email,
         "email": email,
-        "full_name": display_name or email.split("@")[0],
+        "full_name": display_name,
         "role": "user"
     }
