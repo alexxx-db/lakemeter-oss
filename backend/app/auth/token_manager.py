@@ -81,18 +81,26 @@ class LakebaseTokenManager:
         _log_info(f"Secrets scope: {self.secrets_scope}")
     
     def _init_workspace_client(self):
-        """Initialize Databricks WorkspaceClient using CLI auth."""
+        """Initialize Databricks WorkspaceClient using available auth."""
         try:
-            config = Config(
-                host=self.databricks_host,
-                profile=self.databricks_config_profile
-            )
-            self._workspace_client = WorkspaceClient(config=config)
-            # Test CLI auth by getting current user
+            # In Databricks Apps, the SDK auto-detects authentication
+            # It will use the app's service principal automatically
+            if self.databricks_config_profile:
+                # Local dev: use CLI profile
+                config = Config(
+                    host=self.databricks_host,
+                    profile=self.databricks_config_profile
+                )
+                self._workspace_client = WorkspaceClient(config=config)
+            else:
+                # Production/Databricks Apps: use default auth (auto-detected)
+                self._workspace_client = WorkspaceClient(host=self.databricks_host)
+            
+            # Test auth by getting current user
             current_user = self._workspace_client.current_user.me()
-            _log_info(f"CLI auth: {current_user.user_name}")
+            _log_info(f"Authenticated as: {current_user.user_name}")
         except Exception as e:
-            _log_warning(f"CLI auth failed: {e}")
+            _log_warning(f"Auth failed: {e}")
             self._workspace_client = None
     
     def _fetch_sp_credentials(self):
