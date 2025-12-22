@@ -77,6 +77,13 @@ def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/v1/debug/headers")
+def debug_headers(request: Request):
+    """Debug endpoint to see what headers Databricks Apps sends."""
+    from app.auth.databricks_auth import debug_headers as get_debug_headers
+    return get_debug_headers(request)
+
+
 # Reference data endpoints
 from fastapi import Depends
 from sqlalchemy.orm import Session

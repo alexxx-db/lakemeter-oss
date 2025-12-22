@@ -18,20 +18,30 @@ from uuid import uuid4
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 
-from app.config import log_info
+from app.config import log_info, log_warning
 
 # Import User model only for type checking to avoid circular import
 if TYPE_CHECKING:
     from app.models.user import User
 
 
-# Header names used by Databricks Apps
-FORWARDED_EMAIL_HEADER = "X-Forwarded-Email"
-FORWARDED_USER_HEADER = "X-Forwarded-User"
-FORWARDED_ACCESS_TOKEN_HEADER = "X-Forwarded-Access-Token"
+# Header names used by Databricks Apps (check both cases)
+EMAIL_HEADERS = [
+    "X-Forwarded-Email",
+    "x-forwarded-email",
+    "X-Forwarded-Preferred-Username",
+    "x-forwarded-preferred-username",
+]
+USER_HEADERS = [
+    "X-Forwarded-User", 
+    "x-forwarded-user",
+    "X-Forwarded-Name",
+    "x-forwarded-name",
+]
 
 # Environment variable for local development
 LOCAL_DEV_EMAIL = os.getenv("LOCAL_DEV_EMAIL")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "local")
 
 
 def get_user_from_headers(request: Request) -> tuple[Optional[str], Optional[str]]:
@@ -41,16 +51,37 @@ def get_user_from_headers(request: Request) -> tuple[Optional[str], Optional[str
     Returns:
         Tuple of (email, display_name)
     """
-    # Try to get from Databricks Apps headers
-    email = request.headers.get(FORWARDED_EMAIL_HEADER)
-    display_name = request.headers.get(FORWARDED_USER_HEADER)
+    email = None
+    display_name = None
     
-    # Fallback to local dev email if set
+    # Try multiple possible header names (Databricks Apps may use different ones)
+    for header in EMAIL_HEADERS:
+        email = request.headers.get(header)
+        if email:
+            log_info(f"Found email in header: {header}")
+            break
+    
+    for header in USER_HEADERS:
+        display_name = request.headers.get(header)
+        if display_name:
+            break
+    
+    # Fallback to local dev email if set (for local development)
     if not email and LOCAL_DEV_EMAIL:
         email = LOCAL_DEV_EMAIL
         display_name = LOCAL_DEV_EMAIL.split("@")[0]
     
     return email, display_name
+
+
+def debug_headers(request: Request) -> dict:
+    """Return all headers for debugging auth issues."""
+    return {
+        "all_headers": dict(request.headers),
+        "email_found": get_user_from_headers(request)[0],
+        "environment": ENVIRONMENT,
+        "local_dev_email_set": bool(LOCAL_DEV_EMAIL),
+    }
 
 
 def get_or_create_user(db: Session, email: str, full_name: Optional[str] = None) -> "User":
