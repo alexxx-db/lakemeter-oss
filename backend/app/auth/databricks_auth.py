@@ -25,7 +25,12 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-# Header names used by Databricks Apps (check both cases)
+# Header names used by Databricks Apps (for backwards compatibility exports)
+FORWARDED_EMAIL_HEADER = "X-Forwarded-Email"
+FORWARDED_USER_HEADER = "X-Forwarded-User"
+FORWARDED_ACCESS_TOKEN_HEADER = "X-Forwarded-Access-Token"
+
+# Extended header list (check both cases for flexibility)
 EMAIL_HEADERS = [
     "X-Forwarded-Email",
     "x-forwarded-email",
