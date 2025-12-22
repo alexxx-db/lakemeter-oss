@@ -641,87 +641,29 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       
       {/* VM Configuration - Driver & Worker Sections */}
       {showVMConfig && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Driver Configuration Card */}
-          <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border-primary)]">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-              <h4 className="text-sm font-semibold text-[var(--text-primary)]">Driver Node</h4>
-              <span className="text-xs text-[var(--text-muted)]">(1 node)</span>
+        <div className="space-y-3">
+          {/* Serverless Note - explain VM nodes are for DBU estimation only */}
+          {form.serverless_enabled && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                <span className="font-semibold">ℹ️ Serverless Mode:</span> VM node types are used to estimate DBU consumption only. 
+                Actual VM costs are not included as serverless workloads are managed by Databricks.
+              </p>
             </div>
-            
-            <div className="space-y-3">
-              {/* Instance Type */}
-              <div>
-                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
-                <SearchableSelect
-                  options={instanceTypes.map(it => ({
-                    value: it.id,
-                    label: it.vcpus && it.memory_gb 
-                      ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
-                      : it.name,
-                    group: it.instance_family || 'General Purpose'
-                  }))}
-                  value={form.driver_node_type}
-                  onChange={(value) => setForm(f => ({ ...f, driver_node_type: value }))}
-                  placeholder="Select type..."
-                  searchPlaceholder="Search instance types..."
-                  grouped
-                />
+          )}
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Driver Configuration Card */}
+            <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border-primary)]">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                <h4 className="text-sm font-semibold text-[var(--text-primary)]">Driver Node</h4>
+                <span className="text-xs text-[var(--text-muted)]">(1 node)</span>
               </div>
               
-              {/* Pricing Tier & Payment Option Row */}
-              <div className={clsx(
-                "grid gap-3",
-                selectedCloud === 'aws' && form.driver_pricing_tier.startsWith('reserved') 
-                  ? "grid-cols-2" 
-                  : "grid-cols-1"
-              )}>
+              <div className="space-y-3">
+                {/* Instance Type */}
                 <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
-                  <select
-                    value={form.driver_pricing_tier}
-                    onChange={(e) => setForm(f => ({ ...f, driver_pricing_tier: e.target.value }))}
-                    className="w-full text-sm"
-                  >
-                    <option value="on_demand">On-Demand</option>
-                    <option value="reserved_1y">1-Year Reserved</option>
-                    <option value="reserved_3y">3-Year Reserved</option>
-                  </select>
-                </div>
-                
-                {selectedCloud === 'aws' && form.driver_pricing_tier.startsWith('reserved') && (
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
-                    <select
-                      value={form.driver_payment_option}
-                      onChange={(e) => setForm(f => ({ ...f, driver_payment_option: e.target.value }))}
-                      className="w-full text-sm"
-                    >
-                      {paymentOptions.map(opt => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          
-          {/* Worker Configuration Card */}
-          <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border-primary)]">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2 h-2 rounded-full bg-green-500"></div>
-              <h4 className="text-sm font-semibold text-[var(--text-primary)]">Worker Nodes</h4>
-              <span className="text-xs text-[var(--text-muted)]">({form.num_workers} node{form.num_workers !== 1 ? 's' : ''})</span>
-            </div>
-            
-            <div className="space-y-3">
-              {/* Instance Type & Count Row */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
                   <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
                   <SearchableSelect
                     options={instanceTypes.map(it => ({
@@ -731,61 +673,135 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                         : it.name,
                       group: it.instance_family || 'General Purpose'
                     }))}
-                    value={form.worker_node_type}
-                    onChange={(value) => setForm(f => ({ ...f, worker_node_type: value }))}
+                    value={form.driver_node_type}
+                    onChange={(value) => setForm(f => ({ ...f, driver_node_type: value }))}
                     placeholder="Select type..."
                     searchPlaceholder="Search instance types..."
                     grouped
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Count</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={form.num_workers}
-                    onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
-                    className="w-full text-sm"
-                  />
-                </div>
+                
+                {/* Pricing Tier & Payment Option Row - Hide for serverless */}
+                {!form.serverless_enabled && (
+                  <div className={clsx(
+                    "grid gap-3",
+                    selectedCloud === 'aws' && form.driver_pricing_tier.startsWith('reserved') 
+                      ? "grid-cols-2" 
+                      : "grid-cols-1"
+                  )}>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
+                      <select
+                        value={form.driver_pricing_tier}
+                        onChange={(e) => setForm(f => ({ ...f, driver_pricing_tier: e.target.value }))}
+                        className="w-full text-sm"
+                      >
+                        <option value="on_demand">On-Demand</option>
+                        <option value="reserved_1y">1-Year Reserved</option>
+                        <option value="reserved_3y">3-Year Reserved</option>
+                      </select>
+                    </div>
+                    
+                    {selectedCloud === 'aws' && form.driver_pricing_tier.startsWith('reserved') && (
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
+                        <select
+                          value={form.driver_payment_option}
+                          onChange={(e) => setForm(f => ({ ...f, driver_payment_option: e.target.value }))}
+                          className="w-full text-sm"
+                        >
+                          {paymentOptions.map(opt => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Worker Configuration Card */}
+            <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border-primary)]">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                <h4 className="text-sm font-semibold text-[var(--text-primary)]">Worker Nodes</h4>
+                <span className="text-xs text-[var(--text-muted)]">({form.num_workers} node{form.num_workers !== 1 ? 's' : ''})</span>
               </div>
               
-              {/* Pricing Tier & Payment Option Row */}
-              <div className={clsx(
-                "grid gap-3",
-                selectedCloud === 'aws' && form.worker_pricing_tier.startsWith('reserved') 
-                  ? "grid-cols-2" 
-                  : "grid-cols-1"
-              )}>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
-                  <select
-                    value={form.worker_pricing_tier}
-                    onChange={(e) => setForm(f => ({ ...f, worker_pricing_tier: e.target.value }))}
-                    className="w-full text-sm"
-                  >
-                    <option value="spot">Spot Instances</option>
-                    <option value="on_demand">On-Demand</option>
-                    <option value="reserved_1y">1-Year Reserved</option>
-                    <option value="reserved_3y">3-Year Reserved</option>
-                  </select>
+              <div className="space-y-3">
+                {/* Instance Type & Count Row */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
+                    <SearchableSelect
+                      options={instanceTypes.map(it => ({
+                        value: it.id,
+                        label: it.vcpus && it.memory_gb 
+                          ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
+                          : it.name,
+                        group: it.instance_family || 'General Purpose'
+                      }))}
+                      value={form.worker_node_type}
+                      onChange={(value) => setForm(f => ({ ...f, worker_node_type: value }))}
+                      placeholder="Select type..."
+                      searchPlaceholder="Search instance types..."
+                      grouped
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Count</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={form.num_workers}
+                      onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
+                      className="w-full text-sm"
+                    />
+                  </div>
                 </div>
                 
-                {selectedCloud === 'aws' && form.worker_pricing_tier.startsWith('reserved') && (
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
-                    <select
-                      value={form.worker_payment_option}
-                      onChange={(e) => setForm(f => ({ ...f, worker_payment_option: e.target.value }))}
-                      className="w-full text-sm"
-                    >
-                      {paymentOptions.map(opt => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.name}
-                        </option>
-                      ))}
-                    </select>
+                {/* Pricing Tier & Payment Option Row - Hide for serverless */}
+                {!form.serverless_enabled && (
+                  <div className={clsx(
+                    "grid gap-3",
+                    selectedCloud === 'aws' && form.worker_pricing_tier.startsWith('reserved') 
+                      ? "grid-cols-2" 
+                      : "grid-cols-1"
+                  )}>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
+                      <select
+                        value={form.worker_pricing_tier}
+                        onChange={(e) => setForm(f => ({ ...f, worker_pricing_tier: e.target.value }))}
+                        className="w-full text-sm"
+                      >
+                        <option value="spot">Spot Instances</option>
+                        <option value="on_demand">On-Demand</option>
+                        <option value="reserved_1y">1-Year Reserved</option>
+                        <option value="reserved_3y">3-Year Reserved</option>
+                      </select>
+                    </div>
+                    
+                    {selectedCloud === 'aws' && form.worker_pricing_tier.startsWith('reserved') && (
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
+                        <select
+                          value={form.worker_payment_option}
+                          onChange={(e) => setForm(f => ({ ...f, worker_payment_option: e.target.value }))}
+                          className="w-full text-sm"
+                        >
+                          {paymentOptions.map(opt => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
