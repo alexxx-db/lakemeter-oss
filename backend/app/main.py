@@ -139,8 +139,22 @@ def debug_database():
         
         # Try to test database connection
         try:
-            from app.database import engine
-            if engine:
+            from app.database import engine, refresh_engine
+            
+            # If engine is None, try to refresh it now that we have a token
+            if engine is None:
+                result["database_status"] = "ENGINE IS NONE - attempting refresh..."
+                try:
+                    refresh_engine()
+                    from app.database import engine as new_engine
+                    if new_engine:
+                        from sqlalchemy import text
+                        with new_engine.connect() as conn:
+                            conn.execute(text("SELECT 1"))
+                        result["database_status"] = "CONNECTED (after refresh)"
+                except Exception as refresh_err:
+                    result["database_status"] = f"REFRESH FAILED: {str(refresh_err)}"
+            else:
                 from sqlalchemy import text
                 with engine.connect() as conn:
                     conn.execute(text("SELECT 1"))
