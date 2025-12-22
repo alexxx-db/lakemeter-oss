@@ -105,6 +105,8 @@ class LakebaseTokenManager:
     
     def _fetch_sp_credentials(self):
         """Fetch Service Principal credentials from Databricks secrets."""
+        import base64
+        
         if not self._workspace_client:
             _log_warning("Cannot fetch SP credentials: WorkspaceClient not initialized.")
             return
@@ -115,13 +117,28 @@ class LakebaseTokenManager:
 
         _log_info("Fetching SP credentials from secrets...")
         try:
-            self._sp_client_id = self._workspace_client.secrets.get_secret(
+            # Get raw secret values
+            client_id_raw = self._workspace_client.secrets.get_secret(
                 scope=self.secrets_scope, key=self.sp_client_id_key
             ).value
-            self._sp_client_secret = self._workspace_client.secrets.get_secret(
+            client_secret_raw = self._workspace_client.secrets.get_secret(
                 scope=self.secrets_scope, key=self.sp_secret_key
             ).value
-            _log_info("SP credentials fetched from secrets.")
+            
+            # Databricks secrets API returns base64-encoded values - decode them
+            try:
+                self._sp_client_id = base64.b64decode(client_id_raw).decode('utf-8')
+            except Exception:
+                # If decoding fails, use raw value (might already be plain text)
+                self._sp_client_id = client_id_raw
+                
+            try:
+                self._sp_client_secret = base64.b64decode(client_secret_raw).decode('utf-8')
+            except Exception:
+                # If decoding fails, use raw value
+                self._sp_client_secret = client_secret_raw
+            
+            _log_info(f"SP credentials fetched. Client ID starts with: {self._sp_client_id[:8] if self._sp_client_id else 'N/A'}...")
         except Exception as e:
             _log_warning(f"Failed to fetch secrets: {e}")
             self._sp_client_id = None
