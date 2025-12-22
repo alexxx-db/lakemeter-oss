@@ -989,6 +989,18 @@ export const useStore = create<Store>((set, get) => ({
       
       let result: CostCalculationResponse | null = null
       
+      // Determine usage params: either run-based OR hours-based (not both)
+      // If hours_per_month is set and > 0, use direct hours mode
+      // Otherwise use run-based mode
+      const useDirectHours = lineItem.hours_per_month && lineItem.hours_per_month > 0 && !lineItem.runs_per_day
+      const usageParams = useDirectHours
+        ? { hours_per_month: lineItem.hours_per_month }
+        : { 
+            runs_per_day: lineItem.runs_per_day || 1,
+            avg_runtime_minutes: lineItem.avg_runtime_minutes || 30,
+            days_per_month: lineItem.days_per_month || 22
+          }
+      
       switch (lineItem.workload_type) {
         case 'JOBS':
         case 'ALL_PURPOSE':
@@ -999,10 +1011,7 @@ export const useStore = create<Store>((set, get) => ({
               worker_node_type: lineItem.worker_node_type || 'm5.xlarge',
               num_workers: lineItem.num_workers || 1,
               serverless_mode: lineItem.serverless_mode || 'standard',
-              runs_per_day: lineItem.runs_per_day,
-              avg_runtime_minutes: lineItem.avg_runtime_minutes,
-              days_per_month: lineItem.days_per_month,
-              hours_per_month: lineItem.hours_per_month
+              ...usageParams
             })
           } else {
             const driverTier = lineItem.driver_pricing_tier || 'on_demand'
@@ -1026,10 +1035,7 @@ export const useStore = create<Store>((set, get) => ({
               worker_pricing_tier: workerTier,
               driver_payment_option: driverPayment,
               worker_payment_option: workerPayment,
-              runs_per_day: lineItem.runs_per_day,
-              avg_runtime_minutes: lineItem.avg_runtime_minutes,
-              days_per_month: lineItem.days_per_month,
-              hours_per_month: lineItem.hours_per_month
+              ...usageParams
             })
           }
           break
@@ -1042,10 +1048,7 @@ export const useStore = create<Store>((set, get) => ({
               worker_node_type: lineItem.worker_node_type || 'm5.xlarge',
               num_workers: lineItem.num_workers || 1,
               serverless_mode: lineItem.serverless_mode || 'standard',
-              runs_per_day: lineItem.runs_per_day,
-              avg_runtime_minutes: lineItem.avg_runtime_minutes,
-              days_per_month: lineItem.days_per_month,
-              hours_per_month: lineItem.hours_per_month
+              ...usageParams
             })
           } else {
             const dltDriverTier = lineItem.driver_pricing_tier || 'on_demand'
@@ -1068,10 +1071,7 @@ export const useStore = create<Store>((set, get) => ({
               worker_pricing_tier: dltWorkerTier,
               driver_payment_option: dltDriverPayment,
               worker_payment_option: dltWorkerPayment,
-              runs_per_day: lineItem.runs_per_day,
-              avg_runtime_minutes: lineItem.avg_runtime_minutes,
-              days_per_month: lineItem.days_per_month,
-              hours_per_month: lineItem.hours_per_month
+              ...usageParams
             })
           }
           break
@@ -1083,10 +1083,7 @@ export const useStore = create<Store>((set, get) => ({
               ...baseParams,
               warehouse_size: lineItem.dbsql_warehouse_size || 'Medium',
               num_clusters: lineItem.dbsql_num_clusters || 1,
-              runs_per_day: lineItem.runs_per_day || 1,
-              avg_runtime_minutes: lineItem.avg_runtime_minutes || 30,
-              days_per_month: lineItem.days_per_month || 22,
-              hours_per_month: lineItem.hours_per_month
+              ...usageParams
             })
           } else {
             const dbsqlVMTier = lineItem.dbsql_vm_pricing_tier || 'on_demand'
@@ -1101,10 +1098,7 @@ export const useStore = create<Store>((set, get) => ({
               num_clusters: lineItem.dbsql_num_clusters || 1,
               vm_pricing_tier: dbsqlVMTier,
               vm_payment_option: dbsqlVMPayment,
-              runs_per_day: lineItem.runs_per_day || 1,
-              avg_runtime_minutes: lineItem.avg_runtime_minutes || 30,
-              days_per_month: lineItem.days_per_month || 22,
-              hours_per_month: lineItem.hours_per_month
+              ...usageParams
             })
           }
           break
