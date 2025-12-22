@@ -1,20 +1,16 @@
 # Databricks App Configuration
-# Single combined app serving both frontend (static) and backend (API)
-# 
-# This file is at the project root for reference.
-# The actual deployment uses backend/app.yaml
-# 
-# See backend/app.yaml for full configuration details.
+# For full repo deployment (includes both backend/ and frontend/ folders)
 
 command:
-  - "uvicorn"
-  - "app.main:app"
-  - "--host"
-  - "0.0.0.0"
-  - "--port"
-  - "8000"
+  - "/bin/bash"
+  - "-c"
+  - "cd backend && PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 env:
   - name: "ENVIRONMENT"
     value: "production"
+  - name: "DATABRICKS_HOST"
+    value: "{{databricks_host}}"
+  - name: "CORS_ORIGINS"
+    value: ""
 
