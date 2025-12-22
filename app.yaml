@@ -4,7 +4,7 @@
 command:
   - "/bin/bash"
   - "-c"
-  - "cd backend && PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  - "pip install -r requirements.txt && cd backend && PYTHONPATH=. python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 env:
   # App environment
