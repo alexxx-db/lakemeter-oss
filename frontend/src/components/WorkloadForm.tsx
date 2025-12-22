@@ -881,7 +881,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               />
             </div>
             
-            {/* Pricing Tier - only for Pro and Classic warehouse types */}
+            {/* Pricing Tier - only for Pro and Classic warehouse types (not Serverless) */}
             {(form.dbsql_warehouse_type === 'PRO' || form.dbsql_warehouse_type === 'CLASSIC') && (
               <div>
                 <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
