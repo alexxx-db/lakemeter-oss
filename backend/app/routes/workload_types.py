@@ -13,7 +13,7 @@ router = APIRouter(prefix="/workload-types", tags=["workload-types"])
 DEFAULT_WORKLOAD_TYPES = [
     {
         "workload_type": "JOBS",
-        "display_name": "Jobs Compute",
+        "display_name": "Lakeflow Jobs",
         "description": "Scheduled batch jobs (Classic or Serverless)",
         "show_compute_config": True,
         "show_serverless_toggle": True,
@@ -59,8 +59,8 @@ DEFAULT_WORKLOAD_TYPES = [
     },
     {
         "workload_type": "DLT",
-        "display_name": "Delta Live Tables",
-        "description": "Declarative ETL pipelines (Classic or Serverless)",
+        "display_name": "Lakeflow Spark Declarative Pipelines",
+        "description": "Spark Declarative Pipelines (Classic or Serverless)",
         "show_compute_config": True,
         "show_serverless_toggle": True,
         "show_serverless_performance_mode": True,

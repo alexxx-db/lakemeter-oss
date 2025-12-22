@@ -154,6 +154,7 @@ export default function Calculator() {
     // Cost calculation from API
     workloadCosts,
     calculateAllWorkloadCosts,
+    clearWorkloadCosts,
     isCalculatingCost,
     calculatingCostIds,
     // DBU Rates
@@ -326,6 +327,9 @@ export default function Calculator() {
         setIsLoadingLineItems(true)
         setLineItemsLoaded(false)
         
+        // Clear stale workload costs from previous estimate immediately
+        clearWorkloadCosts()
+        
         // Use combined endpoint for single round-trip (much faster)
         try {
           await fetchEstimateWithLineItems(id)
@@ -343,7 +347,7 @@ export default function Calculator() {
       }
     }
     loadEstimateData()
-  }, [id, fetchEstimateWithLineItems, clearEstimateState])
+  }, [id, fetchEstimateWithLineItems, clearEstimateState, clearWorkloadCosts])
   
   // Default form values for new estimates
   const defaultEstimateFormData = {
@@ -420,6 +424,13 @@ export default function Calculator() {
   const calculateItemCost = (item: LineItem): CostBreakdown => {
     // Check if we have API-calculated cost for this item
     const apiResponse = workloadCosts[item.line_item_id]
+    
+    // If we're actively calculating and don't have API data yet, return zeros
+    // This prevents showing stale local calculations during API fetch
+    if (isCalculatingCost && !apiResponse) {
+      return { monthlyDBUs: 0, dbuCost: 0, vmCost: 0, totalCost: 0 }
+    }
+    
     if (apiResponse?.success && apiResponse?.data) {
       const data = apiResponse.data
       
@@ -670,7 +681,7 @@ export default function Calculator() {
     })
     
     return { totalDBUs, totalDBUCost, totalVMCost, totalCost }
-  }, [lineItems, formData.cloud, formData.region, workloadTypes, getVMPrice])
+  }, [lineItems, formData.cloud, formData.region, workloadTypes, getVMPrice, workloadCosts, isCalculatingCost])
   
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {
@@ -779,6 +790,18 @@ export default function Calculator() {
   const getSelectedSku = (item: LineItem) => {
     const wt = workloadTypes.find(w => w.workload_type === item.workload_type)
     if (!wt) return 'N/A'
+    
+    // Handle DLT workloads with edition-specific SKUs
+    if (item.workload_type === 'DLT') {
+      const edition = (item.dlt_edition || 'CORE').toUpperCase()
+      if (item.serverless_enabled) {
+        return 'DELTA_LIVE_TABLES_SERVERLESS'
+      }
+      if (item.photon_enabled) {
+        return `DLT_${edition}_COMPUTE_(PHOTON)`
+      }
+      return `DLT_${edition}_COMPUTE`
+    }
     
     if (item.serverless_enabled && wt.sku_product_type_serverless) {
       return wt.sku_product_type_serverless
@@ -1628,61 +1651,84 @@ export default function Calculator() {
               <div className="space-y-4">
                 {/* Progress indicator when calculating */}
                 {isCalculatingCost && (
-                  <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-3 py-2 rounded-lg">
-                    <div className="w-3 h-3 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
-                    <span>Calculating {calculatingCostIds.size} of {lineItems.length} workloads...</span>
+                  <div className="bg-[var(--bg-tertiary)] px-3 py-2 rounded-lg space-y-2">
+                    <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                      <div className="w-3 h-3 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
+                      <span>Calculating costs... ({lineItems.length - calculatingCostIds.size}/{lineItems.length} complete)</span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="w-full h-1.5 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-orange-500 to-orange-400 transition-all duration-300 ease-out"
+                        style={{ width: `${((lineItems.length - calculatingCostIds.size) / lineItems.length) * 100}%` }}
+                      />
+                    </div>
                   </div>
                 )}
                 
-                {/* DBU Cost - Always show progressive value */}
+                {/* DBU Cost */}
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-orange-500" />
                     <span className="text-sm text-[var(--text-secondary)]">DBU Cost</span>
                   </div>
                   <span className={clsx(
-                    "font-semibold text-[var(--text-primary)]",
-                    isCalculatingCost && "opacity-70"
+                    "font-semibold",
+                    isCalculatingCost ? "text-[var(--text-muted)]" : "text-[var(--text-primary)]"
                   )}>
-                    {formatCurrency(totalCosts.totalDBUCost)}
+                    {isCalculatingCost ? `~${formatCurrency(totalCosts.totalDBUCost)}` : formatCurrency(totalCosts.totalDBUCost)}
                   </span>
                 </div>
                 
-                {/* VM Cost - Always show progressive value */}
+                {/* VM Cost */}
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-orange-400" />
                     <span className="text-sm text-[var(--text-secondary)]">VM Cost</span>
                   </div>
                   <span className={clsx(
-                    "font-semibold text-[var(--text-primary)]",
-                    isCalculatingCost && "opacity-70"
+                    "font-semibold",
+                    isCalculatingCost ? "text-[var(--text-muted)]" : "text-[var(--text-primary)]"
                   )}>
-                    {formatCurrency(totalCosts.totalVMCost)}
+                    {isCalculatingCost ? `~${formatCurrency(totalCosts.totalVMCost)}` : formatCurrency(totalCosts.totalVMCost)}
                   </span>
                 </div>
                 
                 {/* Divider */}
                 <div className="border-t border-[var(--border-primary)] pt-4">
-                  {/* Monthly Total - Always show progressive value */}
+                  {/* Monthly Total */}
                   <div className="flex justify-between items-center mb-2">
-                    <span className="font-semibold text-[var(--text-primary)]">Monthly Total</span>
-                    <span className={clsx(
-                      "text-2xl font-bold text-orange-500",
-                      isCalculatingCost && "opacity-70"
-                    )}>
-                      {formatCurrency(totalCosts.totalCost)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-[var(--text-primary)]">Monthly Total</span>
+                      {isCalculatingCost && (
+                        <span className="text-xs text-orange-500 font-normal animate-pulse">
+                          (calculating...)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className={clsx(
+                        "text-2xl font-bold",
+                        isCalculatingCost ? "text-orange-500/50" : "text-orange-500"
+                      )}>
+                        {isCalculatingCost ? `~${formatCurrency(totalCosts.totalCost)}` : formatCurrency(totalCosts.totalCost)}
+                      </span>
+                      {isCalculatingCost && (
+                        <span className="text-[10px] text-[var(--text-muted)]">
+                          {lineItems.length - calculatingCostIds.size}/{lineItems.length} calculated
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   {/* Annual Total */}
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-[var(--text-muted)]">Annual Total</span>
                     <span className={clsx(
-                      "font-medium text-[var(--text-secondary)]",
-                      isCalculatingCost && "opacity-70"
+                      "font-medium",
+                      isCalculatingCost ? "text-[var(--text-muted)]" : "text-[var(--text-secondary)]"
                     )}>
-                      {formatCurrency(totalCosts.totalCost * 12)}
+                      {isCalculatingCost ? `~${formatCurrency(totalCosts.totalCost * 12)}` : formatCurrency(totalCosts.totalCost * 12)}
                     </span>
                   </div>
                 </div>
@@ -1692,10 +1738,10 @@ export default function Calculator() {
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-[var(--text-muted)]">Total DBUs/month</span>
                     <span className={clsx(
-                      "font-mono text-[var(--text-secondary)]",
-                      isCalculatingCost && "opacity-70"
+                      "font-mono",
+                      isCalculatingCost ? "text-[var(--text-muted)]" : "text-[var(--text-secondary)]"
                     )}>
-                      {formatNumber(totalCosts.totalDBUs)}
+                      {isCalculatingCost ? `~${formatNumber(totalCosts.totalDBUs)}` : formatNumber(totalCosts.totalDBUs)}
                     </span>
                   </div>
                 </div>
