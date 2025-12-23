@@ -1803,6 +1803,7 @@ export default function Calculator() {
           navigate(`/calculator/${estimateId}`)
           setIsChatOpen(false)
         }}
+        mode="estimate_detail"
       />
     </div>
   )

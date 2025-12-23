@@ -35,6 +35,8 @@ class ChatRequest(BaseModel):
     estimate_context: Optional[Dict[str, Any]] = None
     workloads_context: Optional[List[Dict[str, Any]]] = None
     stream: bool = True
+    # Context mode: 'estimates_list' for home page, 'estimate_detail' for editing existing estimate
+    mode: str = "estimate_detail"
 
 
 class ChatResponse(BaseModel):
@@ -50,13 +52,14 @@ class ChatResponse(BaseModel):
 _conversation_agents: Dict[str, EstimateAgent] = {}
 
 
-def _get_or_create_agent(conversation_id: str, token: str) -> EstimateAgent:
+def _get_or_create_agent(conversation_id: str, token: str, mode: str = "estimate_detail") -> EstimateAgent:
     """Get existing agent or create new one for a conversation."""
     if conversation_id not in _conversation_agents:
-        _conversation_agents[conversation_id] = create_agent(token)
+        _conversation_agents[conversation_id] = create_agent(token, mode=mode)
     else:
-        # Update token for existing agent
+        # Update token and mode for existing agent
         _conversation_agents[conversation_id].client.set_token(token)
+        _conversation_agents[conversation_id].set_mode(mode)
     return _conversation_agents[conversation_id]
 
 
@@ -95,7 +98,7 @@ async def chat(
     conversation_id = chat_request.conversation_id or str(uuid.uuid4())
     
     _cleanup_old_conversations()
-    agent = _get_or_create_agent(conversation_id, token)
+    agent = _get_or_create_agent(conversation_id, token, mode=chat_request.mode)
     
     # Set estimate context if provided
     if chat_request.estimate_context:
@@ -156,7 +159,7 @@ async def chat_stream(
     conversation_id = chat_request.conversation_id or str(uuid.uuid4())
     
     _cleanup_old_conversations()
-    agent = _get_or_create_agent(conversation_id, token)
+    agent = _get_or_create_agent(conversation_id, token, mode=chat_request.mode)
     
     # Set estimate context if provided
     if chat_request.estimate_context:
@@ -233,10 +236,13 @@ async def apply_estimate(
         # Get current user
         user = get_current_user(request, db)
         
+        # Get estimate name (support both 'name' and 'estimate_name')
+        est_name = agent.current_estimate.get("name") or agent.current_estimate.get("estimate_name", "AI Generated Estimate")
+        
         # Create the estimate
         estimate = Estimate(
-            name=agent.current_estimate["name"],
-            cloud=agent.current_estimate["cloud"],
+            estimate_name=est_name,  # Use correct field name
+            cloud=agent.current_estimate.get("cloud", "aws"),
             region=agent.current_estimate.get("region", "us-east-1"),
             tier="PREMIUM",
             description=agent.current_estimate.get("description", "Created by AI Assistant"),
@@ -282,9 +288,9 @@ async def apply_estimate(
         return {
             "success": True,
             "estimate_id": str(estimate.estimate_id),
-            "estimate_name": estimate.name,
+            "estimate_name": estimate.estimate_name,
             "workloads_created": len(created_workloads),
-            "message": f"Created estimate '{estimate.name}' with {len(created_workloads)} workloads"
+            "message": f"Created estimate '{estimate.estimate_name}' with {len(created_workloads)} workloads"
         }
     
     except Exception as e:

@@ -56,6 +56,8 @@ interface ChatPanelProps {
   onEstimateCreated?: (estimateId: string) => void
   currentEstimate?: any
   currentWorkloads?: any[]
+  // Mode: 'estimates_list' for home page (create only), 'estimate_detail' for full functionality
+  mode?: 'estimates_list' | 'estimate_detail'
 }
 
 export function ChatPanel({
@@ -63,7 +65,8 @@ export function ChatPanel({
   onClose,
   onEstimateCreated,
   currentEstimate,
-  currentWorkloads
+  currentWorkloads,
+  mode = 'estimate_detail'
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
@@ -92,17 +95,28 @@ export function ChatPanel({
   // Add welcome message on first open
   useEffect(() => {
     if (isOpen && messages.length === 0) {
+      let welcomeContent: string
+      
+      if (mode === 'estimates_list') {
+        // Estimates list page - create only mode
+        welcomeContent = `Hi! I'm your Databricks pricing assistant. I can help you **create new estimates**.\n\nTell me about your project and I'll set up an estimate for you. For example:\n- "Create an estimate for a data lakehouse on AWS"\n- "I need to plan costs for our Azure ML platform"\n- "Set up a GCP estimate for our analytics team"\n\n💡 *Once created, you can click on the estimate to add workloads and get detailed recommendations.*`
+      } else if (currentEstimate) {
+        // Estimate detail page with existing estimate
+        welcomeContent = `I see you're working on the estimate "${currentEstimate.estimate_name || currentEstimate.name || 'Unnamed'}". It has ${currentWorkloads?.length || 0} workload(s) on ${(currentEstimate.cloud || 'AWS').toUpperCase()} (${currentEstimate.region || 'unknown region'}).\n\nHow can I help you? I can:\n- 📊 **Analyze** your current workloads and costs\n- 💡 **Suggest optimizations** to save money\n- ➕ **Add new workloads** to your estimate\n- ❓ **Answer questions** about Databricks pricing`
+      } else {
+        // Estimate detail page without estimate (shouldn't happen, but fallback)
+        welcomeContent = `Hi! I'm your Databricks pricing assistant. I can help you create and manage cost estimates.\n\nWhat would you like to do?`
+      }
+      
       const welcomeMessage: Message = {
         id: 'welcome',
         role: 'assistant',
-        content: currentEstimate 
-          ? `I see you're working on the estimate "${currentEstimate.estimate_name || currentEstimate.name || 'Unnamed'}". It has ${currentWorkloads?.length || 0} workload(s) on ${(currentEstimate.cloud || 'AWS').toUpperCase()} (${currentEstimate.region || 'unknown region'}).\n\nHow can I help you? I can analyze your current workloads, suggest optimizations, or help you add new ones.`
-          : `Hi! I'm your Databricks pricing assistant. I can help you create cost estimates for your workloads.\n\nTell me about what you're planning to build, and I'll help you configure the right resources. For example:\n- "I need to run daily ETL jobs processing 500GB of data"\n- "We're setting up a SQL analytics warehouse for our BI team"\n- "I want to estimate costs for a real-time ML inference endpoint"`,
+        content: welcomeContent,
         timestamp: new Date()
       }
       setMessages([welcomeMessage])
     }
-  }, [isOpen, currentEstimate, currentWorkloads])
+  }, [isOpen, currentEstimate, currentWorkloads, mode])
 
   const sendMessage = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return
@@ -142,7 +156,8 @@ export function ChatPanel({
           conversation_id: conversationId,
           estimate_context: currentEstimate || draftEstimate,
           workloads_context: currentWorkloads || draftWorkloads,
-          stream: true
+          stream: true,
+          mode: mode
         }),
         signal: abortControllerRef.current.signal
       })
@@ -226,7 +241,7 @@ export function ChatPanel({
       setIsLoading(false)
       abortControllerRef.current = null
     }
-  }, [inputValue, isLoading, conversationId, currentEstimate, currentWorkloads, draftEstimate, draftWorkloads])
+  }, [inputValue, isLoading, conversationId, currentEstimate, currentWorkloads, draftEstimate, draftWorkloads, mode])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

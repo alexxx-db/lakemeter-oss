@@ -13,14 +13,8 @@ from app.services.ai_client import ClaudeAIClient, get_claude_client
 from app.config import log_info, log_warning, log_error
 
 
-# System prompt for the AI assistant
-SYSTEM_PROMPT = """You are Lakemeter AI, an expert Databricks pricing assistant. Your role is to help users create accurate cost estimates for their Databricks workloads.
-
-## Your Capabilities
-1. **Create Estimates**: Help users build new pricing estimates by asking about their requirements
-2. **Add Workloads**: Configure workloads (Jobs, SQL, DLT, etc.) with optimal settings
-3. **Analyze Estimates**: Review existing estimates and suggest optimizations
-4. **Provide Guidance**: Share Databricks best practices and cost-saving tips
+# Base system prompt for the AI assistant
+SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assistant.
 
 ## Workload Types You Can Configure
 - **JOBS (Lakeflow Jobs)**: Batch processing, ETL pipelines, scheduled tasks
@@ -38,22 +32,88 @@ SYSTEM_PROMPT = """You are Lakemeter AI, an expert Databricks pricing assistant.
 - **For ML Inference**: Model Serving with appropriate GPU types
 - **For Cost Savings**: Spot instances (up to 90% savings), Serverless (pay-per-use), Reserved capacity
 
-## Conversation Guidelines
-1. Ask clarifying questions to understand requirements (data volume, frequency, SLA)
-2. Recommend appropriate workload types and configurations
-3. Explain your recommendations with cost implications
-4. Use tools to create/modify estimates - don't just describe, actually create them
-5. After creating workloads, summarize the estimated costs
-6. Be concise but helpful - users can always ask for more details
-
 ## Important Notes
 - All costs are estimates based on list prices
 - Actual costs may vary based on usage patterns and negotiated discounts
 - Always recommend reviewing configurations before finalizing"""
 
+# System prompt for Estimates List page (create new estimates only)
+SYSTEM_PROMPT_ESTIMATES_LIST = SYSTEM_PROMPT_BASE + """
 
-# Tool definitions for Claude (OpenAI-compatible format)
-ESTIMATE_TOOLS = [
+## Your Role (Estimates List Page)
+You are on the main estimates page. Here you can ONLY help users CREATE NEW ESTIMATES.
+You cannot view, edit, or analyze existing estimates from this page.
+
+## Your Capabilities Here
+1. **Create New Estimates**: Help users start fresh pricing estimates
+2. **Guide Planning**: Ask questions to understand their needs before creating
+
+## Conversation Guidelines
+1. Ask about the user's project/use case to understand requirements
+2. Ask about cloud provider preference (AWS, Azure, GCP)
+3. Ask about region requirements
+4. Once you have enough info, use the create_estimate tool
+5. After creating, let them know they can click on the estimate to add workloads
+6. Be concise - this is just for creating new estimates"""
+
+# System prompt for Estimate Detail page (full functionality)
+SYSTEM_PROMPT_ESTIMATE_DETAIL = SYSTEM_PROMPT_BASE + """
+
+## Your Role (Estimate Detail Page)
+You are viewing a specific estimate. You have FULL capabilities here.
+
+## Your Capabilities Here
+1. **Add Workloads**: Configure new workloads (Jobs, SQL, DLT, etc.)
+2. **Analyze Estimate**: Review current workloads and suggest optimizations
+3. **Provide Recommendations**: Share best practices and cost-saving tips
+4. **Answer Questions**: Explain configurations, costs, and trade-offs
+
+## Conversation Guidelines
+1. Review the existing estimate context provided
+2. Ask clarifying questions about new workload requirements
+3. Recommend appropriate workload types and configurations
+4. Use the add_workload tool to add new workloads
+5. Use analyze_estimate tool when asked about optimizations
+6. After adding workloads, summarize the estimated costs
+7. Be helpful and proactive with suggestions"""
+
+# For backwards compatibility
+SYSTEM_PROMPT = SYSTEM_PROMPT_ESTIMATE_DETAIL
+
+
+# Tool definitions for Estimates List page (create only)
+TOOLS_ESTIMATES_LIST = [
+    {
+        "name": "create_estimate",
+        "description": "Create a new pricing estimate. Use this when the user wants to start a new estimate or you've gathered enough information to begin.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name for the estimate (e.g., 'Q1 Data Pipeline', 'ML Platform Costs')"
+                },
+                "cloud": {
+                    "type": "string",
+                    "enum": ["aws", "azure", "gcp"],
+                    "description": "Cloud provider"
+                },
+                "region": {
+                    "type": "string",
+                    "description": "Cloud region (e.g., 'us-east-1', 'eastus', 'us-central1')"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional description of the estimate purpose"
+                }
+            },
+            "required": ["name", "cloud", "region"]
+        }
+    }
+]
+
+# Tool definitions for Estimate Detail page (full functionality)
+TOOLS_ESTIMATE_DETAIL = [
     {
         "name": "create_estimate",
         "description": "Create a new pricing estimate. Use this when the user wants to start a new estimate or you've gathered enough information to begin.",
@@ -202,6 +262,9 @@ ESTIMATE_TOOLS = [
     }
 ]
 
+# For backwards compatibility
+ESTIMATE_TOOLS = TOOLS_ESTIMATE_DETAIL
+
 
 # DBU pricing reference (list prices)
 DBU_PRICING = {
@@ -230,10 +293,15 @@ class EstimateAgent:
     AI Agent that helps users create and manage estimates.
     
     Maintains conversation state and handles tool execution.
+    
+    Modes:
+    - 'estimates_list': For main estimates page, only create new estimates
+    - 'estimate_detail': For individual estimate view, full functionality
     """
     
-    def __init__(self, claude_client: ClaudeAIClient):
+    def __init__(self, claude_client: ClaudeAIClient, mode: str = "estimate_detail"):
         self.client = claude_client
+        self.mode = mode
         self.conversation_history: List[Dict[str, Any]] = []
         self.current_estimate: Optional[Dict[str, Any]] = None
         self.draft_workloads: List[Dict[str, Any]] = []
@@ -243,6 +311,22 @@ class EstimateAgent:
         self.conversation_history = []
         self.current_estimate = None
         self.draft_workloads = []
+    
+    def set_mode(self, mode: str):
+        """Set the agent mode (affects available tools and system prompt)."""
+        self.mode = mode
+    
+    def _get_system_prompt(self) -> str:
+        """Get the appropriate system prompt based on mode."""
+        if self.mode == "estimates_list":
+            return SYSTEM_PROMPT_ESTIMATES_LIST
+        return SYSTEM_PROMPT_ESTIMATE_DETAIL
+    
+    def _get_tools(self) -> List[Dict[str, Any]]:
+        """Get the appropriate tools based on mode."""
+        if self.mode == "estimates_list":
+            return TOOLS_ESTIMATES_LIST
+        return TOOLS_ESTIMATE_DETAIL
     
     def set_estimate_context(self, estimate: Dict[str, Any], workloads: List[Dict[str, Any]] = None):
         """Set an existing estimate as context for the conversation."""
@@ -266,12 +350,13 @@ class EstimateAgent:
         
         # Build context for the system prompt
         context_info = self._build_context()
-        system = SYSTEM_PROMPT + context_info
+        system = self._get_system_prompt() + context_info
+        tools = self._get_tools()
         
         # Get response from Claude
         response = await self.client.chat(
             messages=self.conversation_history,
-            tools=ESTIMATE_TOOLS,
+            tools=tools,
             system=system,
             max_tokens=4096,
             temperature=0.7
@@ -314,7 +399,7 @@ class EstimateAgent:
             # Get follow-up response after tool execution
             follow_up = await self.client.chat(
                 messages=self.conversation_history,
-                tools=ESTIMATE_TOOLS,
+                tools=tools,
                 system=system,
                 max_tokens=4096,
                 temperature=0.7
@@ -355,7 +440,8 @@ class EstimateAgent:
         
         # Build context
         context_info = self._build_context()
-        system = SYSTEM_PROMPT + context_info
+        system = self._get_system_prompt() + context_info
+        tools = self._get_tools()
         
         # Stream response
         full_content = ""
@@ -365,7 +451,7 @@ class EstimateAgent:
         
         async for chunk in self.client.chat_stream(
             messages=self.conversation_history,
-            tools=ESTIMATE_TOOLS,
+            tools=tools,
             system=system,
             max_tokens=4096,
             temperature=0.7
@@ -443,7 +529,7 @@ class EstimateAgent:
             
             async for chunk in self.client.chat_stream(
                 messages=self.conversation_history,
-                tools=ESTIMATE_TOOLS,
+                tools=tools,
                 system=system,
                 max_tokens=4096,
                 temperature=0.7
@@ -780,8 +866,8 @@ class EstimateAgent:
         }
 
 
-def create_agent(token: str) -> EstimateAgent:
-    """Create a new agent instance with the given token."""
+def create_agent(token: str, mode: str = "estimate_detail") -> EstimateAgent:
+    """Create a new agent instance with the given token and mode."""
     client = get_claude_client(token)
-    return EstimateAgent(client)
+    return EstimateAgent(client, mode=mode)
 

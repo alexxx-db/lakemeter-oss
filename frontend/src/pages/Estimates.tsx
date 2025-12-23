@@ -10,13 +10,15 @@ import {
   CloudIcon,
   MagnifyingGlassIcon,
   CalendarIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { useStore } from '../store/useStore'
 import { exportAllEstimatesToExcel } from '../api/client'
 import { saveAs } from 'file-saver'
+import { ChatPanel } from '../components/ChatPanel'
 
 const cloudBadges: Record<string, { label: string; bg: string; text: string; border: string }> = {
   aws: { label: 'AWS', bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b', border: 'rgba(245, 158, 11, 0.25)' },
@@ -36,6 +38,7 @@ export default function Estimates() {
   const [isExporting, setIsExporting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
   
   // Fetch estimates on mount - uses SWR pattern (shows cached data, refreshes in background)
   useEffect(() => {
@@ -49,6 +52,14 @@ export default function Estimates() {
     setIsRefreshing(false)
     toast.success('Refreshed')
   }, [fetchEstimates])
+  
+  // Handle estimate created from AI assistant
+  const handleEstimateCreated = useCallback((estimateId: string) => {
+    fetchEstimates(true)
+    setIsChatOpen(false)
+    toast.success('Estimate created by AI assistant!')
+    navigate(`/calculator/${estimateId}`)
+  }, [fetchEstimates, navigate])
   
   const filteredEstimates = estimates.filter(e => 
     e.estimate_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -270,6 +281,31 @@ export default function Estimates() {
           })}
         </div>
       )}
+      
+      {/* AI Assistant Toggle Button */}
+      <motion.button
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setIsChatOpen(true)}
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-40"
+        style={{
+          background: 'linear-gradient(135deg, #f97316 0%, #fb923c 100%)',
+          boxShadow: '0 4px 20px rgba(249, 115, 22, 0.4)'
+        }}
+        title="AI Assistant - Create estimates with AI"
+      >
+        <SparklesIcon className="w-6 h-6 text-white" />
+      </motion.button>
+      
+      {/* AI Chat Panel - Estimates List Mode (Create Only) */}
+      <ChatPanel
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        onEstimateCreated={handleEstimateCreated}
+        mode="estimates_list"
+      />
     </div>
   )
 }
