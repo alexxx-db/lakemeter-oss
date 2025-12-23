@@ -398,3 +398,57 @@ async def confirm_workload(
         else:
             raise HTTPException(status_code=404, detail="Proposal not found")
 
+
+class ConfirmEstimateRequest(BaseModel):
+    """Request to confirm or reject a proposed estimate."""
+    confirmed: bool = True
+
+
+@router.post("/{conversation_id}/confirm-estimate")
+async def confirm_estimate_proposal(
+    conversation_id: str,
+    confirm_request: ConfirmEstimateRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Confirm or reject a proposed estimate.
+    
+    If confirmed, returns the estimate configuration to be created via the regular API.
+    """
+    if conversation_id not in _conversation_agents:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    agent = _conversation_agents[conversation_id]
+    
+    if confirm_request.confirmed:
+        # Get the confirmed estimate configuration
+        estimate = agent.confirm_estimate()
+        
+        if not estimate:
+            raise HTTPException(status_code=404, detail="No estimate proposal to confirm")
+        
+        # Return the estimate config for the frontend to create via regular API
+        return {
+            "success": True,
+            "action": "confirmed",
+            "estimate_config": {
+                "estimate_name": estimate.get("name") or estimate.get("estimate_name"),
+                "cloud": estimate.get("cloud", "aws"),
+                "region": estimate.get("region", "us-east-1"),
+                "description": estimate.get("description", ""),
+                "tier": "PREMIUM"
+            },
+            "message": f"Estimate '{estimate.get('name')}' confirmed. Use the returned config to create via /api/v1/estimates"
+        }
+    else:
+        # Reject the proposal
+        if agent.reject_estimate():
+            return {
+                "success": True,
+                "action": "rejected",
+                "message": "Estimate proposal rejected"
+            }
+        else:
+            raise HTTPException(status_code=404, detail="No estimate proposal to reject")
+

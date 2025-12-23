@@ -10,15 +10,14 @@ import {
   CloudIcon,
   MagnifyingGlassIcon,
   CalendarIcon,
-  ArrowPathIcon,
-  SparklesIcon
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { useStore } from '../store/useStore'
 import { exportAllEstimatesToExcel } from '../api/client'
 import { saveAs } from 'file-saver'
-import { ChatPanel } from '../components/ChatPanel'
+import { ChatPanel, ChatToggleButton } from '../components/ChatPanel'
 
 const cloudBadges: Record<string, { label: string; bg: string; text: string; border: string }> = {
   aws: { label: 'AWS', bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b', border: 'rgba(245, 158, 11, 0.25)' },
@@ -34,7 +33,7 @@ const statusColors: Record<string, { bg: string; text: string; border: string }>
 
 export default function Estimates() {
   const navigate = useNavigate()
-  const { estimates, isLoading, fetchEstimates, deleteEstimate, duplicateEstimate } = useStore()
+  const { estimates, isLoading, fetchEstimates, deleteEstimate, duplicateEstimate, createEstimate, currentUser } = useStore()
   const [isExporting, setIsExporting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -282,28 +281,32 @@ export default function Estimates() {
         </div>
       )}
       
-      {/* AI Assistant Toggle Button */}
-      <motion.button
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+      {/* AI Assistant Toggle Button - Top Right */}
+      <ChatToggleButton 
         onClick={() => setIsChatOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-40"
-        style={{
-          background: 'linear-gradient(135deg, #f97316 0%, #fb923c 100%)',
-          boxShadow: '0 4px 20px rgba(249, 115, 22, 0.4)'
-        }}
-        title="AI Assistant - Create estimates with AI"
-      >
-        <SparklesIcon className="w-6 h-6 text-white" />
-      </motion.button>
+        hasActiveConversation={false}
+      />
       
       {/* AI Chat Panel - Estimates List Mode (Create Only) */}
       <ChatPanel
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         onEstimateCreated={handleEstimateCreated}
+        onEstimateConfirmed={async (estimateConfig) => {
+          // Create the estimate via the store
+          try {
+            const newEstimate = await createEstimate({
+              ...estimateConfig,
+              owner_user_id: currentUser?.user_id
+            })
+            if (newEstimate?.estimate_id) {
+              handleEstimateCreated(newEstimate.estimate_id)
+            }
+            await fetchEstimates()
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to create estimate')
+          }
+        }}
         mode="estimates_list"
       />
     </div>

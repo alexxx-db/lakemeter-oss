@@ -7,7 +7,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import clsx from 'clsx'
 import {
-  ChatBubbleLeftRightIcon,
   PaperAirplaneIcon,
   XMarkIcon,
   SparklesIcon,
@@ -58,10 +57,20 @@ interface ProposedWorkload {
   [key: string]: any
 }
 
+interface ProposedEstimate {
+  proposal_id: string
+  name: string
+  cloud: string
+  region: string
+  description?: string
+  reason?: string
+}
+
 interface ChatPanelProps {
   isOpen: boolean
   onClose: () => void
   onEstimateCreated?: (estimateId: string) => void
+  onEstimateConfirmed?: (estimateConfig: any) => void  // Called when user confirms a proposed estimate
   onWorkloadConfirmed?: (workloadConfig: any) => void  // Called when user confirms a proposed workload
   currentEstimate?: any
   currentWorkloads?: any[]
@@ -75,6 +84,7 @@ export function ChatPanel({
   isOpen,
   onClose,
   onEstimateCreated,
+  onEstimateConfirmed,
   onWorkloadConfirmed,
   currentEstimate,
   currentWorkloads,
@@ -88,6 +98,7 @@ export function ChatPanel({
   const [draftEstimate, setDraftEstimate] = useState<DraftEstimate | null>(null)
   const [draftWorkloads, setDraftWorkloads] = useState<DraftWorkload[]>([])
   const [proposedWorkloads, setProposedWorkloads] = useState<ProposedWorkload[]>([])
+  const [proposedEstimate, setProposedEstimate] = useState<ProposedEstimate | null>(null)
   const [error, setError] = useState<string | null>(null)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -235,6 +246,11 @@ export function ChatPanel({
                 if (chunk.workload) {
                   setProposedWorkloads(prev => [...prev, chunk.workload])
                 }
+              } else if (chunk.type === 'estimate_proposal') {
+                // AI proposed an estimate - set pending proposal
+                if (chunk.estimate) {
+                  setProposedEstimate(chunk.estimate)
+                }
               } else if (chunk.type === 'done') {
                 // Update draft state from final response
                 if (chunk.estimate) {
@@ -245,6 +261,9 @@ export function ChatPanel({
                 }
                 if (chunk.proposed_workloads) {
                   setProposedWorkloads(chunk.proposed_workloads)
+                }
+                if (chunk.proposed_estimate) {
+                  setProposedEstimate(chunk.proposed_estimate)
                 }
               } else if (chunk.type === 'error') {
                 throw new Error(chunk.content)
@@ -297,7 +316,72 @@ export function ChatPanel({
     setDraftEstimate(null)
     setDraftWorkloads([])
     setProposedWorkloads([])
+    setProposedEstimate(null)
     setError(null)
+  }
+  
+  const handleConfirmEstimate = async () => {
+    if (!conversationId || !proposedEstimate) return
+    
+    try {
+      const response = await fetch(`/api/v1/chat/${conversationId}/confirm-estimate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmed: true })
+      })
+      
+      if (!response.ok) throw new Error('Failed to confirm estimate')
+      
+      const result = await response.json()
+      
+      // Clear the proposal
+      setProposedEstimate(null)
+      
+      // Call the parent callback with the estimate config
+      if (onEstimateConfirmed && result.estimate_config) {
+        onEstimateConfirmed(result.estimate_config)
+      }
+      
+      // Add success message
+      setMessages(prev => [...prev, {
+        id: `system-${Date.now()}`,
+        role: 'system',
+        content: `✅ Estimate "${result.estimate_config?.estimate_name}" created! Click on it to add workloads.`,
+        timestamp: new Date()
+      }])
+      
+    } catch (err: any) {
+      setError(err.message || 'Failed to confirm estimate')
+    }
+  }
+  
+  const handleRejectEstimate = async () => {
+    if (!conversationId) return
+    
+    try {
+      const response = await fetch(`/api/v1/chat/${conversationId}/confirm-estimate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmed: false })
+      })
+      
+      if (!response.ok) throw new Error('Failed to reject estimate')
+      
+      // Clear the proposal
+      const name = proposedEstimate?.name
+      setProposedEstimate(null)
+      
+      // Add info message
+      setMessages(prev => [...prev, {
+        id: `system-${Date.now()}`,
+        role: 'system',
+        content: `❌ Estimate "${name}" proposal rejected.`,
+        timestamp: new Date()
+      }])
+      
+    } catch (err: any) {
+      setError(err.message || 'Failed to reject estimate')
+    }
   }
   
   const handleConfirmWorkload = async (proposalId: string) => {
@@ -437,6 +521,61 @@ export function ChatPanel({
         </div>
       </div>
 
+      {/* Proposed Estimate - Awaiting Confirmation */}
+      {proposedEstimate && (
+        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2 mb-2">
+            <ExclamationCircleIcon className="w-4 h-4 text-amber-600" />
+            <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+              Proposed Estimate - Confirm to Create
+            </span>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-200 dark:border-amber-700">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+                    {proposedEstimate.name}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-400">
+                  <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
+                    {proposedEstimate.cloud?.toUpperCase()}
+                  </span>
+                  <span>{proposedEstimate.region}</span>
+                </div>
+                {proposedEstimate.description && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                    {proposedEstimate.description}
+                  </p>
+                )}
+                {proposedEstimate.reason && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">
+                    💡 {proposedEstimate.reason}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  onClick={handleConfirmEstimate}
+                  className="p-1.5 rounded-full bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-800/50 text-green-700 dark:text-green-400 transition-colors"
+                  title="Confirm & Create"
+                >
+                  <CheckCircleIcon className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleRejectEstimate}
+                  className="p-1.5 rounded-full bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-800/50 text-red-700 dark:text-red-400 transition-colors"
+                  title="Reject"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Draft Estimate Preview */}
       {draftEstimate && (
         <div className="px-4 py-3 bg-teal-50 dark:bg-teal-900/20 border-b border-teal-200 dark:border-teal-800">
@@ -660,25 +799,47 @@ export function ChatPanel({
 }
 
 /**
+ * Custom Sparkles Icon - Matches the provided SVG path
+ */
+function SparklesAnimatedIcon({ className }: { className?: string }) {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      fill="none" 
+      viewBox="0 0 24 24" 
+      strokeWidth={1.5} 
+      stroke="currentColor" 
+      className={className}
+    >
+      <path 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+        d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" 
+      />
+    </svg>
+  )
+}
+
+/**
  * AI Assistant Toggle Button
  * 
- * Floating button to open the chat panel.
+ * Fixed button in top right corner to open the chat panel.
  */
 export function ChatToggleButton({ onClick, hasActiveConversation }: { onClick: () => void, hasActiveConversation?: boolean }) {
   return (
     <button
       onClick={onClick}
       className={clsx(
-        "fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 z-40",
+        "fixed top-4 right-4 w-10 h-10 rounded-lg shadow-lg flex items-center justify-center transition-all hover:scale-105 z-40",
         hasActiveConversation
           ? "bg-teal-600 hover:bg-teal-700"
-          : "bg-orange-600 hover:bg-orange-700"
+          : "bg-gradient-to-br from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700"
       )}
       title="AI Assistant"
     >
-      <ChatBubbleLeftRightIcon className="w-6 h-6 text-white" />
+      <SparklesAnimatedIcon className="w-5 h-5 text-white" />
       {hasActiveConversation && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
+        <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
       )}
     </button>
   )

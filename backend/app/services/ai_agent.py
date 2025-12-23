@@ -99,8 +99,8 @@ SYSTEM_PROMPT = SYSTEM_PROMPT_ESTIMATE_DETAIL
 # Tool definitions for Estimates List page (create only)
 TOOLS_ESTIMATES_LIST = [
     {
-        "name": "create_estimate",
-        "description": "Create a new pricing estimate. Use this when the user wants to start a new estimate or you've gathered enough information to begin.",
+        "name": "propose_estimate",
+        "description": "Propose a new estimate configuration for user confirmation. The user will review and confirm before the estimate is created.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -120,6 +120,10 @@ TOOLS_ESTIMATES_LIST = [
                 "description": {
                     "type": "string",
                     "description": "Optional description of the estimate purpose"
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Brief explanation of why this configuration is recommended"
                 }
             },
             "required": ["name", "cloud", "region"]
@@ -256,7 +260,8 @@ class EstimateAgent:
         self.conversation_history: List[Dict[str, Any]] = []
         self.current_estimate: Optional[Dict[str, Any]] = None
         self.current_workloads: List[Dict[str, Any]] = []  # Actual workloads with costs
-        self.proposed_workloads: List[Dict[str, Any]] = []  # Pending confirmations
+        self.proposed_workloads: List[Dict[str, Any]] = []  # Pending workload confirmations
+        self.proposed_estimate: Optional[Dict[str, Any]] = None  # Pending estimate confirmation
     
     def reset(self):
         """Reset the agent state for a new conversation."""
@@ -264,6 +269,7 @@ class EstimateAgent:
         self.current_estimate = None
         self.current_workloads = []
         self.proposed_workloads = []
+        self.proposed_estimate = None
     
     def set_mode(self, mode: str):
         """Set the agent mode (affects available tools and system prompt)."""
@@ -466,11 +472,18 @@ class EstimateAgent:
                     "result": result
                 }
                 
-                # If it's a proposal, yield that separately
+                # If it's a workload proposal, yield that separately
                 if current_tool["name"] == "propose_workload" and result.get("success"):
                     yield {
                         "type": "proposal",
                         "workload": result.get("proposed_workload")
+                    }
+                
+                # If it's an estimate proposal, yield that separately
+                if current_tool["name"] in ["propose_estimate", "create_estimate"] and result.get("success"):
+                    yield {
+                        "type": "estimate_proposal",
+                        "estimate": result.get("proposed_estimate")
                     }
                 
                 current_tool = None
@@ -510,11 +523,18 @@ class EstimateAgent:
                     "result": result
                 }
                 
-                # If it's a proposal, yield that separately
+                # If it's a workload proposal, yield that separately
                 if tool_call["name"] == "propose_workload" and result.get("success"):
                     yield {
                         "type": "proposal",
                         "workload": result.get("proposed_workload")
+                    }
+                
+                # If it's an estimate proposal, yield that separately
+                if tool_call["name"] in ["propose_estimate", "create_estimate"] and result.get("success"):
+                    yield {
+                        "type": "estimate_proposal",
+                        "estimate": result.get("proposed_estimate")
                     }
                 
                 self.conversation_history.append({
@@ -555,7 +575,8 @@ class EstimateAgent:
             "type": "done",
             "estimate": self.current_estimate,
             "workloads": self.current_workloads,
-            "proposed_workloads": self.proposed_workloads
+            "proposed_workloads": self.proposed_workloads,
+            "proposed_estimate": self.proposed_estimate
         }
     
     def _build_context(self) -> str:
@@ -630,7 +651,10 @@ class EstimateAgent:
         log_info(f"Executing tool: {tool_name} with args: {arguments}")
         
         if tool_name == "create_estimate":
-            return self._create_estimate(**arguments)
+            # Legacy support - treat as proposal
+            return self._propose_estimate(**arguments)
+        elif tool_name == "propose_estimate":
+            return self._propose_estimate(**arguments)
         elif tool_name == "propose_workload":
             return self._propose_workload(**arguments)
         elif tool_name == "add_workload":
@@ -643,33 +667,56 @@ class EstimateAgent:
         else:
             return {"error": f"Unknown tool: {tool_name}"}
     
-    def _create_estimate(
+    def _propose_estimate(
         self,
         name: str,
         cloud: str,
         region: str,
-        description: str = ""
+        description: str = "",
+        reason: str = ""
     ) -> Dict[str, Any]:
-        """Create a new estimate draft."""
-        self.current_estimate = {
-            "draft_id": str(uuid.uuid4()),
+        """
+        Propose an estimate configuration for user confirmation.
+        Does NOT create the estimate - user must confirm first.
+        """
+        self.proposed_estimate = {
+            "proposal_id": str(uuid.uuid4()),
             "name": name,
             "estimate_name": name,  # Support both formats
             "cloud": cloud.lower(),
             "region": region,
             "description": description,
-            "status": "draft",
+            "reason": reason,
+            "status": "pending_confirmation",
             "created_at": datetime.now().isoformat()
         }
-        self.current_workloads = []
-        self.proposed_workloads = []
         
         return {
             "success": True,
-            "message": f"Created estimate '{name}' for {cloud.upper()} {region}",
-            "estimate": self.current_estimate,
-            "next_step": "You can now add workloads to this estimate. Click on it to start adding workloads."
+            "message": f"Proposed estimate '{name}' for {cloud.upper()} {region}",
+            "proposed_estimate": self.proposed_estimate,
+            "action_required": "User must confirm this estimate before it's created.",
+            "note": "Once confirmed, you can click on the estimate to add workloads."
         }
+    
+    def confirm_estimate(self) -> Optional[Dict[str, Any]]:
+        """
+        Confirm the proposed estimate (called from API after user confirms).
+        Returns the estimate configuration to be saved.
+        """
+        if self.proposed_estimate:
+            estimate = self.proposed_estimate
+            estimate["status"] = "confirmed"
+            self.proposed_estimate = None
+            return estimate
+        return None
+    
+    def reject_estimate(self) -> bool:
+        """Reject the proposed estimate."""
+        if self.proposed_estimate:
+            self.proposed_estimate = None
+            return True
+        return False
     
     def _propose_workload(
         self,
