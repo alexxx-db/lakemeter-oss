@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth.databricks_auth import get_current_user_optional
+from app.auth.databricks_auth import get_current_user
 from app.external_api import get_user_token
 from app.services.ai_agent import create_agent, EstimateAgent
 from app.config import log_info, log_warning, log_error
