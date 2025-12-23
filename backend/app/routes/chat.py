@@ -46,6 +46,13 @@ class ChatResponse(BaseModel):
     tool_results: Optional[List[Dict[str, Any]]] = None
     estimate: Optional[Dict[str, Any]] = None
     workloads: Optional[List[Dict[str, Any]]] = None
+    proposed_workload: Optional[Dict[str, Any]] = None  # Workload awaiting confirmation
+
+
+class ConfirmWorkloadRequest(BaseModel):
+    """Request to confirm or reject a proposed workload."""
+    proposal_id: str
+    confirmed: bool = True
 
 
 # In-memory conversation storage (for MVP - should use Redis/DB in production)
@@ -100,11 +107,11 @@ async def chat(
     _cleanup_old_conversations()
     agent = _get_or_create_agent(conversation_id, token, mode=chat_request.mode)
     
-    # Set estimate context if provided
-    if chat_request.estimate_context:
-        agent.set_estimate_context(
-            chat_request.estimate_context,
-            chat_request.workloads_context
+    # Set estimate context if provided (now includes workloads with their costs)
+    if chat_request.estimate_context or chat_request.workloads_context:
+        agent.set_context(
+            chat_request.estimate_context or {},
+            chat_request.workloads_context or []
         )
     
     try:
@@ -116,7 +123,8 @@ async def chat(
             conversation_id=conversation_id,
             tool_results=result.get("tool_results"),
             estimate=result.get("estimate"),
-            workloads=result.get("workloads")
+            workloads=result.get("workloads"),
+            proposed_workload=result.get("proposed_workload")
         )
     
     except Exception as e:
@@ -161,11 +169,11 @@ async def chat_stream(
     _cleanup_old_conversations()
     agent = _get_or_create_agent(conversation_id, token, mode=chat_request.mode)
     
-    # Set estimate context if provided
-    if chat_request.estimate_context:
-        agent.set_estimate_context(
-            chat_request.estimate_context,
-            chat_request.workloads_context
+    # Set estimate context if provided (now includes workloads with their costs)
+    if chat_request.estimate_context or chat_request.workloads_context:
+        agent.set_context(
+            chat_request.estimate_context or {},
+            chat_request.workloads_context or []
         )
     
     async def generate():
@@ -251,9 +259,11 @@ async def apply_estimate(
         db.add(estimate)
         db.flush()  # Get the estimate_id
         
-        # Create line items
+        # Create line items from confirmed proposed workloads
         created_workloads = []
-        for workload in agent.draft_workloads:
+        # Note: proposed_workloads that are confirmed should be used
+        workloads_to_create = agent.proposed_workloads if agent.proposed_workloads else []
+        for workload in workloads_to_create:
             line_item = LineItem(
                 estimate_id=estimate.estimate_id,
                 workload_name=workload["workload_name"],
@@ -316,7 +326,75 @@ async def get_conversation_state(
     return {
         "conversation_id": conversation_id,
         "estimate": agent.current_estimate,
-        "workloads": agent.draft_workloads,
+        "workloads": agent.current_workloads,
+        "proposed_workloads": agent.proposed_workloads,
         "message_count": len(agent.conversation_history)
     }
+
+
+@router.post("/{conversation_id}/confirm-workload")
+async def confirm_workload(
+    conversation_id: str,
+    confirm_request: ConfirmWorkloadRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Confirm or reject a proposed workload.
+    
+    If confirmed, creates the workload via the regular line_items API.
+    """
+    from app.models.line_item import LineItem
+    
+    if conversation_id not in _conversation_agents:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    agent = _conversation_agents[conversation_id]
+    
+    if confirm_request.confirmed:
+        # Get the confirmed workload configuration
+        workload = agent.confirm_workload(confirm_request.proposal_id)
+        
+        if not workload:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        
+        # Return the workload config for the frontend to create via regular API
+        # This allows the UI to update properly via Zustand
+        return {
+            "success": True,
+            "action": "confirmed",
+            "workload_config": {
+                "workload_name": workload["workload_name"],
+                "workload_type": workload["workload_type"],
+                "serverless_enabled": workload.get("serverless_enabled", False),
+                "photon_enabled": workload.get("photon_enabled", False),
+                "driver_node_type": workload.get("driver_node_type"),
+                "worker_node_type": workload.get("worker_node_type"),
+                "num_workers": workload.get("num_workers"),
+                "hours_per_month": workload.get("hours_per_month", 730),
+                "runs_per_day": workload.get("runs_per_day"),
+                "avg_runtime_minutes": workload.get("avg_runtime_minutes"),
+                "days_per_month": workload.get("days_per_month", 22),
+                "driver_pricing_tier": workload.get("driver_pricing_tier", "on_demand"),
+                "worker_pricing_tier": workload.get("worker_pricing_tier", "spot"),
+                "dlt_edition": workload.get("dlt_edition"),
+                "dbsql_warehouse_type": workload.get("dbsql_warehouse_type"),
+                "dbsql_warehouse_size": workload.get("dbsql_warehouse_size"),
+                "dbsql_num_clusters": workload.get("dbsql_num_clusters"),
+                "lakebase_cu": workload.get("lakebase_cu"),
+                "lakebase_ha_nodes": workload.get("lakebase_ha_nodes"),
+                "notes": f"Created by AI Assistant: {workload.get('reason', '')}"
+            },
+            "message": f"Workload '{workload['workload_name']}' confirmed. Use the returned config to create via /api/v1/estimates/{{estimate_id}}/line-items"
+        }
+    else:
+        # Reject the proposal
+        if agent.reject_workload(confirm_request.proposal_id):
+            return {
+                "success": True,
+                "action": "rejected",
+                "message": "Workload proposal rejected"
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Proposal not found")
 

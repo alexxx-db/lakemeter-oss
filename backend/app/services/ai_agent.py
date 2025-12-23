@@ -3,6 +3,11 @@ AI Agent Service for Lakemeter
 
 Orchestrates conversations with Claude to help users create and analyze estimates.
 Implements tool calling for estimate management operations.
+
+NOTE: This agent does NOT perform cost calculations. It:
+1. Proposes workload configurations based on user requirements
+2. Analyzes existing estimates using costs provided in context
+3. Creates drafts that are then saved via the regular API flow
 """
 import json
 import uuid
@@ -15,6 +20,12 @@ from app.config import log_info, log_warning, log_error
 
 # Base system prompt for the AI assistant
 SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assistant.
+
+## Important: You Do NOT Calculate Costs
+- You propose workload configurations based on user requirements
+- Actual cost calculations are done by the Lakemeter pricing engine after configurations are saved
+- When discussing costs, refer to the actual calculated costs provided in the context
+- Do not make up or estimate cost numbers yourself
 
 ## Workload Types You Can Configure
 - **JOBS (Lakeflow Jobs)**: Batch processing, ETL pipelines, scheduled tasks
@@ -33,7 +44,7 @@ SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assis
 - **For Cost Savings**: Spot instances (up to 90% savings), Serverless (pay-per-use), Reserved capacity
 
 ## Important Notes
-- All costs are estimates based on list prices
+- All costs shown are from the Lakemeter pricing engine
 - Actual costs may vary based on usage patterns and negotiated discounts
 - Always recommend reviewing configurations before finalizing"""
 
@@ -60,22 +71,26 @@ You cannot view, edit, or analyze existing estimates from this page.
 SYSTEM_PROMPT_ESTIMATE_DETAIL = SYSTEM_PROMPT_BASE + """
 
 ## Your Role (Estimate Detail Page)
-You are viewing a specific estimate. You have FULL capabilities here.
+You are viewing a specific estimate with its workloads and calculated costs.
 
 ## Your Capabilities Here
-1. **Add Workloads**: Configure new workloads (Jobs, SQL, DLT, etc.)
-2. **Analyze Estimate**: Review current workloads and suggest optimizations
+1. **Propose Workloads**: Suggest workload configurations based on user requirements
+2. **Analyze Estimate**: Review current workloads and suggest optimizations using ACTUAL costs
 3. **Provide Recommendations**: Share best practices and cost-saving tips
 4. **Answer Questions**: Explain configurations, costs, and trade-offs
 
+## Using Context
+- The estimate details and workloads with their ACTUAL calculated costs are provided in the context
+- Use these real costs when discussing the estimate, not made-up numbers
+- When proposing new workloads, clearly state the configuration and that costs will be calculated after saving
+
 ## Conversation Guidelines
-1. Review the existing estimate context provided
+1. Review the existing estimate context (name, cloud, region, workloads, costs)
 2. Ask clarifying questions about new workload requirements
-3. Recommend appropriate workload types and configurations
-4. Use the add_workload tool to add new workloads
-5. Use analyze_estimate tool when asked about optimizations
-6. After adding workloads, summarize the estimated costs
-7. Be helpful and proactive with suggestions"""
+3. Use the propose_workload tool to suggest configurations
+4. User must confirm before workloads are added
+5. Use analyze_estimate to provide insights on current costs
+6. Be specific about configurations and reference actual costs from context"""
 
 # For backwards compatibility
 SYSTEM_PROMPT = SYSTEM_PROMPT_ESTIMATE_DETAIL
@@ -115,35 +130,8 @@ TOOLS_ESTIMATES_LIST = [
 # Tool definitions for Estimate Detail page (full functionality)
 TOOLS_ESTIMATE_DETAIL = [
     {
-        "name": "create_estimate",
-        "description": "Create a new pricing estimate. Use this when the user wants to start a new estimate or you've gathered enough information to begin.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Name for the estimate (e.g., 'Q1 Data Pipeline', 'ML Platform Costs')"
-                },
-                "cloud": {
-                    "type": "string",
-                    "enum": ["aws", "azure", "gcp"],
-                    "description": "Cloud provider"
-                },
-                "region": {
-                    "type": "string",
-                    "description": "Cloud region (e.g., 'us-east-1', 'eastus', 'us-central1')"
-                },
-                "description": {
-                    "type": "string",
-                    "description": "Optional description of the estimate purpose"
-                }
-            },
-            "required": ["name", "cloud", "region"]
-        }
-    },
-    {
-        "name": "add_workload",
-        "description": "Add a workload to the current estimate. Call this after create_estimate or when adding to an existing estimate.",
+        "name": "propose_workload",
+        "description": "Propose a new workload configuration for user confirmation. The user will review and confirm before it's added to the estimate. Use this when you have enough information about what the user needs.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -211,14 +199,18 @@ TOOLS_ESTIMATE_DETAIL = [
                     "type": "string",
                     "enum": ["2X-Small", "X-Small", "Small", "Medium", "Large", "X-Large", "2X-Large", "3X-Large", "4X-Large"],
                     "description": "For DBSQL: warehouse size"
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Brief explanation of why this configuration is recommended"
                 }
             },
-            "required": ["workload_type", "workload_name"]
+            "required": ["workload_type", "workload_name", "reason"]
         }
     },
     {
         "name": "get_estimate_summary",
-        "description": "Get a summary of the current estimate including all workloads and total costs. Use this to show the user what has been configured.",
+        "description": "Get a summary of the current estimate including all workloads and their actual calculated costs from the context.",
         "parameters": {
             "type": "object",
             "properties": {},
@@ -226,28 +218,8 @@ TOOLS_ESTIMATE_DETAIL = [
         }
     },
     {
-        "name": "get_pricing_info",
-        "description": "Get current pricing information for a specific workload type and configuration. Use this to provide accurate cost estimates.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "workload_type": {
-                    "type": "string",
-                    "enum": ["JOBS", "ALL_PURPOSE", "DLT", "DBSQL", "MODEL_SERVING", "VECTOR_SEARCH", "LAKEBASE"],
-                    "description": "Workload type to get pricing for"
-                },
-                "cloud": {
-                    "type": "string",
-                    "enum": ["aws", "azure", "gcp"],
-                    "description": "Cloud provider"
-                }
-            },
-            "required": ["workload_type", "cloud"]
-        }
-    },
-    {
         "name": "analyze_estimate",
-        "description": "Analyze the current estimate and provide optimization recommendations. Use this when the user asks for cost-saving tips or improvements.",
+        "description": "Analyze the current estimate using actual costs and provide optimization recommendations. Use this when the user asks for cost-saving tips or improvements.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -266,33 +238,12 @@ TOOLS_ESTIMATE_DETAIL = [
 ESTIMATE_TOOLS = TOOLS_ESTIMATE_DETAIL
 
 
-# DBU pricing reference (list prices)
-DBU_PRICING = {
-    "aws": {
-        "JOBS_COMPUTE": 0.15,
-        "JOBS_COMPUTE_(PHOTON)": 0.20,
-        "JOBS_SERVERLESS_COMPUTE": 0.25,
-        "ALL_PURPOSE_COMPUTE": 0.40,
-        "ALL_PURPOSE_COMPUTE_(PHOTON)": 0.55,
-        "INTERACTIVE_SERVERLESS_COMPUTE": 0.70,
-        "DLT_CORE_COMPUTE": 0.20,
-        "DLT_PRO_COMPUTE": 0.25,
-        "DLT_ADVANCED_COMPUTE": 0.30,
-        "SQL_COMPUTE": 0.22,
-        "SQL_PRO_COMPUTE": 0.55,
-        "SERVERLESS_SQL_COMPUTE": 0.70,
-        "VECTOR_SEARCH_ENDPOINT": 0.40,
-        "SERVERLESS_REAL_TIME_INFERENCE": 0.07,
-        "DATABASE_SERVERLESS_COMPUTE": 0.35
-    }
-}
-
-
 class EstimateAgent:
     """
     AI Agent that helps users create and manage estimates.
     
     Maintains conversation state and handles tool execution.
+    Does NOT perform cost calculations - uses costs from context.
     
     Modes:
     - 'estimates_list': For main estimates page, only create new estimates
@@ -304,13 +255,15 @@ class EstimateAgent:
         self.mode = mode
         self.conversation_history: List[Dict[str, Any]] = []
         self.current_estimate: Optional[Dict[str, Any]] = None
-        self.draft_workloads: List[Dict[str, Any]] = []
+        self.current_workloads: List[Dict[str, Any]] = []  # Actual workloads with costs
+        self.proposed_workloads: List[Dict[str, Any]] = []  # Pending confirmations
     
     def reset(self):
         """Reset the agent state for a new conversation."""
         self.conversation_history = []
         self.current_estimate = None
-        self.draft_workloads = []
+        self.current_workloads = []
+        self.proposed_workloads = []
     
     def set_mode(self, mode: str):
         """Set the agent mode (affects available tools and system prompt)."""
@@ -328,10 +281,19 @@ class EstimateAgent:
             return TOOLS_ESTIMATES_LIST
         return TOOLS_ESTIMATE_DETAIL
     
-    def set_estimate_context(self, estimate: Dict[str, Any], workloads: List[Dict[str, Any]] = None):
-        """Set an existing estimate as context for the conversation."""
+    def set_context(self, estimate: Dict[str, Any], workloads: List[Dict[str, Any]] = None):
+        """
+        Set the current estimate and workloads context.
+        
+        Args:
+            estimate: Estimate details (name, cloud, region, etc.)
+            workloads: List of workloads with their calculated costs
+                       Each should include: workload_name, workload_type, 
+                       total_cost, dbu_cost, vm_cost, configuration fields
+        """
         self.current_estimate = estimate
-        self.draft_workloads = workloads or []
+        self.current_workloads = workloads or []
+        self.proposed_workloads = []  # Clear pending proposals on context change
     
     async def chat(self, user_message: str) -> Dict[str, Any]:
         """
@@ -340,7 +302,8 @@ class EstimateAgent:
         Returns dict with:
         - content: Text response
         - tool_results: Any tool execution results
-        - estimate_update: Updated estimate state if modified
+        - proposed_workload: Workload awaiting confirmation (if any)
+        - estimate: Current estimate state
         """
         # Add user message to history
         self.conversation_history.append({
@@ -364,6 +327,8 @@ class EstimateAgent:
         
         # Process tool calls if any
         tool_results = []
+        proposed_workload = None
+        
         if response.get("tool_calls"):
             for tool_call in response["tool_calls"]:
                 result = await self._execute_tool(
@@ -375,6 +340,10 @@ class EstimateAgent:
                     "input": tool_call["arguments"],
                     "output": result
                 })
+                
+                # Check if this is a workload proposal
+                if tool_call["name"] == "propose_workload" and result.get("success"):
+                    proposed_workload = result.get("proposed_workload")
             
             # Add assistant message with tool use to history
             self.conversation_history.append({
@@ -422,15 +391,16 @@ class EstimateAgent:
         return {
             "content": final_content,
             "tool_results": tool_results,
+            "proposed_workload": proposed_workload,
             "estimate": self.current_estimate,
-            "workloads": self.draft_workloads
+            "workloads": self.current_workloads
         }
     
     async def chat_stream(self, user_message: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Process a user message and stream the response.
         
-        Yields chunks with type 'content', 'tool_start', 'tool_result', or 'done'.
+        Yields chunks with type 'content', 'tool_start', 'tool_result', 'proposal', or 'done'.
         """
         # Add user message to history
         self.conversation_history.append({
@@ -475,6 +445,36 @@ class EstimateAgent:
             elif chunk_type == "tool_input_delta":
                 tool_input_json += chunk.get("partial_json", "")
             
+            elif chunk_type == "tool_call_complete":
+                # Handle complete tool call from OpenAI format
+                current_tool = {
+                    "id": chunk.get("id"),
+                    "name": chunk.get("name"),
+                    "arguments": chunk.get("arguments", {})
+                }
+                tool_calls.append(current_tool)
+                
+                # Execute tool
+                result = await self._execute_tool(
+                    current_tool["name"],
+                    current_tool["arguments"]
+                )
+                
+                yield {
+                    "type": "tool_result",
+                    "tool": current_tool["name"],
+                    "result": result
+                }
+                
+                # If it's a proposal, yield that separately
+                if current_tool["name"] == "propose_workload" and result.get("success"):
+                    yield {
+                        "type": "proposal",
+                        "workload": result.get("proposed_workload")
+                    }
+                
+                current_tool = None
+            
             elif chunk_type == "message_delta":
                 if current_tool and tool_input_json:
                     try:
@@ -487,19 +487,17 @@ class EstimateAgent:
             
             elif chunk_type == "done":
                 break
-            
-            elif chunk_type == "error":
-                yield {"type": "error", "content": chunk.get("content")}
-                return
         
-        # Execute tools if any
+        # Process any tool calls that were accumulated
         if tool_calls:
+            # Add assistant response to history
             self.conversation_history.append({
                 "role": "assistant",
                 "content": full_content,
                 "tool_calls": tool_calls
             })
             
+            # Execute tools and add results to history
             for tool_call in tool_calls:
                 result = await self._execute_tool(
                     tool_call["name"],
@@ -512,7 +510,13 @@ class EstimateAgent:
                     "result": result
                 }
                 
-                # Add to history
+                # If it's a proposal, yield that separately
+                if tool_call["name"] == "propose_workload" and result.get("success"):
+                    yield {
+                        "type": "proposal",
+                        "workload": result.get("proposed_workload")
+                    }
+                
                 self.conversation_history.append({
                     "role": "user",
                     "content": [
@@ -550,22 +554,74 @@ class EstimateAgent:
         yield {
             "type": "done",
             "estimate": self.current_estimate,
-            "workloads": self.draft_workloads
+            "workloads": self.current_workloads,
+            "proposed_workloads": self.proposed_workloads
         }
     
     def _build_context(self) -> str:
-        """Build context string with current estimate state."""
-        context = "\n\n## Current Session State"
+        """Build context string with current estimate state and actual costs."""
+        context = "\n\n## Current Session Context"
         
         if self.current_estimate:
-            context += f"\n\nCurrent Estimate: {json.dumps(self.current_estimate, indent=2)}"
+            est = self.current_estimate
+            context += f"""
+
+### Estimate Details
+- **Name**: {est.get('estimate_name') or est.get('name', 'Unnamed')}
+- **Cloud**: {(est.get('cloud') or 'aws').upper()}
+- **Region**: {est.get('region', 'Not specified')}
+- **Tier**: {est.get('tier', 'PREMIUM')}
+- **Status**: {est.get('status', 'draft')}"""
+            
+            if est.get('customer_name'):
+                context += f"\n- **Customer**: {est.get('customer_name')}"
+            if est.get('description'):
+                context += f"\n- **Description**: {est.get('description')}"
         else:
-            context += "\n\nNo estimate created yet."
+            context += "\n\nNo estimate loaded. User may be creating a new one."
         
-        if self.draft_workloads:
-            context += f"\n\nWorkloads ({len(self.draft_workloads)}):"
-            for w in self.draft_workloads:
-                context += f"\n- {w.get('workload_name', 'Unnamed')}: {w.get('workload_type')} (${w.get('estimated_cost', 0):.2f}/month)"
+        if self.current_workloads:
+            context += f"\n\n### Workloads ({len(self.current_workloads)} total)"
+            
+            total_cost = 0
+            for w in self.current_workloads:
+                # Get cost - could be in different formats depending on source
+                cost = w.get('total_cost') or w.get('monthly_cost') or 0
+                if isinstance(cost, dict):
+                    cost = cost.get('total', 0)
+                total_cost += float(cost) if cost else 0
+                
+                context += f"\n\n**{w.get('workload_name', 'Unnamed')}** ({w.get('workload_type', 'Unknown')})"
+                context += f"\n- Monthly Cost: ${float(cost):.2f}" if cost else "\n- Monthly Cost: Calculating..."
+                
+                # Add relevant configuration details
+                if w.get('serverless_enabled'):
+                    context += "\n- Mode: Serverless"
+                if w.get('photon_enabled'):
+                    context += "\n- Photon: Enabled"
+                if w.get('num_workers'):
+                    context += f"\n- Workers: {w.get('num_workers')}"
+                if w.get('driver_node_type'):
+                    context += f"\n- Driver: {w.get('driver_node_type')}"
+                if w.get('worker_node_type'):
+                    context += f"\n- Worker Type: {w.get('worker_node_type')}"
+                if w.get('worker_pricing_tier'):
+                    context += f"\n- Worker Pricing: {w.get('worker_pricing_tier')}"
+                if w.get('hours_per_month'):
+                    context += f"\n- Hours/Month: {w.get('hours_per_month')}"
+                if w.get('dbsql_warehouse_size'):
+                    context += f"\n- Warehouse Size: {w.get('dbsql_warehouse_size')}"
+                if w.get('dlt_edition'):
+                    context += f"\n- DLT Edition: {w.get('dlt_edition')}"
+            
+            context += f"\n\n### Total Monthly Cost: ${total_cost:.2f}"
+        else:
+            context += "\n\n### Workloads: None yet"
+        
+        if self.proposed_workloads:
+            context += f"\n\n### Pending Proposals ({len(self.proposed_workloads)})"
+            for p in self.proposed_workloads:
+                context += f"\n- {p.get('workload_name')} ({p.get('workload_type')}) - awaiting confirmation"
         
         return context
     
@@ -575,12 +631,13 @@ class EstimateAgent:
         
         if tool_name == "create_estimate":
             return self._create_estimate(**arguments)
+        elif tool_name == "propose_workload":
+            return self._propose_workload(**arguments)
         elif tool_name == "add_workload":
-            return self._add_workload(**arguments)
+            # Legacy support - treat as proposal
+            return self._propose_workload(**arguments)
         elif tool_name == "get_estimate_summary":
             return self._get_estimate_summary()
-        elif tool_name == "get_pricing_info":
-            return self._get_pricing_info(**arguments)
         elif tool_name == "analyze_estimate":
             return self._analyze_estimate(**arguments)
         else:
@@ -593,68 +650,69 @@ class EstimateAgent:
         region: str,
         description: str = ""
     ) -> Dict[str, Any]:
-        """Create a new estimate."""
+        """Create a new estimate draft."""
         self.current_estimate = {
             "draft_id": str(uuid.uuid4()),
             "name": name,
+            "estimate_name": name,  # Support both formats
             "cloud": cloud.lower(),
             "region": region,
             "description": description,
             "status": "draft",
             "created_at": datetime.now().isoformat()
         }
-        self.draft_workloads = []
+        self.current_workloads = []
+        self.proposed_workloads = []
         
         return {
             "success": True,
             "message": f"Created estimate '{name}' for {cloud.upper()} {region}",
-            "estimate": self.current_estimate
+            "estimate": self.current_estimate,
+            "next_step": "You can now add workloads to this estimate. Click on it to start adding workloads."
         }
     
-    def _add_workload(
+    def _propose_workload(
         self,
         workload_type: str,
         workload_name: str,
+        reason: str = "",
         **kwargs
     ) -> Dict[str, Any]:
-        """Add a workload to the current estimate."""
-        if not self.current_estimate:
-            return {
-                "success": False,
-                "error": "No estimate created yet. Please create an estimate first."
-            }
-        
-        # Build workload configuration
+        """
+        Propose a workload configuration for user confirmation.
+        Does NOT add to estimate - user must confirm first.
+        """
+        # Build workload configuration with defaults
         workload = {
-            "draft_id": str(uuid.uuid4()),
+            "proposal_id": str(uuid.uuid4()),
             "workload_type": workload_type,
             "workload_name": workload_name,
-            "cloud": self.current_estimate["cloud"],
+            "cloud": self.current_estimate["cloud"] if self.current_estimate else "aws",
+            "reason": reason,
+            "status": "pending_confirmation",
             **kwargs
         }
         
-        # Set defaults based on workload type
-        workload = self._apply_workload_defaults(workload)
+        # Apply sensible defaults based on workload type
+        workload = self._apply_defaults(workload)
         
-        # Calculate estimated cost
-        estimated_cost = self._calculate_workload_cost(workload)
-        workload["estimated_cost"] = estimated_cost
-        
-        self.draft_workloads.append(workload)
+        # Store as pending proposal
+        self.proposed_workloads.append(workload)
         
         return {
             "success": True,
-            "message": f"Added {workload_type} workload '{workload_name}'",
-            "workload": workload,
-            "estimated_monthly_cost": f"${estimated_cost:.2f}"
+            "message": f"Proposed {workload_type} workload: '{workload_name}'",
+            "proposed_workload": workload,
+            "action_required": "User must confirm this configuration before it's added to the estimate.",
+            "note": "Costs will be calculated after the workload is confirmed and saved."
         }
     
-    def _apply_workload_defaults(self, workload: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_defaults(self, workload: Dict[str, Any]) -> Dict[str, Any]:
         """Apply sensible defaults based on workload type."""
         wtype = workload["workload_type"]
         
         # Common defaults
-        workload.setdefault("hours_per_month", 730)  # 24/7
+        workload.setdefault("hours_per_month", 730)
         workload.setdefault("days_per_month", 22)
         
         if wtype in ["JOBS", "ALL_PURPOSE", "DLT"]:
@@ -679,190 +737,136 @@ class EstimateAgent:
         
         return workload
     
-    def _calculate_workload_cost(self, workload: Dict[str, Any]) -> float:
-        """Calculate estimated monthly cost for a workload."""
-        cloud = workload.get("cloud", "aws")
-        wtype = workload["workload_type"]
-        pricing = DBU_PRICING.get(cloud, DBU_PRICING["aws"])
-        
-        # Determine SKU
-        sku = self._get_sku_for_workload(workload)
-        dbu_price = pricing.get(sku, 0.25)
-        
-        # Calculate DBUs
-        dbu_per_hour = self._estimate_dbu_per_hour(workload)
-        hours = workload.get("hours_per_month", 730)
-        
-        # For run-based workloads
-        if workload.get("runs_per_day") and workload.get("avg_runtime_minutes"):
-            hours = (workload["runs_per_day"] * workload["avg_runtime_minutes"] / 60) * workload.get("days_per_month", 22)
-        
-        monthly_dbus = dbu_per_hour * hours
-        dbu_cost = monthly_dbus * dbu_price
-        
-        return round(dbu_cost, 2)
+    def confirm_workload(self, proposal_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Confirm a proposed workload (called from API after user confirms).
+        Returns the workload configuration to be saved.
+        """
+        for i, proposal in enumerate(self.proposed_workloads):
+            if proposal.get("proposal_id") == proposal_id:
+                workload = self.proposed_workloads.pop(i)
+                workload["status"] = "confirmed"
+                return workload
+        return None
     
-    def _get_sku_for_workload(self, workload: Dict[str, Any]) -> str:
-        """Determine the SKU for pricing based on workload configuration."""
-        wtype = workload["workload_type"]
-        serverless = workload.get("serverless_enabled", False)
-        photon = workload.get("photon_enabled", False)
-        
-        if wtype == "JOBS":
-            if serverless:
-                return "JOBS_SERVERLESS_COMPUTE"
-            return "JOBS_COMPUTE_(PHOTON)" if photon else "JOBS_COMPUTE"
-        
-        elif wtype == "ALL_PURPOSE":
-            if serverless:
-                return "INTERACTIVE_SERVERLESS_COMPUTE"
-            return "ALL_PURPOSE_COMPUTE_(PHOTON)" if photon else "ALL_PURPOSE_COMPUTE"
-        
-        elif wtype == "DLT":
-            if serverless:
-                return "DELTA_LIVE_TABLES_SERVERLESS"
-            edition = workload.get("dlt_edition", "PRO").upper()
-            return f"DLT_{edition}_COMPUTE"
-        
-        elif wtype == "DBSQL":
-            warehouse_type = workload.get("dbsql_warehouse_type", "SERVERLESS")
-            if warehouse_type == "SERVERLESS":
-                return "SERVERLESS_SQL_COMPUTE"
-            elif warehouse_type == "PRO":
-                return "SQL_PRO_COMPUTE"
-            return "SQL_COMPUTE"
-        
-        elif wtype == "MODEL_SERVING":
-            return "SERVERLESS_REAL_TIME_INFERENCE"
-        
-        elif wtype == "VECTOR_SEARCH":
-            return "VECTOR_SEARCH_ENDPOINT"
-        
-        elif wtype == "LAKEBASE":
-            return "DATABASE_SERVERLESS_COMPUTE"
-        
-        return "JOBS_COMPUTE"
-    
-    def _estimate_dbu_per_hour(self, workload: Dict[str, Any]) -> float:
-        """Estimate DBUs per hour based on workload configuration."""
-        wtype = workload["workload_type"]
-        
-        if wtype in ["JOBS", "ALL_PURPOSE", "DLT"]:
-            # Cluster-based: DBUs based on node count
-            num_workers = workload.get("num_workers", 2)
-            driver_dbu = 1  # Simplified
-            worker_dbu = 0.5 * num_workers
-            return driver_dbu + worker_dbu
-        
-        elif wtype == "DBSQL":
-            # Size-based DBUs
-            size_dbu = {
-                "2X-Small": 4, "X-Small": 6, "Small": 12, "Medium": 24,
-                "Large": 40, "X-Large": 80, "2X-Large": 144,
-                "3X-Large": 272, "4X-Large": 528
-            }
-            size = workload.get("dbsql_warehouse_size", "Small")
-            return size_dbu.get(size, 12) * workload.get("dbsql_num_clusters", 1)
-        
-        elif wtype == "LAKEBASE":
-            cu = workload.get("lakebase_cu", 2)
-            nodes = workload.get("lakebase_ha_nodes", 1)
-            return cu * nodes * 2  # 2 DBU per CU
-        
-        return 2  # Default
+    def reject_workload(self, proposal_id: str) -> bool:
+        """Reject a proposed workload."""
+        for i, proposal in enumerate(self.proposed_workloads):
+            if proposal.get("proposal_id") == proposal_id:
+                self.proposed_workloads.pop(i)
+                return True
+        return False
     
     def _get_estimate_summary(self) -> Dict[str, Any]:
-        """Get summary of current estimate."""
+        """Get summary of current estimate using actual costs from context."""
         if not self.current_estimate:
-            return {"error": "No estimate created yet"}
+            return {"error": "No estimate loaded"}
         
-        total_cost = sum(w.get("estimated_cost", 0) for w in self.draft_workloads)
+        total_cost = 0
+        workload_summaries = []
+        
+        for w in self.current_workloads:
+            cost = w.get('total_cost') or w.get('monthly_cost') or 0
+            if isinstance(cost, dict):
+                cost = cost.get('total', 0)
+            cost = float(cost) if cost else 0
+            total_cost += cost
+            
+            workload_summaries.append({
+                "name": w.get("workload_name"),
+                "type": w.get("workload_type"),
+                "monthly_cost": f"${cost:.2f}"
+            })
         
         return {
-            "estimate": self.current_estimate,
-            "workload_count": len(self.draft_workloads),
-            "workloads": [
-                {
-                    "name": w.get("workload_name"),
-                    "type": w.get("workload_type"),
-                    "cost": f"${w.get('estimated_cost', 0):.2f}/month"
-                }
-                for w in self.draft_workloads
-            ],
+            "estimate": {
+                "name": self.current_estimate.get("estimate_name") or self.current_estimate.get("name"),
+                "cloud": self.current_estimate.get("cloud", "").upper(),
+                "region": self.current_estimate.get("region")
+            },
+            "workload_count": len(self.current_workloads),
+            "workloads": workload_summaries,
             "total_monthly_cost": f"${total_cost:.2f}",
-            "total_annual_cost": f"${total_cost * 12:.2f}"
-        }
-    
-    def _get_pricing_info(self, workload_type: str, cloud: str = "aws") -> Dict[str, Any]:
-        """Get pricing information for a workload type."""
-        pricing = DBU_PRICING.get(cloud.lower(), DBU_PRICING["aws"])
-        
-        workload_skus = {
-            "JOBS": ["JOBS_COMPUTE", "JOBS_COMPUTE_(PHOTON)", "JOBS_SERVERLESS_COMPUTE"],
-            "ALL_PURPOSE": ["ALL_PURPOSE_COMPUTE", "ALL_PURPOSE_COMPUTE_(PHOTON)", "INTERACTIVE_SERVERLESS_COMPUTE"],
-            "DLT": ["DLT_CORE_COMPUTE", "DLT_PRO_COMPUTE", "DLT_ADVANCED_COMPUTE"],
-            "DBSQL": ["SQL_COMPUTE", "SQL_PRO_COMPUTE", "SERVERLESS_SQL_COMPUTE"],
-            "MODEL_SERVING": ["SERVERLESS_REAL_TIME_INFERENCE"],
-            "VECTOR_SEARCH": ["VECTOR_SEARCH_ENDPOINT"],
-            "LAKEBASE": ["DATABASE_SERVERLESS_COMPUTE"]
-        }
-        
-        skus = workload_skus.get(workload_type, [])
-        prices = {sku: f"${pricing.get(sku, 0):.2f}/DBU" for sku in skus}
-        
-        return {
-            "workload_type": workload_type,
-            "cloud": cloud.upper(),
-            "pricing": prices,
-            "note": "Prices are list rates. Actual costs depend on usage and negotiated discounts."
+            "total_annual_cost": f"${total_cost * 12:.2f}",
+            "pending_proposals": len(self.proposed_workloads)
         }
     
     def _analyze_estimate(self, focus_area: str = "all") -> Dict[str, Any]:
-        """Analyze estimate and provide recommendations."""
-        if not self.current_estimate or not self.draft_workloads:
-            return {"error": "No estimate with workloads to analyze"}
+        """Analyze estimate using actual costs and provide recommendations."""
+        if not self.current_estimate:
+            return {"error": "No estimate loaded"}
+        
+        if not self.current_workloads:
+            return {
+                "error": "No workloads to analyze",
+                "suggestion": "Add some workloads first, then I can help optimize them."
+            }
         
         recommendations = []
+        total_cost = 0
         
-        for workload in self.draft_workloads:
-            wtype = workload["workload_type"]
+        for workload in self.current_workloads:
+            wtype = workload.get("workload_type", "")
+            wname = workload.get("workload_name", "Unnamed")
+            
+            # Get actual cost
+            cost = workload.get('total_cost') or workload.get('monthly_cost') or 0
+            if isinstance(cost, dict):
+                cost = cost.get('total', 0)
+            cost = float(cost) if cost else 0
+            total_cost += cost
             
             # Cost optimization recommendations
             if focus_area in ["cost_optimization", "all"]:
                 if wtype == "JOBS" and workload.get("worker_pricing_tier") != "spot":
                     recommendations.append({
-                        "workload": workload["workload_name"],
+                        "workload": wname,
                         "type": "cost",
-                        "suggestion": "Consider using spot instances for workers (up to 90% savings)",
-                        "potential_savings": "High"
+                        "current_cost": f"${cost:.2f}/month",
+                        "suggestion": "Consider using spot instances for workers",
+                        "potential_savings": "Up to 90% on worker costs",
+                        "consideration": "Only for fault-tolerant batch jobs"
                     })
                 
-                if wtype in ["ALL_PURPOSE", "DBSQL"] and not workload.get("serverless_enabled"):
-                    if workload.get("hours_per_month", 730) < 200:
+                if wtype in ["ALL_PURPOSE", "JOBS", "DLT"] and not workload.get("serverless_enabled"):
+                    hours = workload.get("hours_per_month", 730)
+                    if hours and hours < 200:
                         recommendations.append({
-                            "workload": workload["workload_name"],
+                            "workload": wname,
                             "type": "cost",
-                            "suggestion": "Consider serverless for low-utilization workloads",
-                            "potential_savings": "Medium"
+                            "current_cost": f"${cost:.2f}/month",
+                            "suggestion": "Consider serverless for this low-utilization workload",
+                            "current_hours": f"{hours} hours/month",
+                            "potential_savings": "Pay only for actual usage"
                         })
+                
+                if wtype == "DBSQL" and workload.get("dbsql_warehouse_type") != "SERVERLESS":
+                    recommendations.append({
+                        "workload": wname,
+                        "type": "cost",
+                        "current_cost": f"${cost:.2f}/month",
+                        "suggestion": "Consider DBSQL Serverless for automatic scaling",
+                        "potential_savings": "Scales to zero when idle"
+                    })
             
             # Performance recommendations
             if focus_area in ["performance", "all"]:
                 if wtype in ["JOBS", "ALL_PURPOSE", "DLT"] and not workload.get("photon_enabled"):
                     recommendations.append({
-                        "workload": workload["workload_name"],
+                        "workload": wname,
                         "type": "performance",
-                        "suggestion": "Enable Photon for 2-3x faster processing on compatible workloads",
-                        "impact": "High"
+                        "suggestion": "Enable Photon for faster processing",
+                        "impact": "2-3x faster on compatible workloads",
+                        "consideration": "Slightly higher DBU cost but often net cheaper due to faster completion"
                     })
-        
-        total_cost = sum(w.get("estimated_cost", 0) for w in self.draft_workloads)
         
         return {
             "total_monthly_cost": f"${total_cost:.2f}",
-            "workload_count": len(self.draft_workloads),
+            "total_annual_cost": f"${total_cost * 12:.2f}",
+            "workload_count": len(self.current_workloads),
             "recommendations": recommendations,
-            "recommendation_count": len(recommendations)
+            "recommendation_count": len(recommendations),
+            "focus_area": focus_area
         }
 
 
@@ -870,4 +874,3 @@ def create_agent(token: str, mode: str = "estimate_detail") -> EstimateAgent:
     """Create a new agent instance with the given token and mode."""
     client = get_claude_client(token)
     return EstimateAgent(client, mode=mode)
-

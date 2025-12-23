@@ -50,12 +50,23 @@ interface DraftWorkload {
   [key: string]: any
 }
 
+interface ProposedWorkload {
+  proposal_id: string
+  workload_type: string
+  workload_name: string
+  reason: string
+  [key: string]: any
+}
+
 interface ChatPanelProps {
   isOpen: boolean
   onClose: () => void
   onEstimateCreated?: (estimateId: string) => void
+  onWorkloadConfirmed?: (workloadConfig: any) => void  // Called when user confirms a proposed workload
   currentEstimate?: any
   currentWorkloads?: any[]
+  // Calculated costs for each workload (keyed by item_id)
+  itemCosts?: Record<string, { total: number; dbu: number; vm: number }>
   // Mode: 'estimates_list' for home page (create only), 'estimate_detail' for full functionality
   mode?: 'estimates_list' | 'estimate_detail'
 }
@@ -64,8 +75,10 @@ export function ChatPanel({
   isOpen,
   onClose,
   onEstimateCreated,
+  onWorkloadConfirmed,
   currentEstimate,
   currentWorkloads,
+  itemCosts,
   mode = 'estimate_detail'
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([])
@@ -74,6 +87,7 @@ export function ChatPanel({
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [draftEstimate, setDraftEstimate] = useState<DraftEstimate | null>(null)
   const [draftWorkloads, setDraftWorkloads] = useState<DraftWorkload[]>([])
+  const [proposedWorkloads, setProposedWorkloads] = useState<ProposedWorkload[]>([])
   const [error, setError] = useState<string | null>(null)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -146,6 +160,18 @@ export function ChatPanel({
     try {
       abortControllerRef.current = new AbortController()
       
+      // Build enriched workloads context with actual calculated costs
+      const enrichedWorkloads = (currentWorkloads || draftWorkloads || []).map(w => {
+        const itemId = w.item_id || w.draft_id
+        const costs = itemCosts?.[itemId]
+        return {
+          ...w,
+          total_cost: costs?.total || w.total_cost || 0,
+          dbu_cost: costs?.dbu || w.dbu_cost || 0,
+          vm_cost: costs?.vm || w.vm_cost || 0
+        }
+      })
+      
       const response = await fetch('/api/v1/chat/stream', {
         method: 'POST',
         headers: {
@@ -155,7 +181,7 @@ export function ChatPanel({
           message: userMessage.content,
           conversation_id: conversationId,
           estimate_context: currentEstimate || draftEstimate,
-          workloads_context: currentWorkloads || draftWorkloads,
+          workloads_context: enrichedWorkloads,
           stream: true,
           mode: mode
         }),
@@ -204,6 +230,11 @@ export function ChatPanel({
                   tool: chunk.tool,
                   result: chunk.result
                 })
+              } else if (chunk.type === 'proposal') {
+                // AI proposed a workload - add to pending proposals
+                if (chunk.workload) {
+                  setProposedWorkloads(prev => [...prev, chunk.workload])
+                }
               } else if (chunk.type === 'done') {
                 // Update draft state from final response
                 if (chunk.estimate) {
@@ -211,6 +242,9 @@ export function ChatPanel({
                 }
                 if (chunk.workloads) {
                   setDraftWorkloads(chunk.workloads)
+                }
+                if (chunk.proposed_workloads) {
+                  setProposedWorkloads(chunk.proposed_workloads)
                 }
               } else if (chunk.type === 'error') {
                 throw new Error(chunk.content)
@@ -241,7 +275,7 @@ export function ChatPanel({
       setIsLoading(false)
       abortControllerRef.current = null
     }
-  }, [inputValue, isLoading, conversationId, currentEstimate, currentWorkloads, draftEstimate, draftWorkloads, mode])
+  }, [inputValue, isLoading, conversationId, currentEstimate, currentWorkloads, draftEstimate, draftWorkloads, itemCosts, mode])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -262,7 +296,72 @@ export function ChatPanel({
     setConversationId(null)
     setDraftEstimate(null)
     setDraftWorkloads([])
+    setProposedWorkloads([])
     setError(null)
+  }
+  
+  const handleConfirmWorkload = async (proposalId: string) => {
+    if (!conversationId) return
+    
+    try {
+      const response = await fetch(`/api/v1/chat/${conversationId}/confirm-workload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proposal_id: proposalId, confirmed: true })
+      })
+      
+      if (!response.ok) throw new Error('Failed to confirm workload')
+      
+      const result = await response.json()
+      
+      // Remove from pending proposals
+      setProposedWorkloads(prev => prev.filter(p => p.proposal_id !== proposalId))
+      
+      // Call the parent callback with the workload config
+      if (onWorkloadConfirmed && result.workload_config) {
+        onWorkloadConfirmed(result.workload_config)
+      }
+      
+      // Add success message
+      setMessages(prev => [...prev, {
+        id: `system-${Date.now()}`,
+        role: 'system',
+        content: `✅ Workload "${result.workload_config?.workload_name}" added to estimate.`,
+        timestamp: new Date()
+      }])
+      
+    } catch (err: any) {
+      setError(err.message || 'Failed to confirm workload')
+    }
+  }
+  
+  const handleRejectWorkload = async (proposalId: string) => {
+    if (!conversationId) return
+    
+    try {
+      const response = await fetch(`/api/v1/chat/${conversationId}/confirm-workload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proposal_id: proposalId, confirmed: false })
+      })
+      
+      if (!response.ok) throw new Error('Failed to reject workload')
+      
+      // Remove from pending proposals
+      const rejected = proposedWorkloads.find(p => p.proposal_id === proposalId)
+      setProposedWorkloads(prev => prev.filter(p => p.proposal_id !== proposalId))
+      
+      // Add info message
+      setMessages(prev => [...prev, {
+        id: `system-${Date.now()}`,
+        role: 'system',
+        content: `❌ Workload "${rejected?.workload_name}" proposal rejected.`,
+        timestamp: new Date()
+      }])
+      
+    } catch (err: any) {
+      setError(err.message || 'Failed to reject workload')
+    }
   }
 
   const applyEstimate = async () => {
@@ -371,6 +470,66 @@ export function ChatPanel({
               </span>
             </div>
           )}
+        </div>
+      )}
+      
+      {/* Proposed Workloads - Awaiting Confirmation */}
+      {proposedWorkloads.length > 0 && (
+        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2 mb-3">
+            <ExclamationCircleIcon className="w-4 h-4 text-amber-600" />
+            <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+              Proposed Workload{proposedWorkloads.length !== 1 ? 's' : ''} - Confirm to Add
+            </span>
+          </div>
+          <div className="space-y-2">
+            {proposedWorkloads.map((proposal) => (
+              <div 
+                key={proposal.proposal_id}
+                className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-200 dark:border-amber-700"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+                        {proposal.workload_name}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                        {proposal.workload_type}
+                      </span>
+                    </div>
+                    {proposal.reason && (
+                      <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
+                        {proposal.reason}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      {proposal.serverless_enabled && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">Serverless</span>}
+                      {proposal.photon_enabled && <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded">Photon</span>}
+                      {proposal.num_workers && <span>{proposal.num_workers} workers</span>}
+                      {proposal.dbsql_warehouse_size && <span>{proposal.dbsql_warehouse_size}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => handleConfirmWorkload(proposal.proposal_id)}
+                      className="p-1.5 rounded-full bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-800/50 text-green-700 dark:text-green-400 transition-colors"
+                      title="Confirm & Add"
+                    >
+                      <CheckCircleIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleRejectWorkload(proposal.proposal_id)}
+                      className="p-1.5 rounded-full bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-800/50 text-red-700 dark:text-red-400 transition-colors"
+                      title="Reject"
+                    >
+                      <XMarkIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
