@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { 
   Squares2X2Icon, 
@@ -13,6 +13,28 @@ import clsx from 'clsx'
 import { useState, useRef, useEffect } from 'react'
 import { useTheme, Theme } from '../hooks/useTheme'
 import { useStore } from '../store/useStore'
+import { ChatPanel } from './ChatPanel'
+import toast from 'react-hot-toast'
+
+// Sparkles Icon for AI Assistant
+function SparklesIcon({ className }: { className?: string }) {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      fill="none" 
+      viewBox="0 0 24 24" 
+      strokeWidth={1.5} 
+      stroke="currentColor" 
+      className={className}
+    >
+      <path 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+        d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" 
+      />
+    </svg>
+  )
+}
 
 const navigation = [
   { name: 'Estimates', href: '/', icon: Squares2X2Icon },
@@ -34,11 +56,28 @@ const themeOptions: { value: Theme; label: string; icon: typeof SunIcon }[] = [
 
 export default function Layout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { theme, setTheme } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   
-  const { currentUser, isAuthenticated, authError, fetchCurrentUser } = useStore()
+  const { 
+    currentUser, 
+    isAuthenticated, 
+    authError, 
+    fetchCurrentUser,
+    currentEstimate,
+    lineItems,
+    workloadCosts,
+    createEstimate,
+    createLineItem,
+    calculateAllWorkloadCosts
+  } = useStore()
+  
+  // Determine chat mode based on current route
+  const isEstimateDetailPage = location.pathname.startsWith('/calculator/') && location.pathname !== '/calculator'
+  const chatMode = isEstimateDetailPage ? 'estimate_detail' : 'estimates_list'
   
   // Fetch current user on mount
   useEffect(() => {
@@ -214,6 +253,25 @@ export default function Layout() {
                   </div>
                 )}
               </div>
+              
+              {/* AI Assistant Button */}
+              <button
+                onClick={() => setIsChatOpen(true)}
+                className={clsx(
+                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border",
+                  isChatOpen 
+                    ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white border-transparent" 
+                    : "hover:bg-gradient-to-r hover:from-orange-500/10 hover:to-amber-500/10"
+                )}
+                style={!isChatOpen ? { 
+                  color: 'var(--text-secondary)',
+                  borderColor: 'var(--border-primary)'
+                } : undefined}
+                title="AI Assistant"
+              >
+                <SparklesIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">AI</span>
+              </button>
             </div>
           </div>
         </div>
@@ -239,6 +297,57 @@ export default function Layout() {
           </p>
         </div>
       </footer>
+      
+      {/* AI Chat Panel - Global */}
+      <ChatPanel
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        currentEstimate={isEstimateDetailPage ? currentEstimate : undefined}
+        currentWorkloads={isEstimateDetailPage ? lineItems : undefined}
+        itemCosts={isEstimateDetailPage ? Object.fromEntries(
+          Object.entries(workloadCosts).map(([id, response]) => [
+            id,
+            {
+              total: response?.data?.total_cost?.cost_per_month || response?.data?.cost?.total_cost || 0,
+              dbu: response?.data?.dbu_calculation?.dbu_cost_per_month || response?.data?.dbu_costs?.dbu_cost_per_month || 0,
+              vm: response?.data?.vm_costs?.vm_cost_per_month || 0
+            }
+          ])
+        ) : undefined}
+        onEstimateCreated={(estimateId) => {
+          navigate(`/calculator/${estimateId}`)
+          setIsChatOpen(false)
+        }}
+        onEstimateConfirmed={async (estimateConfig) => {
+          try {
+            const newEstimate = await createEstimate({
+              ...estimateConfig,
+              owner_user_id: currentUser?.user_id
+            })
+            if (newEstimate?.estimate_id) {
+              navigate(`/calculator/${newEstimate.estimate_id}`)
+              setIsChatOpen(false)
+            }
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to create estimate')
+          }
+        }}
+        onWorkloadConfirmed={async (workloadConfig) => {
+          if (currentEstimate?.estimate_id) {
+            try {
+              await createLineItem({
+                estimate_id: currentEstimate.estimate_id,
+                ...workloadConfig
+              })
+              calculateAllWorkloadCosts(currentEstimate.estimate_id)
+              toast.success(`Workload "${workloadConfig.workload_name}" added!`)
+            } catch (err: any) {
+              toast.error(err.message || 'Failed to add workload')
+            }
+          }
+        }}
+        mode={chatMode}
+      />
     </div>
   )
 }

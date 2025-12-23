@@ -27,7 +27,7 @@ import {
   fetchSalesforceUseCases,
   type RegionResponse
 } from '../api/client'
-import { ChatPanel, ChatToggleButton } from '../components/ChatPanel'
+// ChatPanel is now in Layout.tsx
 import { saveAs } from 'file-saver'
 import WorkloadForm from '../components/WorkloadForm'
 import SearchableSelect from '../components/SearchableSelect'
@@ -148,7 +148,6 @@ export default function Calculator() {
     createEstimate,
     updateEstimate,
     deleteLineItem,
-    createLineItem,
     setSelectedCloud,
     setSelectedRegion,
     fetchVMPricing,
@@ -174,7 +173,6 @@ export default function Calculator() {
   const [isLoadingEstimate, setIsLoadingEstimate] = useState(false)
   const [isLoadingLineItems, setIsLoadingLineItems] = useState(false)
   const [lineItemsLoaded, setLineItemsLoaded] = useState(false)
-  const [isChatOpen, setIsChatOpen] = useState(false)
   
   // Salesforce data
   const [sfAccounts, setSfAccounts] = useState<SalesforceAccount[]>([])
@@ -1789,50 +1787,6 @@ export default function Calculator() {
         </div>
       </div>
       
-      {/* AI Assistant */}
-      <ChatToggleButton 
-        onClick={() => setIsChatOpen(true)} 
-        hasActiveConversation={false}
-      />
-      <ChatPanel
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        currentEstimate={currentEstimate}
-        currentWorkloads={lineItems}
-        // Convert workloadCosts to the format expected by ChatPanel
-        itemCosts={Object.fromEntries(
-          Object.entries(workloadCosts).map(([id, response]) => [
-            id,
-            {
-              total: response?.data?.total_cost?.cost_per_month || response?.data?.cost?.total_cost || 0,
-              dbu: response?.data?.dbu_calculation?.dbu_cost_per_month || response?.data?.dbu_costs?.dbu_cost_per_month || 0,
-              vm: response?.data?.vm_costs?.vm_cost_per_month || 0
-            }
-          ])
-        )}
-        onEstimateCreated={(estimateId) => {
-          // Navigate to the new estimate
-          navigate(`/calculator/${estimateId}`)
-          setIsChatOpen(false)
-        }}
-        onWorkloadConfirmed={async (workloadConfig) => {
-          // Create the workload via the store
-          if (currentEstimate?.estimate_id) {
-            try {
-              await createLineItem({
-                estimate_id: currentEstimate.estimate_id,
-                ...workloadConfig
-              })
-              // Recalculate costs
-              calculateAllWorkloadCosts(currentEstimate.estimate_id)
-              toast.success(`Workload "${workloadConfig.workload_name}" added!`)
-            } catch (err: any) {
-              toast.error(err.message || 'Failed to add workload')
-            }
-          }
-        }}
-        mode="estimate_detail"
-      />
     </div>
   )
 }

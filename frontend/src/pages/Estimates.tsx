@@ -17,7 +17,7 @@ import clsx from 'clsx'
 import { useStore } from '../store/useStore'
 import { exportAllEstimatesToExcel } from '../api/client'
 import { saveAs } from 'file-saver'
-import { ChatPanel, ChatToggleButton } from '../components/ChatPanel'
+// ChatPanel is now in Layout.tsx
 
 const cloudBadges: Record<string, { label: string; bg: string; text: string; border: string }> = {
   aws: { label: 'AWS', bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b', border: 'rgba(245, 158, 11, 0.25)' },
@@ -33,11 +33,10 @@ const statusColors: Record<string, { bg: string; text: string; border: string }>
 
 export default function Estimates() {
   const navigate = useNavigate()
-  const { estimates, isLoading, fetchEstimates, deleteEstimate, duplicateEstimate, createEstimate, currentUser } = useStore()
+  const { estimates, isLoading, fetchEstimates, deleteEstimate, duplicateEstimate } = useStore()
   const [isExporting, setIsExporting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [isChatOpen, setIsChatOpen] = useState(false)
   
   // Fetch estimates on mount - uses SWR pattern (shows cached data, refreshes in background)
   useEffect(() => {
@@ -51,14 +50,6 @@ export default function Estimates() {
     setIsRefreshing(false)
     toast.success('Refreshed')
   }, [fetchEstimates])
-  
-  // Handle estimate created from AI assistant
-  const handleEstimateCreated = useCallback((estimateId: string) => {
-    fetchEstimates(true)
-    setIsChatOpen(false)
-    toast.success('Estimate created by AI assistant!')
-    navigate(`/calculator/${estimateId}`)
-  }, [fetchEstimates, navigate])
   
   const filteredEstimates = estimates.filter(e => 
     e.estimate_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -281,34 +272,6 @@ export default function Estimates() {
         </div>
       )}
       
-      {/* AI Assistant Toggle Button - Top Right */}
-      <ChatToggleButton 
-        onClick={() => setIsChatOpen(true)}
-        hasActiveConversation={false}
-      />
-      
-      {/* AI Chat Panel - Estimates List Mode (Create Only) */}
-      <ChatPanel
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        onEstimateCreated={handleEstimateCreated}
-        onEstimateConfirmed={async (estimateConfig) => {
-          // Create the estimate via the store
-          try {
-            const newEstimate = await createEstimate({
-              ...estimateConfig,
-              owner_user_id: currentUser?.user_id
-            })
-            if (newEstimate?.estimate_id) {
-              handleEstimateCreated(newEstimate.estimate_id)
-            }
-            await fetchEstimates()
-          } catch (err: any) {
-            toast.error(err.message || 'Failed to create estimate')
-          }
-        }}
-        mode="estimates_list"
-      />
     </div>
   )
 }
