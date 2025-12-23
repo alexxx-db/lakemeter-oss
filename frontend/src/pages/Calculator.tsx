@@ -27,6 +27,7 @@ import {
   fetchSalesforceUseCases,
   type RegionResponse
 } from '../api/client'
+import { ChatPanel, ChatToggleButton } from '../components/ChatPanel'
 import { saveAs } from 'file-saver'
 import WorkloadForm from '../components/WorkloadForm'
 import SearchableSelect from '../components/SearchableSelect'
@@ -172,6 +173,7 @@ export default function Calculator() {
   const [isLoadingEstimate, setIsLoadingEstimate] = useState(false)
   const [isLoadingLineItems, setIsLoadingLineItems] = useState(false)
   const [lineItemsLoaded, setLineItemsLoaded] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
   
   // Salesforce data
   const [sfAccounts, setSfAccounts] = useState<SalesforceAccount[]>([])
@@ -1785,6 +1787,23 @@ export default function Calculator() {
           </motion.div>
         </div>
       </div>
+      
+      {/* AI Assistant */}
+      <ChatToggleButton 
+        onClick={() => setIsChatOpen(true)} 
+        hasActiveConversation={false}
+      />
+      <ChatPanel
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        currentEstimate={currentEstimate}
+        currentWorkloads={lineItems}
+        onEstimateCreated={(estimateId) => {
+          // Navigate to the new estimate
+          navigate(`/calculator/${estimateId}`)
+          setIsChatOpen(false)
+        }}
+      />
     </div>
   )
 }

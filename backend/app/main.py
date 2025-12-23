@@ -21,6 +21,7 @@ from app.routes import (
     calculate_router,
     reference_router
 )
+from app.routes.chat import router as chat_router
 
 # Initialize logging based on environment
 setup_logging()
@@ -59,6 +60,7 @@ app.include_router(vm_pricing_router, prefix="/api/v1")
 app.include_router(salesforce_router, prefix="/api/v1")
 app.include_router(calculate_router, prefix="/api/v1")
 app.include_router(reference_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1")
 
 
 @app.get("/api")

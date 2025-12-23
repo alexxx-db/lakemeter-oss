@@ -1,0 +1,316 @@
+"""
+Chat API Routes for AI Assistant
+
+Provides endpoints for conversing with the AI assistant to create and manage estimates.
+"""
+import json
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.auth.databricks_auth import get_current_user_optional
+from app.external_api import get_user_token
+from app.services.ai_agent import create_agent, EstimateAgent
+from app.config import log_info, log_warning, log_error
+
+
+router = APIRouter(prefix="/chat", tags=["AI Assistant"])
+
+
+# Request/Response models
+class ChatMessage(BaseModel):
+    """A single chat message."""
+    role: str  # 'user' or 'assistant'
+    content: str
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+
+
+class ChatRequest(BaseModel):
+    """Request to send a message to the AI assistant."""
+    message: str
+    conversation_id: Optional[str] = None
+    estimate_context: Optional[Dict[str, Any]] = None
+    workloads_context: Optional[List[Dict[str, Any]]] = None
+    stream: bool = True
+
+
+class ChatResponse(BaseModel):
+    """Response from the AI assistant."""
+    content: str
+    conversation_id: str
+    tool_results: Optional[List[Dict[str, Any]]] = None
+    estimate: Optional[Dict[str, Any]] = None
+    workloads: Optional[List[Dict[str, Any]]] = None
+
+
+# In-memory conversation storage (for MVP - should use Redis/DB in production)
+_conversation_agents: Dict[str, EstimateAgent] = {}
+
+
+def _get_or_create_agent(conversation_id: str, token: str) -> EstimateAgent:
+    """Get existing agent or create new one for a conversation."""
+    if conversation_id not in _conversation_agents:
+        _conversation_agents[conversation_id] = create_agent(token)
+    else:
+        # Update token for existing agent
+        _conversation_agents[conversation_id].client.set_token(token)
+    return _conversation_agents[conversation_id]
+
+
+def _cleanup_old_conversations():
+    """Clean up old conversation agents to prevent memory leaks."""
+    # Simple cleanup: keep only last 100 conversations
+    if len(_conversation_agents) > 100:
+        # Remove oldest half
+        keys_to_remove = list(_conversation_agents.keys())[:50]
+        for key in keys_to_remove:
+            del _conversation_agents[key]
+
+
+@router.post("", response_model=ChatResponse)
+@router.post("/", response_model=ChatResponse)
+async def chat(
+    request: Request,
+    chat_request: ChatRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Send a message to the AI assistant and get a response.
+    
+    For non-streaming responses. Use /chat/stream for streaming.
+    """
+    # Get user token for Claude API
+    token = get_user_token(request)
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required for AI assistant"
+        )
+    
+    # Get or create conversation agent
+    import uuid
+    conversation_id = chat_request.conversation_id or str(uuid.uuid4())
+    
+    _cleanup_old_conversations()
+    agent = _get_or_create_agent(conversation_id, token)
+    
+    # Set estimate context if provided
+    if chat_request.estimate_context:
+        agent.set_estimate_context(
+            chat_request.estimate_context,
+            chat_request.workloads_context
+        )
+    
+    try:
+        # Get response from agent
+        result = await agent.chat(chat_request.message)
+        
+        return ChatResponse(
+            content=result["content"],
+            conversation_id=conversation_id,
+            tool_results=result.get("tool_results"),
+            estimate=result.get("estimate"),
+            workloads=result.get("workloads")
+        )
+    
+    except Exception as e:
+        log_error(f"Chat error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI assistant error: {str(e)}"
+        )
+
+
+@router.post("/stream")
+async def chat_stream(
+    request: Request,
+    chat_request: ChatRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Send a message to the AI assistant and stream the response.
+    
+    Returns Server-Sent Events (SSE) with chunks of the response.
+    Event types:
+    - content: Text content chunk
+    - tool_start: Tool execution starting
+    - tool_result: Tool execution result
+    - done: Stream complete with final state
+    - error: Error occurred
+    """
+    # Get user token
+    token = get_user_token(request)
+    if not token:
+        async def error_generator():
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Authentication required'})}\n\n"
+        return StreamingResponse(
+            error_generator(),
+            media_type="text/event-stream"
+        )
+    
+    # Get or create conversation agent
+    import uuid
+    conversation_id = chat_request.conversation_id or str(uuid.uuid4())
+    
+    _cleanup_old_conversations()
+    agent = _get_or_create_agent(conversation_id, token)
+    
+    # Set estimate context if provided
+    if chat_request.estimate_context:
+        agent.set_estimate_context(
+            chat_request.estimate_context,
+            chat_request.workloads_context
+        )
+    
+    async def generate():
+        """Generate SSE events from the agent's streaming response."""
+        try:
+            # Send conversation ID first
+            yield f"data: {json.dumps({'type': 'start', 'conversation_id': conversation_id})}\n\n"
+            
+            async for chunk in agent.chat_stream(chat_request.message):
+                # Convert chunk to SSE format
+                yield f"data: {json.dumps(chunk)}\n\n"
+            
+        except Exception as e:
+            log_error(f"Stream error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+        
+        finally:
+            yield "data: [DONE]\n\n"
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+
+
+@router.delete("/{conversation_id}")
+async def clear_conversation(
+    conversation_id: str,
+    request: Request
+):
+    """Clear a conversation's history and state."""
+    if conversation_id in _conversation_agents:
+        _conversation_agents[conversation_id].reset()
+        del _conversation_agents[conversation_id]
+    
+    return {"success": True, "message": "Conversation cleared"}
+
+
+@router.post("/{conversation_id}/apply")
+async def apply_estimate(
+    conversation_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Apply the AI-generated estimate to create actual database records.
+    
+    This converts the draft estimate and workloads into real saved records.
+    """
+    from app.models.estimate import Estimate
+    from app.models.line_item import LineItem
+    from app.auth.databricks_auth import get_current_user
+    
+    if conversation_id not in _conversation_agents:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    agent = _conversation_agents[conversation_id]
+    
+    if not agent.current_estimate:
+        raise HTTPException(status_code=400, detail="No estimate to apply")
+    
+    try:
+        # Get current user
+        user = get_current_user(request, db)
+        
+        # Create the estimate
+        estimate = Estimate(
+            name=agent.current_estimate["name"],
+            cloud=agent.current_estimate["cloud"],
+            region=agent.current_estimate.get("region", "us-east-1"),
+            tier="PREMIUM",
+            description=agent.current_estimate.get("description", "Created by AI Assistant"),
+            owner_user_id=user.user_id
+        )
+        db.add(estimate)
+        db.flush()  # Get the estimate_id
+        
+        # Create line items
+        created_workloads = []
+        for workload in agent.draft_workloads:
+            line_item = LineItem(
+                estimate_id=estimate.estimate_id,
+                workload_name=workload["workload_name"],
+                workload_type=workload["workload_type"],
+                serverless_enabled=workload.get("serverless_enabled", False),
+                photon_enabled=workload.get("photon_enabled", False),
+                driver_node_type=workload.get("driver_node_type"),
+                worker_node_type=workload.get("worker_node_type"),
+                num_workers=workload.get("num_workers"),
+                hours_per_month=workload.get("hours_per_month", 730),
+                runs_per_day=workload.get("runs_per_day"),
+                avg_runtime_minutes=workload.get("avg_runtime_minutes"),
+                days_per_month=workload.get("days_per_month", 22),
+                driver_pricing_tier=workload.get("driver_pricing_tier", "on_demand"),
+                worker_pricing_tier=workload.get("worker_pricing_tier", "spot"),
+                dlt_edition=workload.get("dlt_edition"),
+                dbsql_warehouse_type=workload.get("dbsql_warehouse_type"),
+                dbsql_warehouse_size=workload.get("dbsql_warehouse_size"),
+                dbsql_num_clusters=workload.get("dbsql_num_clusters"),
+                lakebase_cu=workload.get("lakebase_cu"),
+                lakebase_ha_nodes=workload.get("lakebase_ha_nodes"),
+                notes=f"Created by AI Assistant"
+            )
+            db.add(line_item)
+            created_workloads.append(workload["workload_name"])
+        
+        db.commit()
+        
+        # Clear the conversation after successful apply
+        agent.reset()
+        
+        return {
+            "success": True,
+            "estimate_id": str(estimate.estimate_id),
+            "estimate_name": estimate.name,
+            "workloads_created": len(created_workloads),
+            "message": f"Created estimate '{estimate.name}' with {len(created_workloads)} workloads"
+        }
+    
+    except Exception as e:
+        db.rollback()
+        log_error(f"Apply estimate error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create estimate: {str(e)}"
+        )
+
+
+@router.get("/{conversation_id}/state")
+async def get_conversation_state(
+    conversation_id: str,
+    request: Request
+):
+    """Get the current state of a conversation (estimate and workloads)."""
+    if conversation_id not in _conversation_agents:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    agent = _conversation_agents[conversation_id]
+    
+    return {
+        "conversation_id": conversation_id,
+        "estimate": agent.current_estimate,
+        "workloads": agent.draft_workloads,
+        "message_count": len(agent.conversation_history)
+    }
+
