@@ -96,13 +96,13 @@ export function ChatPanel({
         id: 'welcome',
         role: 'assistant',
         content: currentEstimate 
-          ? `I see you're working on the estimate "${currentEstimate.name}". How can I help you? I can analyze your current workloads, suggest optimizations, or help you add new ones.`
+          ? `I see you're working on the estimate "${currentEstimate.estimate_name || currentEstimate.name || 'Unnamed'}". It has ${currentWorkloads?.length || 0} workload(s) on ${(currentEstimate.cloud || 'AWS').toUpperCase()} (${currentEstimate.region || 'unknown region'}).\n\nHow can I help you? I can analyze your current workloads, suggest optimizations, or help you add new ones.`
           : `Hi! I'm your Databricks pricing assistant. I can help you create cost estimates for your workloads.\n\nTell me about what you're planning to build, and I'll help you configure the right resources. For example:\n- "I need to run daily ETL jobs processing 500GB of data"\n- "We're setting up a SQL analytics warehouse for our BI team"\n- "I want to estimate costs for a real-time ML inference endpoint"`,
         timestamp: new Date()
       }
       setMessages([welcomeMessage])
     }
-  }, [isOpen, currentEstimate])
+  }, [isOpen, currentEstimate, currentWorkloads])
 
   const sendMessage = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return
