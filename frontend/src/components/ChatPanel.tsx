@@ -117,31 +117,95 @@ export function ChatPanel({
     }
   }, [isOpen])
 
+  // Build welcome message content based on context
+  const buildWelcomeContent = useCallback(() => {
+    if (mode === 'estimates_list') {
+      // Estimates list page - create only mode
+      return `Hi! I'm your Databricks pricing assistant. I can help you **create new estimates**.\n\nTell me about your project and I'll set up an estimate for you. For example:\n- "Create an estimate for a data lakehouse on AWS"\n- "I need to plan costs for our Azure ML platform"\n- "Set up a GCP estimate for our analytics team"\n\n💡 *Once created, you can click on the estimate to add workloads and get detailed recommendations.*`
+    } else if (currentEstimate) {
+      // Estimate detail page with existing estimate
+      const estimateName = currentEstimate.estimate_name || currentEstimate.name || 'Unnamed'
+      const cloud = (currentEstimate.cloud || 'AWS').toUpperCase()
+      const region = currentEstimate.region || 'unknown region'
+      const tier = currentEstimate.tier || 'PREMIUM'
+      const workloadCount = currentWorkloads?.length || 0
+      
+      // Calculate total cost from itemCosts
+      let totalCost = 0
+      if (itemCosts && currentWorkloads) {
+        currentWorkloads.forEach(w => {
+          const itemId = w.item_id || w.line_item_id
+          const costs = itemCosts[itemId]
+          if (costs?.total) {
+            totalCost += costs.total
+          }
+        })
+      }
+      
+      // Build detailed context display
+      let contextInfo = `📋 **Current Estimate:**\n`
+      contextInfo += `• **Name:** ${estimateName}\n`
+      contextInfo += `• **Cloud:** ${cloud}\n`
+      contextInfo += `• **Region:** ${region}\n`
+      contextInfo += `• **Tier:** ${tier}\n`
+      contextInfo += `• **Workloads:** ${workloadCount}\n`
+      
+      if (totalCost > 0) {
+        contextInfo += `• **Monthly Cost:** $${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`
+      }
+      
+      // List workloads if there are any
+      if (currentWorkloads && currentWorkloads.length > 0) {
+        contextInfo += `\n📊 **Workloads:**\n`
+        currentWorkloads.slice(0, 5).forEach(w => {
+          const itemId = w.item_id || w.line_item_id
+          const costs = itemCosts?.[itemId]
+          const costStr = costs?.total ? ` - $${costs.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo` : ''
+          contextInfo += `• ${w.workload_name} (${w.workload_type})${costStr}\n`
+        })
+        if (currentWorkloads.length > 5) {
+          contextInfo += `• ... and ${currentWorkloads.length - 5} more\n`
+        }
+      }
+      
+      contextInfo += `\n---\n\nHow can I help you?\n`
+      contextInfo += `- 📊 **Analyze** your current workloads and costs\n`
+      contextInfo += `- 💡 **Suggest optimizations** to save money\n`
+      contextInfo += `- ➕ **Add new workloads** to your estimate\n`
+      contextInfo += `- ❓ **Answer questions** about Databricks pricing`
+      
+      return contextInfo
+    } else {
+      // Estimate detail page without estimate (loading or new)
+      return `Hi! I'm your Databricks pricing assistant. I can help you create and manage cost estimates.\n\n*Loading estimate details...*`
+    }
+  }, [mode, currentEstimate, currentWorkloads, itemCosts])
+  
   // Add welcome message on first open
   useEffect(() => {
     if (isOpen && messages.length === 0) {
-      let welcomeContent: string
-      
-      if (mode === 'estimates_list') {
-        // Estimates list page - create only mode
-        welcomeContent = `Hi! I'm your Databricks pricing assistant. I can help you **create new estimates**.\n\nTell me about your project and I'll set up an estimate for you. For example:\n- "Create an estimate for a data lakehouse on AWS"\n- "I need to plan costs for our Azure ML platform"\n- "Set up a GCP estimate for our analytics team"\n\n💡 *Once created, you can click on the estimate to add workloads and get detailed recommendations.*`
-      } else if (currentEstimate) {
-        // Estimate detail page with existing estimate
-        welcomeContent = `I see you're working on the estimate "${currentEstimate.estimate_name || currentEstimate.name || 'Unnamed'}". It has ${currentWorkloads?.length || 0} workload(s) on ${(currentEstimate.cloud || 'AWS').toUpperCase()} (${currentEstimate.region || 'unknown region'}).\n\nHow can I help you? I can:\n- 📊 **Analyze** your current workloads and costs\n- 💡 **Suggest optimizations** to save money\n- ➕ **Add new workloads** to your estimate\n- ❓ **Answer questions** about Databricks pricing`
-      } else {
-        // Estimate detail page without estimate (shouldn't happen, but fallback)
-        welcomeContent = `Hi! I'm your Databricks pricing assistant. I can help you create and manage cost estimates.\n\nWhat would you like to do?`
-      }
-      
       const welcomeMessage: Message = {
         id: 'welcome',
         role: 'assistant',
-        content: welcomeContent,
+        content: buildWelcomeContent(),
         timestamp: new Date()
       }
       setMessages([welcomeMessage])
     }
-  }, [isOpen, currentEstimate, currentWorkloads, mode])
+  }, [isOpen, buildWelcomeContent])
+  
+  // Update welcome message when estimate data loads (only if no conversation has started)
+  useEffect(() => {
+    if (isOpen && messages.length === 1 && messages[0].id === 'welcome' && currentEstimate) {
+      // Update the welcome message with fresh data
+      setMessages([{
+        id: 'welcome',
+        role: 'assistant',
+        content: buildWelcomeContent(),
+        timestamp: new Date()
+      }])
+    }
+  }, [isOpen, currentEstimate, currentWorkloads, itemCosts, buildWelcomeContent])
 
   const sendMessage = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return
