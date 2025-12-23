@@ -52,12 +52,12 @@ SYSTEM_PROMPT = """You are Lakemeter AI, an expert Databricks pricing assistant.
 - Always recommend reviewing configurations before finalizing"""
 
 
-# Tool definitions for Claude
+# Tool definitions for Claude (OpenAI-compatible format)
 ESTIMATE_TOOLS = [
     {
         "name": "create_estimate",
         "description": "Create a new pricing estimate. Use this when the user wants to start a new estimate or you've gathered enough information to begin.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "name": {
@@ -84,7 +84,7 @@ ESTIMATE_TOOLS = [
     {
         "name": "add_workload",
         "description": "Add a workload to the current estimate. Call this after create_estimate or when adding to an existing estimate.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "workload_type": {
@@ -159,7 +159,7 @@ ESTIMATE_TOOLS = [
     {
         "name": "get_estimate_summary",
         "description": "Get a summary of the current estimate including all workloads and total costs. Use this to show the user what has been configured.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {},
             "required": []
@@ -168,7 +168,7 @@ ESTIMATE_TOOLS = [
     {
         "name": "get_pricing_info",
         "description": "Get current pricing information for a specific workload type and configuration. Use this to provide accurate cost estimates.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "workload_type": {
@@ -188,7 +188,7 @@ ESTIMATE_TOOLS = [
     {
         "name": "analyze_estimate",
         "description": "Analyze the current estimate and provide optimization recommendations. Use this when the user asks for cost-saving tips or improvements.",
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "focus_area": {
