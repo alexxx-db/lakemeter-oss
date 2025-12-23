@@ -142,37 +142,20 @@ export function ChatPanel({
         })
       }
       
-      // Build detailed context display
-      let contextInfo = `📋 **Current Estimate:**\n`
-      contextInfo += `• **Name:** ${estimateName}\n`
-      contextInfo += `• **Cloud:** ${cloud}\n`
-      contextInfo += `• **Region:** ${region}\n`
-      contextInfo += `• **Tier:** ${tier}\n`
-      contextInfo += `• **Workloads:** ${workloadCount}\n`
+      // Build estimate context display (simplified - no workload list)
+      let contextInfo = `📋 **Current Estimate:** ${estimateName}\n`
+      contextInfo += `☁️ ${cloud} • ${region} • ${tier}\n`
+      contextInfo += `📊 ${workloadCount} workload${workloadCount !== 1 ? 's' : ''}`
       
       if (totalCost > 0) {
-        contextInfo += `• **Monthly Cost:** $${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`
+        contextInfo += ` • **$${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo**`
       }
       
-      // List workloads if there are any
-      if (currentWorkloads && currentWorkloads.length > 0) {
-        contextInfo += `\n📊 **Workloads:**\n`
-        currentWorkloads.slice(0, 5).forEach(w => {
-          const itemId = w.item_id || w.line_item_id
-          const costs = itemCosts?.[itemId]
-          const costStr = costs?.total ? ` - $${costs.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo` : ''
-          contextInfo += `• ${w.workload_name} (${w.workload_type})${costStr}\n`
-        })
-        if (currentWorkloads.length > 5) {
-          contextInfo += `• ... and ${currentWorkloads.length - 5} more\n`
-        }
-      }
-      
-      contextInfo += `\n---\n\nHow can I help you?\n`
-      contextInfo += `- 📊 **Analyze** your current workloads and costs\n`
-      contextInfo += `- 💡 **Suggest optimizations** to save money\n`
-      contextInfo += `- ➕ **Add new workloads** to your estimate\n`
-      contextInfo += `- ❓ **Answer questions** about Databricks pricing`
+      contextInfo += `\n\n---\n\nHow can I help you?\n`
+      contextInfo += `• 📊 **Analyze** your workloads and costs\n`
+      contextInfo += `• 💡 **Suggest optimizations** to save money\n`
+      contextInfo += `• ➕ **Add new workloads** to your estimate\n`
+      contextInfo += `• ❓ **Answer questions** about Databricks pricing`
       
       return contextInfo
     } else {

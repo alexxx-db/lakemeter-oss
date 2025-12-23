@@ -255,23 +255,27 @@ export default function Layout() {
               </div>
               
               {/* AI Assistant Button */}
-              <button
+              <motion.button
                 onClick={() => setIsChatOpen(true)}
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                whileTap={{ scale: 0.95 }}
                 className={clsx(
-                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border",
+                  "relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300",
                   isChatOpen 
-                    ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white border-transparent" 
-                    : "hover:bg-gradient-to-r hover:from-orange-500/10 hover:to-amber-500/10"
+                    ? "bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 text-white shadow-lg shadow-orange-500/30" 
+                    : "text-orange-500 hover:text-white hover:bg-gradient-to-br hover:from-orange-500 hover:via-amber-500 hover:to-yellow-500 hover:shadow-lg hover:shadow-orange-500/30"
                 )}
-                style={!isChatOpen ? { 
-                  color: 'var(--text-secondary)',
-                  borderColor: 'var(--border-primary)'
-                } : undefined}
                 title="AI Assistant"
               >
-                <SparklesIcon className="w-4 h-4" />
-                <span className="hidden sm:inline">AI</span>
-              </button>
+                <motion.div
+                  animate={isChatOpen ? { rotate: [0, 15, -15, 0] } : {}}
+                  transition={{ duration: 0.5, repeat: isChatOpen ? Infinity : 0, repeatDelay: 2 }}
+                >
+                  <SparklesIcon className="w-5 h-5" />
+                </motion.div>
+                {/* Glow effect on hover */}
+                <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-orange-400 to-amber-400 opacity-0 hover:opacity-20 blur-md transition-opacity duration-300" />
+              </motion.button>
             </div>
           </div>
         </div>
