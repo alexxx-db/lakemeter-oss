@@ -70,8 +70,8 @@ interface ChatPanelProps {
   isOpen: boolean
   onClose: () => void
   onEstimateCreated?: (estimateId: string) => void
-  onEstimateConfirmed?: (estimateConfig: any) => void  // Called when user confirms a proposed estimate
-  onWorkloadConfirmed?: (workloadConfig: any) => void  // Called when user confirms a proposed workload
+  onEstimateConfirmed?: (estimateConfig: any) => Promise<void>  // Called when user confirms a proposed estimate
+  onWorkloadConfirmed?: (workloadConfig: any) => Promise<void>  // Called when user confirms a proposed workload
   currentEstimate?: any
   currentWorkloads?: any[]
   // Calculated costs for each workload (keyed by item_id)
@@ -384,18 +384,30 @@ export function ChatPanel({
       // Clear the proposal
       setProposedEstimate(null)
       
-      // Call the parent callback with the estimate config
+      // Call the parent callback with the estimate config and AWAIT the result
+      // The callback will actually create the estimate in the database
       if (onEstimateConfirmed && result.estimate_config) {
-        onEstimateConfirmed(result.estimate_config)
+        try {
+          await onEstimateConfirmed(result.estimate_config)
+          
+          // Only show success message AFTER the estimate is actually created
+          setMessages(prev => [...prev, {
+            id: `system-${Date.now()}`,
+            role: 'system',
+            content: `✅ Estimate "${result.estimate_config?.estimate_name}" created! Click on it to add workloads.`,
+            timestamp: new Date()
+          }])
+        } catch (createErr: any) {
+          // Show error if creation failed
+          setMessages(prev => [...prev, {
+            id: `system-${Date.now()}`,
+            role: 'system',
+            content: `❌ Failed to create estimate: ${createErr.message || 'Database error'}. Please try again.`,
+            timestamp: new Date()
+          }])
+          setError(createErr.message || 'Failed to create estimate in database')
+        }
       }
-      
-      // Add success message
-      setMessages(prev => [...prev, {
-        id: `system-${Date.now()}`,
-        role: 'system',
-        content: `✅ Estimate "${result.estimate_config?.estimate_name}" created! Click on it to add workloads.`,
-        timestamp: new Date()
-      }])
       
     } catch (err: any) {
       setError(err.message || 'Failed to confirm estimate')
@@ -448,18 +460,29 @@ export function ChatPanel({
       // Remove from pending proposals
       setProposedWorkloads(prev => prev.filter(p => p.proposal_id !== proposalId))
       
-      // Call the parent callback with the workload config
+      // Call the parent callback with the workload config and AWAIT the result
       if (onWorkloadConfirmed && result.workload_config) {
-        onWorkloadConfirmed(result.workload_config)
+        try {
+          await onWorkloadConfirmed(result.workload_config)
+          
+          // Only show success message AFTER the workload is actually created
+          setMessages(prev => [...prev, {
+            id: `system-${Date.now()}`,
+            role: 'system',
+            content: `✅ Workload "${result.workload_config?.workload_name}" added to estimate.`,
+            timestamp: new Date()
+          }])
+        } catch (createErr: any) {
+          // Show error if creation failed
+          setMessages(prev => [...prev, {
+            id: `system-${Date.now()}`,
+            role: 'system',
+            content: `❌ Failed to add workload: ${createErr.message || 'Database error'}. Please try again.`,
+            timestamp: new Date()
+          }])
+          setError(createErr.message || 'Failed to add workload to database')
+        }
       }
-      
-      // Add success message
-      setMessages(prev => [...prev, {
-        id: `system-${Date.now()}`,
-        role: 'system',
-        content: `✅ Workload "${result.workload_config?.workload_name}" added to estimate.`,
-        timestamp: new Date()
-      }])
       
     } catch (err: any) {
       setError(err.message || 'Failed to confirm workload')
