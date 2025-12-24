@@ -1344,15 +1344,18 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         
       </div>
       
-      {/* Notes */}
+      {/* Notes - Multi-line for detailed configuration rationale */}
       <div>
-        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Notes</label>
-        <input
-          type="text"
+        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+          Notes
+          <span className="ml-1 font-normal text-[var(--text-muted)]">(configuration rationale, assumptions, trade-offs)</span>
+        </label>
+        <textarea
           value={form.notes}
           onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
-          placeholder="Optional notes..."
-          className="w-full text-sm"
+          placeholder="Configuration rationale and assumptions...&#10;• Why this configuration was chosen&#10;• Sizing assumptions (data volume, users, etc.)&#10;• Cost optimization choices&#10;• Trade-offs to be aware of"
+          className="w-full text-sm min-h-[80px] resize-y"
+          rows={3}
         />
       </div>
       

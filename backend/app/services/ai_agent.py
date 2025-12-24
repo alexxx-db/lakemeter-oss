@@ -83,6 +83,53 @@ SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assis
 - **For Cost Savings**: Spot instances, Serverless (pay-per-use), Reserved capacity (1yr/3yr for predictable workloads)
 - **For AWS Reserved**: Consider payment options (no_upfront, partial_upfront, all_upfront) for additional savings
 
+## Common GenAI Use Cases & Recommended Workloads
+
+### RAG Chatbot / Knowledge Assistant
+A typical RAG (Retrieval-Augmented Generation) chatbot requires MULTIPLE workloads:
+1. **Data Preparation (JOBS)**: Process and chunk documents for embeddings
+   - Lakeflow Jobs, Photon enabled, spot workers for cost savings
+   - Run frequency: daily or when new documents added
+2. **Vector Search (VECTOR_SEARCH)**: Store and query document embeddings
+   - Estimate based on number of vectors and query volume
+3. **Foundation Model (FMAPI_PROPRIETARY or FMAPI_DATABRICKS)**: Generate responses
+   - Input tokens: ~2000-4000 per query (context + question)
+   - Output tokens: ~300-500 per response
+   - Calculate monthly tokens based on expected conversations
+
+### Document Processing / Summarization
+1. **Data Ingestion (JOBS)**: Load and process documents
+2. **Foundation Model (FMAPI)**: Summarize or extract information
+   - Higher input tokens (full document), lower output tokens
+
+### Customer Support Bot
+1. **Vector Search**: FAQ and knowledge base retrieval
+2. **Foundation Model**: Response generation
+3. **Optional Model Serving**: Custom intent classification model
+
+### Code Assistant
+1. **Foundation Model**: Code generation/completion
+   - Models: Claude Sonnet, GPT-4, or CodeLlama
+   - Moderate input (code context), moderate output (completions)
+
+When user mentions: "chatbot", "RAG", "knowledge base", "document Q&A", "assistant" - 
+PROACTIVELY suggest the full architecture with multiple workloads!
+
+## Notes Field Guidelines
+When proposing workloads, ALWAYS include detailed notes explaining:
+1. **Why this configuration**: Explain the reasoning for each choice
+2. **Sizing rationale**: Why you chose this size/scale
+3. **Cost considerations**: Any cost optimization choices made
+4. **Assumptions**: What assumptions you made about usage
+5. **Trade-offs**: Any trade-offs to be aware of
+
+Format notes as multiple lines for readability:
+"Configuration rationale:
+- Chose X because Y
+- Sized for Z concurrent users
+- Using spot instances for 60-90% savings
+- Assumption: 8 hours/day usage"
+
 ## Common Instance Types by Cloud
 - **AWS**: m5.large, m5.xlarge, i3.xlarge, r5.xlarge (memory), c5.xlarge (compute), p3.2xlarge (GPU)
 - **Azure**: Standard_DS3_v2, Standard_E4ds_v4 (memory), Standard_F4s_v2 (compute), Standard_NC6s_v3 (GPU)
@@ -394,26 +441,33 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 
                 # === Foundation Model API Specific ===
+                "fmapi_provider": {
+                    "type": "string",
+                    "enum": ["anthropic", "openai", "google", "meta", "databricks"],
+                    "description": "FMAPI provider (for proprietary: anthropic/openai/google, for databricks: meta/databricks)"
+                },
                 "fmapi_model": {
                     "type": "string",
-                    "description": "Model name (e.g., 'llama-3-3-70b', 'dbrx-instruct', 'gpt-4', 'claude-sonnet-4')"
+                    "description": "Model name (e.g., 'claude-sonnet-4', 'gpt-4', 'llama-3-3-70b', 'dbrx-instruct')"
+                },
+                "fmapi_endpoint_type": {
+                    "type": "string",
+                    "enum": ["global", "regional"],
+                    "description": "Endpoint type: global (multi-region) or regional (single region)"
+                },
+                "fmapi_context_length": {
+                    "type": "string",
+                    "enum": ["all", "8k", "16k", "32k", "128k", "200k"],
+                    "description": "Context length tier for the model"
                 },
                 "fmapi_rate_type": {
                     "type": "string",
-                    "enum": ["input_token", "output_token", "provisioned_scaling", "provisioned_entry"],
-                    "description": "FMAPI billing type: token-based (pay-per-use) or provisioned (reserved capacity)"
+                    "enum": ["input_token", "output_token", "cache_read", "cache_write"],
+                    "description": "Token type for billing. Create separate workloads for input and output tokens."
                 },
-                "fmapi_input_tokens": {
-                    "type": "integer",
-                    "description": "Expected input tokens per month (millions)"
-                },
-                "fmapi_output_tokens": {
-                    "type": "integer",
-                    "description": "Expected output tokens per month (millions)"
-                },
-                "fmapi_provisioned_hours": {
+                "fmapi_quantity": {
                     "type": "number",
-                    "description": "For provisioned: hours of provisioned capacity per month"
+                    "description": "Token quantity in millions per month (e.g., 2.5 = 2.5M tokens/month)"
                 },
                 
                 # === Lakebase Specific ===
@@ -426,14 +480,20 @@ The user will review and confirm before it's added to the estimate.""",
                     "description": "Enable High Availability (adds 1 replica node for failover)"
                 },
                 
-                # === Notes ===
+                # === Notes (DETAILED) ===
                 "reason": {
                     "type": "string",
-                    "description": "Brief explanation of why this configuration is recommended and key trade-offs"
+                    "description": "Brief one-line summary of why this configuration was chosen"
                 },
                 "notes": {
                     "type": "string",
-                    "description": "Additional notes or assumptions made in the configuration"
+                    "description": """DETAILED multi-line notes explaining the configuration rationale. Include:
+- Configuration rationale: Why each setting was chosen
+- Sizing assumptions: How you arrived at the size/scale
+- Cost considerations: Any cost optimization choices
+- Usage assumptions: What usage patterns you assumed
+- Trade-offs: Important trade-offs to be aware of
+Use newlines to separate sections for readability."""
                 }
             },
             "required": ["workload_type", "workload_name", "reason"]
@@ -480,6 +540,57 @@ The user will review and confirm before it's added to the estimate.""",
                 }
             },
             "required": []
+        }
+    },
+    {
+        "name": "propose_genai_architecture",
+        "description": """Propose a complete GenAI architecture with MULTIPLE workloads for common use cases.
+Use this when user mentions: chatbot, RAG, knowledge base, document Q&A, assistant, AI agent, summarization.
+This will propose all necessary workloads (data prep, vector search, foundation models) together.""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "use_case": {
+                    "type": "string",
+                    "enum": ["rag_chatbot", "document_processing", "customer_support", "code_assistant", "custom"],
+                    "description": "The GenAI use case pattern"
+                },
+                "use_case_name": {
+                    "type": "string",
+                    "description": "Descriptive name for this GenAI application (e.g., 'Customer Support Chatbot', 'Document Q&A System')"
+                },
+                "model_preference": {
+                    "type": "string",
+                    "enum": ["claude", "gpt", "llama", "dbrx", "no_preference"],
+                    "description": "User's preferred foundation model family"
+                },
+                "expected_conversations_per_day": {
+                    "type": "integer",
+                    "description": "Expected number of conversations/queries per day"
+                },
+                "avg_context_tokens": {
+                    "type": "integer",
+                    "description": "Average context size in tokens (retrieved docs + question). Default 2000-4000 for RAG."
+                },
+                "avg_response_tokens": {
+                    "type": "integer",
+                    "description": "Average response size in tokens. Default 300-500."
+                },
+                "document_count": {
+                    "type": "integer",
+                    "description": "Approximate number of documents in knowledge base (for vector search sizing)"
+                },
+                "data_prep_frequency": {
+                    "type": "string",
+                    "enum": ["hourly", "daily", "weekly", "one_time"],
+                    "description": "How often new documents are ingested"
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Detailed explanation of why this architecture is recommended and how the components work together"
+                }
+            },
+            "required": ["use_case", "use_case_name", "explanation"]
         }
     }
 ]
@@ -937,6 +1048,8 @@ The following fields MUST be set before workloads can be added:
             return self._analyze_estimate(**arguments)
         elif tool_name == "ask_clarifying_questions":
             return self._ask_clarifying_questions(**arguments)
+        elif tool_name == "propose_genai_architecture":
+            return self._propose_genai_architecture(**arguments)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
     
@@ -1009,6 +1122,231 @@ The following fields MUST be set before workloads can be added:
             "context": context,
             "message": f"I need a bit more information to create the right configuration:\n\n{formatted_questions}",
             "note": "Please answer these questions so I can propose an accurate workload configuration."
+        }
+    
+    def _propose_genai_architecture(
+        self,
+        use_case: str,
+        use_case_name: str,
+        explanation: str,
+        model_preference: str = "no_preference",
+        expected_conversations_per_day: int = 100,
+        avg_context_tokens: int = 3000,
+        avg_response_tokens: int = 400,
+        document_count: int = 1000,
+        data_prep_frequency: str = "daily"
+    ) -> Dict[str, Any]:
+        """
+        Propose a complete GenAI architecture with multiple workloads.
+        Creates workload proposals for data prep, vector search, and foundation models.
+        """
+        # Check required estimate fields first
+        if self.current_estimate:
+            cloud = self.current_estimate.get('cloud')
+            region = self.current_estimate.get('region')
+            tier = self.current_estimate.get('tier')
+            
+            missing = []
+            if not cloud:
+                missing.append("Cloud Provider")
+            if not region:
+                missing.append("Region")
+            if not tier:
+                missing.append("Databricks Tier")
+            
+            if missing:
+                return {
+                    "success": False,
+                    "error": "missing_required_fields",
+                    "missing_fields": missing,
+                    "message": f"Cannot propose architecture. Please fill in: {', '.join(missing)}"
+                }
+        else:
+            return {
+                "success": False,
+                "error": "no_estimate",
+                "message": "No estimate loaded."
+            }
+        
+        cloud = self.current_estimate.get('cloud', 'aws').lower()
+        workloads = []
+        
+        # Calculate monthly token volumes
+        days_per_month = 22  # Business days
+        monthly_conversations = expected_conversations_per_day * days_per_month
+        monthly_input_tokens = (monthly_conversations * avg_context_tokens) / 1_000_000  # In millions
+        monthly_output_tokens = (monthly_conversations * avg_response_tokens) / 1_000_000  # In millions
+        
+        # Determine model based on preference
+        if model_preference == "claude":
+            provider = "anthropic"
+            model = "claude-sonnet-4"
+        elif model_preference == "gpt":
+            provider = "openai"
+            model = "gpt-4"
+        elif model_preference == "llama":
+            provider = "meta"
+            model = "llama-3-3-70b"
+        elif model_preference == "dbrx":
+            provider = "databricks"
+            model = "dbrx-instruct"
+        else:
+            provider = "anthropic"
+            model = "claude-sonnet-4"
+        
+        # 1. Data Preparation Job (for RAG-like use cases)
+        if use_case in ["rag_chatbot", "document_processing", "customer_support"]:
+            # Determine job frequency
+            if data_prep_frequency == "hourly":
+                runs_per_day = 24
+                runtime_mins = 15
+            elif data_prep_frequency == "daily":
+                runs_per_day = 1
+                runtime_mins = 30
+            elif data_prep_frequency == "weekly":
+                runs_per_day = 1
+                runtime_mins = 60
+                days_per_month = 4
+            else:  # one_time
+                runs_per_day = 1
+                runtime_mins = 60
+                days_per_month = 1
+            
+            data_prep = {
+                "proposal_id": str(uuid.uuid4()),
+                "workload_type": "JOBS",
+                "workload_name": f"{use_case_name} - Data Preparation",
+                "cloud": cloud,
+                "serverless_enabled": True,
+                "serverless_mode": "standard",
+                "photon_enabled": True,
+                "runs_per_day": runs_per_day,
+                "avg_runtime_minutes": runtime_mins,
+                "days_per_month": days_per_month if data_prep_frequency != "weekly" else 4,
+                "reason": "Document processing and chunking for embeddings",
+                "notes": f"""Configuration Rationale:
+• Purpose: Process and chunk documents for vector embeddings
+• Serverless: Chosen for cost efficiency - only pay when running
+• Photon enabled: 2-3x faster document processing
+• Frequency: {data_prep_frequency} based on your content update needs
+• Runtime: {runtime_mins} min estimated for ~{document_count} documents
+
+Assumptions:
+• Average document size: ~10KB
+• Chunk size: ~500 tokens for optimal retrieval
+• Using Delta Lake for document storage""",
+                "status": "pending_confirmation"
+            }
+            workloads.append(data_prep)
+            self.proposed_workloads.append(data_prep)
+        
+        # 2. Vector Search (for retrieval)
+        if use_case in ["rag_chatbot", "customer_support", "document_processing"]:
+            # Estimate vector dimensions and storage
+            estimated_chunks = document_count * 5  # ~5 chunks per doc
+            
+            vector_search = {
+                "proposal_id": str(uuid.uuid4()),
+                "workload_type": "VECTOR_SEARCH",
+                "workload_name": f"{use_case_name} - Vector Search",
+                "cloud": cloud,
+                "vector_search_index_type": "DELTA_SYNC",
+                "hours_per_month": 730,  # 24/7 for production
+                "reason": "Semantic search over document embeddings",
+                "notes": f"""Configuration Rationale:
+• Purpose: Store and query document embeddings for RAG retrieval
+• Index Type: DELTA_SYNC for automatic updates when docs change
+• 24/7 availability for production chatbot
+• Estimated vectors: ~{estimated_chunks:,} (based on {document_count} docs)
+
+Sizing:
+• Vector dimensions: 1536 (OpenAI) or 768 (other models)
+• Query latency: <100ms for top-k retrieval
+• Automatically scales with query volume""",
+                "status": "pending_confirmation"
+            }
+            workloads.append(vector_search)
+            self.proposed_workloads.append(vector_search)
+        
+        # 3. Foundation Model - Input Tokens
+        fm_input = {
+            "proposal_id": str(uuid.uuid4()),
+            "workload_type": "FMAPI_PROPRIETARY" if provider in ["anthropic", "openai", "google"] else "FMAPI_DATABRICKS",
+            "workload_name": f"{use_case_name} - {model} (Input Tokens)",
+            "cloud": cloud,
+            "fmapi_provider": provider,
+            "fmapi_model": model,
+            "fmapi_endpoint_type": "global",
+            "fmapi_context_length": "all",
+            "fmapi_rate_type": "input_token",
+            "fmapi_quantity": round(monthly_input_tokens, 2),
+            "hours_per_month": 730,
+            "reason": "Input tokens for context + questions",
+            "notes": f"""Configuration Rationale:
+• Model: {model} ({provider}) - good balance of quality and cost
+• Input tokens: {monthly_input_tokens:.2f}M/month
+• Calculation: {expected_conversations_per_day} conversations/day × {days_per_month} days × {avg_context_tokens} tokens/conversation
+
+Token Breakdown:
+• Retrieved context: ~{avg_context_tokens - 500} tokens
+• User question: ~500 tokens
+• System prompt: included in context
+
+Tip: Add separate workload for output tokens to see full cost.""",
+            "status": "pending_confirmation"
+        }
+        workloads.append(fm_input)
+        self.proposed_workloads.append(fm_input)
+        
+        # 4. Foundation Model - Output Tokens
+        fm_output = {
+            "proposal_id": str(uuid.uuid4()),
+            "workload_type": "FMAPI_PROPRIETARY" if provider in ["anthropic", "openai", "google"] else "FMAPI_DATABRICKS",
+            "workload_name": f"{use_case_name} - {model} (Output Tokens)",
+            "cloud": cloud,
+            "fmapi_provider": provider,
+            "fmapi_model": model,
+            "fmapi_endpoint_type": "global",
+            "fmapi_context_length": "all",
+            "fmapi_rate_type": "output_token",
+            "fmapi_quantity": round(monthly_output_tokens, 2),
+            "hours_per_month": 730,
+            "reason": "Output tokens for generated responses",
+            "notes": f"""Configuration Rationale:
+• Model: {model} ({provider})
+• Output tokens: {monthly_output_tokens:.2f}M/month
+• Calculation: {expected_conversations_per_day} conv/day × {days_per_month} days × {avg_response_tokens} tokens/response
+
+Note: Output tokens are typically 3-5x more expensive than input tokens.
+Consider caching common responses to reduce costs.""",
+            "status": "pending_confirmation"
+        }
+        workloads.append(fm_output)
+        self.proposed_workloads.append(fm_output)
+        
+        return {
+            "success": True,
+            "action": "genai_architecture_proposed",
+            "use_case": use_case,
+            "use_case_name": use_case_name,
+            "workloads_proposed": len(workloads),
+            "workloads": [
+                {"name": w["workload_name"], "type": w["workload_type"], "proposal_id": w["proposal_id"]}
+                for w in workloads
+            ],
+            "explanation": explanation,
+            "message": f"""I've proposed a complete {use_case_name} architecture with {len(workloads)} workloads:
+
+{chr(10).join(f"• {w['workload_name']} ({w['workload_type']})" for w in workloads)}
+
+Each workload needs to be confirmed individually. Review the configurations and notes for each one.
+
+**Monthly Usage Estimates:**
+• Conversations: {monthly_conversations:,}
+• Input tokens: {monthly_input_tokens:.2f}M
+• Output tokens: {monthly_output_tokens:.2f}M
+• Documents: {document_count:,}""",
+            "note": "Confirm each workload individually after reviewing the configuration and notes."
         }
     
     def _propose_workload(
