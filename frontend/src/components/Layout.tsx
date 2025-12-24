@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { 
   Squares2X2Icon, 
@@ -56,7 +56,6 @@ const themeOptions: { value: Theme; label: string; icon: typeof SunIcon }[] = [
 
 export default function Layout() {
   const location = useLocation()
-  const navigate = useNavigate()
   const { theme, setTheme } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -70,14 +69,19 @@ export default function Layout() {
     currentEstimate,
     lineItems,
     workloadCosts,
-    createEstimate,
     createLineItem,
     calculateAllWorkloadCosts
   } = useStore()
   
-  // Determine chat mode based on current route
+  // Determine if we're on an estimate detail page (AI assistant only available there)
   const isEstimateDetailPage = location.pathname.startsWith('/calculator/') && location.pathname !== '/calculator'
-  const chatMode = isEstimateDetailPage ? 'estimate_detail' : 'estimates_list'
+  
+  // Close chat when navigating away from estimate detail page
+  useEffect(() => {
+    if (!isEstimateDetailPage && isChatOpen) {
+      setIsChatOpen(false)
+    }
+  }, [isEstimateDetailPage, isChatOpen])
   
   // Fetch current user on mount
   useEffect(() => {
@@ -254,28 +258,30 @@ export default function Layout() {
                 )}
               </div>
               
-              {/* AI Assistant Button */}
-              <motion.button
-                onClick={() => setIsChatOpen(true)}
-                whileHover={{ scale: 1.1, rotate: 5 }}
-                whileTap={{ scale: 0.95 }}
-                className={clsx(
-                  "relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300",
-                  isChatOpen 
-                    ? "bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 text-white shadow-lg shadow-orange-500/30" 
-                    : "text-orange-500 hover:text-white hover:bg-gradient-to-br hover:from-orange-500 hover:via-amber-500 hover:to-yellow-500 hover:shadow-lg hover:shadow-orange-500/30"
-                )}
-                title="AI Assistant"
-              >
-                <motion.div
-                  animate={isChatOpen ? { rotate: [0, 15, -15, 0] } : {}}
-                  transition={{ duration: 0.5, repeat: isChatOpen ? Infinity : 0, repeatDelay: 2 }}
+              {/* AI Assistant Button - Only show on estimate detail pages */}
+              {isEstimateDetailPage && (
+                <motion.button
+                  onClick={() => setIsChatOpen(true)}
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  whileTap={{ scale: 0.95 }}
+                  className={clsx(
+                    "relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300",
+                    isChatOpen 
+                      ? "bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 text-white shadow-lg shadow-orange-500/30" 
+                      : "text-orange-500 hover:text-white hover:bg-gradient-to-br hover:from-orange-500 hover:via-amber-500 hover:to-yellow-500 hover:shadow-lg hover:shadow-orange-500/30"
+                  )}
+                  title="AI Assistant"
                 >
-                  <SparklesIcon className="w-5 h-5" />
-                </motion.div>
-                {/* Glow effect on hover */}
-                <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-orange-400 to-amber-400 opacity-0 hover:opacity-20 blur-md transition-opacity duration-300" />
-              </motion.button>
+                  <motion.div
+                    animate={isChatOpen ? { rotate: [0, 15, -15, 0] } : {}}
+                    transition={{ duration: 0.5, repeat: isChatOpen ? Infinity : 0, repeatDelay: 2 }}
+                  >
+                    <SparklesIcon className="w-5 h-5" />
+                  </motion.div>
+                  {/* Glow effect on hover */}
+                  <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-orange-400 to-amber-400 opacity-0 hover:opacity-20 blur-md transition-opacity duration-300" />
+                </motion.button>
+              )}
             </div>
           </div>
         </div>
@@ -302,55 +308,41 @@ export default function Layout() {
         </div>
       </footer>
       
-      {/* AI Chat Panel - Global */}
-      <ChatPanel
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        currentEstimate={isEstimateDetailPage ? currentEstimate : undefined}
-        currentWorkloads={isEstimateDetailPage ? lineItems : undefined}
-        itemCosts={isEstimateDetailPage ? Object.fromEntries(
-          Object.entries(workloadCosts).map(([id, response]) => [
-            id,
-            {
-              total: response?.data?.total_cost?.cost_per_month || response?.data?.cost?.total_cost || 0,
-              dbu: response?.data?.dbu_calculation?.dbu_cost_per_month || response?.data?.dbu_costs?.dbu_cost_per_month || 0,
-              vm: response?.data?.vm_costs?.vm_cost_per_month || 0
+      {/* AI Chat Panel - Only on estimate detail pages */}
+      {isEstimateDetailPage && (
+        <ChatPanel
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          currentEstimate={currentEstimate}
+          currentWorkloads={lineItems}
+          itemCosts={Object.fromEntries(
+            Object.entries(workloadCosts).map(([id, response]) => [
+              id,
+              {
+                total: response?.data?.total_cost?.cost_per_month || response?.data?.cost?.total_cost || 0,
+                dbu: response?.data?.dbu_calculation?.dbu_cost_per_month || response?.data?.dbu_costs?.dbu_cost_per_month || 0,
+                vm: response?.data?.vm_costs?.vm_cost_per_month || 0
+              }
+            ])
+          )}
+          onWorkloadConfirmed={async (workloadConfig) => {
+            if (currentEstimate?.estimate_id) {
+              try {
+                await createLineItem({
+                  estimate_id: currentEstimate.estimate_id,
+                  ...workloadConfig
+                })
+                calculateAllWorkloadCosts(currentEstimate.estimate_id)
+                toast.success(`Workload "${workloadConfig.workload_name}" added!`)
+              } catch (err: any) {
+                toast.error(err.message || 'Failed to add workload')
+                throw err  // Re-throw so ChatPanel can show error
+              }
             }
-          ])
-        ) : undefined}
-        onEstimateCreated={(estimateId) => {
-          navigate(`/calculator/${estimateId}`)
-          setIsChatOpen(false)
-        }}
-        onEstimateConfirmed={async (estimateConfig) => {
-          try {
-            // Don't pass owner_user_id - backend sets it from authenticated user
-            const newEstimate = await createEstimate(estimateConfig)
-            if (newEstimate?.estimate_id) {
-              navigate(`/calculator/${newEstimate.estimate_id}`)
-              setIsChatOpen(false)
-            }
-          } catch (err: any) {
-            console.error('Failed to create estimate:', err)
-            toast.error(err.message || 'Failed to create estimate')
-          }
-        }}
-        onWorkloadConfirmed={async (workloadConfig) => {
-          if (currentEstimate?.estimate_id) {
-            try {
-              await createLineItem({
-                estimate_id: currentEstimate.estimate_id,
-                ...workloadConfig
-              })
-              calculateAllWorkloadCosts(currentEstimate.estimate_id)
-              toast.success(`Workload "${workloadConfig.workload_name}" added!`)
-            } catch (err: any) {
-              toast.error(err.message || 'Failed to add workload')
-            }
-          }
-        }}
-        mode={chatMode}
-      />
+          }}
+          mode="estimate_detail"
+        />
+      )}
     </div>
   )
 }

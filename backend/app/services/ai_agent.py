@@ -88,11 +88,51 @@ SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assis
 - **Azure**: Standard_DS3_v2, Standard_E4ds_v4 (memory), Standard_F4s_v2 (compute), Standard_NC6s_v3 (GPU)
 - **GCP**: n1-standard-4, n1-highmem-4 (memory), n1-highcpu-4 (compute), n1-standard-4-nvidia-tesla-t4 (GPU)
 
+## Reference Data for Dropdown Options
+
+### DBSQL Warehouse Sizes (DBU/hour)
+- 2X-Small: 4 DBU/hr
+- X-Small: 6 DBU/hr  
+- Small: 12 DBU/hr
+- Medium: 24 DBU/hr
+- Large: 40 DBU/hr
+- X-Large: 80 DBU/hr
+- 2X-Large: 144 DBU/hr
+- 3X-Large: 272 DBU/hr
+- 4X-Large: 528 DBU/hr
+
+### DLT Editions
+- CORE: Basic pipelines, no CDC
+- PRO: CDC, SCD Type 2, better monitoring
+- ADVANCED: Expectations, enhanced monitoring, data quality
+
+### Pricing Tiers
+- on_demand: Pay as you go, most flexible
+- spot: Up to 90% savings, for fault-tolerant batch jobs (workers only)
+- 1yr_reserved: ~30% savings, 1-year commitment
+- 3yr_reserved: ~40% savings, 3-year commitment
+
+### AWS Reserved Payment Options (only for reserved tiers)
+- no_upfront: No upfront payment, slightly higher hourly rate
+- partial_upfront: ~50% upfront, balanced savings
+- all_upfront: 100% upfront, maximum savings
+
+### Serverless Modes
+- standard: Cost-effective, good for most workloads
+- performance: Faster provisioning, higher throughput, premium pricing
+
+### Model Serving Types
+- cpu: For small models, embeddings
+- gpu_small: For medium models (7B-13B params)
+- gpu_medium: For large models (30B-70B params)
+- gpu_large: For very large models (70B+ params)
+
 ## Important Notes
 - All costs shown are from the Lakemeter pricing engine
 - Actual costs may vary based on usage patterns and negotiated discounts
 - Always recommend reviewing configurations before finalizing
-- Ask clarifying questions before proposing configurations - don't assume!"""
+- Ask clarifying questions before proposing configurations - don't assume!
+- ALWAYS use the estimate's cloud provider when suggesting instance types"""
 
 # System prompt for Estimates List page (create new estimates only)
 SYSTEM_PROMPT_ESTIMATES_LIST = SYSTEM_PROMPT_BASE + """
@@ -133,12 +173,22 @@ SYSTEM_PROMPT_ESTIMATE_DETAIL = SYSTEM_PROMPT_BASE + """
 ## Your Role (Estimate Detail Page)
 You are viewing a specific estimate with its workloads and calculated costs.
 
+## CRITICAL: Check Estimate Configuration First
+Before proposing ANY workload, verify the estimate has these REQUIRED fields set:
+- **Cloud Provider**: Must be AWS, Azure, or GCP
+- **Region**: Must have a valid region selected
+- **Databricks Tier**: Should be set (usually Premium)
+
+If any of these are missing, TELL THE USER to fill them in before adding workloads.
+Example: "I see your estimate doesn't have a region selected yet. Please select a region in the estimate configuration before we add workloads, so I can suggest the right instance types."
+
 ## Your Capabilities Here
-1. **Ask Clarifying Questions**: ALWAYS ask questions first to understand requirements
-2. **Propose Workloads**: Suggest workload configurations after gathering requirements
-3. **Analyze Estimate**: Review current workloads and suggest optimizations using ACTUAL costs
-4. **Provide Recommendations**: Share best practices and cost-saving tips
-5. **Answer Questions**: Explain configurations, costs, and trade-offs
+1. **Check Configuration**: Verify estimate has required fields before proposing workloads
+2. **Ask Clarifying Questions**: ALWAYS ask questions first to understand requirements
+3. **Propose Workloads**: Suggest workload configurations after gathering requirements
+4. **Analyze Estimate**: Review current workloads and suggest optimizations using ACTUAL costs
+5. **Provide Recommendations**: Share best practices and cost-saving tips
+6. **Answer Questions**: Explain configurations, costs, and trade-offs
 
 ## CRITICAL: Ask Before You Propose
 NEVER propose a workload without first asking clarifying questions such as:
@@ -152,24 +202,28 @@ NEVER propose a workload without first asking clarifying questions such as:
 Use the ask_clarifying_questions tool or ask naturally in conversation.
 
 ## Using Context
-- The estimate details and workloads with their ACTUAL calculated costs are provided in the context
+- The estimate details (name, cloud, region, tier) are provided in the context
+- Use the ESTIMATE'S CLOUD PROVIDER to suggest appropriate instance types
+- The workloads with their ACTUAL calculated costs are provided in the context
 - Use these real costs when discussing the estimate, not made-up numbers
 - When proposing new workloads, clearly state the configuration and that costs will be calculated after saving
 
 ## Conversation Flow
-1. **Greet & Review**: Acknowledge the current estimate (name, cloud, region, existing workloads)
-2. **Understand Needs**: Ask what they want to add or change
-3. **Gather Requirements**: Ask 2-4 targeted questions based on workload type
-4. **Propose Configuration**: Use propose_workload with all relevant fields filled
-5. **Explain Choices**: Tell them WHY you chose each configuration option
-6. **Await Confirmation**: User must confirm before it's added
+1. **Greet & Review**: Acknowledge the current estimate (name, cloud, region, tier, existing workloads)
+2. **Check Required Fields**: If cloud/region/tier missing, ask user to fill them first
+3. **Understand Needs**: Ask what they want to add or change
+4. **Gather Requirements**: Ask 2-4 targeted questions based on workload type
+5. **Propose Configuration**: Use propose_workload with all relevant fields filled
+6. **Explain Choices**: Tell them WHY you chose each configuration option
+7. **Await Confirmation**: User must confirm before it's added
 
 ## Configuration Tips
 - For JOBS/DLT: Ask about runs_per_day + avg_runtime_minutes for batch, OR hours_per_month for continuous
 - For DBSQL: Ask about concurrent users and query patterns to size the warehouse
 - For serverless: No VM types needed, but ask about workload intensity for cost estimates
 - For reserved pricing: Only recommend for predictable, long-running workloads
-- For spot workers: Only for fault-tolerant batch jobs that can handle interruptions"""
+- For spot workers: Only for fault-tolerant batch jobs that can handle interruptions
+- ALWAYS use instance types appropriate for the estimate's cloud provider!"""
 
 # For backwards compatibility
 SYSTEM_PROMPT = SYSTEM_PROMPT_ESTIMATE_DETAIL
@@ -777,19 +831,44 @@ class EstimateAgent:
         
         if self.current_estimate:
             est = self.current_estimate
+            
+            # Check required fields
+            cloud = est.get('cloud')
+            region = est.get('region')
+            tier = est.get('tier')
+            
+            missing_fields = []
+            if not cloud:
+                missing_fields.append("Cloud Provider")
+            if not region:
+                missing_fields.append("Region")
+            if not tier:
+                missing_fields.append("Databricks Tier")
+            
             context += f"""
 
 ### Estimate Details
 - **Name**: {est.get('estimate_name') or est.get('name', 'Unnamed')}
-- **Cloud**: {(est.get('cloud') or 'aws').upper()}
-- **Region**: {est.get('region', 'Not specified')}
-- **Tier**: {est.get('tier', 'PREMIUM')}
+- **Cloud**: {cloud.upper() if cloud else '⚠️ NOT SET - Required before adding workloads'}
+- **Region**: {region if region else '⚠️ NOT SET - Required before adding workloads'}
+- **Tier**: {tier if tier else '⚠️ NOT SET - Required before adding workloads'}
 - **Status**: {est.get('status', 'draft')}"""
+            
+            if missing_fields:
+                context += f"""
+
+### ⚠️ MISSING REQUIRED FIELDS
+The following fields MUST be set before workloads can be added:
+{chr(10).join(f'- {field}' for field in missing_fields)}
+
+**Tell the user to fill in these fields in the estimate configuration first!**"""
             
             if est.get('customer_name'):
                 context += f"\n- **Customer**: {est.get('customer_name')}"
             if est.get('description'):
                 context += f"\n- **Description**: {est.get('description')}"
+            if est.get('sfdc_account_id'):
+                context += f"\n- **Salesforce Account**: Linked"
         else:
             context += "\n\nNo estimate loaded. User may be creating a new one."
         
@@ -942,7 +1021,39 @@ class EstimateAgent:
         """
         Propose a workload configuration for user confirmation.
         Does NOT add to estimate - user must confirm first.
+        
+        Validates that required estimate fields are set before proposing.
         """
+        # Check if estimate has required fields
+        if self.current_estimate:
+            cloud = self.current_estimate.get('cloud')
+            region = self.current_estimate.get('region')
+            tier = self.current_estimate.get('tier')
+            
+            missing = []
+            if not cloud:
+                missing.append("Cloud Provider")
+            if not region:
+                missing.append("Region")
+            if not tier:
+                missing.append("Databricks Tier")
+            
+            if missing:
+                return {
+                    "success": False,
+                    "error": "missing_required_fields",
+                    "missing_fields": missing,
+                    "message": f"Cannot propose workload. The estimate is missing required fields: {', '.join(missing)}. Please ask the user to fill in these fields in the estimate configuration first.",
+                    "user_message": f"Before I can add workloads, please fill in the missing fields in your estimate configuration: {', '.join(missing)}. You can set these in the Configuration section at the top of the page."
+                }
+        else:
+            return {
+                "success": False,
+                "error": "no_estimate",
+                "message": "No estimate loaded. Cannot propose workload.",
+                "user_message": "Please select or create an estimate first before adding workloads."
+            }
+        
         # Build workload configuration with defaults
         workload = {
             "proposal_id": str(uuid.uuid4()),
