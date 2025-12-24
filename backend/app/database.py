@@ -4,13 +4,15 @@ Database connection and session management.
 Supports automatic OAuth token refresh for Lakebase using Service Principal M2M flow.
 Reference: https://docs.databricks.com/aws/en/oltp/instances/authentication
 """
+import threading
+import time
 from urllib.parse import quote_plus
+
 from fastapi import HTTPException
 from sqlalchemy import create_engine, text, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError
-import time
 
 from app.config import log_info, log_warning, log_error
 
@@ -86,30 +88,37 @@ except Exception as e:
 
 # Track last engine refresh time
 _last_engine_refresh = time.time()
-_ENGINE_REFRESH_INTERVAL = 45 * 60  # Refresh engine every 45 minutes (before 1-hour token expiry)
+_ENGINE_REFRESH_INTERVAL = 30 * 60  # Refresh engine every 30 minutes (well before 1-hour token expiry)
+_refresh_lock = threading.Lock()
 
 
 def refresh_engine():
-    """Refresh the database engine with a new token."""
+    """Refresh the database engine with a new token. Thread-safe."""
     global engine, SessionLocal, _last_engine_refresh
     
     from app.auth.token_manager import token_manager
     
-    log_info("Refreshing database engine with new token...")
-    
-    if token_manager:
-        # Force token refresh
-        token_manager._token = None
-        token_manager._expires_at = None
-    
-    try:
-        engine, SessionLocal = _create_engine_with_token_refresh()
-        _last_engine_refresh = time.time()
-        log_info("Database engine refreshed successfully")
-        return True
-    except Exception as e:
-        log_error(f"Failed to refresh database engine: {e}")
-        return False
+    with _refresh_lock:
+        log_info("Refreshing database engine with new token...")
+        
+        if token_manager:
+            # Force token refresh
+            token_manager._token = None
+            token_manager._expires_at = None
+            # Also re-fetch SP credentials in case they were updated
+            try:
+                token_manager._fetch_sp_credentials()
+            except Exception as e:
+                log_warning(f"Could not re-fetch SP credentials: {e}")
+        
+        try:
+            engine, SessionLocal = _create_engine_with_token_refresh()
+            _last_engine_refresh = time.time()
+            log_info("Database engine refreshed successfully")
+            return True
+        except Exception as e:
+            log_error(f"Failed to refresh database engine: {e}")
+            return False
 
 
 def _check_and_refresh_engine():

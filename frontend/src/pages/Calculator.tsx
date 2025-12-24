@@ -27,7 +27,6 @@ import {
   fetchSalesforceUseCases,
   type RegionResponse
 } from '../api/client'
-// ChatPanel is now in Layout.tsx
 import { saveAs } from 'file-saver'
 import WorkloadForm from '../components/WorkloadForm'
 import SearchableSelect from '../components/SearchableSelect'
@@ -1786,7 +1785,6 @@ export default function Calculator() {
           </motion.div>
         </div>
       </div>
-      
     </div>
   )
 }

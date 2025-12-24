@@ -1,14 +1,46 @@
 """User API routes."""
 from typing import List
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User
 from app.schemas import UserCreate, UserUpdate, UserResponse
+from app.auth.databricks_auth import FORWARDED_EMAIL_HEADER
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+# NOTE: /me route MUST be defined BEFORE /{user_id} to avoid "me" being parsed as UUID
+@router.get("/me", response_model=UserResponse)
+def get_current_user_me(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Get the current authenticated user."""
+    # Get email from forwarded header (Databricks Apps SSO)
+    email = request.headers.get(FORWARDED_EMAIL_HEADER)
+    
+    if not email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Find or create user
+    user = db.query(User).filter(User.email == email).first()
+    
+    if not user:
+        # Create new user from SSO
+        full_name = email.split('@')[0].replace('.', ' ').title()
+        user = User(
+            email=email,
+            full_name=full_name,
+            is_active=True
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    
+    return user
 
 
 @router.get("", response_model=List[UserResponse])
