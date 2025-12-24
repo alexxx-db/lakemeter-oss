@@ -131,9 +131,11 @@ Format notes as multiple lines for readability:
 - Assumption: 8 hours/day usage"
 
 ## Common Instance Types by Cloud
-- **AWS**: m5.large, m5.xlarge, i3.xlarge, r5.xlarge (memory), c5.xlarge (compute), p3.2xlarge (GPU)
-- **Azure**: Standard_DS3_v2, Standard_E4ds_v4 (memory), Standard_F4s_v2 (compute), Standard_NC6s_v3 (GPU)
+- **AWS**: m5.xlarge, i3.xlarge, r5.xlarge (memory), c5.xlarge (compute), p3.2xlarge (GPU)
+- **Azure**: Standard_D4s_v3, Standard_E4s_v3 (memory), Standard_F4s_v2 (compute), Standard_NC6s_v3 (GPU)
 - **GCP**: n1-standard-4, n1-highmem-4 (memory), n1-highcpu-4 (compute), n1-standard-4-nvidia-tesla-t4 (GPU)
+
+**NOTE**: For Azure, use Standard_D series (D4s_v3, D8s_v3) - these are widely available across regions.
 
 ## Reference Data for Dropdown Options
 
@@ -1216,6 +1218,19 @@ The following fields MUST be set before workloads can be added:
         cloud = self.current_estimate.get('cloud', 'aws').lower()
         workloads = []
         
+        # Get existing proposal names to avoid duplicates
+        existing_proposal_names = {p.get('workload_name') for p in self.proposed_workloads}
+        existing_workload_names = {w.get('workload_name') for w in self.current_workloads} if self.current_workloads else set()
+        all_existing_names = existing_proposal_names | existing_workload_names
+        
+        def add_workload_if_new(workload_config):
+            """Only add workload if name doesn't already exist"""
+            if workload_config['workload_name'] not in all_existing_names:
+                workloads.append(workload_config)
+                self.proposed_workloads.append(workload_config)
+                return True
+            return False
+        
         # Calculate monthly token volumes
         days_per_month = 22  # Business days
         monthly_conversations = expected_conversations_per_day * days_per_month
@@ -1282,8 +1297,7 @@ Assumptions:
 • Using Delta Lake for document storage""",
                 "status": "pending_confirmation"
             }
-            workloads.append(data_prep)
-            self.proposed_workloads.append(data_prep)
+            add_workload_if_new(data_prep)
         
         # 2. Vector Search (for retrieval)
         if use_case in ["rag_chatbot", "customer_support", "document_processing"]:
@@ -1310,8 +1324,7 @@ Sizing:
 • Automatically scales with query volume""",
                 "status": "pending_confirmation"
             }
-            workloads.append(vector_search)
-            self.proposed_workloads.append(vector_search)
+            add_workload_if_new(vector_search)
         
         # 3. Foundation Model - Input Tokens
         fm_input = {
@@ -1340,8 +1353,7 @@ Token Breakdown:
 Tip: Add separate workload for output tokens to see full cost.""",
             "status": "pending_confirmation"
         }
-        workloads.append(fm_input)
-        self.proposed_workloads.append(fm_input)
+        add_workload_if_new(fm_input)
         
         # 4. Foundation Model - Output Tokens
         fm_output = {
@@ -1366,8 +1378,7 @@ Note: Output tokens are typically 3-5x more expensive than input tokens.
 Consider caching common responses to reduce costs.""",
             "status": "pending_confirmation"
         }
-        workloads.append(fm_output)
-        self.proposed_workloads.append(fm_output)
+        add_workload_if_new(fm_output)
         
         return {
             "success": True,
@@ -1437,6 +1448,20 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 "user_message": "Please select or create an estimate first before adding workloads."
             }
         
+        # Check for duplicate proposals (same workload name)
+        existing_names = {p.get('workload_name') for p in self.proposed_workloads}
+        if workload_name in existing_names:
+            # Find and return the existing proposal instead of creating a duplicate
+            for p in self.proposed_workloads:
+                if p.get('workload_name') == workload_name:
+                    return {
+                        "success": True,
+                        "message": f"Workload '{workload_name}' already proposed",
+                        "proposed_workload": p,
+                        "action_required": "This workload is already pending confirmation.",
+                        "note": "Review and confirm the existing proposal."
+                    }
+        
         # Build workload configuration with defaults
         workload = {
             "proposal_id": str(uuid.uuid4()),
@@ -1468,6 +1493,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
         cloud = workload.get("cloud", "aws").lower()
         
         # Cloud-specific instance types for balanced cost/performance
+        # Using widely available instance types across regions
         instance_types = {
             "aws": {
                 "general": "i3.xlarge",    # NVMe SSD, good for Spark shuffle
@@ -1475,8 +1501,8 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 "compute": "c5.xlarge",     # Compute optimized
             },
             "azure": {
-                "general": "Standard_DS3_v2",      # SSD, balanced
-                "memory": "Standard_E4ds_v4",      # Memory optimized
+                "general": "Standard_D4s_v3",      # General purpose, widely available
+                "memory": "Standard_E4s_v3",       # Memory optimized
                 "compute": "Standard_F4s_v2",      # Compute optimized
             },
             "gcp": {
@@ -1516,7 +1542,8 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 if cloud == "aws":
                     notes_parts.append("• i3.xlarge chosen for NVMe SSD storage - optimal for Spark shuffle operations")
                 elif cloud == "azure":
-                    notes_parts.append("• Standard_DS3_v2 provides SSD storage with balanced CPU/memory")
+                    notes_parts.append("• Standard_D4s_v3 provides SSD storage with balanced CPU/memory")
+                    notes_parts.append("• D-series VMs are widely available across Azure regions")
                 else:
                     notes_parts.append("• n1-standard-4 provides balanced compute for general workloads")
                 
