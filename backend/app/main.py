@@ -200,6 +200,53 @@ def debug_database():
     return result
 
 
+@app.post("/api/v1/debug/database/refresh")
+def debug_database_refresh():
+    """Force refresh the database token and reconnect."""
+    from app.database import refresh_engine
+    from app.auth.token_manager import token_manager
+    
+    result = {
+        "action": "refresh",
+        "token_refresh": "NOT ATTEMPTED",
+        "engine_refresh": "NOT ATTEMPTED",
+        "status": "UNKNOWN"
+    }
+    
+    # Step 1: Force token refresh
+    if token_manager:
+        try:
+            # Clear existing token to force refresh
+            token_manager._token = None
+            token_manager._expires_at = None
+            
+            # Get new token
+            new_token = token_manager.get_token()
+            if new_token:
+                result["token_refresh"] = f"SUCCESS (length: {len(new_token)})"
+            else:
+                result["token_refresh"] = "FAILED - no token returned"
+        except Exception as e:
+            result["token_refresh"] = f"FAILED: {str(e)}"
+    else:
+        result["token_refresh"] = "SKIPPED - token_manager not initialized"
+    
+    # Step 2: Refresh database engine
+    try:
+        success = refresh_engine()
+        if success:
+            result["engine_refresh"] = "SUCCESS"
+            result["status"] = "CONNECTED"
+        else:
+            result["engine_refresh"] = "FAILED"
+            result["status"] = "DISCONNECTED"
+    except Exception as e:
+        result["engine_refresh"] = f"ERROR: {str(e)}"
+        result["status"] = "ERROR"
+    
+    return result
+
+
 # Reference data endpoints
 from fastapi import Depends
 from sqlalchemy.orm import Session

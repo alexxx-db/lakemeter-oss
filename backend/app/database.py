@@ -6,11 +6,13 @@ Reference: https://docs.databricks.com/aws/en/oltp/instances/authentication
 """
 from urllib.parse import quote_plus
 from fastapi import HTTPException
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import OperationalError
+import time
 
-from app.config import log_info, log_error
+from app.config import log_info, log_warning, log_error
 
 
 # Base class for models (defined early so models can import it)
@@ -54,7 +56,8 @@ def _create_engine_with_token_refresh():
             pool_pre_ping=True,
             pool_size=5,
             max_overflow=10,
-            pool_recycle=1800,
+            # Recycle connections every 15 minutes (before token expires at 1 hour)
+            pool_recycle=900,
             connect_args={"sslmode": "require"}
         )
         
@@ -81,27 +84,96 @@ except Exception as e:
     SessionLocal = None
 
 
+# Track last engine refresh time
+_last_engine_refresh = time.time()
+_ENGINE_REFRESH_INTERVAL = 45 * 60  # Refresh engine every 45 minutes (before 1-hour token expiry)
+
+
 def refresh_engine():
     """Refresh the database engine with a new token."""
-    global engine, SessionLocal
+    global engine, SessionLocal, _last_engine_refresh
     
     from app.auth.token_manager import token_manager
     
+    log_info("Refreshing database engine with new token...")
+    
     if token_manager:
+        # Force token refresh
         token_manager._token = None
         token_manager._expires_at = None
     
-    engine, SessionLocal = _create_engine_with_token_refresh()
+    try:
+        engine, SessionLocal = _create_engine_with_token_refresh()
+        _last_engine_refresh = time.time()
+        log_info("Database engine refreshed successfully")
+        return True
+    except Exception as e:
+        log_error(f"Failed to refresh database engine: {e}")
+        return False
+
+
+def _check_and_refresh_engine():
+    """Check if engine needs refresh due to token age."""
+    global engine, SessionLocal, _last_engine_refresh
+    
+    # If engine is None, try to create it
+    if engine is None:
+        log_info("Engine is None, attempting to create...")
+        try:
+            refresh_engine()
+        except Exception as e:
+            log_error(f"Failed to create engine: {e}")
+            return False
+    
+    # Check if it's time to refresh (proactive refresh before token expires)
+    time_since_refresh = time.time() - _last_engine_refresh
+    if time_since_refresh > _ENGINE_REFRESH_INTERVAL:
+        log_info(f"Engine is {time_since_refresh/60:.1f} minutes old, proactively refreshing...")
+        refresh_engine()
+    
     return engine is not None
 
 
 def get_db():
-    """Dependency to get database session."""
+    """
+    Dependency to get database session.
+    
+    Automatically handles token refresh on connection errors.
+    """
+    # Proactive refresh check
+    _check_and_refresh_engine()
+    
     if SessionLocal is None:
         raise HTTPException(status_code=503, detail="Database not connected")
     
     db = SessionLocal()
     try:
+        # Test the connection before yielding
+        try:
+            db.execute(text("SELECT 1"))
+        except OperationalError as e:
+            error_str = str(e).lower()
+            # Check if it's an auth/token error
+            if "invalid authorization" in error_str or "authentication failed" in error_str or "password" in error_str:
+                log_warning("Database connection failed due to auth error, refreshing token...")
+                db.close()
+                
+                # Refresh engine with new token
+                if refresh_engine():
+                    # Retry with new session
+                    db = SessionLocal()
+                    db.execute(text("SELECT 1"))  # Test again
+                else:
+                    raise HTTPException(status_code=503, detail="Database connection failed after token refresh")
+            else:
+                raise
+        
         yield db
+    except OperationalError as e:
+        error_str = str(e).lower()
+        if "invalid authorization" in error_str or "authentication failed" in error_str:
+            log_warning("Database operation failed due to auth error, refreshing for next request...")
+            refresh_engine()
+        raise HTTPException(status_code=503, detail=f"Database error: {str(e)}")
     finally:
         db.close()
