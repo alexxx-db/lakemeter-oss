@@ -656,7 +656,15 @@ class EstimateAgent:
         """
         self.current_estimate = estimate
         self.current_workloads = workloads or []
-        self.proposed_workloads = []  # Clear pending proposals on context change
+        
+        # Filter out any proposals that have already been added to the estimate
+        # (matching by workload_name to avoid duplicates showing in AI panel)
+        if self.current_workloads and self.proposed_workloads:
+            existing_names = {w.get('workload_name') for w in self.current_workloads}
+            self.proposed_workloads = [
+                p for p in self.proposed_workloads 
+                if p.get('workload_name') not in existing_names
+            ]
     
     async def chat(self, user_message: str) -> Dict[str, Any]:
         """
@@ -1418,32 +1426,138 @@ Each workload needs to be confirmed individually. Review the configurations and 
         }
     
     def _apply_defaults(self, workload: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply sensible defaults based on workload type."""
+        """Apply sensible defaults based on workload type and generate explanatory notes."""
         wtype = workload["workload_type"]
+        cloud = workload.get("cloud", "aws").lower()
+        
+        # Cloud-specific instance types for balanced cost/performance
+        instance_types = {
+            "aws": {
+                "general": "i3.xlarge",    # NVMe SSD, good for Spark shuffle
+                "memory": "r5.xlarge",      # Memory optimized
+                "compute": "c5.xlarge",     # Compute optimized
+            },
+            "azure": {
+                "general": "Standard_DS3_v2",      # SSD, balanced
+                "memory": "Standard_E4ds_v4",      # Memory optimized
+                "compute": "Standard_F4s_v2",      # Compute optimized
+            },
+            "gcp": {
+                "general": "n1-standard-4",        # Balanced
+                "memory": "n1-highmem-4",          # Memory optimized
+                "compute": "n1-highcpu-4",         # Compute optimized
+            }
+        }
+        
+        default_instance = instance_types.get(cloud, instance_types["aws"])["general"]
         
         # Common defaults
         workload.setdefault("hours_per_month", 730)
         workload.setdefault("days_per_month", 22)
         
+        notes_parts = []
+        
         if wtype in ["JOBS", "ALL_PURPOSE", "DLT"]:
-            workload.setdefault("serverless_enabled", False)
-            workload.setdefault("photon_enabled", True)
-            workload.setdefault("num_workers", 2)
-            workload.setdefault("driver_node_type", "i3.xlarge")
-            workload.setdefault("worker_node_type", "i3.xlarge")
-            workload.setdefault("worker_pricing_tier", "spot" if wtype == "JOBS" else "on_demand")
+            # Set serverless default - prefer serverless for simplicity
+            is_serverless = workload.setdefault("serverless_enabled", False)
+            
+            # Photon - enable by default for performance
+            photon_enabled = workload.setdefault("photon_enabled", True)
+            
+            if not is_serverless:
+                # Non-serverless: set instance types and worker pricing
+                workload.setdefault("num_workers", 4)
+                workload.setdefault("driver_node_type", default_instance)
+                workload.setdefault("worker_node_type", default_instance)
+                
+                # DEFAULT TO SPOT WORKERS for cost savings
+                workload.setdefault("worker_pricing_tier", "spot")
+                workload.setdefault("driver_pricing_tier", "on_demand")
+                
+                # Build explanatory notes
+                notes_parts.append(f"**Instance Type ({default_instance})**:")
+                if cloud == "aws":
+                    notes_parts.append("• i3.xlarge chosen for NVMe SSD storage - optimal for Spark shuffle operations")
+                elif cloud == "azure":
+                    notes_parts.append("• Standard_DS3_v2 provides SSD storage with balanced CPU/memory")
+                else:
+                    notes_parts.append("• n1-standard-4 provides balanced compute for general workloads")
+                
+                notes_parts.append("")
+                notes_parts.append("**Worker Pricing (Spot)**:")
+                notes_parts.append("• Spot instances provide 60-90% cost savings")
+                notes_parts.append("• Suitable for batch/ETL workloads that can handle interruptions")
+                notes_parts.append("• Driver uses on-demand for stability")
+                
+                if photon_enabled:
+                    notes_parts.append("")
+                    notes_parts.append("**Photon Enabled**:")
+                    notes_parts.append("• 2-3x faster for SQL/DataFrame operations")
+                    notes_parts.append("• Native vectorized engine reduces compute time")
+                    notes_parts.append("• Often results in lower total cost despite higher DBU rate")
+            else:
+                notes_parts.append("**Serverless Mode**:")
+                notes_parts.append("• No infrastructure management required")
+                notes_parts.append("• Automatic scaling based on workload")
+                notes_parts.append("• Pay only for actual compute time used")
         
         if wtype == "DLT":
-            workload.setdefault("dlt_edition", "PRO")
+            edition = workload.setdefault("dlt_edition", "PRO")
+            notes_parts.append("")
+            notes_parts.append(f"**DLT Edition ({edition})**:")
+            if edition == "CORE":
+                notes_parts.append("• Basic pipeline functionality")
+                notes_parts.append("• Good for simple ETL without CDC requirements")
+            elif edition == "PRO":
+                notes_parts.append("• Includes Change Data Capture (CDC)")
+                notes_parts.append("• SCD Type 2 support for historical tracking")
+                notes_parts.append("• Enhanced monitoring and data quality")
+            else:  # ADVANCED
+                notes_parts.append("• Full data quality with expectations")
+                notes_parts.append("• Advanced monitoring and observability")
+                notes_parts.append("• Best for production-critical pipelines")
         
         if wtype == "DBSQL":
-            workload.setdefault("dbsql_warehouse_type", "SERVERLESS")
-            workload.setdefault("dbsql_warehouse_size", "Small")
+            warehouse_type = workload.setdefault("dbsql_warehouse_type", "SERVERLESS")
+            size = workload.setdefault("dbsql_warehouse_size", "Small")
             workload.setdefault("dbsql_num_clusters", 1)
+            
+            notes_parts.append(f"**Warehouse Type ({warehouse_type})**:")
+            if warehouse_type == "SERVERLESS":
+                notes_parts.append("• Automatic scaling and instant startup")
+                notes_parts.append("• Scales to zero when idle - no idle costs")
+                notes_parts.append("• Best for variable query patterns")
+            else:
+                notes_parts.append("• Fixed capacity for predictable performance")
+                notes_parts.append("• Better for constant, high-utilization workloads")
+            
+            notes_parts.append("")
+            notes_parts.append(f"**Warehouse Size ({size})**:")
+            size_info = {
+                "2X-Small": "4 DBU/hr - Single user or light queries",
+                "X-Small": "6 DBU/hr - Small team, simple queries",
+                "Small": "12 DBU/hr - Standard BI dashboards",
+                "Medium": "24 DBU/hr - Multiple concurrent users",
+                "Large": "40 DBU/hr - Heavy analytics workloads",
+            }
+            notes_parts.append(f"• {size_info.get(size, 'Sized based on expected query complexity')}")
         
         if wtype == "LAKEBASE":
-            workload.setdefault("lakebase_cu", 2)
+            cu = workload.setdefault("lakebase_cu", 2)
             workload.setdefault("lakebase_ha_nodes", 1)
+            
+            notes_parts.append(f"**Compute Units ({cu} CU)**:")
+            notes_parts.append("• Each CU provides dedicated compute capacity")
+            notes_parts.append("• Scale CUs based on concurrent connections and query complexity")
+        
+        # Combine existing notes with generated explanations
+        existing_notes = workload.get("notes", "")
+        generated_notes = "\n".join(notes_parts) if notes_parts else ""
+        
+        if existing_notes and generated_notes:
+            workload["notes"] = f"{existing_notes}\n\n---\n\n{generated_notes}"
+        elif generated_notes:
+            workload["notes"] = f"Created by AI Assistant\n\n{generated_notes}"
         
         return workload
     
