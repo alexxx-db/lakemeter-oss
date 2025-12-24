@@ -883,6 +883,18 @@ class EstimateAgent:
                         "workload": result.get("proposed_workload")
                     }
                 
+                # If it's a GenAI architecture proposal, yield each workload separately
+                if current_tool["name"] == "propose_genai_architecture" and result.get("success"):
+                    for w in result.get("workloads", []):
+                        # Find the full workload from proposed_workloads
+                        for proposed in self.proposed_workloads:
+                            if proposed.get("proposal_id") == w.get("proposal_id"):
+                                yield {
+                                    "type": "proposal",
+                                    "workload": proposed
+                                }
+                                break
+                
                 # If it's an estimate proposal, yield that separately
                 if current_tool["name"] in ["propose_estimate", "create_estimate"] and result.get("success"):
                     yield {
@@ -934,6 +946,18 @@ class EstimateAgent:
                         "workload": result.get("proposed_workload")
                     }
                 
+                # If it's a GenAI architecture proposal, yield each workload separately
+                if tool_call["name"] == "propose_genai_architecture" and result.get("success"):
+                    for w in result.get("workloads", []):
+                        # Find the full workload from proposed_workloads
+                        for proposed in self.proposed_workloads:
+                            if proposed.get("proposal_id") == w.get("proposal_id"):
+                                yield {
+                                    "type": "proposal",
+                                    "workload": proposed
+                                }
+                                break
+                
                 # If it's an estimate proposal, yield that separately
                 if tool_call["name"] in ["propose_estimate", "create_estimate"] and result.get("success"):
                     yield {
@@ -955,19 +979,38 @@ class EstimateAgent:
             # Get follow-up response
             yield {"type": "content", "content": "\n\n"}
             
-            async for chunk in self.client.chat_stream(
-                messages=self.conversation_history,
-                tools=tools,
-                system=system,
-                max_tokens=4096,
-                temperature=0.7
-            ):
-                if chunk.get("type") == "content_delta":
-                    content = chunk.get("content", "")
-                    full_content += content
-                    yield {"type": "content", "content": content}
-                elif chunk.get("type") == "done":
-                    break
+            follow_up_content = ""
+            try:
+                async for chunk in self.client.chat_stream(
+                    messages=self.conversation_history,
+                    tools=tools,
+                    system=system,
+                    max_tokens=4096,
+                    temperature=0.7
+                ):
+                    chunk_type = chunk.get("type")
+                    if chunk_type == "content_delta":
+                        content = chunk.get("content", "")
+                        follow_up_content += content
+                        full_content += content
+                        yield {"type": "content", "content": content}
+                    elif chunk_type == "error":
+                        log_error(f"Follow-up stream error: {chunk.get('content')}")
+                        yield {"type": "content", "content": f"\n\n*Error getting response: {chunk.get('content')}*"}
+                        break
+                    elif chunk_type == "done":
+                        break
+                
+                # If no follow-up content, provide a default message
+                if not follow_up_content.strip():
+                    default_msg = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
+                    yield {"type": "content", "content": default_msg}
+                    full_content += default_msg
+            except Exception as e:
+                log_error(f"Follow-up response error: {e}")
+                error_msg = f"\n\n*Error: {str(e)}*"
+                yield {"type": "content", "content": error_msg}
+                full_content += error_msg
         
         # Add final response to history
         self.conversation_history.append({
