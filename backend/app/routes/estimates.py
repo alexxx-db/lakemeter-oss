@@ -111,14 +111,25 @@ def create_estimate(
     db: Session = Depends(get_db)
 ):
     """Create a new estimate owned by the current user."""
-    db_estimate = Estimate(
-        **estimate.model_dump(),
-        owner_user_id=current_user.user_id  # Set the owner
-    )
-    db.add(db_estimate)
-    db.commit()
-    db.refresh(db_estimate)
-    return db_estimate
+    from app.config import log_info, log_error
+    
+    try:
+        log_info(f"Creating estimate '{estimate.estimate_name}' for user {current_user.user_id}")
+        
+        db_estimate = Estimate(
+            **estimate.model_dump(),
+            owner_user_id=current_user.user_id  # Set the owner
+        )
+        db.add(db_estimate)
+        db.commit()
+        db.refresh(db_estimate)
+        
+        log_info(f"Estimate created successfully: {db_estimate.estimate_id}")
+        return db_estimate
+    except Exception as e:
+        log_error(f"Failed to create estimate: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create estimate: {str(e)}")
 
 
 # NOTE: This route MUST be defined BEFORE /{estimate_id} routes to avoid "me" being parsed as UUID

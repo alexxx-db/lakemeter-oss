@@ -324,15 +324,14 @@ export default function Layout() {
         }}
         onEstimateConfirmed={async (estimateConfig) => {
           try {
-            const newEstimate = await createEstimate({
-              ...estimateConfig,
-              owner_user_id: currentUser?.user_id
-            })
+            // Don't pass owner_user_id - backend sets it from authenticated user
+            const newEstimate = await createEstimate(estimateConfig)
             if (newEstimate?.estimate_id) {
               navigate(`/calculator/${newEstimate.estimate_id}`)
               setIsChatOpen(false)
             }
           } catch (err: any) {
+            console.error('Failed to create estimate:', err)
             toast.error(err.message || 'Failed to create estimate')
           }
         }}
