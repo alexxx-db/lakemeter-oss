@@ -30,9 +30,9 @@ import type {
 // =============================================================================
 // LOCAL STORAGE CACHE UTILITIES
 // =============================================================================
-const CACHE_VERSION = 'v5'  // Bumped - backend now always uses defaults with correct show_usage_runs
+const CACHE_VERSION = 'v6'  // Bumped - added validation for empty regions
 const CACHE_KEY = `lakemeter_reference_data_${CACHE_VERSION}`
-const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+const CACHE_TTL = 4 * 60 * 60 * 1000 // 4 hours in milliseconds (reduced from 24h)
 
 interface CachedReferenceData {
   workloadTypes: WorkloadType[]
@@ -81,6 +81,23 @@ function getCachedReferenceData(): CachedReferenceData | null {
     // Check for regionsMap (new cache format) or regions (old format)
     if (!data.regionsMap && !data.regions) {
       console.warn('[Cache] No regions data in cache, clearing')
+      localStorage.removeItem(CACHE_KEY)
+      return null
+    }
+    
+    // CRITICAL: Check if regions are actually populated (not just empty arrays)
+    // If regionsMap exists but all regions are empty, the cache is invalid
+    if (data.regionsMap) {
+      const hasAnyRegions = Object.values(data.regionsMap).some(
+        (regions) => Array.isArray(regions) && regions.length > 0
+      )
+      if (!hasAnyRegions) {
+        console.warn('[Cache] Regions are empty in cache (fetch may have failed previously), clearing')
+        localStorage.removeItem(CACHE_KEY)
+        return null
+      }
+    } else if (data.regions && data.regions.length === 0) {
+      console.warn('[Cache] Regions array is empty, clearing')
       localStorage.removeItem(CACHE_KEY)
       return null
     }
