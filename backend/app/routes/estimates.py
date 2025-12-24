@@ -3,7 +3,7 @@ from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, select
 
 from app.database import get_db
 from app.models import Estimate, LineItem, User
@@ -47,10 +47,10 @@ def list_estimates(
         .subquery()
     )
     
-    # Shared estimates subquery
-    shared_estimate_ids = db.query(Sharing.estimate_id).filter(
+    # Shared estimates subquery - use select() to avoid SAWarning
+    shared_estimate_ids = select(Sharing.estimate_id).where(
         Sharing.shared_with_user_id == current_user.user_id
-    ).subquery()
+    ).scalar_subquery()
     
     # Main query with join for line item count
     query = (

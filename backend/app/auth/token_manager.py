@@ -138,7 +138,13 @@ class LakebaseTokenManager:
                 # If decoding fails, use raw value
                 self._sp_client_secret = client_secret_raw
             
-            _log_info(f"SP credentials fetched. Client ID starts with: {self._sp_client_id[:8] if self._sp_client_id else 'N/A'}...")
+            _log_info(f"SP credentials fetched. Client ID: {self._sp_client_id[:12] if self._sp_client_id else 'N/A'}...")
+            _log_info(f"Secret length: {len(self._sp_client_secret) if self._sp_client_secret else 0}")
+            
+            # Update db_user to match SP client ID (ensures consistency)
+            if self._sp_client_id:
+                self.db_user = self._sp_client_id
+                _log_info(f"Set DB_USER to SP client ID: {self.db_user}")
         except Exception as e:
             _log_warning(f"Failed to fetch secrets: {e}")
             self._sp_client_id = None
@@ -171,7 +177,12 @@ class LakebaseTokenManager:
                 
                 self._token = credential.token
                 self._expires_at = datetime.fromisoformat(credential.expiration_time.replace('Z', '+00:00')) - timedelta(minutes=5)
-                _log_info(f"Token refreshed via SP secrets. Expires at: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                
+                # CRITICAL: Update db_user to match the SP identity that generated the token
+                # This ensures the DB connection uses the same identity as the token
+                self.db_user = self._sp_client_id
+                _log_info(f"Token refreshed via SP secrets. DB_USER set to: {self.db_user}")
+                _log_info(f"Token expires at: {self._expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
                 return
             except Exception as e:
                 _log_warning(f"SP secrets token generation failed: {e}")
