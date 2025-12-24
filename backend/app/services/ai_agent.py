@@ -34,19 +34,65 @@ SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assis
 - **DBSQL (Databricks SQL)**: SQL analytics, BI dashboards, ad-hoc queries
 - **MODEL_SERVING**: Real-time ML inference endpoints
 - **VECTOR_SEARCH**: Vector similarity search for AI applications
+- **FMAPI_DATABRICKS**: Foundation Model APIs (Databricks-hosted models like Llama, DBRX)
+- **FMAPI_PROPRIETARY**: Foundation Model APIs (External models like GPT, Claude)
 - **LAKEBASE**: PostgreSQL-compatible database
 
+## Key Questions to Ask Users
+
+### For ALL Workloads:
+1. What is the primary use case? (ETL, analytics, ML, real-time, etc.)
+2. What cloud provider? (AWS, Azure, GCP)
+3. What region? (for compliance/latency requirements)
+
+### For Compute Workloads (Jobs, All Purpose, DLT):
+1. Is this a scheduled batch job or interactive/continuous?
+2. For batch: How many runs per day? Average runtime per run?
+3. For continuous: How many hours per month will it run?
+4. How much data will be processed? (helps size the cluster)
+5. Do you need fault tolerance? (determines spot vs on-demand)
+6. Do you want serverless (simpler, pay-per-use) or classic (more control)?
+
+### For DBSQL:
+1. How many concurrent users/queries expected?
+2. Is this for BI dashboards (continuous) or ad-hoc queries (sporadic)?
+3. What query complexity? (determines warehouse size)
+4. Serverless (auto-scaling, simpler) or Pro/Classic (fixed size)?
+
+### For Model Serving:
+1. What type of model? (LLM, custom ML, embeddings)
+2. Expected queries per second?
+3. Latency requirements?
+4. GPU requirements?
+
+### For FMAPI (Foundation Models):
+1. Which model? (Llama, DBRX, GPT, Claude, etc.)
+2. Expected token volume? (input + output tokens per month)
+3. Rate type: pay-per-token or provisioned throughput?
+
+### For Lakebase:
+1. How many compute units (CU)? (1-128, based on workload)
+2. Do you need HA? (adds 1 replica node for high availability)
+3. Expected hours per month?
+
 ## Best Practices to Recommend
-- **For Batch ETL**: Use Lakeflow Jobs with Photon enabled, spot instances for workers
+- **For Batch ETL**: Use Lakeflow Jobs with Photon enabled, spot instances for workers (up to 90% savings)
 - **For Interactive**: All Purpose for development, DBSQL Serverless for production queries
 - **For Streaming**: DLT with auto-scaling, consider Core vs Pro vs Advanced editions
 - **For ML Inference**: Model Serving with appropriate GPU types
-- **For Cost Savings**: Spot instances (up to 90% savings), Serverless (pay-per-use), Reserved capacity
+- **For Cost Savings**: Spot instances, Serverless (pay-per-use), Reserved capacity (1yr/3yr for predictable workloads)
+- **For AWS Reserved**: Consider payment options (no_upfront, partial_upfront, all_upfront) for additional savings
+
+## Common Instance Types by Cloud
+- **AWS**: m5.large, m5.xlarge, i3.xlarge, r5.xlarge (memory), c5.xlarge (compute), p3.2xlarge (GPU)
+- **Azure**: Standard_DS3_v2, Standard_E4ds_v4 (memory), Standard_F4s_v2 (compute), Standard_NC6s_v3 (GPU)
+- **GCP**: n1-standard-4, n1-highmem-4 (memory), n1-highcpu-4 (compute), n1-standard-4-nvidia-tesla-t4 (GPU)
 
 ## Important Notes
 - All costs shown are from the Lakemeter pricing engine
 - Actual costs may vary based on usage patterns and negotiated discounts
-- Always recommend reviewing configurations before finalizing"""
+- Always recommend reviewing configurations before finalizing
+- Ask clarifying questions before proposing configurations - don't assume!"""
 
 # System prompt for Estimates List page (create new estimates only)
 SYSTEM_PROMPT_ESTIMATES_LIST = SYSTEM_PROMPT_BASE + """
@@ -56,16 +102,30 @@ You are on the main estimates page. Here you can ONLY help users CREATE NEW ESTI
 You cannot view, edit, or analyze existing estimates from this page.
 
 ## Your Capabilities Here
-1. **Create New Estimates**: Help users start fresh pricing estimates
-2. **Guide Planning**: Ask questions to understand their needs before creating
+1. **Ask Questions**: Understand what the user wants to estimate
+2. **Create New Estimates**: Propose new pricing estimates for confirmation
 
-## Conversation Guidelines
-1. Ask about the user's project/use case to understand requirements
-2. Ask about cloud provider preference (AWS, Azure, GCP)
-3. Ask about region requirements
-4. Once you have enough info, use the create_estimate tool
-5. After creating, let them know they can click on the estimate to add workloads
-6. Be concise - this is just for creating new estimates"""
+## CRITICAL: Ask Before You Create
+NEVER create an estimate without asking at least these questions:
+1. "What project or use case is this estimate for?" (for naming)
+2. "Which cloud provider? (AWS, Azure, or GCP)"
+3. "Any specific region requirements?" (for compliance/latency)
+
+## Conversation Flow
+1. **Greet**: "Hi! I can help you create a new Databricks pricing estimate."
+2. **Ask Questions**: Get project name, cloud, and region
+3. **Propose**: Use propose_estimate with the gathered info
+4. **Guide Next Steps**: After confirmation, tell them to click the estimate to add workloads
+
+## Example Conversation
+User: "I need to estimate costs for a data pipeline"
+You: "I'd be happy to help! A few quick questions:
+1. What would you like to name this estimate? (e.g., 'Q1 Data Pipeline')
+2. Which cloud provider are you using - AWS, Azure, or GCP?
+3. Any preferred region for compliance or latency reasons?"
+
+User: "Call it 'Marketing ETL', we use AWS in us-east-1"
+You: [Use propose_estimate tool with those details]"""
 
 # System prompt for Estimate Detail page (full functionality)
 SYSTEM_PROMPT_ESTIMATE_DETAIL = SYSTEM_PROMPT_BASE + """
@@ -74,23 +134,42 @@ SYSTEM_PROMPT_ESTIMATE_DETAIL = SYSTEM_PROMPT_BASE + """
 You are viewing a specific estimate with its workloads and calculated costs.
 
 ## Your Capabilities Here
-1. **Propose Workloads**: Suggest workload configurations based on user requirements
-2. **Analyze Estimate**: Review current workloads and suggest optimizations using ACTUAL costs
-3. **Provide Recommendations**: Share best practices and cost-saving tips
-4. **Answer Questions**: Explain configurations, costs, and trade-offs
+1. **Ask Clarifying Questions**: ALWAYS ask questions first to understand requirements
+2. **Propose Workloads**: Suggest workload configurations after gathering requirements
+3. **Analyze Estimate**: Review current workloads and suggest optimizations using ACTUAL costs
+4. **Provide Recommendations**: Share best practices and cost-saving tips
+5. **Answer Questions**: Explain configurations, costs, and trade-offs
+
+## CRITICAL: Ask Before You Propose
+NEVER propose a workload without first asking clarifying questions such as:
+- What is the use case? (ETL, analytics, ML inference, etc.)
+- Is this batch or continuous?
+- For batch: How often? How long per run?
+- For continuous: Hours per day/month?
+- How much data or what scale?
+- Cost vs performance priority?
+
+Use the ask_clarifying_questions tool or ask naturally in conversation.
 
 ## Using Context
 - The estimate details and workloads with their ACTUAL calculated costs are provided in the context
 - Use these real costs when discussing the estimate, not made-up numbers
 - When proposing new workloads, clearly state the configuration and that costs will be calculated after saving
 
-## Conversation Guidelines
-1. Review the existing estimate context (name, cloud, region, workloads, costs)
-2. Ask clarifying questions about new workload requirements
-3. Use the propose_workload tool to suggest configurations
-4. User must confirm before workloads are added
-5. Use analyze_estimate to provide insights on current costs
-6. Be specific about configurations and reference actual costs from context"""
+## Conversation Flow
+1. **Greet & Review**: Acknowledge the current estimate (name, cloud, region, existing workloads)
+2. **Understand Needs**: Ask what they want to add or change
+3. **Gather Requirements**: Ask 2-4 targeted questions based on workload type
+4. **Propose Configuration**: Use propose_workload with all relevant fields filled
+5. **Explain Choices**: Tell them WHY you chose each configuration option
+6. **Await Confirmation**: User must confirm before it's added
+
+## Configuration Tips
+- For JOBS/DLT: Ask about runs_per_day + avg_runtime_minutes for batch, OR hours_per_month for continuous
+- For DBSQL: Ask about concurrent users and query patterns to size the warehouse
+- For serverless: No VM types needed, but ask about workload intensity for cost estimates
+- For reserved pricing: Only recommend for predictable, long-running workloads
+- For spot workers: Only for fault-tolerant batch jobs that can handle interruptions"""
 
 # For backwards compatibility
 SYSTEM_PROMPT = SYSTEM_PROMPT_ESTIMATE_DETAIL
@@ -135,30 +214,40 @@ TOOLS_ESTIMATES_LIST = [
 TOOLS_ESTIMATE_DETAIL = [
     {
         "name": "propose_workload",
-        "description": "Propose a new workload configuration for user confirmation. The user will review and confirm before it's added to the estimate. Use this when you have enough information about what the user needs.",
+        "description": """Propose a new workload configuration for user confirmation. 
+ASK CLARIFYING QUESTIONS FIRST before calling this tool to ensure you have the right configuration.
+The user will review and confirm before it's added to the estimate.""",
         "parameters": {
             "type": "object",
             "properties": {
+                # === Common Fields ===
                 "workload_type": {
                     "type": "string",
-                    "enum": ["JOBS", "ALL_PURPOSE", "DLT", "DBSQL", "MODEL_SERVING", "VECTOR_SEARCH", "LAKEBASE"],
+                    "enum": ["JOBS", "ALL_PURPOSE", "DLT", "DBSQL", "MODEL_SERVING", "VECTOR_SEARCH", "FMAPI_DATABRICKS", "FMAPI_PROPRIETARY", "LAKEBASE"],
                     "description": "Type of Databricks workload"
                 },
                 "workload_name": {
                     "type": "string",
                     "description": "Descriptive name for this workload (e.g., 'Daily ETL Job', 'Analytics Warehouse')"
                 },
+                
+                # === Compute Configuration (Jobs, All Purpose, DLT) ===
                 "serverless_enabled": {
                     "type": "boolean",
-                    "description": "Whether to use serverless compute (recommended for variable workloads)"
+                    "description": "Use serverless compute (simpler, pay-per-use, auto-scaling). Recommended for variable workloads."
+                },
+                "serverless_mode": {
+                    "type": "string",
+                    "enum": ["standard", "performance"],
+                    "description": "For serverless: 'standard' (cost-effective) or 'performance' (faster, higher cost)"
                 },
                 "photon_enabled": {
                     "type": "boolean",
-                    "description": "Whether to enable Photon acceleration (recommended for most workloads)"
+                    "description": "Enable Photon acceleration (recommended for SQL/Spark workloads, ~2x faster)"
                 },
                 "driver_node_type": {
                     "type": "string",
-                    "description": "Instance type for driver node (e.g., 'i3.xlarge', 'm5.large')"
+                    "description": "Instance type for driver node (e.g., 'i3.xlarge', 'm5.large', 'Standard_DS3_v2')"
                 },
                 "worker_node_type": {
                     "type": "string",
@@ -166,15 +255,17 @@ TOOLS_ESTIMATE_DETAIL = [
                 },
                 "num_workers": {
                     "type": "integer",
-                    "description": "Number of worker nodes (typically 2-100)"
+                    "description": "Number of worker nodes (typically 2-100 based on data volume)"
                 },
+                
+                # === Usage Patterns ===
                 "hours_per_month": {
                     "type": "number",
-                    "description": "Expected hours of usage per month (730 = 24/7)"
+                    "description": "Direct hours of usage per month. Use for continuous workloads (730 = 24/7, 176 = 8h/day weekdays)"
                 },
                 "runs_per_day": {
                     "type": "integer",
-                    "description": "For batch jobs: number of runs per day"
+                    "description": "For batch jobs: number of scheduled runs per day"
                 },
                 "avg_runtime_minutes": {
                     "type": "integer",
@@ -182,34 +273,135 @@ TOOLS_ESTIMATE_DETAIL = [
                 },
                 "days_per_month": {
                     "type": "integer",
-                    "description": "Days per month the workload runs (default 22 for weekdays, 30 for daily)"
+                    "description": "Days per month the workload runs (22 = weekdays only, 30 = daily)"
+                },
+                
+                # === Pricing Tiers ===
+                "driver_pricing_tier": {
+                    "type": "string",
+                    "enum": ["on_demand", "1yr_reserved", "3yr_reserved"],
+                    "description": "Pricing tier for driver. Use reserved for predictable workloads (up to 40% savings)"
                 },
                 "worker_pricing_tier": {
                     "type": "string",
-                    "enum": ["on_demand", "spot"],
+                    "enum": ["on_demand", "spot", "1yr_reserved", "3yr_reserved"],
                     "description": "Pricing tier for workers. Use 'spot' for fault-tolerant batch jobs (up to 90% savings)"
                 },
+                "driver_payment_option": {
+                    "type": "string",
+                    "enum": ["no_upfront", "partial_upfront", "all_upfront"],
+                    "description": "AWS only: Payment option for reserved driver (all_upfront = most savings)"
+                },
+                "worker_payment_option": {
+                    "type": "string",
+                    "enum": ["no_upfront", "partial_upfront", "all_upfront"],
+                    "description": "AWS only: Payment option for reserved workers"
+                },
+                
+                # === DLT Specific ===
                 "dlt_edition": {
                     "type": "string",
                     "enum": ["CORE", "PRO", "ADVANCED"],
-                    "description": "For DLT workloads: edition level"
+                    "description": "DLT edition: CORE (basic), PRO (CDC, SCD), ADVANCED (expectations, monitoring)"
                 },
+                
+                # === DBSQL Specific ===
                 "dbsql_warehouse_type": {
                     "type": "string",
                     "enum": ["SERVERLESS", "PRO", "CLASSIC"],
-                    "description": "For DBSQL: warehouse type"
+                    "description": "DBSQL warehouse type: SERVERLESS (auto-scaling), PRO (fixed, Unity Catalog), CLASSIC (fixed, legacy)"
                 },
                 "dbsql_warehouse_size": {
                     "type": "string",
                     "enum": ["2X-Small", "X-Small", "Small", "Medium", "Large", "X-Large", "2X-Large", "3X-Large", "4X-Large"],
-                    "description": "For DBSQL: warehouse size"
+                    "description": "DBSQL warehouse size (2X-Small=4 DBU/hr, Small=12, Medium=24, Large=40, X-Large=80)"
                 },
+                "dbsql_num_clusters": {
+                    "type": "integer",
+                    "description": "Number of DBSQL clusters for scaling (1-100)"
+                },
+                
+                # === Model Serving Specific ===
+                "model_serving_type": {
+                    "type": "string",
+                    "enum": ["cpu", "gpu_small", "gpu_medium", "gpu_large"],
+                    "description": "Model Serving compute type based on model requirements"
+                },
+                "model_serving_scale_to_zero": {
+                    "type": "boolean",
+                    "description": "Allow scaling to zero when idle (saves cost but adds cold start latency)"
+                },
+                
+                # === Vector Search Specific ===
+                "vector_search_index_type": {
+                    "type": "string",
+                    "enum": ["DIRECT_ACCESS", "DELTA_SYNC"],
+                    "description": "Vector Search index type"
+                },
+                
+                # === Foundation Model API Specific ===
+                "fmapi_model": {
+                    "type": "string",
+                    "description": "Model name (e.g., 'llama-3-3-70b', 'dbrx-instruct', 'gpt-4', 'claude-sonnet-4')"
+                },
+                "fmapi_rate_type": {
+                    "type": "string",
+                    "enum": ["input_token", "output_token", "provisioned_scaling", "provisioned_entry"],
+                    "description": "FMAPI billing type: token-based (pay-per-use) or provisioned (reserved capacity)"
+                },
+                "fmapi_input_tokens": {
+                    "type": "integer",
+                    "description": "Expected input tokens per month (millions)"
+                },
+                "fmapi_output_tokens": {
+                    "type": "integer",
+                    "description": "Expected output tokens per month (millions)"
+                },
+                "fmapi_provisioned_hours": {
+                    "type": "number",
+                    "description": "For provisioned: hours of provisioned capacity per month"
+                },
+                
+                # === Lakebase Specific ===
+                "lakebase_cu": {
+                    "type": "integer",
+                    "description": "Lakebase Compute Units (1-128). More CUs = more concurrent connections and faster queries"
+                },
+                "lakebase_ha_enabled": {
+                    "type": "boolean",
+                    "description": "Enable High Availability (adds 1 replica node for failover)"
+                },
+                
+                # === Notes ===
                 "reason": {
                     "type": "string",
-                    "description": "Brief explanation of why this configuration is recommended"
+                    "description": "Brief explanation of why this configuration is recommended and key trade-offs"
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Additional notes or assumptions made in the configuration"
                 }
             },
             "required": ["workload_type", "workload_name", "reason"]
+        }
+    },
+    {
+        "name": "ask_clarifying_questions",
+        "description": "Use this tool to ask the user clarifying questions before proposing a workload. This ensures you have the right information for an accurate configuration.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of questions to ask the user"
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Brief context for why you need this information"
+                }
+            },
+            "required": ["questions"]
         }
     },
     {
@@ -664,6 +856,8 @@ class EstimateAgent:
             return self._get_estimate_summary()
         elif tool_name == "analyze_estimate":
             return self._analyze_estimate(**arguments)
+        elif tool_name == "ask_clarifying_questions":
+            return self._ask_clarifying_questions(**arguments)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
     
@@ -717,6 +911,26 @@ class EstimateAgent:
             self.proposed_estimate = None
             return True
         return False
+    
+    def _ask_clarifying_questions(
+        self,
+        questions: List[str],
+        context: str = ""
+    ) -> Dict[str, Any]:
+        """
+        Format clarifying questions to ask the user.
+        This is a "soft" tool - it just formats questions for the AI to present naturally.
+        """
+        formatted_questions = "\n".join([f"• {q}" for q in questions])
+        
+        return {
+            "success": True,
+            "action": "ask_questions",
+            "questions": questions,
+            "context": context,
+            "message": f"I need a bit more information to create the right configuration:\n\n{formatted_questions}",
+            "note": "Please answer these questions so I can propose an accurate workload configuration."
+        }
     
     def _propose_workload(
         self,
