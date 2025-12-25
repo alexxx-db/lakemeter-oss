@@ -228,53 +228,57 @@ def clone_line_item(
         LineItem.estimate_id == original.estimate_id
     ).count()
     
-    # Create the cloned line item
+    # Create the cloned line item - only copy fields that exist in the model
     cloned = LineItem(
         estimate_id=original.estimate_id,
         display_order=max_order,
         workload_name=new_name,
         workload_type=original.workload_type,
         cloud=original.cloud,
+        # Serverless
         serverless_enabled=original.serverless_enabled,
         serverless_mode=original.serverless_mode,
+        # Classic Compute
+        photon_enabled=original.photon_enabled,
         driver_node_type=original.driver_node_type,
         worker_node_type=original.worker_node_type,
         num_workers=original.num_workers,
-        autoscale_enabled=original.autoscale_enabled,
-        autoscale_min_workers=original.autoscale_min_workers,
-        autoscale_max_workers=original.autoscale_max_workers,
-        photon_enabled=original.photon_enabled,
+        # DLT
         dlt_edition=original.dlt_edition,
-        dlt_pipeline_mode=original.dlt_pipeline_mode,
+        # DBSQL
         dbsql_warehouse_type=original.dbsql_warehouse_type,
         dbsql_warehouse_size=original.dbsql_warehouse_size,
         dbsql_num_clusters=original.dbsql_num_clusters,
+        dbsql_vm_pricing_tier=original.dbsql_vm_pricing_tier,
+        dbsql_vm_payment_option=original.dbsql_vm_payment_option,
+        # Vector Search
         vector_search_mode=original.vector_search_mode,
         vector_capacity_millions=original.vector_capacity_millions,
-        lakebase_cu=original.lakebase_cu,
-        lakebase_storage_gb=original.lakebase_storage_gb,
-        lakebase_ha_nodes=original.lakebase_ha_nodes,
-        lakebase_backup_retention_days=original.lakebase_backup_retention_days,
+        # Model Serving
+        model_serving_gpu_type=original.model_serving_gpu_type,
+        # FMAPI
         fmapi_provider=original.fmapi_provider,
         fmapi_model=original.fmapi_model,
         fmapi_endpoint_type=original.fmapi_endpoint_type,
         fmapi_context_length=original.fmapi_context_length,
-        fmapi_provisioned_type=original.fmapi_provisioned_type,
         fmapi_rate_type=original.fmapi_rate_type,
         fmapi_quantity=original.fmapi_quantity,
-        fmapi_input_tokens_per_month=original.fmapi_input_tokens_per_month,
-        fmapi_output_tokens_per_month=original.fmapi_output_tokens_per_month,
+        # Lakebase
+        lakebase_cu=original.lakebase_cu,
+        lakebase_storage_gb=original.lakebase_storage_gb,
+        lakebase_ha_nodes=original.lakebase_ha_nodes,
+        lakebase_backup_retention_days=original.lakebase_backup_retention_days,
+        # Usage
         runs_per_day=original.runs_per_day,
         avg_runtime_minutes=original.avg_runtime_minutes,
         days_per_month=original.days_per_month,
         hours_per_month=original.hours_per_month,
+        # Pricing
         driver_pricing_tier=original.driver_pricing_tier,
         worker_pricing_tier=original.worker_pricing_tier,
         driver_payment_option=original.driver_payment_option,
         worker_payment_option=original.worker_payment_option,
-        vm_pricing_tier=original.vm_pricing_tier,
-        vm_payment_option=original.vm_payment_option,
-        spot_percentage=original.spot_percentage,
+        # Additional
         workload_config=original.workload_config,
         notes=original.notes
     )

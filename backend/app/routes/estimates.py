@@ -305,7 +305,7 @@ def duplicate_estimate(
     db.add(new_estimate)
     db.flush()
     
-    # Copy line items
+    # Copy line items - only copy fields that exist in the model
     for original_item in original.line_items:
         new_item = LineItem(
             estimate_id=new_estimate.estimate_id,
@@ -313,41 +313,50 @@ def duplicate_estimate(
             workload_name=original_item.workload_name,
             workload_type=original_item.workload_type,
             cloud=original_item.cloud,
+            # Serverless
             serverless_enabled=original_item.serverless_enabled,
             serverless_mode=original_item.serverless_mode,
+            # Classic Compute
+            photon_enabled=original_item.photon_enabled,
             driver_node_type=original_item.driver_node_type,
             worker_node_type=original_item.worker_node_type,
             num_workers=original_item.num_workers,
-            autoscale_enabled=original_item.autoscale_enabled,
-            autoscale_min_workers=original_item.autoscale_min_workers,
-            autoscale_max_workers=original_item.autoscale_max_workers,
-            photon_enabled=original_item.photon_enabled,
+            # DLT
             dlt_edition=original_item.dlt_edition,
-            dlt_pipeline_mode=original_item.dlt_pipeline_mode,
+            # DBSQL
             dbsql_warehouse_type=original_item.dbsql_warehouse_type,
             dbsql_warehouse_size=original_item.dbsql_warehouse_size,
             dbsql_num_clusters=original_item.dbsql_num_clusters,
+            dbsql_vm_pricing_tier=original_item.dbsql_vm_pricing_tier,
+            dbsql_vm_payment_option=original_item.dbsql_vm_payment_option,
+            # Vector Search
             vector_search_mode=original_item.vector_search_mode,
             vector_capacity_millions=original_item.vector_capacity_millions,
-            lakebase_cu=original_item.lakebase_cu,
-            lakebase_storage_gb=original_item.lakebase_storage_gb,
-            lakebase_ha_nodes=original_item.lakebase_ha_nodes,
-            lakebase_backup_retention_days=original_item.lakebase_backup_retention_days,
+            # Model Serving
+            model_serving_gpu_type=original_item.model_serving_gpu_type,
+            # FMAPI
             fmapi_provider=original_item.fmapi_provider,
             fmapi_model=original_item.fmapi_model,
             fmapi_endpoint_type=original_item.fmapi_endpoint_type,
             fmapi_context_length=original_item.fmapi_context_length,
-            fmapi_provisioned_type=original_item.fmapi_provisioned_type,
-            fmapi_input_tokens_per_month=original_item.fmapi_input_tokens_per_month,
-            fmapi_output_tokens_per_month=original_item.fmapi_output_tokens_per_month,
+            fmapi_rate_type=original_item.fmapi_rate_type,
+            fmapi_quantity=original_item.fmapi_quantity,
+            # Lakebase
+            lakebase_cu=original_item.lakebase_cu,
+            lakebase_storage_gb=original_item.lakebase_storage_gb,
+            lakebase_ha_nodes=original_item.lakebase_ha_nodes,
+            lakebase_backup_retention_days=original_item.lakebase_backup_retention_days,
+            # Usage
             runs_per_day=original_item.runs_per_day,
             avg_runtime_minutes=original_item.avg_runtime_minutes,
             days_per_month=original_item.days_per_month,
+            hours_per_month=original_item.hours_per_month,
+            # Pricing
             driver_pricing_tier=original_item.driver_pricing_tier,
             worker_pricing_tier=original_item.worker_pricing_tier,
-            vm_pricing_tier=original_item.vm_pricing_tier,
-            vm_payment_option=original_item.vm_payment_option,
-            spot_percentage=original_item.spot_percentage,
+            driver_payment_option=original_item.driver_payment_option,
+            worker_payment_option=original_item.worker_payment_option,
+            # Additional
             workload_config=original_item.workload_config,
             notes=original_item.notes
         )
@@ -394,7 +403,7 @@ def clone_estimate(
     db.add(new_estimate)
     db.flush()
     
-    # Copy line items
+    # Copy line items - only copy fields that exist in the model
     for original_item in original.line_items:
         new_item = LineItem(
             estimate_id=new_estimate.estimate_id,
@@ -402,46 +411,50 @@ def clone_estimate(
             workload_name=original_item.workload_name,
             workload_type=original_item.workload_type,
             cloud=original_item.cloud,
+            # Serverless
             serverless_enabled=original_item.serverless_enabled,
             serverless_mode=original_item.serverless_mode,
+            # Classic Compute
+            photon_enabled=original_item.photon_enabled,
             driver_node_type=original_item.driver_node_type,
             worker_node_type=original_item.worker_node_type,
             num_workers=original_item.num_workers,
-            autoscale_enabled=original_item.autoscale_enabled,
-            autoscale_min_workers=original_item.autoscale_min_workers,
-            autoscale_max_workers=original_item.autoscale_max_workers,
-            photon_enabled=original_item.photon_enabled,
+            # DLT
             dlt_edition=original_item.dlt_edition,
-            dlt_pipeline_mode=original_item.dlt_pipeline_mode,
+            # DBSQL
             dbsql_warehouse_type=original_item.dbsql_warehouse_type,
             dbsql_warehouse_size=original_item.dbsql_warehouse_size,
             dbsql_num_clusters=original_item.dbsql_num_clusters,
+            dbsql_vm_pricing_tier=original_item.dbsql_vm_pricing_tier,
+            dbsql_vm_payment_option=original_item.dbsql_vm_payment_option,
+            # Vector Search
             vector_search_mode=original_item.vector_search_mode,
             vector_capacity_millions=original_item.vector_capacity_millions,
-            lakebase_cu=original_item.lakebase_cu,
-            lakebase_storage_gb=original_item.lakebase_storage_gb,
-            lakebase_ha_nodes=original_item.lakebase_ha_nodes,
-            lakebase_backup_retention_days=original_item.lakebase_backup_retention_days,
+            # Model Serving
+            model_serving_gpu_type=original_item.model_serving_gpu_type,
+            # FMAPI
             fmapi_provider=original_item.fmapi_provider,
             fmapi_model=original_item.fmapi_model,
             fmapi_endpoint_type=original_item.fmapi_endpoint_type,
             fmapi_context_length=original_item.fmapi_context_length,
-            fmapi_provisioned_type=original_item.fmapi_provisioned_type,
             fmapi_rate_type=original_item.fmapi_rate_type,
             fmapi_quantity=original_item.fmapi_quantity,
-            fmapi_input_tokens_per_month=original_item.fmapi_input_tokens_per_month,
-            fmapi_output_tokens_per_month=original_item.fmapi_output_tokens_per_month,
+            # Lakebase
+            lakebase_cu=original_item.lakebase_cu,
+            lakebase_storage_gb=original_item.lakebase_storage_gb,
+            lakebase_ha_nodes=original_item.lakebase_ha_nodes,
+            lakebase_backup_retention_days=original_item.lakebase_backup_retention_days,
+            # Usage
             runs_per_day=original_item.runs_per_day,
             avg_runtime_minutes=original_item.avg_runtime_minutes,
             days_per_month=original_item.days_per_month,
             hours_per_month=original_item.hours_per_month,
+            # Pricing
             driver_pricing_tier=original_item.driver_pricing_tier,
             worker_pricing_tier=original_item.worker_pricing_tier,
             driver_payment_option=original_item.driver_payment_option,
             worker_payment_option=original_item.worker_payment_option,
-            vm_pricing_tier=original_item.vm_pricing_tier,
-            vm_payment_option=original_item.vm_payment_option,
-            spot_percentage=original_item.spot_percentage,
+            # Additional
             workload_config=original_item.workload_config,
             notes=original_item.notes
         )

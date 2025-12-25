@@ -14,6 +14,93 @@ from app.config import settings, log_info, log_error
 router = APIRouter(prefix="/calculate", tags=["Calculations"])
 
 
+# ==================== FMAPI Proprietary Pricing Data ====================
+# Pricing per 1M tokens (input/output) - approximate public pricing
+FMAPI_PROPRIETARY_PRICING = {
+    # Anthropic models
+    "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
+    "claude-sonnet-4": {"input": 3.00, "output": 15.00},
+    "claude-sonnet-4-1": {"input": 3.00, "output": 15.00},
+    "claude-sonnet-3-7": {"input": 3.00, "output": 15.00},
+    "claude-opus-4": {"input": 15.00, "output": 75.00},
+    "claude-opus-4-1": {"input": 15.00, "output": 75.00},
+    "claude-opus-4-5": {"input": 15.00, "output": 75.00},
+    "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
+    # OpenAI models
+    "gpt-5": {"input": 5.00, "output": 15.00},
+    "gpt-5-1": {"input": 5.00, "output": 15.00},
+    "gpt-5-mini": {"input": 0.15, "output": 0.60},
+    "gpt-5-nano": {"input": 0.075, "output": 0.30},
+    # Google models
+    "gemini-2-5-pro": {"input": 1.25, "output": 5.00},
+    "gemini-2-5-flash": {"input": 0.075, "output": 0.30},
+}
+
+# Default pricing for unknown models
+FMAPI_PROPRIETARY_DEFAULT_PRICING = {"input": 3.00, "output": 15.00}
+
+
+def calculate_fmapi_proprietary_local(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Local fallback calculation for FMAPI Proprietary.
+    Uses approximate public pricing when external API is unavailable.
+    """
+    model = data.get("model", "claude-sonnet-4-5")
+    rate_type = data.get("rate_type", "input_token")
+    quantity = data.get("quantity", 1000000)
+    cloud = data.get("cloud", "AWS")
+    region = data.get("region", "us-east-1")
+    tier = data.get("tier", "PREMIUM")
+    provider = data.get("provider", "anthropic")
+    
+    # Get pricing for this model
+    pricing = FMAPI_PROPRIETARY_PRICING.get(model, FMAPI_PROPRIETARY_DEFAULT_PRICING)
+    
+    # Calculate cost based on rate type
+    if rate_type in ["input_token", "cache_read"]:
+        price_per_1m = pricing["input"]
+    elif rate_type in ["output_token", "cache_write"]:
+        price_per_1m = pricing["output"]
+    elif rate_type == "batch_inference":
+        # Batch inference typically 50% of regular pricing
+        price_per_1m = (pricing["input"] + pricing["output"]) / 2 * 0.5
+    else:
+        price_per_1m = pricing["input"]
+    
+    # Cost = (tokens / 1,000,000) * price_per_1M
+    cost = (quantity / 1_000_000) * price_per_1m
+    
+    return {
+        "success": True,
+        "data": {
+            "workload_type": "FMAPI_PROPRIETARY",
+            "configuration": {
+                "cloud": cloud.upper(),
+                "region": region,
+                "tier": tier.upper(),
+                "provider": provider,
+                "model": model,
+                "rate_type": rate_type,
+                "endpoint_type": data.get("endpoint_type", "global"),
+                "context_length": data.get("context_length", "all")
+            },
+            "usage": {
+                "quantity": quantity,
+                "rate_type": rate_type
+            },
+            "cost": {
+                "price_per_1m_tokens": price_per_1m,
+                "tokens_processed": quantity,
+                "total_cost": round(cost, 2)
+            },
+            "total_cost": {
+                "cost_per_month": round(cost, 2),
+                "note": f"Estimated cost for {model} ({rate_type})"
+            }
+        }
+    }
+
+
 # ==================== Request Models ====================
 
 class JobsClassicRequest(BaseModel):
@@ -338,11 +425,16 @@ async def calculate_fmapi_databricks(request: Request, data: FMAPIDatabricksRequ
 
 @router.post("/fmapi-proprietary")
 async def calculate_fmapi_proprietary(request: Request, data: FMAPIProprietaryRequest):
-    """Calculate FMAPI Proprietary cost via external API."""
+    """Calculate FMAPI Proprietary cost via external API, with local fallback."""
     client = LakemeterAPIClient(user_token=get_user_token(request))
-    return await call_external_or_error(
-        request, client.calculate_fmapi_proprietary, data.model_dump(exclude_none=True), "fmapi-proprietary"
-    )
+    try:
+        return await call_external_or_error(
+            request, client.calculate_fmapi_proprietary, data.model_dump(exclude_none=True), "fmapi-proprietary"
+        )
+    except HTTPException as e:
+        # If external API fails, use local fallback calculation
+        log_info(f"[Calculate] External API failed for fmapi-proprietary, using local fallback")
+        return calculate_fmapi_proprietary_local(data.model_dump(exclude_none=True))
 
 
 @router.post("/vector-search")
