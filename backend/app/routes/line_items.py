@@ -1,15 +1,20 @@
 """Line Item API routes."""
-from typing import List
+from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models import LineItem, Estimate, User
 from app.models.sharing import Sharing
 from app.schemas import LineItemCreate, LineItemUpdate, LineItemResponse
 from app.auth import get_current_user
+
+
+class CloneRequest(BaseModel):
+    new_name: Optional[str] = None
 
 router = APIRouter(prefix="/line-items", tags=["line-items"])
 
@@ -195,7 +200,7 @@ def reorder_line_items(
 @router.post("/{line_item_id}/clone", response_model=LineItemResponse, status_code=201)
 def clone_line_item(
     line_item_id: UUID,
-    payload: dict = None,
+    payload: Optional[CloneRequest] = Body(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -216,9 +221,7 @@ def clone_line_item(
     _check_estimate_access(original.estimate_id, current_user, db, require_edit=True)
     
     # Get new name from payload or generate from original
-    new_name = (payload or {}).get("new_name")
-    if not new_name:
-        new_name = f"{original.workload_name} (Copy)"
+    new_name = payload.new_name if payload and payload.new_name else f"{original.workload_name} (Copy)"
     
     # Get max display order in the estimate
     max_order = db.query(LineItem).filter(

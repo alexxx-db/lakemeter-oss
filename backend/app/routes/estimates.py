@@ -1,9 +1,10 @@
 """Estimates API routes."""
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func, select
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models import Estimate, LineItem, User
@@ -17,6 +18,11 @@ from app.schemas import (
     LineItemResponse
 )
 from app.auth import get_current_user
+
+
+class CloneRequest(BaseModel):
+    new_name: Optional[str] = None
+
 
 router = APIRouter(prefix="/estimates", tags=["estimates"])
 
@@ -355,7 +361,7 @@ def duplicate_estimate(
 @router.post("/{estimate_id}/clone", response_model=EstimateResponse)
 def clone_estimate(
     estimate_id: UUID,
-    payload: dict = None,
+    payload: Optional[CloneRequest] = Body(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -368,9 +374,7 @@ def clone_estimate(
     original = _get_estimate_for_user(estimate_id, current_user, db)
     
     # Get new name from payload or generate from original
-    new_name = (payload or {}).get("new_name")
-    if not new_name:
-        new_name = f"{original.estimate_name} (Copy)"
+    new_name = payload.new_name if payload and payload.new_name else f"{original.estimate_name} (Copy)"
     
     # Create new estimate owned by current user
     new_estimate = Estimate(
