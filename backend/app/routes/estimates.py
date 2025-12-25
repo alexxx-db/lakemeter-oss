@@ -350,3 +350,99 @@ def duplicate_estimate(
     db.commit()
     db.refresh(new_estimate)
     return new_estimate
+
+
+@router.post("/{estimate_id}/clone", response_model=EstimateResponse)
+def clone_estimate(
+    estimate_id: UUID,
+    payload: dict = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Clone an estimate with all its line items.
+    
+    Optionally provide a new_name in the request body.
+    The cloned estimate is owned by the current user.
+    """
+    original = _get_estimate_for_user(estimate_id, current_user, db)
+    
+    # Get new name from payload or generate from original
+    new_name = (payload or {}).get("new_name")
+    if not new_name:
+        new_name = f"{original.estimate_name} (Copy)"
+    
+    # Create new estimate owned by current user
+    new_estimate = Estimate(
+        estimate_name=new_name,
+        owner_user_id=current_user.user_id,
+        sfdc_account_id=original.sfdc_account_id,
+        customer_name=original.customer_name,
+        opportunity_id=original.opportunity_id,
+        uco_id=original.uco_id,
+        cloud=original.cloud,
+        region=original.region,
+        tier=original.tier,
+        status="draft",
+        template_id=original.template_id,
+        original_prompt=original.original_prompt
+    )
+    db.add(new_estimate)
+    db.flush()
+    
+    # Copy line items
+    for original_item in original.line_items:
+        new_item = LineItem(
+            estimate_id=new_estimate.estimate_id,
+            display_order=original_item.display_order,
+            workload_name=original_item.workload_name,
+            workload_type=original_item.workload_type,
+            cloud=original_item.cloud,
+            serverless_enabled=original_item.serverless_enabled,
+            serverless_mode=original_item.serverless_mode,
+            driver_node_type=original_item.driver_node_type,
+            worker_node_type=original_item.worker_node_type,
+            num_workers=original_item.num_workers,
+            autoscale_enabled=original_item.autoscale_enabled,
+            autoscale_min_workers=original_item.autoscale_min_workers,
+            autoscale_max_workers=original_item.autoscale_max_workers,
+            photon_enabled=original_item.photon_enabled,
+            dlt_edition=original_item.dlt_edition,
+            dlt_pipeline_mode=original_item.dlt_pipeline_mode,
+            dbsql_warehouse_type=original_item.dbsql_warehouse_type,
+            dbsql_warehouse_size=original_item.dbsql_warehouse_size,
+            dbsql_num_clusters=original_item.dbsql_num_clusters,
+            vector_search_mode=original_item.vector_search_mode,
+            vector_capacity_millions=original_item.vector_capacity_millions,
+            lakebase_cu=original_item.lakebase_cu,
+            lakebase_storage_gb=original_item.lakebase_storage_gb,
+            lakebase_ha_nodes=original_item.lakebase_ha_nodes,
+            lakebase_backup_retention_days=original_item.lakebase_backup_retention_days,
+            fmapi_provider=original_item.fmapi_provider,
+            fmapi_model=original_item.fmapi_model,
+            fmapi_endpoint_type=original_item.fmapi_endpoint_type,
+            fmapi_context_length=original_item.fmapi_context_length,
+            fmapi_provisioned_type=original_item.fmapi_provisioned_type,
+            fmapi_rate_type=original_item.fmapi_rate_type,
+            fmapi_quantity=original_item.fmapi_quantity,
+            fmapi_input_tokens_per_month=original_item.fmapi_input_tokens_per_month,
+            fmapi_output_tokens_per_month=original_item.fmapi_output_tokens_per_month,
+            runs_per_day=original_item.runs_per_day,
+            avg_runtime_minutes=original_item.avg_runtime_minutes,
+            days_per_month=original_item.days_per_month,
+            hours_per_month=original_item.hours_per_month,
+            driver_pricing_tier=original_item.driver_pricing_tier,
+            worker_pricing_tier=original_item.worker_pricing_tier,
+            driver_payment_option=original_item.driver_payment_option,
+            worker_payment_option=original_item.worker_payment_option,
+            vm_pricing_tier=original_item.vm_pricing_tier,
+            vm_payment_option=original_item.vm_payment_option,
+            spot_percentage=original_item.spot_percentage,
+            workload_config=original_item.workload_config,
+            notes=original_item.notes
+        )
+        db.add(new_item)
+    
+    db.commit()
+    db.refresh(new_estimate)
+    return new_estimate

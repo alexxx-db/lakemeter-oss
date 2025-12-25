@@ -290,11 +290,16 @@ interface Store {
   
   // Actions - Cost Calculation (NEW)
   calculateWorkloadCost: (lineItem: LineItem, estimateCloud: string, estimateRegion: string, estimateTier: string) => Promise<CostCalculationResponse | null>
-  calculateAllWorkloadCosts: (estimateId: string) => Promise<void>
+  calculateAllWorkloadCosts: (estimateId: string, options?: { forceRecalculate?: boolean; onlyLineItemIds?: string[] }) => Promise<void>
+  recalculateSingleWorkload: (lineItemId: string) => Promise<void>
   clearWorkloadCosts: () => void
   clearSingleWorkloadCost: (lineItemId: string) => void
   markItemCalculating: (lineItemId: string) => void
   isItemCalculating: (lineItemId: string) => boolean
+  
+  // Actions - Clone
+  cloneEstimate: (estimateId: string, newName?: string) => Promise<Estimate | null>
+  cloneLineItem: (lineItemId: string, newName?: string) => Promise<LineItem | null>
   
   // UI State
   clearError: () => void
@@ -1204,8 +1209,8 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   
-  calculateAllWorkloadCosts: async (estimateId) => {
-    const { lineItems, currentEstimate } = get()
+  calculateAllWorkloadCosts: async (estimateId, options?: { forceRecalculate?: boolean; onlyLineItemIds?: string[] }) => {
+    const { lineItems, currentEstimate, workloadCosts } = get()
     
     if (!currentEstimate) return
     
@@ -1213,13 +1218,36 @@ export const useStore = create<Store>((set, get) => ({
     const estimateRegion = currentEstimate.region || 'us-east-1'
     const estimateTier = currentEstimate.tier || 'PREMIUM'
     
-    const estimateLineItems = lineItems.filter(li => li.estimate_id === estimateId)
+    let estimateLineItems = lineItems.filter(li => li.estimate_id === estimateId)
     
     if (estimateLineItems.length === 0) return
     
-    // Mark all items as calculating (for optimistic UI)
-    const allIds = new Set(estimateLineItems.map(li => li.line_item_id))
-    set({ isCalculatingCost: true, calculatingCostIds: allIds })
+    // If specific line item IDs are provided, only calculate those
+    if (options?.onlyLineItemIds && options.onlyLineItemIds.length > 0) {
+      estimateLineItems = estimateLineItems.filter(li => 
+        options.onlyLineItemIds!.includes(li.line_item_id)
+      )
+    } else if (!options?.forceRecalculate) {
+      // Smart calculation: skip items that already have cached costs
+      // Only recalculate new items (no cached cost) or items marked for recalculation
+      estimateLineItems = estimateLineItems.filter(li => {
+        const cachedCost = workloadCosts[li.line_item_id]
+        // Recalculate if: no cached cost, or cached cost has an error
+        return !cachedCost || !cachedCost.success
+      })
+      
+      // If all workloads have cached costs, nothing to do
+      if (estimateLineItems.length === 0) {
+        console.log('[Calc] All workloads have cached costs, skipping recalculation')
+        return
+      }
+      
+      console.log(`[Calc] Smart recalculation: ${estimateLineItems.length} workloads need calculation (${lineItems.filter(li => li.estimate_id === estimateId).length - estimateLineItems.length} cached)`)
+    }
+    
+    // Mark only the items that need calculation
+    const idsToCalculate = new Set(estimateLineItems.map(li => li.line_item_id))
+    set({ isCalculatingCost: true, calculatingCostIds: idsToCalculate })
     
     // Process in chunks of 6 (browser connection limit per origin)
     const CHUNK_SIZE = 6
@@ -1255,6 +1283,39 @@ export const useStore = create<Store>((set, get) => ({
     set({ isCalculatingCost: false, calculatingCostIds: new Set() })
   },
   
+  // Recalculate only specific workloads (for updates)
+  recalculateSingleWorkload: async (lineItemId: string) => {
+    const { lineItems, currentEstimate } = get()
+    
+    if (!currentEstimate) return
+    
+    const lineItem = lineItems.find(li => li.line_item_id === lineItemId)
+    if (!lineItem) return
+    
+    const estimateCloud = currentEstimate.cloud || 'AWS'
+    const estimateRegion = currentEstimate.region || 'us-east-1'
+    const estimateTier = currentEstimate.tier || 'PREMIUM'
+    
+    // Mark this item as calculating
+    set((state) => ({
+      calculatingCostIds: new Set([...state.calculatingCostIds, lineItemId]),
+      isCalculatingCost: true
+    }))
+    
+    try {
+      await get().calculateWorkloadCost(lineItem, estimateCloud, estimateRegion, estimateTier)
+    } finally {
+      set((state) => {
+        const newSet = new Set(state.calculatingCostIds)
+        newSet.delete(lineItemId)
+        return { 
+          calculatingCostIds: newSet,
+          isCalculatingCost: newSet.size > 0
+        }
+      })
+    }
+  },
+  
   clearWorkloadCosts: () => set({ workloadCosts: {}, calculatingCostIds: new Set() }),
   
   clearSingleWorkloadCost: (lineItemId: string) => set((state) => {
@@ -1270,6 +1331,48 @@ export const useStore = create<Store>((set, get) => ({
   
   isItemCalculating: (lineItemId: string) => {
     return get().calculatingCostIds.has(lineItemId)
+  },
+  
+  // Clone functions
+  cloneEstimate: async (estimateId: string, newName?: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const clonedEstimate = await api.cloneEstimate(estimateId, newName)
+      // Add to estimates list - need to add line_item_count from original
+      const originalEstimate = get().estimates.find(e => e.estimate_id === estimateId)
+      const estimateListItem: EstimateListItem = {
+        ...clonedEstimate,
+        line_item_count: originalEstimate?.line_item_count || 0
+      }
+      set((state) => ({
+        estimates: [estimateListItem, ...state.estimates],
+        isLoading: false
+      }))
+      return clonedEstimate
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to clone estimate'
+      set({ error: errorMessage, isLoading: false })
+      return null
+    }
+  },
+  
+  cloneLineItem: async (lineItemId: string, newName?: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const clonedItem = await api.cloneLineItem(lineItemId, newName)
+      // Add to line items list
+      set((state) => ({
+        lineItems: [...state.lineItems, clonedItem],
+        isLoading: false
+      }))
+      // Recalculate only the new cloned item
+      get().recalculateSingleWorkload(clonedItem.line_item_id)
+      return clonedItem
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to clone workload'
+      set({ error: errorMessage, isLoading: false })
+      return null
+    }
   },
   
   clearError: () => set({ error: null })

@@ -190,3 +190,94 @@ def reorder_line_items(
     
     db.commit()
     return {"message": "Line items reordered successfully"}
+
+
+@router.post("/{line_item_id}/clone", response_model=LineItemResponse, status_code=201)
+def clone_line_item(
+    line_item_id: UUID,
+    payload: dict = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Clone a line item (workload). User must have edit access to the estimate.
+    
+    Optionally provide a new_name in the request body.
+    """
+    # Get the original line item
+    original = db.query(LineItem).filter(
+        LineItem.line_item_id == line_item_id
+    ).first()
+    
+    if not original:
+        raise HTTPException(status_code=404, detail="Line item not found")
+    
+    # Check edit access to the estimate
+    _check_estimate_access(original.estimate_id, current_user, db, require_edit=True)
+    
+    # Get new name from payload or generate from original
+    new_name = (payload or {}).get("new_name")
+    if not new_name:
+        new_name = f"{original.workload_name} (Copy)"
+    
+    # Get max display order in the estimate
+    max_order = db.query(LineItem).filter(
+        LineItem.estimate_id == original.estimate_id
+    ).count()
+    
+    # Create the cloned line item
+    cloned = LineItem(
+        estimate_id=original.estimate_id,
+        display_order=max_order,
+        workload_name=new_name,
+        workload_type=original.workload_type,
+        cloud=original.cloud,
+        serverless_enabled=original.serverless_enabled,
+        serverless_mode=original.serverless_mode,
+        driver_node_type=original.driver_node_type,
+        worker_node_type=original.worker_node_type,
+        num_workers=original.num_workers,
+        autoscale_enabled=original.autoscale_enabled,
+        autoscale_min_workers=original.autoscale_min_workers,
+        autoscale_max_workers=original.autoscale_max_workers,
+        photon_enabled=original.photon_enabled,
+        dlt_edition=original.dlt_edition,
+        dlt_pipeline_mode=original.dlt_pipeline_mode,
+        dbsql_warehouse_type=original.dbsql_warehouse_type,
+        dbsql_warehouse_size=original.dbsql_warehouse_size,
+        dbsql_num_clusters=original.dbsql_num_clusters,
+        vector_search_mode=original.vector_search_mode,
+        vector_capacity_millions=original.vector_capacity_millions,
+        lakebase_cu=original.lakebase_cu,
+        lakebase_storage_gb=original.lakebase_storage_gb,
+        lakebase_ha_nodes=original.lakebase_ha_nodes,
+        lakebase_backup_retention_days=original.lakebase_backup_retention_days,
+        fmapi_provider=original.fmapi_provider,
+        fmapi_model=original.fmapi_model,
+        fmapi_endpoint_type=original.fmapi_endpoint_type,
+        fmapi_context_length=original.fmapi_context_length,
+        fmapi_provisioned_type=original.fmapi_provisioned_type,
+        fmapi_rate_type=original.fmapi_rate_type,
+        fmapi_quantity=original.fmapi_quantity,
+        fmapi_input_tokens_per_month=original.fmapi_input_tokens_per_month,
+        fmapi_output_tokens_per_month=original.fmapi_output_tokens_per_month,
+        runs_per_day=original.runs_per_day,
+        avg_runtime_minutes=original.avg_runtime_minutes,
+        days_per_month=original.days_per_month,
+        hours_per_month=original.hours_per_month,
+        driver_pricing_tier=original.driver_pricing_tier,
+        worker_pricing_tier=original.worker_pricing_tier,
+        driver_payment_option=original.driver_payment_option,
+        worker_payment_option=original.worker_payment_option,
+        vm_pricing_tier=original.vm_pricing_tier,
+        vm_payment_option=original.vm_payment_option,
+        spot_percentage=original.spot_percentage,
+        workload_config=original.workload_config,
+        notes=original.notes
+    )
+    
+    db.add(cloned)
+    db.commit()
+    db.refresh(cloned)
+    
+    return cloned

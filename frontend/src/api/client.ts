@@ -119,6 +119,18 @@ export const duplicateEstimate = async (id: string): Promise<Estimate> => {
   return data
 }
 
+// Clone estimate with optional new name
+export const cloneEstimate = async (id: string, newName?: string): Promise<Estimate> => {
+  const { data } = await api.post(`/estimates/${id}/clone`, { new_name: newName })
+  return data
+}
+
+// Clone line item/workload with optional new name
+export const cloneLineItem = async (lineItemId: string, newName?: string): Promise<LineItem> => {
+  const { data } = await api.post(`/line-items/${lineItemId}/clone`, { new_name: newName })
+  return data
+}
+
 // ============================================================================
 // Line Items
 // ============================================================================

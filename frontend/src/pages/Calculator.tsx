@@ -8,6 +8,7 @@ import {
   ArrowPathIcon,
   CheckIcon,
   TrashIcon,
+  DocumentDuplicateIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   BoltIcon,
@@ -147,6 +148,7 @@ export default function Calculator() {
     createEstimate,
     updateEstimate,
     deleteLineItem,
+    cloneLineItem,
     setSelectedCloud,
     setSelectedRegion,
     fetchVMPricing,
@@ -759,6 +761,19 @@ export default function Calculator() {
       } catch {
         toast.error('Failed to delete')
       }
+    }
+  }
+  
+  const handleCloneWorkload = async (e: React.MouseEvent, item: LineItem) => {
+    e.stopPropagation()
+    try {
+      const cloned = await cloneLineItem(item.line_item_id)
+      if (cloned) {
+        toast.success(`Workload "${item.workload_name}" cloned`)
+        markAsChanged()
+      }
+    } catch {
+      toast.error('Failed to clone workload')
     }
   }
   
@@ -1456,11 +1471,19 @@ export default function Calculator() {
                           {/* Actions */}
                           <div className="flex items-center gap-1">
                             <button
+                              onClick={(e) => handleCloneWorkload(e, item)}
+                              className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
+                              title="Clone workload"
+                            >
+                              <DocumentDuplicateIcon className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDeleteLineItem(item)
                               }}
                               className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
+                              title="Delete workload"
                             >
                               <TrashIcon className="w-4 h-4" />
                             </button>
