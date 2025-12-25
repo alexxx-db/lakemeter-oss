@@ -1137,41 +1137,57 @@ export default function Calculator() {
               {/* Cloud Selection */}
               <div>
                 <label className="block text-xs font-medium mb-2 text-[var(--text-secondary)]">Cloud Provider</label>
+                {/* Show warning if cloud is locked due to existing workloads */}
+                {lineItems.length > 0 && (
+                  <div className="mb-2 text-xs text-amber-500 flex items-center gap-1">
+                    <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                    Cloud provider locked. Remove all workloads to change.
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-3">
-                  {CLOUD_PROVIDERS.map(cloud => (
-                    <button
-                      key={cloud.id}
-                      onClick={() => {
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          cloud: cloud.id, 
-                          region: '',
-                          // Reset tier if switching to Azure and current tier is 'enterprise' (not available on Azure)
-                          tier: (cloud.id === 'azure' && prev.tier === 'enterprise') ? '' : prev.tier
-                        }))
-                        setSelectedCloud(cloud.id)
-                        markAsChanged()
-                      }}
-                      className={clsx(
-                        'relative p-4 rounded-xl border-2 transition-all text-center',
-                        formData.cloud === cloud.id
-                          ? 'border-orange-500 bg-orange-500/10'
-                          : 'border-dashed border-[var(--border-secondary)] hover:border-orange-500/50 hover:bg-orange-500/5'
-                      )}
-                    >
-                      <div className={clsx(
-                        'text-lg font-semibold',
-                        formData.cloud === cloud.id ? 'text-orange-500' : 'text-[var(--text-primary)]'
-                      )}>
-                        {cloud.name}
-                      </div>
-                      {formData.cloud === cloud.id && (
-                        <div className="absolute top-2 right-2">
-                          <CheckIcon className="w-4 h-4 text-orange-500" />
+                  {CLOUD_PROVIDERS.map(cloud => {
+                    const isLocked = lineItems.length > 0 && formData.cloud !== cloud.id
+                    return (
+                      <button
+                        key={cloud.id}
+                        disabled={isLocked}
+                        onClick={() => {
+                          if (isLocked) return
+                          setFormData(prev => ({ 
+                            ...prev, 
+                            cloud: cloud.id, 
+                            region: '',
+                            // Reset tier if switching to Azure and current tier is 'enterprise' (not available on Azure)
+                            tier: (cloud.id === 'azure' && prev.tier === 'enterprise') ? '' : prev.tier
+                          }))
+                          setSelectedCloud(cloud.id)
+                          markAsChanged()
+                        }}
+                        className={clsx(
+                          'relative p-4 rounded-xl border-2 transition-all text-center',
+                          formData.cloud === cloud.id
+                            ? 'border-orange-500 bg-orange-500/10'
+                            : 'border-dashed border-[var(--border-secondary)]',
+                          isLocked
+                            ? 'opacity-40 cursor-not-allowed'
+                            : formData.cloud !== cloud.id && 'hover:border-orange-500/50 hover:bg-orange-500/5'
+                        )}
+                        title={isLocked ? 'Remove all workloads to change cloud provider' : undefined}
+                      >
+                        <div className={clsx(
+                          'text-lg font-semibold',
+                          formData.cloud === cloud.id ? 'text-orange-500' : 'text-[var(--text-primary)]'
+                        )}>
+                          {cloud.name}
                         </div>
-                      )}
-                    </button>
-                  ))}
+                        {formData.cloud === cloud.id && (
+                          <div className="absolute top-2 right-2">
+                            <CheckIcon className="w-4 h-4 text-orange-500" />
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
               

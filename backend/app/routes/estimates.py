@@ -254,6 +254,20 @@ def update_estimate(
     estimate = _get_estimate_for_user(estimate_id, current_user, db)
     
     update_data = estimate_update.model_dump(exclude_unset=True)
+    
+    # Check if cloud is being changed
+    if 'cloud' in update_data and update_data['cloud'] != estimate.cloud:
+        # Count existing workloads
+        workload_count = db.query(LineItem).filter(
+            LineItem.estimate_id == estimate_id
+        ).count()
+        
+        if workload_count > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot change cloud provider. Remove all {workload_count} workload(s) first."
+            )
+    
     for field, value in update_data.items():
         setattr(estimate, field, value)
     
