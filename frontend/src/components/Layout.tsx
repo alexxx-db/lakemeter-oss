@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Squares2X2Icon, 
   PlusCircleIcon,
@@ -7,14 +7,17 @@ import {
   MoonIcon,
   ComputerDesktopIcon,
   ChevronDownIcon,
-  UserCircleIcon
+  UserCircleIcon,
+  ExclamationTriangleIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTheme, Theme } from '../hooks/useTheme'
 import { useStore } from '../store/useStore'
 import { ChatPanel } from './ChatPanel'
 import toast from 'react-hot-toast'
+import { SESSION_EXPIRED_EVENT, resetSessionExpiredFlag } from '../api/client'
 
 // Sparkles Icon for AI Assistant
 function SparklesIcon({ className }: { className?: string }) {
@@ -59,6 +62,8 @@ export default function Layout() {
   const { theme, setTheme } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [showSessionExpired, setShowSessionExpired] = useState(false)
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
   
   const { 
@@ -70,11 +75,35 @@ export default function Layout() {
     lineItems,
     workloadCosts,
     createLineItem,
-    calculateAllWorkloadCosts
+    calculateAllWorkloadCosts,
+    setSessionExpired
   } = useStore()
   
   // Determine if we're on an estimate detail page (AI assistant only available there)
   const isEstimateDetailPage = location.pathname.startsWith('/calculator/') && location.pathname !== '/calculator'
+  
+  // Handle page refresh
+  const handleRefreshPage = useCallback(() => {
+    resetSessionExpiredFlag()
+    setSessionExpired(false)
+    setShowSessionExpired(false)
+    window.location.reload()
+  }, [setSessionExpired])
+  
+  // Listen for session expiration events
+  useEffect(() => {
+    const handleSessionExpired = (event: CustomEvent) => {
+      console.log('Session expired event received:', event.detail)
+      setSessionExpiredMessage(event.detail?.message || 'Your session has expired')
+      setShowSessionExpired(true)
+      setSessionExpired(true)
+    }
+    
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired as EventListener)
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired as EventListener)
+    }
+  }, [setSessionExpired])
   
   // Close chat when navigating away from estimate detail page
   useEffect(() => {
@@ -343,6 +372,68 @@ export default function Layout() {
           mode="estimate_detail"
         />
       )}
+      
+      {/* Session Expired Modal */}
+      <AnimatePresence>
+        {showSessionExpired && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.6)' }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="max-w-md w-full rounded-2xl shadow-2xl overflow-hidden"
+              style={{ backgroundColor: 'var(--bg-primary)' }}
+            >
+              {/* Header with warning icon */}
+              <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-8 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/20 flex items-center justify-center">
+                  <ExclamationTriangleIcon className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-white">Session Expired</h2>
+              </div>
+              
+              {/* Content */}
+              <div className="px-6 py-6">
+                <p className="text-center mb-6" style={{ color: 'var(--text-secondary)' }}>
+                  {sessionExpiredMessage || 'Your session has expired due to inactivity or token expiration.'}
+                </p>
+                
+                <div 
+                  className="p-4 rounded-lg mb-6 text-sm"
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                >
+                  <p className="font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+                    What happened?
+                  </p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Your authentication token has expired</li>
+                    <li>This can happen after extended inactivity</li>
+                    <li>Your data is safe - just refresh to continue</li>
+                  </ul>
+                </div>
+                
+                <button
+                  onClick={handleRefreshPage}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+                >
+                  <ArrowPathIcon className="w-5 h-5" />
+                  Refresh Page
+                </button>
+                
+                <p className="text-center text-xs mt-4" style={{ color: 'var(--text-muted)' }}>
+                  You'll be redirected to log in again
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

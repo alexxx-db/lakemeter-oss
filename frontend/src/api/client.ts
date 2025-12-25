@@ -28,12 +28,39 @@ const api = axios.create({
   },
 })
 
+// Custom event for session expiration - dispatched to window so any component can listen
+export const SESSION_EXPIRED_EVENT = 'lakemeter:session-expired'
+
+// Track if we've already shown the session expired message to avoid spam
+let sessionExpiredShown = false
+
+export const resetSessionExpiredFlag = () => {
+  sessionExpiredShown = false
+}
+
 // Response interceptor to handle authentication errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Successful response - session is valid
+    return response
+  },
   (error) => {
-    if (error.response?.status === 401) {
-      console.error('Authentication required. Please access through Databricks Apps or set LOCAL_DEV_EMAIL.')
+    // Check for session expiration (401 Unauthorized or 403 Forbidden)
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      console.error('Session expired or authentication required')
+      
+      // Only dispatch the event once to avoid multiple modals
+      if (!sessionExpiredShown) {
+        sessionExpiredShown = true
+        
+        // Dispatch custom event that Layout component will listen to
+        window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, {
+          detail: {
+            status: error.response?.status,
+            message: error.response?.data?.detail || 'Your session has expired'
+          }
+        }))
+      }
     }
     return Promise.reject(error)
   }

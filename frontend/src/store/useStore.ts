@@ -189,6 +189,8 @@ interface Store {
   currentUser: CurrentUser | null
   isAuthenticated: boolean
   authError: string | null
+  sessionExpired: boolean
+  setSessionExpired: (expired: boolean) => void
   
   // Estimates
   estimates: EstimateListItem[]
@@ -303,6 +305,8 @@ export const useStore = create<Store>((set, get) => ({
   currentUser: null,
   isAuthenticated: false,
   authError: null,
+  sessionExpired: false,
+  setSessionExpired: (expired: boolean) => set({ sessionExpired: expired }),
   
   estimates: [],
   currentEstimate: null,
