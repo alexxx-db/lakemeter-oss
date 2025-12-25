@@ -1062,18 +1062,28 @@ export default function Calculator() {
           </button>
           
           <div>
-            <input
-              type="text"
-              value={formData.estimate_name}
-              onChange={(e) => {
-                setFormData(prev => ({ ...prev, estimate_name: e.target.value }))
-                markAsChanged()
-              }}
-              placeholder="Untitled Estimate"
-              className="text-xl font-semibold bg-transparent border-none p-0 focus:ring-0 w-full min-w-[200px] text-[var(--text-primary)] placeholder-[var(--text-muted)]"
-            />
-            {currentEstimate && (
-              <p className="text-xs mt-0.5 text-[var(--text-muted)]">Version {currentEstimate.version}</p>
+            {isLoadingEstimate && id ? (
+              // Loading skeleton for estimate name
+              <div className="space-y-1.5">
+                <div className="h-7 w-48 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                <div className="h-4 w-20 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+              </div>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={formData.estimate_name}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, estimate_name: e.target.value }))
+                    markAsChanged()
+                  }}
+                  placeholder="Untitled Estimate"
+                  className="text-xl font-semibold bg-transparent border-none p-0 focus:ring-0 w-full min-w-[200px] text-[var(--text-primary)] placeholder-[var(--text-muted)]"
+                />
+                {currentEstimate && (
+                  <p className="text-xs mt-0.5 text-[var(--text-muted)]">Version {currentEstimate.version}</p>
+                )}
+              </>
             )}
           </div>
           
@@ -1137,58 +1147,74 @@ export default function Calculator() {
               {/* Cloud Selection */}
               <div>
                 <label className="block text-xs font-medium mb-2 text-[var(--text-secondary)]">Cloud Provider</label>
-                {/* Show warning if cloud is locked due to existing workloads */}
-                {lineItems.length > 0 && (
-                  <div className="mb-2 text-xs text-amber-500 flex items-center gap-1">
-                    <ExclamationTriangleIcon className="w-3.5 h-3.5" />
-                    Cloud provider locked. Remove all workloads to change.
-                  </div>
-                )}
-                <div className="grid grid-cols-3 gap-3">
-                  {CLOUD_PROVIDERS.map(cloud => {
-                    const isLocked = lineItems.length > 0 && formData.cloud !== cloud.id
-                    return (
-                      <button
-                        key={cloud.id}
-                        disabled={isLocked}
-                        onClick={() => {
-                          if (isLocked) return
-                          setFormData(prev => ({ 
-                            ...prev, 
-                            cloud: cloud.id, 
-                            region: '',
-                            // Reset tier if switching to Azure and current tier is 'enterprise' (not available on Azure)
-                            tier: (cloud.id === 'azure' && prev.tier === 'enterprise') ? '' : prev.tier
-                          }))
-                          setSelectedCloud(cloud.id)
-                          markAsChanged()
-                        }}
-                        className={clsx(
-                          'relative p-4 rounded-xl border-2 transition-all text-center',
-                          formData.cloud === cloud.id
-                            ? 'border-orange-500 bg-orange-500/10'
-                            : 'border-dashed border-[var(--border-secondary)]',
-                          isLocked
-                            ? 'opacity-40 cursor-not-allowed'
-                            : formData.cloud !== cloud.id && 'hover:border-orange-500/50 hover:bg-orange-500/5'
-                        )}
-                        title={isLocked ? 'Remove all workloads to change cloud provider' : undefined}
+                {isLoadingEstimate && id ? (
+                  // Loading skeleton for cloud providers
+                  <div className="grid grid-cols-3 gap-3">
+                    {[1, 2, 3].map(i => (
+                      <div
+                        key={i}
+                        className="p-4 rounded-xl border-2 border-dashed border-[var(--border-secondary)]"
                       >
-                        <div className={clsx(
-                          'text-lg font-semibold',
-                          formData.cloud === cloud.id ? 'text-orange-500' : 'text-[var(--text-primary)]'
-                        )}>
-                          {cloud.name}
-                        </div>
-                        {formData.cloud === cloud.id && (
-                          <div className="absolute top-2 right-2">
-                            <CheckIcon className="w-4 h-4 text-orange-500" />
-                          </div>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
+                        <div className="h-6 w-16 mx-auto bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    {/* Show warning if cloud is locked due to existing workloads */}
+                    {lineItems.length > 0 && (
+                      <div className="mb-2 text-xs text-amber-500 flex items-center gap-1">
+                        <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                        Cloud provider locked. Remove all workloads to change.
+                      </div>
+                    )}
+                    <div className="grid grid-cols-3 gap-3">
+                      {CLOUD_PROVIDERS.map(cloud => {
+                        const isLocked = lineItems.length > 0 && formData.cloud !== cloud.id
+                        return (
+                          <button
+                            key={cloud.id}
+                            disabled={isLocked}
+                            onClick={() => {
+                              if (isLocked) return
+                              setFormData(prev => ({ 
+                                ...prev, 
+                                cloud: cloud.id, 
+                                region: '',
+                                // Reset tier if switching to Azure and current tier is 'enterprise' (not available on Azure)
+                                tier: (cloud.id === 'azure' && prev.tier === 'enterprise') ? '' : prev.tier
+                              }))
+                              setSelectedCloud(cloud.id)
+                              markAsChanged()
+                            }}
+                            className={clsx(
+                              'relative p-4 rounded-xl border-2 transition-all text-center',
+                              formData.cloud === cloud.id
+                                ? 'border-orange-500 bg-orange-500/10'
+                                : 'border-dashed border-[var(--border-secondary)]',
+                              isLocked
+                                ? 'opacity-40 cursor-not-allowed'
+                                : formData.cloud !== cloud.id && 'hover:border-orange-500/50 hover:bg-orange-500/5'
+                            )}
+                            title={isLocked ? 'Remove all workloads to change cloud provider' : undefined}
+                          >
+                            <div className={clsx(
+                              'text-lg font-semibold',
+                              formData.cloud === cloud.id ? 'text-orange-500' : 'text-[var(--text-primary)]'
+                            )}>
+                              {cloud.name}
+                            </div>
+                            {formData.cloud === cloud.id && (
+                              <div className="absolute top-2 right-2">
+                                <CheckIcon className="w-4 h-4 text-orange-500" />
+                              </div>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
               
               {/* Salesforce Selection */}
@@ -1308,56 +1334,70 @@ export default function Calculator() {
                   Infrastructure
                 </h4>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                      Region <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.region}
-                      onChange={(e) => {
-                        setFormData(prev => ({ ...prev, region: e.target.value }))
-                        setSelectedRegion(e.target.value)
-                        markAsChanged()
-                      }}
-                      className={clsx(
-                        "w-full text-sm",
-                        !formData.region && "border-orange-500/50 ring-1 ring-orange-500/30"
-                      )}
-                    >
-                      <option value="">{isLoadingRegions ? 'Loading regions...' : 'Select region'}</option>
-                      {regions.map(region => (
-                        <option key={region.region_code} value={region.region_code}>
-                          {region.region_code} ({region.sku_region})
-                        </option>
-                      ))}
-                    </select>
+                {isLoadingEstimate && id ? (
+                  // Loading skeleton for Region and Tier
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse mb-1.5" />
+                      <div className="h-10 w-full bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="h-4 w-24 bg-[var(--bg-tertiary)] rounded animate-pulse mb-1.5" />
+                      <div className="h-10 w-full bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                    </div>
                   </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                      Databricks Tier <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.tier}
-                      onChange={(e) => {
-                        setFormData(prev => ({ ...prev, tier: e.target.value }))
-                        markAsChanged()
-                      }}
-                      className={clsx(
-                        "w-full text-sm",
-                        !formData.tier && "border-orange-500/50 ring-1 ring-orange-500/30"
-                      )}
-                    >
-                      <option value="">Select tier</option>
-                      <option value="standard">Standard</option>
-                      <option value="premium">Premium</option>
-                      {formData.cloud !== 'azure' && (
-                        <option value="enterprise">Enterprise</option>
-                      )}
-                    </select>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                        Region <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={formData.region}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, region: e.target.value }))
+                          setSelectedRegion(e.target.value)
+                          markAsChanged()
+                        }}
+                        className={clsx(
+                          "w-full text-sm",
+                          !formData.region && "border-orange-500/50 ring-1 ring-orange-500/30"
+                        )}
+                      >
+                        <option value="">{isLoadingRegions ? 'Loading regions...' : 'Select region'}</option>
+                        {regions.map(region => (
+                          <option key={region.region_code} value={region.region_code}>
+                            {region.region_code} ({region.sku_region})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                        Databricks Tier <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={formData.tier}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, tier: e.target.value }))
+                          markAsChanged()
+                        }}
+                        className={clsx(
+                          "w-full text-sm",
+                          !formData.tier && "border-orange-500/50 ring-1 ring-orange-500/30"
+                        )}
+                      >
+                        <option value="">Select tier</option>
+                        <option value="standard">Standard</option>
+                        <option value="premium">Premium</option>
+                        {formData.cloud !== 'azure' && (
+                          <option value="enterprise">Enterprise</option>
+                        )}
+                      </select>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           </motion.div>
