@@ -16,7 +16,13 @@ import {
   CurrencyDollarIcon,
   ServerStackIcon,
   ExclamationTriangleIcon,
-  BuildingOfficeIcon
+  BuildingOfficeIcon,
+  PlayCircleIcon,
+  CircleStackIcon,
+  ArrowsRightLeftIcon,
+  MagnifyingGlassCircleIcon,
+  SparklesIcon,
+  ServerIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -39,6 +45,87 @@ const CLOUD_PROVIDERS = [
   { id: 'azure', name: 'Azure', logo: '/azure.svg', bgClass: 'from-sky-600/20 to-sky-900/10' },
   { id: 'gcp', name: 'GCP', logo: '/gcp.svg', bgClass: 'from-red-600/20 to-red-900/10' }
 ]
+
+// Workload type visual config - icons, colors, and labels
+const WORKLOAD_TYPE_CONFIG: Record<string, { 
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>, 
+  color: string, 
+  bgColor: string,
+  label: string 
+}> = {
+  'JOBS': { 
+    icon: PlayCircleIcon, 
+    color: 'text-emerald-500', 
+    bgColor: 'bg-emerald-500/10',
+    label: 'Jobs'
+  },
+  'ALL_PURPOSE': { 
+    icon: CpuChipIcon, 
+    color: 'text-blue-500', 
+    bgColor: 'bg-blue-500/10',
+    label: 'Compute'
+  },
+  'DLT': { 
+    icon: ArrowsRightLeftIcon, 
+    color: 'text-purple-500', 
+    bgColor: 'bg-purple-500/10',
+    label: 'Pipeline'
+  },
+  'DBSQL': { 
+    icon: CircleStackIcon, 
+    color: 'text-cyan-500', 
+    bgColor: 'bg-cyan-500/10',
+    label: 'SQL'
+  },
+  'VECTOR_SEARCH': { 
+    icon: MagnifyingGlassCircleIcon, 
+    color: 'text-rose-500', 
+    bgColor: 'bg-rose-500/10',
+    label: 'Vector'
+  },
+  'MODEL_SERVING': { 
+    icon: SparklesIcon, 
+    color: 'text-amber-500', 
+    bgColor: 'bg-amber-500/10',
+    label: 'ML Serving'
+  },
+  'FMAPI_DATABRICKS': { 
+    icon: SparklesIcon, 
+    color: 'text-orange-500', 
+    bgColor: 'bg-orange-500/10',
+    label: 'GenAI'
+  },
+  'FMAPI_PROPRIETARY': { 
+    icon: SparklesIcon, 
+    color: 'text-pink-500', 
+    bgColor: 'bg-pink-500/10',
+    label: 'GenAI Pro'
+  },
+  'LAKEBASE': { 
+    icon: ServerIcon, 
+    color: 'text-indigo-500', 
+    bgColor: 'bg-indigo-500/10',
+    label: 'Lakebase'
+  }
+}
+
+// Get workload type visual config with fallback
+const getWorkloadTypeConfig = (workloadType: string | null | undefined) => {
+  if (!workloadType) {
+    return { 
+      icon: CpuChipIcon, 
+      color: 'text-orange-500', 
+      bgColor: 'bg-orange-500/10',
+      label: 'Workload'
+    }
+  }
+  return WORKLOAD_TYPE_CONFIG[workloadType] || { 
+    icon: CpuChipIcon, 
+    color: 'text-orange-500', 
+    bgColor: 'bg-orange-500/10',
+    label: workloadType
+  }
+}
 
 // DBU Pricing (per DBU per hour)
 const DBU_PRICING: Record<string, Record<string, number>> = {
@@ -797,11 +884,6 @@ export default function Calculator() {
     setExpandedItems(newExpanded)
   }
   
-  const getWorkloadDisplay = (type: string) => {
-    const wt = workloadTypes.find(w => w.workload_type === type)
-    return wt?.display_name || type
-  }
-  
   const getSelectedSku = (item: LineItem) => {
     const wt = workloadTypes.find(w => w.workload_type === item.workload_type)
     if (!wt) return 'N/A'
@@ -1461,6 +1543,8 @@ export default function Calculator() {
                   const isExpanded = expandedItems.has(item.line_item_id)
                   const sku = getSelectedSku(item)
                   const usageSummary = getUsageSummary(item)
+                  const typeConfig = getWorkloadTypeConfig(item.workload_type)
+                  const TypeIcon = typeConfig.icon
                   
                   return (
                     <motion.div
@@ -1477,13 +1561,23 @@ export default function Calculator() {
                       >
                         {/* Top row: name, badges, cost, actions */}
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center flex-shrink-0">
-                            <CpuChipIcon className="w-5 h-5 text-orange-500" />
+                          <div className={clsx(
+                            "w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0",
+                            typeConfig.bgColor
+                          )}>
+                            <TypeIcon className={clsx("w-5 h-5", typeConfig.color)} />
                           </div>
                           
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h4 className="font-semibold truncate text-[var(--text-primary)]">{item.workload_name}</h4>
+                              {/* Workload type badge */}
+                              <span className={clsx(
+                                "px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide",
+                                typeConfig.bgColor, typeConfig.color
+                              )}>
+                                {typeConfig.label}
+                              </span>
                               {(item.serverless_enabled || (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')) && (
                                 <span className="badge badge-teal">Serverless</span>
                               )}
@@ -1503,8 +1597,6 @@ export default function Calculator() {
                               )}
                             </div>
                             <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mt-0.5">
-                              <span>{getWorkloadDisplay(item.workload_type || '')}</span>
-                              <span>•</span>
                               <span className="font-mono text-[var(--text-secondary)]">{sku}</span>
                             </div>
                           </div>
