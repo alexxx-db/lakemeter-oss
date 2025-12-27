@@ -63,43 +63,43 @@ const WORKLOAD_TYPE_CONFIG: Record<string, {
     icon: CpuChipIcon, 
     color: 'text-blue-500', 
     bgColor: 'bg-blue-500/10',
-    label: 'Compute'
+    label: 'AP'
   },
   'DLT': { 
     icon: ArrowsRightLeftIcon, 
     color: 'text-purple-500', 
     bgColor: 'bg-purple-500/10',
-    label: 'Pipeline'
+    label: 'SDP'
   },
   'DBSQL': { 
     icon: CircleStackIcon, 
     color: 'text-cyan-500', 
     bgColor: 'bg-cyan-500/10',
-    label: 'SQL'
+    label: 'DB SQL'
   },
   'VECTOR_SEARCH': { 
     icon: MagnifyingGlassCircleIcon, 
     color: 'text-rose-500', 
     bgColor: 'bg-rose-500/10',
-    label: 'Vector'
+    label: 'VS'
   },
   'MODEL_SERVING': { 
     icon: SparklesIcon, 
     color: 'text-amber-500', 
     bgColor: 'bg-amber-500/10',
-    label: 'ML Serving'
+    label: 'MS'
   },
   'FMAPI_DATABRICKS': { 
     icon: SparklesIcon, 
     color: 'text-orange-500', 
     bgColor: 'bg-orange-500/10',
-    label: 'GenAI'
+    label: 'FMAPI DBX'
   },
   'FMAPI_PROPRIETARY': { 
     icon: SparklesIcon, 
     color: 'text-pink-500', 
     bgColor: 'bg-pink-500/10',
-    label: 'GenAI Pro'
+    label: 'FMAPI Prop'
   },
   'LAKEBASE': { 
     icon: ServerIcon, 
@@ -884,31 +884,6 @@ export default function Calculator() {
     setExpandedItems(newExpanded)
   }
   
-  const getSelectedSku = (item: LineItem) => {
-    const wt = workloadTypes.find(w => w.workload_type === item.workload_type)
-    if (!wt) return 'N/A'
-    
-    // Handle DLT workloads with edition-specific SKUs
-    if (item.workload_type === 'DLT') {
-      const edition = (item.dlt_edition || 'CORE').toUpperCase()
-      if (item.serverless_enabled) {
-        return 'DELTA_LIVE_TABLES_SERVERLESS'
-      }
-      if (item.photon_enabled) {
-        return `DLT_${edition}_COMPUTE_(PHOTON)`
-      }
-      return `DLT_${edition}_COMPUTE`
-    }
-    
-    if (item.serverless_enabled && wt.sku_product_type_serverless) {
-      return wt.sku_product_type_serverless
-    }
-    if (item.photon_enabled && wt.sku_product_type_photon) {
-      return wt.sku_product_type_photon
-    }
-    return wt.sku_product_type_standard || 'N/A'
-  }
-  
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -1541,7 +1516,6 @@ export default function Calculator() {
                   const isItemLoading = calculatingCostIds.has(item.line_item_id)
                   const costs = calculateItemCost(item)
                   const isExpanded = expandedItems.has(item.line_item_id)
-                  const sku = getSelectedSku(item)
                   const usageSummary = getUsageSummary(item)
                   const typeConfig = getWorkloadTypeConfig(item.workload_type)
                   const TypeIcon = typeConfig.icon
@@ -1587,17 +1561,9 @@ export default function Calculator() {
                                   Photon
                                 </span>
                               )}
-                              {/* Show Spot Workers badge only for non-serverless compute workloads */}
-                              {item.worker_pricing_tier === 'spot' && 
-                               !item.serverless_enabled && 
-                               ['JOBS', 'ALL_PURPOSE', 'DLT'].includes(item.workload_type || '') && (
-                                <span className="badge badge-yellow">
-                                  Spot Workers
-                                </span>
-                              )}
                             </div>
                             <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mt-0.5">
-                              <span className="font-mono text-[var(--text-secondary)]">{sku}</span>
+                              <span>{workloadTypes.find(w => w.workload_type === item.workload_type)?.display_name || item.workload_type}</span>
                             </div>
                           </div>
                           
