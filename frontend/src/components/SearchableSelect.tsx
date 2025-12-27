@@ -151,10 +151,13 @@ export default function SearchableSelect({
             Loading...
           </span>
         ) : (
-          <span className={clsx(
-            "flex-1 truncate",
-            value ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"
-          )}>
+          <span 
+            className={clsx(
+              "flex-1 truncate",
+              value ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"
+            )}
+            title={selectedOption?.label || placeholder}
+          >
             {selectedOption?.label || placeholder}
           </span>
         )}

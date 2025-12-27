@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BoltIcon, CloudIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
+import { BoltIcon, CloudIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { useStore } from '../store/useStore'
@@ -295,18 +295,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   const isWorkloadTypesLoading = workloadTypes.length === 0
   const isWorkloadTypeInvalid = !isWorkloadTypesLoading && !selectedWorkloadType && form.workload_type
   
-  const computedSku = (): string | null => {
-    if (!selectedWorkloadType) return null
-    
-    if (form.serverless_enabled && selectedWorkloadType.sku_product_type_serverless) {
-      return selectedWorkloadType.sku_product_type_serverless
-    }
-    if (form.photon_enabled && selectedWorkloadType.sku_product_type_photon) {
-      return selectedWorkloadType.sku_product_type_photon
-    }
-    return selectedWorkloadType.sku_product_type_standard || null
-  }
-  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -539,16 +527,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         </div>
       </div>
       
-      {/* SKU Preview */}
-      {computedSku() && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
-          <InformationCircleIcon className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
-          <div className="text-sm">
-            <span className="text-[var(--text-muted)]">SKU: </span>
-            <span className="font-mono text-orange-600 dark:text-orange-400">{computedSku()}</span>
-          </div>
-        </div>
-      )}
       
       {/* Feature Toggles Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -742,8 +720,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               
               <div className="space-y-3">
                 {/* Instance Type & Count Row */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="col-span-3">
                     <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
                     <SearchableSelect
                       options={instanceTypes.map(it => ({
