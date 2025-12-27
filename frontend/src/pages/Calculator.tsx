@@ -289,6 +289,9 @@ export default function Calculator() {
     tier: ''  // No default - must be selected
   })
   
+  // Configuration panel collapsed state
+  const [isConfigCollapsed, setIsConfigCollapsed] = useState(false)
+  
   // Track changes
   const markAsChanged = useCallback(() => {
     setHasUnsavedChanges(true)
@@ -1189,274 +1192,289 @@ export default function Calculator() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content - Left 2 columns */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Configuration Section */}
+          {/* Configuration Section - Collapsible */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="card p-5"
+            className="card"
           >
-            <h3 className="section-title flex items-center gap-2 mb-4">
-              <CpuChipIcon className="w-4 h-4" />
-              Configuration
-            </h3>
-            
-            <div className="space-y-5">
-              {/* Cloud Selection */}
-              <div>
-                <label className="block text-xs font-medium mb-2 text-[var(--text-secondary)]">Cloud Provider</label>
-                {isLoadingEstimate && id ? (
-                  // Loading skeleton for cloud providers
-                  <div className="grid grid-cols-3 gap-3">
-                    {[1, 2, 3].map(i => (
-                      <div
-                        key={i}
-                        className="p-4 rounded-xl border-2 border-dashed border-[var(--border-secondary)]"
-                      >
-                        <div className="h-6 w-16 mx-auto bg-[var(--bg-tertiary)] rounded animate-pulse" />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <>
-                    {/* Show warning if cloud is locked due to existing workloads */}
-                    {lineItems.length > 0 && (
-                      <div className="mb-2 text-xs text-amber-500 flex items-center gap-1">
-                        <ExclamationTriangleIcon className="w-3.5 h-3.5" />
-                        Cloud provider locked. Remove all workloads to change.
-                      </div>
-                    )}
-                    <div className="grid grid-cols-3 gap-3">
-                      {CLOUD_PROVIDERS.map(cloud => {
-                        const isLocked = lineItems.length > 0 && formData.cloud !== cloud.id
-                        return (
-                          <button
-                            key={cloud.id}
-                            disabled={isLocked}
-                            onClick={() => {
-                              if (isLocked) return
-                              setFormData(prev => ({ 
-                                ...prev, 
-                                cloud: cloud.id, 
-                                region: '',
-                                // Reset tier if switching to Azure and current tier is 'enterprise' (not available on Azure)
-                                tier: (cloud.id === 'azure' && prev.tier === 'enterprise') ? '' : prev.tier
-                              }))
-                              setSelectedCloud(cloud.id)
-                              markAsChanged()
-                            }}
-                            className={clsx(
-                              'relative p-4 rounded-xl border-2 transition-all text-center',
-                              formData.cloud === cloud.id
-                                ? 'border-orange-500 bg-orange-500/10'
-                                : 'border-dashed border-[var(--border-secondary)]',
-                              isLocked
-                                ? 'opacity-40 cursor-not-allowed'
-                                : formData.cloud !== cloud.id && 'hover:border-orange-500/50 hover:bg-orange-500/5'
-                            )}
-                            title={isLocked ? 'Remove all workloads to change cloud provider' : undefined}
-                          >
-                            <div className={clsx(
-                              'text-lg font-semibold',
-                              formData.cloud === cloud.id ? 'text-orange-500' : 'text-[var(--text-primary)]'
-                            )}>
-                              {cloud.name}
-                            </div>
-                            {formData.cloud === cloud.id && (
-                              <div className="absolute top-2 right-2">
-                                <CheckIcon className="w-4 h-4 text-orange-500" />
-                              </div>
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-              
-              {/* Salesforce Selection */}
-              <div className="border-t border-[var(--border-primary)] pt-5 mt-5">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-4 flex items-center gap-2">
-                  <BuildingOfficeIcon className="w-4 h-4" />
-                  Salesforce Context
-                </h4>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Account Selection */}
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                      Salesforce Account <span className="text-red-500">*</span>
-                    </label>
-                    <SearchableSelect
-                      options={(() => {
-                        // Show loading state if still loading
-                        if (isLoadingSfAccounts && sfAccounts.length === 0) return []
-                        // Build options from search results
-                        const searchOptions = sfAccounts.map(a => ({
-                          value: a.salesforce_account_id,
-                          label: a.salesforce_account_name || a.salesforce_account_id
-                        }))
-                        // If we have a saved account that's not in search results, add it
-                        if (formData.sfdc_account_id && formData.customer_name) {
-                          const existsInSearch = sfAccounts.some(a => a.salesforce_account_id === formData.sfdc_account_id)
-                          if (!existsInSearch) {
-                            return [{ value: formData.sfdc_account_id, label: formData.customer_name }, ...searchOptions]
-                          }
-                        }
-                        return searchOptions
-                      })()}
-                      value={formData.sfdc_account_id}
-                      onChange={(value) => {
-                        const selectedAccount = sfAccounts.find(a => a.salesforce_account_id === value)
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          sfdc_account_id: value,
-                          customer_name: selectedAccount?.salesforce_account_name || prev.customer_name,
-                          opportunity_id: '',
-                          uco_id: ''
-                        }))
-                        setSfOpportunitySearch('')
-                        setSfUseCaseSearch('')
-                        markAsChanged()
-                      }}
-                      onSearchChange={setSfAccountSearch}
-                      placeholder={isLoadingSfAccounts ? "Loading accounts..." : "Select account..."}
-                      searchPlaceholder="Search accounts..."
-                      isLoading={isLoadingSfAccounts}
-                      required
-                    />
-                  </div>
-                  
-                  {/* Opportunity Selection */}
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                      Opportunity
-                      {!formData.sfdc_account_id && (
-                        <span className="text-[var(--text-muted)] text-[10px] ml-1">(select account first)</span>
-                      )}
-                    </label>
-                    <SearchableSelect
-                      options={sfOpportunities.map(o => ({
-                        value: o.id,
-                        label: o.name || o.id
-                      }))}
-                      value={formData.opportunity_id}
-                      onChange={(value) => {
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          opportunity_id: value
-                        }))
-                        markAsChanged()
-                      }}
-                      onSearchChange={setSfOpportunitySearch}
-                      placeholder={!formData.sfdc_account_id ? "Select account first" : isLoadingSfOpportunities ? "Loading opportunities..." : "Select opportunity..."}
-                      searchPlaceholder="Search opportunities..."
-                      isLoading={isLoadingSfOpportunities}
-                      disabled={!formData.sfdc_account_id}
-                    />
-                  </div>
-                  
-                  {/* Use Case Selection */}
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                      Use Case
-                      {!formData.sfdc_account_id && (
-                        <span className="text-[var(--text-muted)] text-[10px] ml-1">(select account first)</span>
-                      )}
-                    </label>
-                    <SearchableSelect
-                      options={sfUseCases.map(uc => ({
-                        value: uc.salesforce_use_case_id,
-                        label: uc.salesforce_use_case_name || uc.salesforce_use_case_id
-                      }))}
-                      value={formData.uco_id}
-                      onChange={(value) => {
-                        setFormData(prev => ({ ...prev, uco_id: value }))
-                        markAsChanged()
-                      }}
-                      onSearchChange={setSfUseCaseSearch}
-                      placeholder={!formData.sfdc_account_id ? "Select account first" : isLoadingSfUseCases ? "Loading use cases..." : "Select use case..."}
-                      searchPlaceholder="Search use cases..."
-                      isLoading={isLoadingSfUseCases}
-                      disabled={!formData.sfdc_account_id}
-                    />
-                  </div>
+            {/* Header - Always visible, clickable to expand/collapse */}
+            <div 
+              className="p-4 cursor-pointer hover:bg-[var(--bg-tertiary)]/50 transition-colors flex items-center justify-between"
+              onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}
+            >
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-orange-500/10">
+                  <CpuChipIcon className="w-5 h-5 text-orange-500" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-[var(--text-primary)]">Configuration</h3>
+                  <p className="text-xs text-[var(--text-muted)] truncate">
+                    {formData.cloud.toUpperCase()} • {formData.region || 'No region'} • {formData.tier ? formData.tier.charAt(0).toUpperCase() + formData.tier.slice(1) : 'No tier'}
+                    {formData.customer_name && ` • ${formData.customer_name}`}
+                  </p>
                 </div>
               </div>
-              
-              {/* Cloud & Region Config */}
-              <div className="border-t border-[var(--border-primary)] pt-5 mt-5">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-4 flex items-center gap-2">
-                  <CpuChipIcon className="w-4 h-4" />
-                  Infrastructure
-                </h4>
-                
-                {isLoadingEstimate && id ? (
-                  // Loading skeleton for Region and Tier
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse mb-1.5" />
-                      <div className="h-10 w-full bg-[var(--bg-tertiary)] rounded animate-pulse" />
-                    </div>
-                    <div>
-                      <div className="h-4 w-24 bg-[var(--bg-tertiary)] rounded animate-pulse mb-1.5" />
-                      <div className="h-10 w-full bg-[var(--bg-tertiary)] rounded animate-pulse" />
-                    </div>
-                  </div>
+              <button className="p-1 rounded hover:bg-[var(--bg-tertiary)] transition-colors flex-shrink-0 ml-2">
+                {isConfigCollapsed ? (
+                  <ChevronDownIcon className="w-5 h-5 text-[var(--text-muted)]" />
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <ChevronUpIcon className="w-5 h-5 text-[var(--text-muted)]" />
+                )}
+              </button>
+            </div>
+            
+            {/* Collapsible content */}
+            {!isConfigCollapsed && (
+              <div className="px-4 pb-4 space-y-5 border-t border-[var(--border-primary)]">
+                {/* Cloud Selection */}
+                <div className="pt-4">
+                  <label className="block text-xs font-medium mb-2 text-[var(--text-secondary)]">Cloud Provider</label>
+                  {isLoadingEstimate && id ? (
+                    <div className="grid grid-cols-3 gap-3">
+                      {[1, 2, 3].map(i => (
+                        <div
+                          key={i}
+                          className="p-4 rounded-xl border-2 border-dashed border-[var(--border-secondary)]"
+                        >
+                          <div className="h-6 w-16 mx-auto bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      {lineItems.length > 0 && (
+                        <div className="mb-2 text-xs text-amber-500 flex items-center gap-1">
+                          <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                          Cloud provider locked. Remove all workloads to change.
+                        </div>
+                      )}
+                      <div className="grid grid-cols-3 gap-3">
+                        {CLOUD_PROVIDERS.map(cloud => {
+                          const isLocked = lineItems.length > 0 && formData.cloud !== cloud.id
+                          return (
+                            <button
+                              key={cloud.id}
+                              disabled={isLocked}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (isLocked) return
+                                setFormData(prev => ({ 
+                                  ...prev, 
+                                  cloud: cloud.id, 
+                                  region: '',
+                                  tier: (cloud.id === 'azure' && prev.tier === 'enterprise') ? '' : prev.tier
+                                }))
+                                setSelectedCloud(cloud.id)
+                                markAsChanged()
+                              }}
+                              className={clsx(
+                                'relative p-4 rounded-xl border-2 transition-all text-center',
+                                formData.cloud === cloud.id
+                                  ? 'border-orange-500 bg-orange-500/10'
+                                  : 'border-dashed border-[var(--border-secondary)]',
+                                isLocked
+                                  ? 'opacity-40 cursor-not-allowed'
+                                  : formData.cloud !== cloud.id && 'hover:border-orange-500/50 hover:bg-orange-500/5'
+                              )}
+                              title={isLocked ? 'Remove all workloads to change cloud provider' : undefined}
+                            >
+                              <div className={clsx(
+                                'text-lg font-semibold',
+                                formData.cloud === cloud.id ? 'text-orange-500' : 'text-[var(--text-primary)]'
+                              )}>
+                                {cloud.name}
+                              </div>
+                              {formData.cloud === cloud.id && (
+                                <div className="absolute top-2 right-2">
+                                  <CheckIcon className="w-4 h-4 text-orange-500" />
+                                </div>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+                
+                {/* Salesforce Selection */}
+                <div className="border-t border-[var(--border-primary)] pt-5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-4 flex items-center gap-2">
+                    <BuildingOfficeIcon className="w-4 h-4" />
+                    Salesforce Context
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4" onClick={(e) => e.stopPropagation()}>
+                    {/* Account Selection */}
                     <div>
                       <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                        Region <span className="text-red-500">*</span>
+                        Salesforce Account <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        value={formData.region}
-                        onChange={(e) => {
-                          setFormData(prev => ({ ...prev, region: e.target.value }))
-                          setSelectedRegion(e.target.value)
+                      <SearchableSelect
+                        options={(() => {
+                          if (isLoadingSfAccounts && sfAccounts.length === 0) return []
+                          const searchOptions = sfAccounts.map(a => ({
+                            value: a.salesforce_account_id,
+                            label: a.salesforce_account_name || a.salesforce_account_id
+                          }))
+                          if (formData.sfdc_account_id && formData.customer_name) {
+                            const existsInSearch = sfAccounts.some(a => a.salesforce_account_id === formData.sfdc_account_id)
+                            if (!existsInSearch) {
+                              return [{ value: formData.sfdc_account_id, label: formData.customer_name }, ...searchOptions]
+                            }
+                          }
+                          return searchOptions
+                        })()}
+                        value={formData.sfdc_account_id}
+                        onChange={(value) => {
+                          const selectedAccount = sfAccounts.find(a => a.salesforce_account_id === value)
+                          setFormData(prev => ({ 
+                            ...prev, 
+                            sfdc_account_id: value,
+                            customer_name: selectedAccount?.salesforce_account_name || prev.customer_name,
+                            opportunity_id: '',
+                            uco_id: ''
+                          }))
+                          setSfOpportunitySearch('')
+                          setSfUseCaseSearch('')
                           markAsChanged()
                         }}
-                        className={clsx(
-                          "w-full text-sm",
-                          !formData.region && "border-orange-500/50 ring-1 ring-orange-500/30"
-                        )}
-                      >
-                        <option value="">{isLoadingRegions ? 'Loading regions...' : 'Select region'}</option>
-                        {regions.map(region => (
-                          <option key={region.region_code} value={region.region_code}>
-                            {region.region_code} ({region.sku_region})
-                          </option>
-                        ))}
-                      </select>
+                        onSearchChange={setSfAccountSearch}
+                        placeholder={isLoadingSfAccounts ? "Loading accounts..." : "Select account..."}
+                        searchPlaceholder="Search accounts..."
+                        isLoading={isLoadingSfAccounts}
+                        required
+                      />
                     </div>
                     
+                    {/* Opportunity Selection */}
                     <div>
                       <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                        Databricks Tier <span className="text-red-500">*</span>
+                        Opportunity
+                        {!formData.sfdc_account_id && (
+                          <span className="text-[var(--text-muted)] text-[10px] ml-1">(select account first)</span>
+                        )}
                       </label>
-                      <select
-                        value={formData.tier}
-                        onChange={(e) => {
-                          setFormData(prev => ({ ...prev, tier: e.target.value }))
+                      <SearchableSelect
+                        options={sfOpportunities.map(o => ({
+                          value: o.id,
+                          label: o.name || o.id
+                        }))}
+                        value={formData.opportunity_id}
+                        onChange={(value) => {
+                          setFormData(prev => ({ ...prev, opportunity_id: value }))
                           markAsChanged()
                         }}
-                        className={clsx(
-                          "w-full text-sm",
-                          !formData.tier && "border-orange-500/50 ring-1 ring-orange-500/30"
+                        onSearchChange={setSfOpportunitySearch}
+                        placeholder={!formData.sfdc_account_id ? "Select account first" : isLoadingSfOpportunities ? "Loading opportunities..." : "Select opportunity..."}
+                        searchPlaceholder="Search opportunities..."
+                        isLoading={isLoadingSfOpportunities}
+                        disabled={!formData.sfdc_account_id}
+                      />
+                    </div>
+                    
+                    {/* Use Case Selection */}
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                        Use Case
+                        {!formData.sfdc_account_id && (
+                          <span className="text-[var(--text-muted)] text-[10px] ml-1">(select account first)</span>
                         )}
-                      >
-                        <option value="">Select tier</option>
-                        <option value="standard">Standard</option>
-                        <option value="premium">Premium</option>
-                        {formData.cloud !== 'azure' && (
-                          <option value="enterprise">Enterprise</option>
-                        )}
-                      </select>
+                      </label>
+                      <SearchableSelect
+                        options={sfUseCases.map(uc => ({
+                          value: uc.salesforce_use_case_id,
+                          label: uc.salesforce_use_case_name || uc.salesforce_use_case_id
+                        }))}
+                        value={formData.uco_id}
+                        onChange={(value) => {
+                          setFormData(prev => ({ ...prev, uco_id: value }))
+                          markAsChanged()
+                        }}
+                        onSearchChange={setSfUseCaseSearch}
+                        placeholder={!formData.sfdc_account_id ? "Select account first" : isLoadingSfUseCases ? "Loading use cases..." : "Select use case..."}
+                        searchPlaceholder="Search use cases..."
+                        isLoading={isLoadingSfUseCases}
+                        disabled={!formData.sfdc_account_id}
+                      />
                     </div>
                   </div>
-                )}
+                </div>
+                
+                {/* Infrastructure */}
+                <div className="border-t border-[var(--border-primary)] pt-5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-4 flex items-center gap-2">
+                    <CpuChipIcon className="w-4 h-4" />
+                    Infrastructure
+                  </h4>
+                  
+                  {isLoadingEstimate && id ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse mb-1.5" />
+                        <div className="h-10 w-full bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                      </div>
+                      <div>
+                        <div className="h-4 w-24 bg-[var(--bg-tertiary)] rounded animate-pulse mb-1.5" />
+                        <div className="h-10 w-full bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4" onClick={(e) => e.stopPropagation()}>
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                          Region <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={formData.region}
+                          onChange={(e) => {
+                            setFormData(prev => ({ ...prev, region: e.target.value }))
+                            setSelectedRegion(e.target.value)
+                            markAsChanged()
+                          }}
+                          className={clsx(
+                            "w-full text-sm",
+                            !formData.region && "border-orange-500/50 ring-1 ring-orange-500/30"
+                          )}
+                        >
+                          <option value="">{isLoadingRegions ? 'Loading regions...' : 'Select region'}</option>
+                          {regions.map(region => (
+                            <option key={region.region_code} value={region.region_code}>
+                              {region.region_code} ({region.sku_region})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                          Databricks Tier <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={formData.tier}
+                          onChange={(e) => {
+                            setFormData(prev => ({ ...prev, tier: e.target.value }))
+                            markAsChanged()
+                          }}
+                          className={clsx(
+                            "w-full text-sm",
+                            !formData.tier && "border-orange-500/50 ring-1 ring-orange-500/30"
+                          )}
+                        >
+                          <option value="">Select tier</option>
+                          <option value="standard">Standard</option>
+                          <option value="premium">Premium</option>
+                          {formData.cloud !== 'azure' && (
+                            <option value="enterprise">Enterprise</option>
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </motion.div>
           
           {/* Workloads List */}
@@ -1545,13 +1563,6 @@ export default function Calculator() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h4 className="font-semibold truncate text-[var(--text-primary)]">{item.workload_name}</h4>
-                              {/* Workload type badge */}
-                              <span className={clsx(
-                                "px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide",
-                                typeConfig.bgColor, typeConfig.color
-                              )}>
-                                {typeConfig.label}
-                              </span>
                               {(item.serverless_enabled || (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')) && (
                                 <span className="badge badge-teal">Serverless</span>
                               )}
