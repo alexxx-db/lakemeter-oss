@@ -716,12 +716,24 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
                 <h4 className="text-sm font-semibold text-[var(--text-primary)]">Worker Nodes</h4>
                 <span className="text-xs text-[var(--text-muted)]">({form.num_workers} node{form.num_workers !== 1 ? 's' : ''})</span>
+                {/* Instance type match indicator */}
+                {form.driver_node_type && form.worker_node_type && (
+                  form.driver_node_type === form.worker_node_type ? (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 font-medium">
+                      Same as Driver
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-medium">
+                      Different
+                    </span>
+                  )
+                )}
               </div>
               
               <div className="space-y-3">
                 {/* Instance Type & Count Row */}
-                <div className="grid grid-cols-4 gap-3">
-                  <div className="col-span-3">
+                <div className="flex gap-2">
+                  <div className="flex-1 min-w-0">
                     <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
                     <SearchableSelect
                       options={instanceTypes.map(it => ({
@@ -738,7 +750,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                       grouped
                     />
                   </div>
-                  <div>
+                  <div className="w-14 flex-shrink-0">
                     <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Count</label>
                     <input
                       type="number"
@@ -746,7 +758,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                       max={100}
                       value={form.num_workers}
                       onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
-                      className="w-full text-sm"
+                      className="w-full text-sm text-center"
                     />
                   </div>
                 </div>
