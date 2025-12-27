@@ -96,7 +96,7 @@ DEFAULT_WORKLOAD_TYPES = [
         "show_vector_search_mode": False,
         "show_vm_pricing": False,
         "show_usage_hours": True,
-        "show_usage_runs": False,
+        "show_usage_runs": True,
         "show_usage_tokens": False,
         "sku_product_type_standard": "SQL_COMPUTE",
         "sku_product_type_photon": "SQL_PRO_COMPUTE",
