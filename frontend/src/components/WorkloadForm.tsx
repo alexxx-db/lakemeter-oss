@@ -1174,7 +1174,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Quantity (M/month)</label>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Quantity (M tokens/month)</label>
               <input
                 type="number"
                 min={0}
