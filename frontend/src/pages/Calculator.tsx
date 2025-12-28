@@ -41,6 +41,17 @@ import { saveAs } from 'file-saver'
 import WorkloadForm from '../components/WorkloadForm'
 import SearchableSelect from '../components/SearchableSelect'
 import type { LineItem, SalesforceAccount, SalesforceOpportunity, SalesforceUseCase } from '../types'
+import {
+  getInstanceDBURate as getBundleInstanceDBURate,
+  getPhotonMultiplier as getBundlePhotonMultiplier,
+  getDBUPrice as getBundleDBUPrice,
+  getDBSQLRate as getBundleDBSQLRate,
+  getDBSQLWarehouseConfig as getBundleDBSQLWarehouseConfig,
+  getVectorSearchRate as getBundleVectorSearchRate,
+  getModelServingRate as getBundleModelServingRate,
+  getFMAPIDatabricksRate as getBundleFMAPIDatabricksRate,
+  getFMAPIProprietaryRate as getBundleFMAPIProprietaryRate
+} from '../utils/pricingBundle'
 
 // Cloud provider visual options
 const CLOUD_PROVIDERS = [
@@ -248,6 +259,10 @@ export default function Calculator() {
     // FMAPI rates (cached lookups)
     getFMAPIDatabricksRate,
     getFMAPIProprietaryRate,
+    // Pricing Bundle (for instant local calculations)
+    pricingBundle,
+    isPricingBundleLoaded,
+    loadPricingBundle,
     // State management
     clearEstimateState
   } = useStore()
@@ -316,7 +331,8 @@ export default function Calculator() {
   
   useEffect(() => {
     fetchReferenceData()
-  }, [fetchReferenceData])
+    loadPricingBundle()  // Load static pricing bundle for instant calculations
+  }, [fetchReferenceData, loadPricingBundle])
   
   // Fetch Salesforce accounts on mount or when search changes (debounced)
   useEffect(() => {
@@ -630,7 +646,18 @@ export default function Calculator() {
     }
     
     // Get DBU price for this product type
-    const dbuPrice = pricing[productType] || 0.20
+    // Try pricing bundle first (static data), then runtime dbuRatesMap, then hardcoded fallback
+    let dbuPrice = 0.20
+    if (isPricingBundleLoaded && formData.tier) {
+      const bundlePrice = getBundleDBUPrice(pricingBundle, cloud, region, formData.tier, productType)
+      if (bundlePrice > 0) {
+        dbuPrice = bundlePrice
+      } else {
+        dbuPrice = pricing[productType] || 0.20
+      }
+    } else {
+      dbuPrice = pricing[productType] || 0.20
+    }
     
     // ========================================
     // Step 3: Calculate DBU per hour based on workload type
@@ -640,22 +667,42 @@ export default function Calculator() {
     let monthlyDBUs = 0
     let vmCost = 0
     
-    // Get instance DBU rates from fetched instanceTypes (not hardcoded)
-    const driverInstance = instanceTypes.find(it => it.id === item.driver_node_type || it.name === item.driver_node_type)
-    const workerInstance = instanceTypes.find(it => it.id === item.worker_node_type || it.name === item.worker_node_type)
-    const driverDBURate = driverInstance?.dbu_rate || 0.5 // Fallback to 0.5 if not found
-    const workerDBURate = workerInstance?.dbu_rate || 0.5
+    // Get instance DBU rates - try pricing bundle first, then fetched instanceTypes
+    let driverDBURate = 0.5 // Fallback
+    let workerDBURate = 0.5
     
-    // Get photon multiplier from fetched photonMultipliers
-    // Look up the multiplier for the current product type
-    const getPhotonMultiplier = () => {
+    if (isPricingBundleLoaded && item.driver_node_type) {
+      const bundleDriverRate = getBundleInstanceDBURate(pricingBundle, cloud, item.driver_node_type)
+      if (bundleDriverRate > 0) driverDBURate = bundleDriverRate
+    }
+    if (!driverDBURate || driverDBURate === 0.5) {
+      const driverInstance = instanceTypes.find(it => it.id === item.driver_node_type || it.name === item.driver_node_type)
+      if (driverInstance?.dbu_rate) driverDBURate = driverInstance.dbu_rate
+    }
+    
+    if (isPricingBundleLoaded && item.worker_node_type) {
+      const bundleWorkerRate = getBundleInstanceDBURate(pricingBundle, cloud, item.worker_node_type)
+      if (bundleWorkerRate > 0) workerDBURate = bundleWorkerRate
+    }
+    if (!workerDBURate || workerDBURate === 0.5) {
+      const workerInstance = instanceTypes.find(it => it.id === item.worker_node_type || it.name === item.worker_node_type)
+      if (workerInstance?.dbu_rate) workerDBURate = workerInstance.dbu_rate
+    }
+    
+    // Get photon multiplier - try pricing bundle first, then fetched photonMultipliers
+    const getPhotonMultiplierValue = (): number => {
       if (!item.photon_enabled || item.serverless_enabled) return 1.0
       
       // Extract base SKU type (without "(PHOTON)" suffix) for lookup
-      // The API returns multipliers for base SKU types like "JOBS_COMPUTE", not "JOBS_COMPUTE_(PHOTON)"
       const baseSKUType = productType.replace('_(PHOTON)', '')
       
-      // Map workload types to their base SKU types
+      // Try pricing bundle first
+      if (isPricingBundleLoaded) {
+        const bundleMultiplier = getBundlePhotonMultiplier(pricingBundle, cloud, baseSKUType)
+        if (bundleMultiplier !== 2.0) return bundleMultiplier // 2.0 is the fallback in bundle helper
+      }
+      
+      // Map workload types to their base SKU types for API data lookup
       const workloadToSKU: Record<string, string> = {
         'JOBS': 'JOBS_COMPUTE',
         'ALL_PURPOSE': 'ALL_PURPOSE_COMPUTE',
@@ -663,7 +710,7 @@ export default function Calculator() {
       }
       const skuForLookup = workloadToSKU[item.workload_type || ''] || baseSKUType
       
-      // Try to find multiplier: first exact match, then by base SKU, then by workload mapping
+      // Fall back to fetched photonMultipliers
       const multiplierEntry = photonMultipliers.find(pm => 
         pm.sku_type === baseSKUType || 
         pm.sku_type === skuForLookup ||
@@ -672,7 +719,7 @@ export default function Calculator() {
       )
       return multiplierEntry?.multiplier || 2.0 // Fallback to 2.0 (typical photon multiplier)
     }
-    const photonMultiplier = getPhotonMultiplier()
+    const photonMultiplier = getPhotonMultiplierValue()
     
     // Serverless mode multiplier (performance = 2x, standard = 1x)
     const serverlessMultiplier = (item.serverless_enabled && item.serverless_mode === 'performance') ? 2 : 1
@@ -741,25 +788,58 @@ export default function Calculator() {
         break
       
       case 'DBSQL':
-        // DBSQL: lookup DBU per hour from warehouse size using fetched dbsqlSizes
-        const dbsqlSize = dbsqlSizes.find(s => s.id === item.dbsql_warehouse_size || s.name === item.dbsql_warehouse_size)
-        const warehouseDBUs = dbsqlSize?.dbu_per_hour || DBSQL_DBU_RATES[item.dbsql_warehouse_size || 'Small'] || 12
+        // DBSQL: lookup DBU per hour from warehouse size
+        // Try pricing bundle first, then fetched dbsqlSizes, then hardcoded fallback
+        const dbsqlWarehouseType = item.dbsql_warehouse_type || 'SERVERLESS'
+        const warehouseSize = item.dbsql_warehouse_size || 'Small'
         const numClusters = item.dbsql_num_clusters || 1
+        
+        let warehouseDBUs = DBSQL_DBU_RATES[warehouseSize] || 12 // Default fallback
+        
+        // Try pricing bundle for DBSQL rate
+        if (isPricingBundleLoaded) {
+          const bundleDbsqlRate = getBundleDBSQLRate(pricingBundle, cloud, dbsqlWarehouseType, warehouseSize)
+          if (bundleDbsqlRate && bundleDbsqlRate.dbu_per_hour > 0) {
+            warehouseDBUs = bundleDbsqlRate.dbu_per_hour
+          }
+        }
+        
+        // Fall back to fetched dbsqlSizes
+        if (!warehouseDBUs || warehouseDBUs === (DBSQL_DBU_RATES[warehouseSize] || 12)) {
+          const dbsqlSize = dbsqlSizes.find(s => s.id === warehouseSize || s.name === warehouseSize)
+          if (dbsqlSize?.dbu_per_hour) warehouseDBUs = dbsqlSize.dbu_per_hour
+        }
         
         // DBU/Hour = warehouse_dbu_rate × num_clusters
         dbuPerHour = warehouseDBUs * numClusters
         monthlyDBUs = dbuPerHour * hoursPerMonth
         
         // VM costs only for CLASSIC and PRO (not SERVERLESS)
-        const dbsqlWarehouseType = item.dbsql_warehouse_type || 'SERVERLESS'
         if (dbsqlWarehouseType !== 'SERVERLESS') {
-          // Classic/Pro: VM Cost/Hour = (driver_vm_cost + worker_vm_cost × workers) × num_clusters
-          // DBSQL Classic typically uses i3 instances
-          const dbsqlVMPricingTier = item.driver_pricing_tier || 'on_demand'
-          const dbsqlVMPaymentOption = item.driver_payment_option || 'NA'
+          // Try to get warehouse config from pricing bundle for VM details
+          const warehouseConfig = isPricingBundleLoaded 
+            ? getBundleDBSQLWarehouseConfig(pricingBundle, cloud, dbsqlWarehouseType, warehouseSize)
+            : null
           
-          // Get VM cost for the warehouse (use driver node type if specified, otherwise estimate)
-          if (item.driver_node_type) {
+          if (warehouseConfig) {
+            // Use config from bundle: driver + workers VM costs
+            const dbsqlVMPricingTier = item.driver_pricing_tier || 'on_demand'
+            const dbsqlVMPaymentOption = item.driver_payment_option || 'NA'
+            
+            const driverVMCost = getVMPrice(cloud, region, warehouseConfig.driver_instance_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
+            const workerVMCost = getVMPrice(cloud, region, warehouseConfig.worker_instance_type, item.worker_pricing_tier || 'spot', item.worker_payment_option || 'NA')
+            
+            // VM Cost/Hour = (driver_count × driver_vm + worker_count × worker_vm) × num_clusters
+            const dbsqlVMCostPerHour = (
+              (warehouseConfig.driver_count * driverVMCost) + 
+              (warehouseConfig.worker_count * workerVMCost)
+            ) * numClusters
+            vmCost = dbsqlVMCostPerHour * hoursPerMonth
+          } else if (item.driver_node_type) {
+            // Fallback: use driver/worker node types if specified
+            const dbsqlVMPricingTier = item.driver_pricing_tier || 'on_demand'
+            const dbsqlVMPaymentOption = item.driver_payment_option || 'NA'
+            
             const dbsqlDriverVMCost = getVMPrice(cloud, region, item.driver_node_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
             const dbsqlWorkerVMCost = item.worker_node_type 
               ? getVMPrice(cloud, region, item.worker_node_type, item.worker_pricing_tier || 'spot', item.worker_payment_option || 'NA')
@@ -775,27 +855,56 @@ export default function Calculator() {
       
       case 'VECTOR_SEARCH':
         // Vector Search: Units = CEILING(vector_capacity_millions / divisor)
-        // Use fetched vectorSearchModes for accurate rates
         const vectorMode = item.vector_search_mode || 'standard'
         const vectorCapacity = item.vector_capacity_millions || 1
         
-        // Get rate from fetched data, fallback to defaults
-        const vectorRateData = getVectorSearchRate(vectorMode)
-        const divisor = vectorRateData?.input_divisor || (vectorMode === 'storage_optimized' ? 64 : 2)
-        const unitsUsed = Math.ceil(vectorCapacity / divisor)
+        // Try pricing bundle first, then fetched data, then defaults
+        let vectorDivisor = vectorMode === 'storage_optimized' ? 64000000 : 2000000  // Default divisors
+        let vectorModeDBURate = vectorMode === 'storage_optimized' ? 18.29 : 4  // Default DBU rates
+        
+        if (isPricingBundleLoaded) {
+          const bundleVectorRate = getBundleVectorSearchRate(pricingBundle, cloud, vectorMode)
+          if (bundleVectorRate) {
+            vectorDivisor = bundleVectorRate.input_divisor
+            vectorModeDBURate = bundleVectorRate.dbu_rate
+          }
+        } else {
+          // Fall back to fetched vectorSearchModes
+          const vectorRateData = getVectorSearchRate(vectorMode)
+          if (vectorRateData) {
+            vectorDivisor = vectorRateData.input_divisor
+            vectorModeDBURate = vectorRateData.dbu_per_hour
+          }
+        }
+        
+        // input_divisor is total vectors (e.g., 2000000 = 2M), vectorCapacity is in millions
+        const vectorsInMillions = vectorCapacity * 1000000
+        const unitsUsed = Math.ceil(vectorsInMillions / vectorDivisor)
         
         // DBU/Hour = units_used × mode_dbu_rate
-        const vectorModeDBURate = vectorRateData?.dbu_per_hour || (vectorMode === 'storage_optimized' ? 0.5 : 2.0)
         dbuPerHour = unitsUsed * vectorModeDBURate
         monthlyDBUs = dbuPerHour * hoursPerMonth
         break
       
       case 'MODEL_SERVING':
         // Model Serving: DBU/Hour = gpu_type_dbu_rate
-        // Look up DBU rate from fetched modelServingGPUTypes
         const gpuType = item.model_serving_gpu_type || 'cpu'
-        const gpuTypeData = modelServingGPUTypes.find(g => g.id === gpuType || g.name === gpuType)
-        const gpuDBURate = gpuTypeData?.dbu_per_hour || 2 // Default to 2 DBU/hr if not found
+        
+        // Try pricing bundle first, then fetched data, then default
+        let gpuDBURate = 2 // Default fallback
+        
+        if (isPricingBundleLoaded) {
+          const bundleGpuRate = getBundleModelServingRate(pricingBundle, cloud, gpuType)
+          if (bundleGpuRate && bundleGpuRate.dbu_rate > 0) {
+            gpuDBURate = bundleGpuRate.dbu_rate
+          }
+        }
+        
+        // Fall back to fetched modelServingGPUTypes
+        if (gpuDBURate === 2) {
+          const gpuTypeData = modelServingGPUTypes.find(g => g.id === gpuType || g.name === gpuType)
+          if (gpuTypeData?.dbu_per_hour) gpuDBURate = gpuTypeData.dbu_per_hour
+        }
         
         // Total Cost = DBU/Hour × hours_per_month × dbu_price
         dbuPerHour = gpuDBURate
@@ -815,60 +924,94 @@ export default function Calculator() {
       
       case 'FMAPI_DATABRICKS':
         // Foundation Models (Databricks) - llama, gpt-oss, gemma, bge, gte, etc.
-        // Use cached rate data if available, otherwise use defaults
         const fmapiDbxQuantity = item.fmapi_quantity || 0
         const fmapiDbxRateType = item.fmapi_rate_type || 'input_token'
         const fmapiDbxIsProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(fmapiDbxRateType)
         
-        // Try to get cached rate from store
-        const dbxRateData = item.fmapi_model 
-          ? getFMAPIDatabricksRate(item.fmapi_model, fmapiDbxRateType) 
-          : null
+        // Try pricing bundle first
+        let dbxDbuRate: number | null = null
         
-        if (fmapiDbxIsProvisioned) {
-          // Provisioned: Cost = quantity (hours) × dbu_per_hour × dbu_price
-          const provisionedDbxDbuPerHour = dbxRateData?.dbu_per_hour || 
-            (fmapiDbxRateType === 'provisioned_scaling' ? 200 : 50)
-          monthlyDBUs = fmapiDbxQuantity * provisionedDbxDbuPerHour
-        } else {
-          // Token-based: Cost = quantity × dbu_per_1M_tokens × dbu_price
-          // quantity is in millions (M), so formula is: quantity × dbu_per_1M
-          const tokenDbxRate = dbxRateData?.dbu_per_1M_tokens || 
-            (fmapiDbxRateType === 'output_token' ? 3.0 : 1.0)
-          monthlyDBUs = fmapiDbxQuantity * tokenDbxRate
+        if (isPricingBundleLoaded && item.fmapi_model) {
+          const bundleDbxRate = getBundleFMAPIDatabricksRate(pricingBundle, cloud, item.fmapi_model, fmapiDbxRateType)
+          if (bundleDbxRate) {
+            dbxDbuRate = bundleDbxRate.dbu_rate
+          }
         }
+        
+        // Fall back to store's cached rate
+        if (dbxDbuRate === null && item.fmapi_model) {
+          const dbxRateData = getFMAPIDatabricksRate(item.fmapi_model, fmapiDbxRateType)
+          if (dbxRateData) {
+            if (fmapiDbxIsProvisioned) {
+              dbxDbuRate = dbxRateData.dbu_per_hour || null
+            } else {
+              dbxDbuRate = dbxRateData.dbu_per_1M_tokens || null
+            }
+          }
+        }
+        
+        // Apply defaults if still no rate found
+        if (dbxDbuRate === null) {
+          if (fmapiDbxIsProvisioned) {
+            dbxDbuRate = fmapiDbxRateType === 'provisioned_scaling' ? 200 : 50
+          } else {
+            dbxDbuRate = fmapiDbxRateType === 'output_token' ? 3.0 : 1.0
+          }
+        }
+        
+        monthlyDBUs = fmapiDbxQuantity * dbxDbuRate
         break
       
       case 'FMAPI_PROPRIETARY':
         // Foundation Models (Proprietary) - OpenAI, Anthropic, Google
-        // Use cached rate data if available, otherwise use defaults
         const fmapiPropQuantity = item.fmapi_quantity || 0
         const fmapiPropRateType = item.fmapi_rate_type || 'input_token'
         const fmapiPropIsProvisioned = fmapiPropRateType === 'provisioned_scaling'
         
-        // Try to get cached rate from store
-        const propRateData = (item.fmapi_provider && item.fmapi_model)
-          ? getFMAPIProprietaryRate(item.fmapi_provider, item.fmapi_model, fmapiPropRateType)
-          : null
+        // Try pricing bundle first
+        let propDbuRate: number | null = null
         
-        if (fmapiPropIsProvisioned) {
-          // Provisioned: Cost = quantity (hours) × dbu_per_hour × dbu_price
-          const provisionedPropDbuPerHour = propRateData?.dbu_per_hour || 150
-          monthlyDBUs = fmapiPropQuantity * provisionedPropDbuPerHour
-        } else {
-          // Token-based: Cost = quantity × dbu_per_1M_tokens × dbu_price
-          // Use cached rate or fall back to reasonable defaults
-          let tokenPropRate = propRateData?.dbu_per_1M_tokens
-          if (!tokenPropRate) {
-            switch (fmapiPropRateType) {
-              case 'output_token': tokenPropRate = 6.0; break
-              case 'cache_read': tokenPropRate = 0.5; break
-              case 'cache_write': tokenPropRate = 1.0; break
-              default: tokenPropRate = 2.0 // input_token
+        if (isPricingBundleLoaded && item.fmapi_provider && item.fmapi_model) {
+          // Bundle key format: "cloud:provider:model:endpoint_type:context_length:rate_type"
+          // Use defaults for endpoint_type and context_length if not specified
+          const endpointType = item.fmapi_endpoint_type || 'global'
+          const contextLength = item.fmapi_context_length || 'all'
+          const bundlePropRate = getBundleFMAPIProprietaryRate(
+            pricingBundle, cloud, item.fmapi_provider, item.fmapi_model, 
+            endpointType, contextLength, fmapiPropRateType
+          )
+          if (bundlePropRate) {
+            propDbuRate = bundlePropRate.dbu_rate
+          }
+        }
+        
+        // Fall back to store's cached rate
+        if (propDbuRate === null && item.fmapi_provider && item.fmapi_model) {
+          const propRateData = getFMAPIProprietaryRate(item.fmapi_provider, item.fmapi_model, fmapiPropRateType)
+          if (propRateData) {
+            if (fmapiPropIsProvisioned) {
+              propDbuRate = propRateData.dbu_per_hour || null
+            } else {
+              propDbuRate = propRateData.dbu_per_1M_tokens || null
             }
           }
-          monthlyDBUs = fmapiPropQuantity * tokenPropRate
         }
+        
+        // Apply defaults if still no rate found
+        if (propDbuRate === null) {
+          if (fmapiPropIsProvisioned) {
+            propDbuRate = 150
+          } else {
+            switch (fmapiPropRateType) {
+              case 'output_token': propDbuRate = 6.0; break
+              case 'cache_read': propDbuRate = 0.5; break
+              case 'cache_write': propDbuRate = 1.0; break
+              default: propDbuRate = 2.0 // input_token
+            }
+          }
+        }
+        
+        monthlyDBUs = fmapiPropQuantity * propDbuRate
         break
       
       default:
@@ -910,7 +1053,7 @@ export default function Calculator() {
     })
     
     return { totalDBUs, totalDBUCost, totalVMCost, totalCost }
-  }, [lineItems, formData.cloud, formData.region, workloadTypes, getVMPrice, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate])
+  }, [lineItems, formData.cloud, formData.region, formData.tier, workloadTypes, getVMPrice, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
   
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {

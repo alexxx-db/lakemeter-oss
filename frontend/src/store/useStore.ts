@@ -29,6 +29,13 @@ import type {
   FMAPIDatabricksModel,
   FMAPIProprietaryModel
 } from '../api/client'
+import { 
+  loadPricingBundle, 
+  createEmptyBundle,
+  getVMCost as getBundleVMCost,
+  getDBUPrice as getBundleDBUPrice,
+  type PricingBundle
+} from '../utils/pricingBundle'
 
 // =============================================================================
 // LOCAL STORAGE CACHE UTILITIES
@@ -242,6 +249,11 @@ interface Store {
   fmapiDatabricksRates: Record<string, FMAPIDatabricksModel>  // "model:rate_type" -> rate data
   fmapiProprietaryRates: Record<string, FMAPIProprietaryModel>  // "provider:model:rate_type" -> rate data
   
+  // Static Pricing Bundle (for instant local calculations)
+  pricingBundle: PricingBundle
+  isPricingBundleLoaded: boolean
+  loadPricingBundle: () => Promise<void>
+  
   // Cost Calculations (NEW)
   workloadCosts: Record<string, CostCalculationResponse>  // Map of line_item_id -> cost
   isCalculatingCost: boolean
@@ -386,6 +398,10 @@ export const useStore = create<Store>((set, get) => ({
   vectorSearchModes: [],
   fmapiDatabricksRates: {},
   fmapiProprietaryRates: {},
+  
+  // Static Pricing Bundle (for instant local calculations)
+  pricingBundle: createEmptyBundle(),
+  isPricingBundleLoaded: false,
   
   // Cost Calculations
   workloadCosts: {},
@@ -807,6 +823,28 @@ export const useStore = create<Store>((set, get) => ({
     set({ isReferenceDataLoaded: false })
   },
   
+  // Load static pricing bundle for instant local calculations
+  loadPricingBundle: async () => {
+    const state = get()
+    if (state.isPricingBundleLoaded) {
+      console.log('[PricingBundle] Already loaded')
+      return
+    }
+    
+    try {
+      const bundle = await loadPricingBundle()
+      set({ pricingBundle: bundle, isPricingBundleLoaded: bundle.isLoaded })
+      
+      // If bundle loaded successfully, populate vmPricingMap from bundle for backwards compatibility
+      if (bundle.isLoaded && Object.keys(bundle.vmCosts).length > 0) {
+        console.log('[PricingBundle] Loaded', Object.keys(bundle.vmCosts).length, 'VM costs')
+      }
+    } catch (error) {
+      console.error('[PricingBundle] Failed to load:', error)
+      // Keep using API-based fallback
+    }
+  },
+  
   // Get cached regions for a specific cloud (instant, no API call)
   getRegionsForCloud: (cloud: string) => {
     const state = get()
@@ -1014,8 +1052,17 @@ export const useStore = create<Store>((set, get) => ({
       return 0
     }
     
-    const { vmPricingMap } = get()
+    const { vmPricingMap, pricingBundle, isPricingBundleLoaded } = get()
     
+    // Try pricing bundle first (static data - instant lookup)
+    if (isPricingBundleLoaded && Object.keys(pricingBundle.vmCosts).length > 0) {
+      const bundlePrice = getBundleVMCost(pricingBundle, cloud, region, instanceType, pricingTier, paymentOption)
+      if (bundlePrice > 0) {
+        return bundlePrice
+      }
+    }
+    
+    // Fall back to runtime-cached vmPricingMap
     const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
     if (vmPricingMap[exactKey] !== undefined) {
       return vmPricingMap[exactKey]
@@ -1081,8 +1128,18 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   
-  getDBURate: (productType) => {
-    const { dbuRatesMap } = get()
+  getDBURate: (productType, cloud?: string, region?: string, tier?: string) => {
+    const { dbuRatesMap, pricingBundle, isPricingBundleLoaded } = get()
+    
+    // Try pricing bundle first (static data - instant lookup)
+    if (isPricingBundleLoaded && cloud && region && tier) {
+      const bundlePrice = getBundleDBUPrice(pricingBundle, cloud, region, tier, productType)
+      if (bundlePrice > 0) {
+        return bundlePrice
+      }
+    }
+    
+    // Fall back to runtime-cached dbuRatesMap
     return dbuRatesMap[productType] || 0
   },
   

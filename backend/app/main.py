@@ -976,6 +976,12 @@ if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
     if (STATIC_DIR / "assets").exists():
         app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
     
+    # Mount static pricing data (for instant local calculations)
+    PRICING_DIR = STATIC_DIR / "pricing"
+    if PRICING_DIR.exists():
+        app.mount("/static/pricing", StaticFiles(directory=PRICING_DIR), name="pricing")
+        log_info(f"Pricing bundle found at {PRICING_DIR}")
+    
     # Serve static files at root (favicon, etc.)
     @app.get("/favicon.ico")
     async def favicon():

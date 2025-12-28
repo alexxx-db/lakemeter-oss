@@ -164,3 +164,90 @@ async def get_fmapi_proprietary_models(request: Request, provider: Optional[str]
         "get_fmapi_proprietary_models"
     )
 
+
+# ==================== Pricing Bundle ====================
+
+@router.post("/pricing-bundle/regenerate")
+async def regenerate_pricing_bundle():
+    """
+    Regenerate the static pricing bundle from Lakebase reference tables.
+    
+    This endpoint triggers the pricing bundle generation script which queries
+    Lakebase and creates static JSON files for instant client-side calculations.
+    
+    Returns:
+        dict: Status of the regeneration with file counts
+    """
+    import sys
+    import os
+    from pathlib import Path
+    
+    # Add scripts directory to path
+    backend_dir = Path(__file__).parent.parent.parent
+    scripts_dir = backend_dir / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    
+    try:
+        from generate_pricing_bundle import generate_all_pricing_bundles
+        generate_all_pricing_bundles()
+        
+        # Check generated files
+        pricing_dir = backend_dir / "static" / "pricing"
+        files = list(pricing_dir.glob("*.json")) if pricing_dir.exists() else []
+        
+        return {
+            "success": True,
+            "message": "Pricing bundle regenerated successfully",
+            "files_generated": len(files),
+            "file_names": [f.name for f in files]
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": str(e),
+                "message": "Failed to regenerate pricing bundle"
+            }
+        )
+
+
+@router.get("/pricing-bundle/status")
+async def get_pricing_bundle_status():
+    """
+    Check the status of the static pricing bundle.
+    
+    Returns:
+        dict: Information about the pricing bundle files
+    """
+    from pathlib import Path
+    import json
+    from datetime import datetime
+    
+    backend_dir = Path(__file__).parent.parent.parent
+    pricing_dir = backend_dir / "static" / "pricing"
+    
+    if not pricing_dir.exists():
+        return {
+            "exists": False,
+            "message": "Pricing bundle not generated yet. Call POST /regenerate to create it."
+        }
+    
+    manifest_path = pricing_dir / "manifest.json"
+    if manifest_path.exists():
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        return {
+            "exists": True,
+            "generated_at": manifest.get("generated_at"),
+            "total_entries": manifest.get("total_entries"),
+            "files": manifest.get("files", [])
+        }
+    
+    files = list(pricing_dir.glob("*.json"))
+    return {
+        "exists": True,
+        "files": [f.name for f in files],
+        "count": len(files)
+    }
+

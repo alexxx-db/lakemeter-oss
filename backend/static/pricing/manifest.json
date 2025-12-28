@@ -1,0 +1,18 @@
+{
+  "generated_at": "2025-12-29T00:00:00.000Z",
+  "total_entries": 0,
+  "files": [
+    "instance-dbu-rates.json",
+    "photon-multipliers.json",
+    "vm-costs.json",
+    "dbu-rates.json",
+    "dbsql-rates.json",
+    "dbsql-warehouse-config.json",
+    "vector-search-rates.json",
+    "model-serving-rates.json",
+    "fmapi-databricks-rates.json",
+    "fmapi-proprietary-rates.json"
+  ],
+  "note": "Placeholder files. Run POST /api/v1/reference/pricing-bundle/regenerate to populate with actual data from Lakebase."
+}
+
