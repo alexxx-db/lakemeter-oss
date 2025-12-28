@@ -471,13 +471,16 @@ export default function Calculator() {
       if (currentEstimate.cloud) {
         setSelectedCloud(currentEstimate.cloud.toLowerCase())
       }
+      if (currentEstimate.region) {
+        setSelectedRegion(currentEstimate.region)
+      }
     } else if (!id) {
       // Creating new estimate - reset to defaults
       setFormData(defaultEstimateFormData)
       setSelectedCloud('aws')
       setHasUnsavedChanges(false)
     }
-  }, [currentEstimate, id, setSelectedCloud])
+  }, [currentEstimate, id, setSelectedCloud, setSelectedRegion])
   
   // Fetch DBU rates when cloud/region/tier changes
   useEffect(() => {
@@ -2102,144 +2105,67 @@ export default function Calculator() {
               </div>
             ) : lineItems.length > 0 ? (
               <div className="space-y-4">
-                {/* Instant calculation indicator */}
-                <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">
-                  <BoltIcon className="w-3 h-3" />
-                  <span>Local calculation • Instant updates</span>
+                {/* Monthly Total - Hero Section */}
+                <div className="text-center pb-4 border-b border-[var(--border-primary)]">
+                  <p className="text-xs text-[var(--text-muted)] mb-1">Monthly Total</p>
+                  <p className="text-3xl font-bold text-orange-500">{formatCurrency(totalCosts.totalCost)}</p>
+                  <p className="text-sm text-[var(--text-secondary)] mt-1">
+                    {formatCurrency(totalCosts.totalCost * 12)}/year
+                  </p>
                 </div>
                 
-                {/* DBU Cost */}
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-orange-500" />
-                    <span className="text-sm text-[var(--text-secondary)]">DBU Cost</span>
+                {/* Cost Breakdown Row */}
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 rounded-lg bg-[var(--bg-tertiary)]">
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">DBU</p>
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</p>
                   </div>
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    {formatCurrency(totalCosts.totalDBUCost)}
-                  </span>
-                </div>
-                
-                {/* VM Cost */}
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-orange-400" />
-                    <span className="text-sm text-[var(--text-secondary)]">VM Cost</span>
+                  <div className="p-2 rounded-lg bg-[var(--bg-tertiary)]">
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">VM</p>
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</p>
                   </div>
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    {formatCurrency(totalCosts.totalVMCost)}
-                  </span>
-                </div>
-                
-                {/* Divider */}
-                <div className="border-t border-[var(--border-primary)] pt-4">
-                  {/* Monthly Total */}
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-semibold text-[var(--text-primary)]">Monthly Total</span>
-                    <span className="text-2xl font-bold text-orange-500">
-                      {formatCurrency(totalCosts.totalCost)}
-                    </span>
-                  </div>
-                  
-                  {/* Annual Total */}
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-[var(--text-muted)]">Annual Total</span>
-                    <span className="font-medium text-[var(--text-secondary)]">
-                      {formatCurrency(totalCosts.totalCost * 12)}
-                    </span>
+                  <div className="p-2 rounded-lg bg-[var(--bg-tertiary)]">
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">DBUs</p>
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">{formatNumber(totalCosts.totalDBUs)}</p>
                   </div>
                 </div>
                 
-                {/* DBU Summary */}
-                <div className="pt-3 border-t border-[var(--border-primary)]">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-[var(--text-muted)]">Total DBUs/month</span>
-                    <span className="font-mono text-[var(--text-secondary)]">
-                      {formatNumber(totalCosts.totalDBUs)}
-                    </span>
-                  </div>
-                </div>
-                
-                {/* Cost Distribution Chart */}
-                {lineItems.length > 1 && totalCosts.totalCost > 0 && (
-                  <div className="pt-4 border-t border-[var(--border-primary)]">
-                    <p className="text-xs font-medium uppercase tracking-wider mb-3 text-[var(--text-muted)]">Cost Distribution</p>
-                    <div className="space-y-2">
+                {/* Workload Breakdown - Combined List with Bars */}
+                {lineItems.length > 0 && (
+                  <div className="pt-3 border-t border-[var(--border-primary)]">
+                    <p className="text-xs font-medium uppercase tracking-wider mb-2 text-[var(--text-muted)]">
+                      Workloads ({lineItems.length})
+                    </p>
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                       {(() => {
-                        // Sort by cost descending and take top items
                         const sortedItems = [...lineItems]
-                          .map(item => ({
-                            item,
-                            costs: calculateItemCost(item)
-                          }))
+                          .map(item => ({ item, costs: calculateItemCost(item) }))
                           .sort((a, b) => b.costs.totalCost - a.costs.totalCost)
                         
-                        // Show top 5 individually, group rest as "Other"
-                        const topItems = sortedItems.slice(0, 5)
-                        const otherItems = sortedItems.slice(5)
-                        const otherCost = otherItems.reduce((sum, i) => sum + i.costs.totalCost, 0)
+                        const barColors = ['bg-orange-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500', 'bg-indigo-500']
                         
-                        const barColors = [
-                          'bg-orange-500',
-                          'bg-amber-500',
-                          'bg-blue-500',
-                          'bg-emerald-500',
-                          'bg-purple-500',
-                        ]
-                        
-                        return (
-                          <>
-                            {topItems.map(({ item, costs }, idx) => {
-                              const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
-                              return (
-                                <div key={item.line_item_id} className="space-y-1">
-                                  <div className="flex justify-between text-xs">
-                                    <span className="text-[var(--text-secondary)] truncate max-w-[120px]">{item.workload_name}</span>
-                                    <span className="text-[var(--text-muted)] ml-2">{percent.toFixed(1)}%</span>
-                                  </div>
-                                  <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                                    <div 
-                                      className={clsx("h-full rounded-full transition-all duration-300", barColors[idx])}
-                                      style={{ width: `${percent}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              )
-                            })}
-                            {otherCost > 0 && (
-                              <div className="space-y-1">
-                                <div className="flex justify-between text-xs">
-                                  <span className="text-[var(--text-muted)]">Other ({otherItems.length})</span>
-                                  <span className="text-[var(--text-muted)] ml-2">{((otherCost / totalCosts.totalCost) * 100).toFixed(1)}%</span>
-                                </div>
-                                <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                                  <div 
-                                    className="h-full rounded-full transition-all duration-300 bg-gray-400"
-                                    style={{ width: `${(otherCost / totalCosts.totalCost) * 100}%` }}
-                                  />
+                        return sortedItems.map(({ item, costs }, idx) => {
+                          const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
+                          const barColor = barColors[idx % barColors.length]
+                          return (
+                            <div key={item.line_item_id} className="group">
+                              <div className="flex items-center justify-between text-xs mb-0.5">
+                                <span className="text-[var(--text-secondary)] truncate max-w-[110px]" title={item.workload_name}>{item.workload_name}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[var(--text-muted)]">{percent.toFixed(0)}%</span>
+                                  <span className="font-medium text-[var(--text-primary)] w-16 text-right">{formatCurrency(costs.totalCost)}</span>
                                 </div>
                               </div>
-                            )}
-                          </>
-                        )
+                              <div className="h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                                <div 
+                                  className={clsx("h-full rounded-full transition-all duration-300", barColor)}
+                                  style={{ width: `${Math.max(percent, 1)}%` }}
+                                />
+                              </div>
+                            </div>
+                          )
+                        })
                       })()}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Per Workload Breakdown */}
-                {lineItems.length > 1 && (
-                  <div className="pt-4 border-t border-[var(--border-primary)]">
-                    <p className="text-xs font-medium uppercase tracking-wider mb-3 text-[var(--text-muted)]">By Workload</p>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {lineItems.map(item => {
-                        const costs = calculateItemCost(item)
-                        return (
-                          <div key={item.line_item_id} className="flex justify-between text-sm">
-                            <span className="text-[var(--text-secondary)] truncate pr-2 max-w-[140px]">{item.workload_name}</span>
-                            <span className="font-medium text-[var(--text-primary)]">{formatCurrency(costs.totalCost)}</span>
-                          </div>
-                        )
-                      })}
                     </div>
                   </div>
                 )}
