@@ -188,21 +188,8 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
   }
 }
 
-// Instance DBU rates
-const INSTANCE_DBU_RATES: Record<string, number> = {
-  'i3.xlarge': 0.75, 'i3.2xlarge': 1.5, 'i3.4xlarge': 3.0, 'i3.8xlarge': 6.0, 'i3.16xlarge': 12.0,
-  'm5.large': 0.25, 'm5.xlarge': 0.5, 'm5.2xlarge': 1.0, 'm5.4xlarge': 2.0,
-  'r5.large': 0.35, 'r5.xlarge': 0.69, 'r5.2xlarge': 1.38,
-  'c5.xlarge': 0.44, 'c5.2xlarge': 0.88,
-  'p3.2xlarge': 5.5, 'p3.8xlarge': 22.0,
-  'Standard_DS3_v2': 0.75, 'Standard_DS4_v2': 1.5, 'Standard_DS5_v2': 3.0,
-  'Standard_D4s_v3': 0.5, 'Standard_D8s_v3': 1.0, 'Standard_D16s_v3': 2.0,
-  'Standard_E4s_v3': 0.69, 'Standard_E8s_v3': 1.38,
-  'Standard_L8s_v2': 1.5, 'Standard_NC6s_v3': 5.5,
-  'n1-standard-4': 0.5, 'n1-standard-8': 1.0, 'n1-standard-16': 2.0, 'n1-standard-32': 4.0,
-  'n1-highmem-4': 0.69, 'n1-highmem-8': 1.38,
-  'n2-standard-4': 0.5, 'n2-standard-8': 1.0
-}
+// Note: Instance DBU rates are now fetched dynamically from instanceTypes
+// The hardcoded INSTANCE_DBU_RATES has been replaced with lookups using instanceTypes.dbu_rate
 
 
 // DBSQL warehouse DBU rates (keys must match database CHECK constraint: chk_dbsql_warehouse_size)
@@ -249,6 +236,10 @@ export default function Calculator() {
     // DBU Rates
     dbuRatesMap,
     fetchDBURates,
+    // Instance types for DBU rate lookup
+    instanceTypes,
+    // Photon multipliers
+    photonMultipliers,
     // State management
     clearEstimateState
   } = useStore()
@@ -655,31 +646,52 @@ export default function Calculator() {
     
     // ========================================
     // Step 3: Calculate DBU per hour based on workload type
+    // Uses fetched instanceTypes for accurate DBU rates
     // ========================================
     let dbuPerHour = 0
     let monthlyDBUs = 0
     let vmCost = 0
     
-    // Get instance DBU rates
-    const driverDBURate = INSTANCE_DBU_RATES[item.driver_node_type || ''] || 0.5
-    const workerDBURate = INSTANCE_DBU_RATES[item.worker_node_type || ''] || 0.5
+    // Get instance DBU rates from fetched instanceTypes (not hardcoded)
+    const driverInstance = instanceTypes.find(it => it.id === item.driver_node_type || it.name === item.driver_node_type)
+    const workerInstance = instanceTypes.find(it => it.id === item.worker_node_type || it.name === item.worker_node_type)
+    const driverDBURate = driverInstance?.dbu_rate || 0.5 // Fallback to 0.5 if not found
+    const workerDBURate = workerInstance?.dbu_rate || 0.5
     
-    // Photon multiplier (only for classic compute, serverless includes Photon)
-    const photonMultiplier = (!item.serverless_enabled && item.photon_enabled) ? 1.3 : 1.0
+    // Get photon multiplier from fetched photonMultipliers
+    // Look up the multiplier for the current product type
+    const getPhotonMultiplier = () => {
+      if (!item.photon_enabled || item.serverless_enabled) return 1.0
+      // Try to find multiplier for the specific SKU type
+      const multiplierEntry = photonMultipliers.find(pm => 
+        pm.sku_type === productType || 
+        pm.sku_type?.includes(item.workload_type || '')
+      )
+      return multiplierEntry?.multiplier || 1.3 // Fallback to 1.3 if not found
+    }
+    const photonMultiplier = getPhotonMultiplier()
     
     // Serverless mode multiplier (performance = 2x, standard = 1x)
     const serverlessMultiplier = (item.serverless_enabled && item.serverless_mode === 'performance') ? 2 : 1
     
+    // DLT multiplier (varies by edition for classic DLT)
+    const getDLTMultiplier = () => {
+      if (item.workload_type !== 'DLT') return 1.0
+      // DLT has edition-based pricing, the multiplier is baked into the DBU price
+      return 1.0
+    }
+    const dltMultiplier = getDLTMultiplier()
+    
     switch (item.workload_type) {
       case 'ALL_PURPOSE':
       case 'JOBS':
-      case 'DLT':
         if (item.serverless_enabled) {
-          // Serverless compute: (driver + workers) × serverless_multiplier
-          // No VM costs for serverless
+          // Serverless: DBU/Hour = base_dbu_rate × photon_multiplier (always on) × serverless_multiplier
+          // For serverless, use a base rate since instances don't apply the same way
+          // Photon is ALWAYS enabled in serverless
           dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * serverlessMultiplier
         } else {
-          // Classic compute: (driver + workers) × photon_multiplier
+          // Classic: DBU/Hour = (driver_dbu_rate + worker_dbu_rate × num_workers) × photon_multiplier
           dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier
           
           // VM costs for classic compute
@@ -688,13 +700,37 @@ export default function Calculator() {
           const workerPricingTier = item.worker_pricing_tier || 'spot'
           const workerPaymentOption = item.worker_payment_option || 'NA'
           
-          // Driver VM cost
+          // Driver VM cost/hour
           const driverVMCostPerHour = getVMPrice(cloud, region, item.driver_node_type || '', driverPricingTier, driverPaymentOption)
           
-          // Worker VM cost
+          // Worker VM cost/hour
           const workerVMCostPerHour = getVMPrice(cloud, region, item.worker_node_type || '', workerPricingTier, workerPaymentOption)
           
-          // Total VM cost per hour
+          // VM Cost/Month = VM Cost/Hour × Hours/Month
+          const totalVMCostPerHour = driverVMCostPerHour + (workerVMCostPerHour * numWorkers)
+          vmCost = totalVMCostPerHour * hoursPerMonth
+        }
+        // DBU/Month = DBU/Hour × Hours/Month
+        monthlyDBUs = dbuPerHour * hoursPerMonth
+        break
+      
+      case 'DLT':
+        if (item.serverless_enabled) {
+          // DLT Serverless: DBU/Hour = base_dbu_rate × photon (always on) × dlt_multiplier × serverless_multiplier
+          dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * dltMultiplier * serverlessMultiplier
+        } else {
+          // DLT Classic: DBU/Hour = (driver_dbu + worker_dbu × workers) × photon_multiplier × dlt_multiplier
+          dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier * dltMultiplier
+          
+          // VM costs for classic compute
+          const driverPricingTier = item.driver_pricing_tier || 'on_demand'
+          const driverPaymentOption = item.driver_payment_option || 'NA'
+          const workerPricingTier = item.worker_pricing_tier || 'spot'
+          const workerPaymentOption = item.worker_payment_option || 'NA'
+          
+          const driverVMCostPerHour = getVMPrice(cloud, region, item.driver_node_type || '', driverPricingTier, driverPaymentOption)
+          const workerVMCostPerHour = getVMPrice(cloud, region, item.worker_node_type || '', workerPricingTier, workerPaymentOption)
+          
           const totalVMCostPerHour = driverVMCostPerHour + (workerVMCostPerHour * numWorkers)
           vmCost = totalVMCostPerHour * hoursPerMonth
         }
@@ -773,7 +809,7 @@ export default function Calculator() {
     })
     
     return { totalDBUs, totalDBUCost, totalVMCost, totalCost }
-  }, [lineItems, formData.cloud, formData.region, workloadTypes, getVMPrice, workloadCosts, isCalculatingCost])
+  }, [lineItems, formData.cloud, formData.region, workloadTypes, getVMPrice, workloadCosts, isCalculatingCost, instanceTypes, photonMultipliers, dbuRatesMap])
   
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {
