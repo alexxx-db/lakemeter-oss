@@ -229,6 +229,7 @@ export default function Calculator() {
     setSelectedCloud,
     setSelectedRegion,
     fetchVMPricing,
+    fetchVMCostForInstance,
     getVMPrice,
     // DBU Rates
     dbuRatesMap,
@@ -393,6 +394,26 @@ export default function Calculator() {
       fetchVMPricing(formData.cloud, formData.region || undefined)
     }
   }, [formData.cloud, formData.region, fetchVMPricing])
+  
+  // Fetch VM costs for all unique instance types used in line items
+  // This ensures VM pricing is available for cost calculations
+  useEffect(() => {
+    if (!formData.cloud || !formData.region || lineItems.length === 0) return
+    
+    // Collect all unique instance types from line items
+    const instanceTypesToFetch = new Set<string>()
+    lineItems.forEach(item => {
+      if (item.driver_node_type) instanceTypesToFetch.add(item.driver_node_type)
+      if (item.worker_node_type) instanceTypesToFetch.add(item.worker_node_type)
+    })
+    
+    // Fetch VM costs for each unique instance type (async, non-blocking)
+    instanceTypesToFetch.forEach(instanceType => {
+      // Fetch both on_demand and spot pricing for each instance
+      fetchVMCostForInstance(formData.cloud, formData.region, instanceType, 'on_demand', 'NA')
+      fetchVMCostForInstance(formData.cloud, formData.region, instanceType, 'spot', 'NA')
+    })
+  }, [formData.cloud, formData.region, lineItems, fetchVMCostForInstance])
   
   // Use cached regions from store (pre-loaded for all clouds)
   // This is instant - no API call needed when switching clouds

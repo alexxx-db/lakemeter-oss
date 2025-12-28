@@ -1042,8 +1042,9 @@ export const useStore = create<Store>((set, get) => ({
       }
     }
     
-    // Only warn if instance type was specified but not found
-    console.warn(`VM price not found for ${cloud}/${region}/${instanceType}/${pricingTier}`)
+    // VM price not found - this is expected during initial load or for new instance types
+    // The fetchVMCostForInstance will be triggered by the component to fetch the price
+    // Returning 0 allows the calculation to proceed; VM cost will update when data is fetched
     return 0
   },
   
