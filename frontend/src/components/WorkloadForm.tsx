@@ -1209,14 +1209,16 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Capacity Units (Millions)</label>
+              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Capacity (M vectors)</label>
               <input
                 type="number"
-                min={1}
-                max={100}
+                min={0.1}
+                max={1000}
+                step={0.1}
                 value={form.vector_capacity_millions}
-                onChange={(e) => setForm(f => ({ ...f, vector_capacity_millions: parseInt(e.target.value) || 1 }))}
+                onChange={(e) => setForm(f => ({ ...f, vector_capacity_millions: parseFloat(e.target.value) || 1 }))}
                 className="w-full text-sm"
+                placeholder="e.g., 1.5"
               />
             </div>
           </>
