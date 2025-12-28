@@ -1063,105 +1063,73 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 : null
               
               return (
-                <div className="col-span-2 grid grid-cols-2 gap-4">
-                  {/* Driver Node */}
-                  <div className="p-3 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-2.5 h-2.5 bg-blue-500 rounded-full"></span>
-                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                        Driver Node ({warehouseConfig?.driver_count || 1} node)
+                <div className="col-span-2 grid grid-cols-2 gap-3">
+                  {/* Driver Node - Compact */}
+                  <div className="p-2.5 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                        <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Driver</span>
+                      </div>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                        {warehouseConfig?.driver_instance_type || '—'}
                       </span>
                     </div>
-                    
-                    {/* Instance Type - Read Only */}
-                    <div className="mb-3">
-                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
-                      <div className="w-full px-3 py-2 text-sm rounded-md border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed">
-                        {warehouseConfig?.driver_instance_type || 'Loading...'}
-                      </div>
-                    </div>
-                    
-                    {/* Pricing Tier */}
-                    <div className="mb-3">
-                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
-                      <select
-                        value={form.dbsql_driver_pricing_tier}
-                        onChange={(e) => setForm(f => ({ ...f, dbsql_driver_pricing_tier: e.target.value }))}
-                        className="w-full text-sm"
-                      >
-                        <option value="on_demand">On-Demand</option>
-                        <option value="reserved_1y">1-Year Reserved</option>
-                        <option value="reserved_3y">3-Year Reserved</option>
-                      </select>
-                    </div>
-                    
-                    {/* Payment Option - only for AWS and reserved pricing tiers */}
+                    <select
+                      value={form.dbsql_driver_pricing_tier}
+                      onChange={(e) => setForm(f => ({ ...f, dbsql_driver_pricing_tier: e.target.value }))}
+                      className="w-full text-sm"
+                    >
+                      <option value="on_demand">On-Demand</option>
+                      <option value="reserved_1y">1-Year Reserved</option>
+                      <option value="reserved_3y">3-Year Reserved</option>
+                    </select>
                     {selectedCloud === 'aws' && form.dbsql_driver_pricing_tier.startsWith('reserved') && (
-                      <div>
-                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
-                        <select
-                          value={form.dbsql_driver_payment_option}
-                          onChange={(e) => setForm(f => ({ ...f, dbsql_driver_payment_option: e.target.value }))}
-                          className="w-full text-sm"
-                        >
-                          {paymentOptions.map(opt => (
-                            <option key={opt.id} value={opt.id}>
-                              {opt.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <select
+                        value={form.dbsql_driver_payment_option}
+                        onChange={(e) => setForm(f => ({ ...f, dbsql_driver_payment_option: e.target.value }))}
+                        className="w-full text-sm mt-2"
+                      >
+                        {paymentOptions.map(opt => (
+                          <option key={opt.id} value={opt.id}>{opt.name}</option>
+                        ))}
+                      </select>
                     )}
                   </div>
                   
-                  {/* Worker Nodes */}
-                  <div className="p-3 rounded-lg border bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-2.5 h-2.5 bg-green-500 rounded-full"></span>
-                      <span className="text-xs font-semibold text-green-700 dark:text-green-300">
-                        Worker Nodes ({warehouseConfig?.worker_count || 4} nodes)
+                  {/* Worker Nodes - Compact */}
+                  <div className="p-2.5 rounded-lg border bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        <span className="text-xs font-semibold text-green-700 dark:text-green-300">
+                          Workers ×{warehouseConfig?.worker_count || 4}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                        {warehouseConfig?.worker_instance_type || '—'}
                       </span>
                     </div>
-                    
-                    {/* Instance Type - Read Only */}
-                    <div className="mb-3">
-                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
-                      <div className="w-full px-3 py-2 text-sm rounded-md border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed">
-                        {warehouseConfig?.worker_instance_type || 'Loading...'}
-                      </div>
-                    </div>
-                    
-                    {/* Pricing Tier - includes Spot for workers */}
-                    <div className="mb-3">
-                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
-                      <select
-                        value={form.dbsql_worker_pricing_tier}
-                        onChange={(e) => setForm(f => ({ ...f, dbsql_worker_pricing_tier: e.target.value }))}
-                        className="w-full text-sm"
-                      >
-                        <option value="spot">Spot Instances</option>
-                        <option value="on_demand">On-Demand</option>
-                        <option value="reserved_1y">1-Year Reserved</option>
-                        <option value="reserved_3y">3-Year Reserved</option>
-                      </select>
-                    </div>
-                    
-                    {/* Payment Option - only for AWS and reserved pricing tiers */}
+                    <select
+                      value={form.dbsql_worker_pricing_tier}
+                      onChange={(e) => setForm(f => ({ ...f, dbsql_worker_pricing_tier: e.target.value }))}
+                      className="w-full text-sm"
+                    >
+                      <option value="spot">Spot Instances</option>
+                      <option value="on_demand">On-Demand</option>
+                      <option value="reserved_1y">1-Year Reserved</option>
+                      <option value="reserved_3y">3-Year Reserved</option>
+                    </select>
                     {selectedCloud === 'aws' && form.dbsql_worker_pricing_tier.startsWith('reserved') && (
-                      <div>
-                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
-                        <select
-                          value={form.dbsql_worker_payment_option}
-                          onChange={(e) => setForm(f => ({ ...f, dbsql_worker_payment_option: e.target.value }))}
-                          className="w-full text-sm"
-                        >
-                          {paymentOptions.map(opt => (
-                            <option key={opt.id} value={opt.id}>
-                              {opt.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <select
+                        value={form.dbsql_worker_payment_option}
+                        onChange={(e) => setForm(f => ({ ...f, dbsql_worker_payment_option: e.target.value }))}
+                        className="w-full text-sm mt-2"
+                      >
+                        {paymentOptions.map(opt => (
+                          <option key={opt.id} value={opt.id}>{opt.name}</option>
+                        ))}
+                      </select>
                     )}
                   </div>
                 </div>
