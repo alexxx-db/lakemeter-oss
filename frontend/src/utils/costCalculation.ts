@@ -7,21 +7,22 @@
 import type { LineItem, InstanceType, DBSQLSize, ModelServingGPUType } from '../types'
 import type { VectorSearchMode, PhotonMultiplier } from '../api/client'
 
-// Fallback DBU rates if fetched data not available
+// Fallback DBU rates if fetched data not available ($/DBU)
+// These should match the actual Databricks pricing
 export const DEFAULT_DBU_PRICING: Record<string, Record<string, number>> = {
   aws: {
     'JOBS_COMPUTE': 0.15,
-    'JOBS_COMPUTE_(PHOTON)': 0.29,
-    'JOBS_SERVERLESS_COMPUTE': 0.22,
-    'ALL_PURPOSE_COMPUTE': 0.55,
-    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.55,
+    'JOBS_COMPUTE_(PHOTON)': 0.15,  // Photon doesn't change $/DBU, only DBU consumption
+    'JOBS_SERVERLESS_COMPUTE': 0.39,  // Serverless has higher $/DBU
+    'ALL_PURPOSE_COMPUTE': 0.40,
+    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.40,
     'INTERACTIVE_SERVERLESS_COMPUTE': 0.70,
     'DLT_CORE_COMPUTE': 0.20,
-    'DLT_CORE_COMPUTE_(PHOTON)': 0.38,
+    'DLT_CORE_COMPUTE_(PHOTON)': 0.20,
     'DLT_PRO_COMPUTE': 0.25,
-    'DLT_PRO_COMPUTE_(PHOTON)': 0.49,
+    'DLT_PRO_COMPUTE_(PHOTON)': 0.25,
     'DLT_ADVANCED_COMPUTE': 0.36,
-    'DLT_ADVANCED_COMPUTE_(PHOTON)': 0.71,
+    'DLT_ADVANCED_COMPUTE_(PHOTON)': 0.36,
     'DELTA_LIVE_TABLES_SERVERLESS': 0.30,
     'SQL_COMPUTE': 0.22,
     'SQL_PRO_COMPUTE': 0.55,
@@ -191,13 +192,20 @@ export function calculateWorkloadCost(
   const workerDBURate = workerInstance?.dbu_rate || 0.5
   
   // Get photon multiplier from fetched photonMultipliers
+  // NOTE: For serverless workloads, photon is ALWAYS enabled (built-in)
   const getPhotonMultiplier = () => {
-    if (!item.photon_enabled || item.serverless_enabled) return 1.0
+    // For serverless, photon is always enabled - use multiplier
+    // For classic, only apply if photon is explicitly enabled
+    if (!item.serverless_enabled && !item.photon_enabled) return 1.0
+    
+    // Try to get from fetched data
+    const baseSKUType = productType.replace('_(PHOTON)', '').replace('_SERVERLESS', '')
     const multiplierEntry = photonMultipliers.find(pm => 
-      pm.sku_type === productType || 
+      pm.sku_type === baseSKUType || 
+      pm.sku_type === productType ||
       pm.sku_type?.includes(item.workload_type || '')
     )
-    return multiplierEntry?.multiplier || 1.3
+    return multiplierEntry?.multiplier || 2.0  // Default to 2.0 (standard photon multiplier)
   }
   const photonMultiplier = getPhotonMultiplier()
   
@@ -208,8 +216,11 @@ export function calculateWorkloadCost(
     case 'ALL_PURPOSE':
     case 'JOBS':
       if (item.serverless_enabled) {
-        dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * serverlessMultiplier
+        // Serverless: DBU/Hour = base_dbu_rate × photon_multiplier (always on) × serverless_multiplier
+        // Photon is ALWAYS enabled in serverless (built-in)
+        dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier * serverlessMultiplier
       } else {
+        // Classic: DBU/Hour = (driver_dbu_rate + worker_dbu_rate × num_workers) × photon_multiplier
         dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier
         
         // VM costs for classic compute
@@ -229,8 +240,11 @@ export function calculateWorkloadCost(
     
     case 'DLT':
       if (item.serverless_enabled) {
-        dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * serverlessMultiplier
+        // DLT Serverless: DBU/Hour = base_dbu_rate × photon_multiplier (always on) × serverless_multiplier
+        // Photon is ALWAYS enabled in serverless (built-in)
+        dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier * serverlessMultiplier
       } else {
+        // DLT Classic: DBU/Hour = (driver_dbu + worker_dbu × workers) × photon_multiplier
         dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier
         
         const driverPricingTier = item.driver_pricing_tier || 'on_demand'
