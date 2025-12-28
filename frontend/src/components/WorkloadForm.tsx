@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
-import { BoltIcon, CloudIcon } from '@heroicons/react/24/outline'
+import { useState, useEffect, useMemo } from 'react'
+import { BoltIcon, CloudIcon, CurrencyDollarIcon, ArrowTrendingUpIcon, ArrowTrendingDownIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { useStore } from '../store/useStore'
 import SearchableSelect from './SearchableSelect'
 import type { LineItem, WorkloadType } from '../types'
+import { calculateWorkloadCost, type CostCalculationContext } from '../utils/costCalculation'
 
 interface Props {
   estimateId: string
@@ -22,14 +23,22 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     dltEditions, 
     vmPaymentOptions,
     modelServingGPUTypes,
+    vectorSearchModes,
     fmapiDatabricksConfig,
     fmapiProprietaryConfig,
     selectedCloud,
+    selectedRegion,
+    dbuRatesMap,
+    photonMultipliers,
     createLineItem,
     updateLineItem,
     fetchLineItems,
     clearSingleWorkloadCost,
-    markItemCalculating
+    markItemCalculating,
+    getVMPrice,
+    getFMAPIDatabricksRate,
+    getFMAPIProprietaryRate,
+    getVectorSearchRate
   } = useStore()
   
   // Fallback DBSQL sizes if store hasn't loaded yet
@@ -1349,6 +1358,26 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         />
       </div>
       
+      {/* Live Cost Preview */}
+      <LiveCostPreview 
+        form={form}
+        originalItem={lineItem}
+        context={{
+          cloud: selectedCloud,
+          region: selectedRegion,
+          dbuRatesMap,
+          instanceTypes,
+          dbsqlSizes,
+          photonMultipliers,
+          modelServingGPUTypes,
+          vectorSearchModes,
+          getVMPrice,
+          getFMAPIDatabricksRate,
+          getFMAPIProprietaryRate,
+          getVectorSearchRate
+        }}
+      />
+      
       {/* Actions */}
       <div className="flex items-center justify-end gap-2 pt-2">
         <button type="button" onClick={onClose} className="btn btn-secondary">
@@ -1363,5 +1392,162 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         </button>
       </div>
     </form>
+  )
+}
+
+// Helper to format currency
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount)
+}
+
+// Helper to format numbers
+function formatNumber(num: number): string {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + 'M'
+  } else if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'K'
+  }
+  return num.toFixed(0)
+}
+
+// Live Cost Preview Component
+interface LiveCostPreviewProps {
+  form: {
+    workload_type: string
+    serverless_enabled: boolean
+    serverless_mode: string
+    driver_node_type: string
+    worker_node_type: string
+    num_workers: number
+    photon_enabled: boolean
+    dlt_edition: string
+    dbsql_warehouse_type: string
+    dbsql_warehouse_size: string
+    dbsql_num_clusters: number
+    vector_search_mode: string
+    vector_capacity_millions: number
+    model_serving_gpu_type: string
+    lakebase_cu: number
+    lakebase_ha_nodes: number
+    fmapi_provider: string
+    fmapi_model: string
+    fmapi_rate_type: string
+    fmapi_quantity: number
+    runs_per_day: number
+    avg_runtime_minutes: number
+    days_per_month: number
+    hours_per_month: number
+    driver_pricing_tier: string
+    worker_pricing_tier: string
+    driver_payment_option: string
+    worker_payment_option: string
+  }
+  originalItem: LineItem | null
+  context: CostCalculationContext
+}
+
+function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) {
+  // Calculate current cost based on form values
+  const currentCost = useMemo(() => {
+    const formAsItem: Partial<LineItem> = {
+      workload_type: form.workload_type,
+      serverless_enabled: form.serverless_enabled,
+      serverless_mode: form.serverless_mode,
+      driver_node_type: form.driver_node_type || undefined,
+      worker_node_type: form.worker_node_type || undefined,
+      num_workers: form.num_workers,
+      photon_enabled: form.photon_enabled,
+      dlt_edition: form.dlt_edition,
+      dbsql_warehouse_type: form.dbsql_warehouse_type,
+      dbsql_warehouse_size: form.dbsql_warehouse_size,
+      dbsql_num_clusters: form.dbsql_num_clusters,
+      vector_search_mode: form.vector_search_mode,
+      vector_capacity_millions: form.vector_capacity_millions,
+      model_serving_gpu_type: form.model_serving_gpu_type,
+      lakebase_cu: form.lakebase_cu,
+      lakebase_ha_nodes: form.lakebase_ha_nodes,
+      fmapi_provider: form.fmapi_provider,
+      fmapi_model: form.fmapi_model,
+      fmapi_rate_type: form.fmapi_rate_type,
+      fmapi_quantity: form.fmapi_quantity,
+      runs_per_day: form.runs_per_day,
+      avg_runtime_minutes: form.avg_runtime_minutes,
+      days_per_month: form.days_per_month,
+      hours_per_month: form.hours_per_month || undefined,
+      driver_pricing_tier: form.driver_pricing_tier,
+      worker_pricing_tier: form.worker_pricing_tier,
+      driver_payment_option: form.driver_payment_option,
+      worker_payment_option: form.worker_payment_option
+    }
+    
+    return calculateWorkloadCost(formAsItem, context)
+  }, [form, context])
+  
+  // Calculate original cost for comparison (only for existing items)
+  const originalCost = useMemo(() => {
+    if (!originalItem) return null
+    return calculateWorkloadCost(originalItem, context)
+  }, [originalItem, context])
+  
+  // Calculate delta
+  const costDelta = originalCost ? currentCost.totalCost - originalCost.totalCost : 0
+  const hasCostChange = Math.abs(costDelta) > 0.01
+  
+  // Don't show if no region is selected
+  if (!context.region) {
+    return (
+      <div className="mt-4 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+        <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+          <CurrencyDollarIcon className="w-4 h-4" />
+          <span>Select a region to see cost estimate</span>
+        </div>
+      </div>
+    )
+  }
+  
+  return (
+    <div className="mt-4 p-3 rounded-lg bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <CurrencyDollarIcon className="w-5 h-5 text-orange-500" />
+            <span className="text-sm font-medium text-[var(--text-secondary)]">Live Estimate:</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-bold text-orange-500">{formatCurrency(currentCost.totalCost)}</span>
+            <span className="text-xs text-[var(--text-muted)]">/mo</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
+          <span>{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
+          {currentCost.vmCost > 0 && (
+            <span>VM: {formatCurrency(currentCost.vmCost)}</span>
+          )}
+          
+          {/* Show delta for existing items */}
+          {originalItem && hasCostChange && (
+            <div className={clsx(
+              "flex items-center gap-1 px-2 py-0.5 rounded-full font-medium",
+              costDelta > 0 
+                ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                : "bg-green-500/10 text-green-600 dark:text-green-400"
+            )}>
+              {costDelta > 0 ? (
+                <ArrowTrendingUpIcon className="w-3 h-3" />
+              ) : (
+                <ArrowTrendingDownIcon className="w-3 h-3" />
+              )}
+              <span>{costDelta > 0 ? '+' : ''}{formatCurrency(costDelta)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

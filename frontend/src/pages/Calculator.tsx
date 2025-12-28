@@ -22,7 +22,10 @@ import {
   ArrowsRightLeftIcon,
   MagnifyingGlassCircleIcon,
   SparklesIcon,
-  ServerIcon
+  ServerIcon,
+  TableCellsIcon,
+  Squares2X2Icon,
+  ListBulletIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -292,6 +295,9 @@ export default function Calculator() {
   
   // Configuration panel collapsed state
   const [isConfigCollapsed, setIsConfigCollapsed] = useState(false)
+  
+  // Workloads view mode: 'cards' (default, compact), 'expanded', 'table'
+  const [workloadsViewMode, setWorkloadsViewMode] = useState<'cards' | 'expanded' | 'table'>('cards')
   
   // Track changes
   const markAsChanged = useCallback(() => {
@@ -1620,6 +1626,48 @@ export default function Calculator() {
                   ({lineItems.length})
                 </span>
               </h2>
+              
+              {/* View Mode Toggle */}
+              {lineItems.length > 0 && (
+                <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-lg p-0.5">
+                  <button
+                    onClick={() => setWorkloadsViewMode('cards')}
+                    className={clsx(
+                      "p-1.5 rounded-md transition-colors",
+                      workloadsViewMode === 'cards'
+                        ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    )}
+                    title="Compact cards (default)"
+                  >
+                    <Squares2X2Icon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setWorkloadsViewMode('expanded')}
+                    className={clsx(
+                      "p-1.5 rounded-md transition-colors",
+                      workloadsViewMode === 'expanded'
+                        ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    )}
+                    title="Expanded cards with details"
+                  >
+                    <ListBulletIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setWorkloadsViewMode('table')}
+                    className={clsx(
+                      "p-1.5 rounded-md transition-colors",
+                      workloadsViewMode === 'table'
+                        ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    )}
+                    title="Table view for comparison"
+                  >
+                    <TableCellsIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
             
             {!id ? (
@@ -1657,40 +1705,153 @@ export default function Calculator() {
               </div>
             ) : (
               <>
-                {/* Existing Workloads */}
-                {lineItems.map((item, index) => {
+                {/* Table View */}
+                {workloadsViewMode === 'table' && lineItems.length > 0 && (
+                  <div className="card overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-[var(--border-primary)] bg-[var(--bg-tertiary)]">
+                            <th className="text-left p-3 font-medium text-[var(--text-secondary)]">Name</th>
+                            <th className="text-left p-3 font-medium text-[var(--text-secondary)]">Type</th>
+                            <th className="text-right p-3 font-medium text-[var(--text-secondary)]">DBU Cost</th>
+                            <th className="text-right p-3 font-medium text-[var(--text-secondary)]">VM Cost</th>
+                            <th className="text-right p-3 font-medium text-[var(--text-secondary)]">Total</th>
+                            <th className="text-right p-3 font-medium text-[var(--text-secondary)]">DBUs/mo</th>
+                            <th className="text-center p-3 font-medium text-[var(--text-secondary)]">Actions</th>
+                          </tr>
+                        </thead>
+                          {lineItems.map((item) => {
+                            const costs = calculateItemCost(item)
+                            const typeConfig = getWorkloadTypeConfig(item.workload_type)
+                            const TypeIcon = typeConfig.icon
+                            const isExpanded = expandedItems.has(item.line_item_id)
+                            
+                            return (
+                              <tbody key={item.line_item_id}>
+                                <tr 
+                                  className="border-b border-[var(--border-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors"
+                                  onClick={() => toggleExpand(item.line_item_id)}
+                                >
+                                  <td className="p-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className={clsx("w-6 h-6 rounded flex items-center justify-center flex-shrink-0", typeConfig.bgColor)}>
+                                        <TypeIcon className={clsx("w-3.5 h-3.5", typeConfig.color)} />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="font-medium truncate text-[var(--text-primary)]">{item.workload_name}</p>
+                                        <div className="flex items-center gap-1 mt-0.5">
+                                          {(item.serverless_enabled || (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')) && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-600 dark:text-teal-400">Serverless</span>
+                                          )}
+                                          {item.photon_enabled && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 dark:text-orange-400">Photon</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 text-[var(--text-muted)]">
+                                    {workloadTypes.find(w => w.workload_type === item.workload_type)?.display_name || item.workload_type}
+                                  </td>
+                                  <td className="p-3 text-right font-medium text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</td>
+                                  <td className="p-3 text-right font-medium text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</td>
+                                  <td className="p-3 text-right font-bold text-orange-500">{formatCurrency(costs.totalCost)}</td>
+                                  <td className="p-3 text-right text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)}</td>
+                                  <td className="p-3">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        onClick={(e) => handleCloneWorkload(e, item)}
+                                        className="p-1 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
+                                        title="Clone"
+                                      >
+                                        <DocumentDuplicateIcon className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteLineItem(item) }}
+                                        className="p-1 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
+                                        title="Delete"
+                                      >
+                                        <TrashIcon className="w-4 h-4" />
+                                      </button>
+                                      {isExpanded ? (
+                                        <ChevronUpIcon className="w-4 h-4 text-[var(--text-muted)]" />
+                                      ) : (
+                                        <ChevronDownIcon className="w-4 h-4 text-[var(--text-muted)]" />
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                                {/* Expanded Form Row */}
+                                {isExpanded && (
+                                  <tr>
+                                    <td colSpan={7} className="p-0 bg-[var(--bg-tertiary)]">
+                                      <div className="p-4">
+                                        <WorkloadForm
+                                          estimateId={id}
+                                          lineItem={item}
+                                          onClose={() => setExpandedItems(new Set())}
+                                          onSave={markAsChanged}
+                                          inline
+                                        />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            )
+                          })}
+                      </table>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Card Views (Compact and Expanded) */}
+                {workloadsViewMode !== 'table' && lineItems.map((item, index) => {
                   const isItemLoading = calculatingCostIds.has(item.line_item_id)
                   const costs = calculateItemCost(item)
                   const isExpanded = expandedItems.has(item.line_item_id)
                   const usageSummary = getUsageSummary(item)
                   const typeConfig = getWorkloadTypeConfig(item.workload_type)
                   const TypeIcon = typeConfig.icon
+                  // Show details row only in 'expanded' mode OR when the item is expanded for editing
+                  const showDetailsRow = workloadsViewMode === 'expanded' || isExpanded
                   
                   return (
                     <motion.div
                       key={item.line_item_id}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.03 }}
+                      transition={{ delay: index * 0.02 }}
                       className="card overflow-hidden"
                     >
-                      {/* Workload Header - All details visible */}
+                      {/* Workload Header */}
                       <div 
-                        className="p-4 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                        className={clsx(
+                          "p-4 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors",
+                          workloadsViewMode === 'cards' && !isExpanded && "py-3"
+                        )}
                         onClick={() => toggleExpand(item.line_item_id)}
                       >
                         {/* Top row: name, badges, cost, actions */}
                         <div className="flex items-center gap-4">
                           <div className={clsx(
-                            "w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0",
+                            "rounded-lg flex items-center justify-center flex-shrink-0",
+                            workloadsViewMode === 'cards' && !isExpanded ? "w-8 h-8" : "w-10 h-10",
                             typeConfig.bgColor
                           )}>
-                            <TypeIcon className={clsx("w-5 h-5", typeConfig.color)} />
+                            <TypeIcon className={clsx(
+                              typeConfig.color,
+                              workloadsViewMode === 'cards' && !isExpanded ? "w-4 h-4" : "w-5 h-5"
+                            )} />
                           </div>
                           
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <h4 className="font-semibold truncate text-[var(--text-primary)]">{item.workload_name}</h4>
+                              <h4 className={clsx(
+                                "font-semibold truncate text-[var(--text-primary)]",
+                                workloadsViewMode === 'cards' && !isExpanded && "text-sm"
+                              )}>{item.workload_name}</h4>
                               {(item.serverless_enabled || (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')) && (
                                 <span className="badge badge-teal">Serverless</span>
                               )}
@@ -1715,7 +1876,10 @@ export default function Calculator() {
                               </>
                             ) : (
                               <>
-                                <p className="text-lg font-bold text-orange-500">{formatCurrency(costs.totalCost)}</p>
+                                <p className={clsx(
+                                  "font-bold text-orange-500",
+                                  workloadsViewMode === 'cards' && !isExpanded ? "text-base" : "text-lg"
+                                )}>{formatCurrency(costs.totalCost)}</p>
                                 <p className="text-xs text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs/mo</p>
                               </>
                             )}
@@ -1748,62 +1912,64 @@ export default function Calculator() {
                           </div>
                         </div>
                         
-                        {/* Bottom row: Cost breakdown & config summary */}
-                        <div className="mt-3 pt-3 border-t border-[var(--border-primary)] grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
-                          <div>
-                            <span className="text-[var(--text-muted)]">DBU Cost</span>
-                            {isItemLoading && !workloadCosts[item.line_item_id] ? (
-                              <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse mt-0.5" />
-                            ) : (
-                              <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
-                            )}
-                          </div>
-                          {/* Hide VM Cost for serverless workloads */}
-                          {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'].includes(item.workload_type || '') && (
+                        {/* Bottom row: Cost breakdown & config summary (only in expanded mode or when item is expanded) */}
+                        {showDetailsRow && (
+                          <div className="mt-3 pt-3 border-t border-[var(--border-primary)] grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
                             <div>
-                              <span className="text-[var(--text-muted)]">VM Cost</span>
+                              <span className="text-[var(--text-muted)]">DBU Cost</span>
                               {isItemLoading && !workloadCosts[item.line_item_id] ? (
                                 <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse mt-0.5" />
                               ) : (
-                                <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
+                                <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
                               )}
                             </div>
-                          )}
-                          
-                          {/* Compute workloads: show driver/worker nodes */}
-                          {(item.workload_type === 'JOBS' || item.workload_type === 'ALL_PURPOSE' || item.workload_type === 'DLT') && (
-                            <>
-                              {item.driver_node_type && (
-                                <div>
-                                  <span className="text-[var(--text-muted)]">Driver</span>
-                                  <p className="font-mono text-[var(--text-primary)] text-[10px]">{item.driver_node_type}</p>
-                                </div>
-                              )}
-                              {item.worker_node_type && (
-                                <div>
-                                  <span className="text-[var(--text-muted)]">Workers</span>
-                                  <p className="text-[var(--text-primary)]">{item.num_workers}× <span className="font-mono text-[10px]">{item.worker_node_type}</span></p>
-                                </div>
-                              )}
-                            </>
-                          )}
-                          
-                          {/* Workload-specific details */}
-                          {getWorkloadSummaryDetails(item).map((detail, idx) => (
-                            <div key={idx}>
-                              <span className="text-[var(--text-muted)]">{detail.label}</span>
-                              <p className="text-[var(--text-primary)]">{detail.value}</p>
-                            </div>
-                          ))}
-                          
-                          {/* Usage summary */}
-                          {usageSummary && (
-                            <div>
-                              <span className="text-[var(--text-muted)]">Usage</span>
-                              <p className="text-[var(--text-primary)]">{usageSummary}</p>
-                            </div>
-                          )}
-                        </div>
+                            {/* Hide VM Cost for serverless workloads */}
+                            {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'].includes(item.workload_type || '') && (
+                              <div>
+                                <span className="text-[var(--text-muted)]">VM Cost</span>
+                                {isItemLoading && !workloadCosts[item.line_item_id] ? (
+                                  <div className="h-4 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse mt-0.5" />
+                                ) : (
+                                  <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Compute workloads: show driver/worker nodes */}
+                            {(item.workload_type === 'JOBS' || item.workload_type === 'ALL_PURPOSE' || item.workload_type === 'DLT') && (
+                              <>
+                                {item.driver_node_type && (
+                                  <div>
+                                    <span className="text-[var(--text-muted)]">Driver</span>
+                                    <p className="font-mono text-[var(--text-primary)] text-[10px]">{item.driver_node_type}</p>
+                                  </div>
+                                )}
+                                {item.worker_node_type && (
+                                  <div>
+                                    <span className="text-[var(--text-muted)]">Workers</span>
+                                    <p className="text-[var(--text-primary)]">{item.num_workers}× <span className="font-mono text-[10px]">{item.worker_node_type}</span></p>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                            
+                            {/* Workload-specific details */}
+                            {getWorkloadSummaryDetails(item).map((detail, idx) => (
+                              <div key={idx}>
+                                <span className="text-[var(--text-muted)]">{detail.label}</span>
+                                <p className="text-[var(--text-primary)]">{detail.value}</p>
+                              </div>
+                            ))}
+                            
+                            {/* Usage summary */}
+                            {usageSummary && (
+                              <div>
+                                <span className="text-[var(--text-muted)]">Usage</span>
+                                <p className="text-[var(--text-primary)]">{usageSummary}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       
                       {/* Expanded: Edit Form */}
