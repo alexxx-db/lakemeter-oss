@@ -22,9 +22,10 @@ export interface InstanceDBURate {
   family: string | null
 }
 
-export interface PhotonMultiplier {
+export interface DBUMultiplier {
   multiplier: number
   category: string | null
+  feature: string  // 'photon', 'serverless_dlt', 'serverless_jobs', 'serverless_notebook', 'lakebase'
 }
 
 export interface DBSQLRate {
@@ -62,7 +63,7 @@ export interface FMAPIRate {
 
 export interface PricingBundle {
   instanceDBURates: Record<string, Record<string, InstanceDBURate>>  // cloud -> instance_type -> rate
-  photonMultipliers: Record<string, PhotonMultiplier>                // "cloud:sku_type" -> multiplier
+  dbuMultipliers: Record<string, DBUMultiplier>                       // "cloud:sku_type:feature" -> multiplier (photon, serverless, lakebase)
   vmCosts: Record<string, number>                                     // "cloud:region:instance:tier:payment" -> cost
   dbuRates: Record<string, Record<string, number>>                   // "cloud:region:tier" -> product_type -> price
   dbsqlRates: Record<string, DBSQLRate>                              // "cloud:type:size" -> rate
@@ -100,7 +101,7 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
   try {
     const [
       instanceDBURates,
-      photonMultipliers,
+      dbuMultipliers,
       vmCosts,
       dbuRates,
       dbsqlRates,
@@ -111,7 +112,7 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
       fmapiProprietaryRates
     ] = await Promise.all([
       loadJSON<Record<string, Record<string, InstanceDBURate>>>('instance-dbu-rates.json'),
-      loadJSON<Record<string, PhotonMultiplier>>('photon-multipliers.json'),
+      loadJSON<Record<string, DBUMultiplier>>('dbu-multipliers.json'),
       loadJSON<Record<string, number>>('vm-costs.json'),
       loadJSON<Record<string, Record<string, number>>>('dbu-rates.json'),
       loadJSON<Record<string, DBSQLRate>>('dbsql-rates.json'),
@@ -127,7 +128,7 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
     
     return {
       instanceDBURates,
-      photonMultipliers,
+      dbuMultipliers,
       vmCosts,
       dbuRates,
       dbsqlRates,
@@ -152,7 +153,7 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
 export function createEmptyBundle(): PricingBundle {
   return {
     instanceDBURates: {},
-    photonMultipliers: {},
+    dbuMultipliers: {},
     vmCosts: {},
     dbuRates: {},
     dbsqlRates: {},
@@ -187,15 +188,49 @@ export function getInstanceDBURate(
 
 /**
  * Get photon multiplier.
+ * Key format in dbuMultipliers: "cloud:sku_type:feature"
+ * For photon, feature = 'photon'
  */
 export function getPhotonMultiplier(
   bundle: PricingBundle,
   cloud: string,
   skuType: string
 ): number {
-  const key = `${cloud.toLowerCase()}:${skuType}`
-  const data = bundle.photonMultipliers[key]
-  return data?.multiplier ?? 2.0 // fallback
+  // Try exact match with photon feature
+  const key = `${cloud.toLowerCase()}:${skuType}:photon`
+  const data = bundle.dbuMultipliers[key]
+  if (data?.multiplier) return data.multiplier
+  
+  // Try without feature (fallback for older data format)
+  const keyNoFeature = `${cloud.toLowerCase()}:${skuType}`
+  const dataNoFeature = bundle.dbuMultipliers[keyNoFeature]
+  if (dataNoFeature?.multiplier) return dataNoFeature.multiplier
+  
+  return 2.0 // fallback
+}
+
+/**
+ * Get serverless multiplier.
+ * Key format in dbuMultipliers: "cloud:sku_type:feature"
+ * For serverless, feature = 'serverless_dlt', 'serverless_jobs', or 'serverless_notebook'
+ */
+export function getServerlessMultiplier(
+  bundle: PricingBundle,
+  cloud: string,
+  skuType: string,
+  workloadType: string
+): number {
+  // Map workload type to feature name
+  const featureMap: Record<string, string> = {
+    'DLT': 'serverless_dlt',
+    'JOBS': 'serverless_jobs',
+    'ALL_PURPOSE': 'serverless_notebook'
+  }
+  const feature = featureMap[workloadType] || 'serverless_jobs'
+  
+  const key = `${cloud.toLowerCase()}:${skuType}:${feature}`
+  const data = bundle.dbuMultipliers[key]
+  return data?.multiplier ?? 1.0 // fallback (standard = 1x)
 }
 
 /**

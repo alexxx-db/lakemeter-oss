@@ -3,7 +3,7 @@
   "total_entries": 0,
   "files": [
     "instance-dbu-rates.json",
-    "photon-multipliers.json",
+    "dbu-multipliers.json",
     "vm-costs.json",
     "dbu-rates.json",
     "dbsql-rates.json",

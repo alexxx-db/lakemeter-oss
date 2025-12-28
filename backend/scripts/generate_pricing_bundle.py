@@ -97,24 +97,28 @@ def generate_instance_dbu_rates(conn, output_dir: str):
     return count
 
 
-def generate_photon_multipliers(conn, output_dir: str):
+def generate_dbu_multipliers(conn, output_dir: str):
     """
-    Generate photon multipliers from lakemeter.sync_ref_photon_multipliers.
+    Generate DBU multipliers from lakemeter.sync_ref_dbu_multipliers.
     
-    Output structure:
+    This table contains ALL multipliers:
+    - Photon multipliers (feature = 'photon')
+    - Serverless multipliers (feature = 'serverless_dlt', 'serverless_jobs', 'serverless_notebook')
+    - Lakebase multipliers (sku_type = 'DATABASE_SERVERLESS_COMPUTE')
+    
+    Output structure (photon-multipliers.json):
     {
-        "aws:JOBS_COMPUTE": 2.9,
-        "aws:ALL_PURPOSE_COMPUTE": 2.2,
+        "aws:JOBS_COMPUTE": {"multiplier": 2.0, "category": "CLASSIC_COMPUTE", "feature": "photon"},
+        "aws:ALL_PURPOSE_COMPUTE": {"multiplier": 2.0, "category": "CLASSIC_COMPUTE", "feature": "photon"},
         ...
     }
     """
-    print("\n⚡ Generating photon multipliers...")
+    print("\n⚡ Generating DBU multipliers (photon, serverless, lakebase)...")
     
     result = conn.execute(text("""
-        SELECT cloud, sku_type, category, multiplier
-        FROM lakemeter.sync_ref_photon_multipliers
-        WHERE is_active = true
-        ORDER BY cloud, sku_type
+        SELECT cloud, sku_type, feature, multiplier, category
+        FROM lakemeter.sync_ref_dbu_multipliers
+        ORDER BY cloud, sku_type, feature
     """))
     
     data = {}
@@ -122,18 +126,22 @@ def generate_photon_multipliers(conn, output_dir: str):
     
     for row in result.mappings():
         cloud = row['cloud'].lower() if row['cloud'] else 'aws'
-        key = f"{cloud}:{row['sku_type']}"
+        feature = row['feature'] or 'unknown'
+        # Create key with feature to distinguish photon vs serverless for same SKU
+        key = f"{cloud}:{row['sku_type']}:{feature}"
         data[key] = {
             'multiplier': float(row['multiplier']) if row['multiplier'] else 1.0,
-            'category': row['category']
+            'category': row['category'],
+            'feature': feature
         }
         count += 1
     
-    output_file = os.path.join(output_dir, 'photon-multipliers.json')
+    # Write to dbu-multipliers.json (renamed from photon-multipliers.json)
+    output_file = os.path.join(output_dir, 'dbu-multipliers.json')
     with open(output_file, 'w') as f:
         json.dump(data, f, indent=2, default=decimal_default)
     
-    print(f"   ✅ Generated {count} photon multipliers")
+    print(f"   ✅ Generated {count} DBU multipliers (photon, serverless, lakebase)")
     return count
 
 
@@ -500,7 +508,7 @@ def generate_all_pricing_bundles():
     with engine.connect() as conn:
         # Generate all pricing files
         total_count += generate_instance_dbu_rates(conn, output_dir)
-        total_count += generate_photon_multipliers(conn, output_dir)
+        total_count += generate_dbu_multipliers(conn, output_dir)
         total_count += generate_vm_pricing(conn, output_dir)
         total_count += generate_dbu_rates(conn, output_dir)
         total_count += generate_dbsql_rates(conn, output_dir)
