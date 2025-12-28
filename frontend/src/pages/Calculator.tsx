@@ -830,11 +830,12 @@ export default function Calculator() {
           
           if (warehouseConfig) {
             // Use config from bundle: driver + workers VM costs
+            // DBSQL has single pricing tier selection - use same for driver and workers
             const dbsqlVMPricingTier = item.driver_pricing_tier || 'on_demand'
             const dbsqlVMPaymentOption = item.driver_payment_option || 'NA'
             
             const driverVMCost = getVMPrice(cloud, region, warehouseConfig.driver_instance_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
-            const workerVMCost = getVMPrice(cloud, region, warehouseConfig.worker_instance_type, item.worker_pricing_tier || 'spot', item.worker_payment_option || 'NA')
+            const workerVMCost = getVMPrice(cloud, region, warehouseConfig.worker_instance_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
             
             // VM Cost/Hour = (driver_count × driver_vm + worker_count × worker_vm) × num_clusters
             const dbsqlVMCostPerHour = (
