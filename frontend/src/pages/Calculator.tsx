@@ -141,14 +141,15 @@ const getWorkloadTypeConfig = (workloadType: string | null | undefined) => {
   }
 }
 
-// DBU Pricing (per DBU per hour)
+// DBU Pricing ($/DBU) - PREMIUM tier fallback values
+// Note: Actual prices come from pricing bundle or API, these are fallbacks
 const DBU_PRICING: Record<string, Record<string, number>> = {
   aws: {
     'JOBS_COMPUTE': 0.15,
-    'JOBS_COMPUTE_(PHOTON)': 0.20,
-    'JOBS_SERVERLESS_COMPUTE': 0.25,
+    'JOBS_COMPUTE_(PHOTON)': 0.15,  // Photon doesn't change $/DBU, only consumption
+    'JOBS_SERVERLESS_COMPUTE': 0.39,  // Serverless has higher $/DBU
     'ALL_PURPOSE_COMPUTE': 0.40,
-    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.55,
+    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.40,
     'INTERACTIVE_SERVERLESS_COMPUTE': 0.70,
     'DLT_CORE_COMPUTE': 0.20,
     'DLT_PRO_COMPUTE': 0.25,
@@ -164,10 +165,10 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
   },
   azure: {
     'JOBS_COMPUTE': 0.15,
-    'JOBS_COMPUTE_(PHOTON)': 0.20,
-    'JOBS_SERVERLESS_COMPUTE': 0.25,
+    'JOBS_COMPUTE_(PHOTON)': 0.15,
+    'JOBS_SERVERLESS_COMPUTE': 0.39,
     'ALL_PURPOSE_COMPUTE': 0.40,
-    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.55,
+    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.40,
     'INTERACTIVE_SERVERLESS_COMPUTE': 0.70,
     'DLT_CORE_COMPUTE': 0.20,
     'DLT_PRO_COMPUTE': 0.25,
@@ -183,10 +184,10 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
   },
   gcp: {
     'JOBS_COMPUTE': 0.15,
-    'JOBS_COMPUTE_(PHOTON)': 0.20,
-    'JOBS_SERVERLESS_COMPUTE': 0.25,
+    'JOBS_COMPUTE_(PHOTON)': 0.15,
+    'JOBS_SERVERLESS_COMPUTE': 0.39,
     'ALL_PURPOSE_COMPUTE': 0.40,
-    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.55,
+    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.40,
     'INTERACTIVE_SERVERLESS_COMPUTE': 0.70,
     'DLT_CORE_COMPUTE': 0.20,
     'DLT_PRO_COMPUTE': 0.25,
@@ -1226,9 +1227,10 @@ export default function Calculator() {
     }).format(amount)
   }
   
-  const formatNumber = (num: number) => {
+  const formatNumber = (num: number, decimals: number = 2) => {
     return new Intl.NumberFormat('en-US', {
-      maximumFractionDigits: 0
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
     }).format(num)
   }
   
