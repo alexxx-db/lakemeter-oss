@@ -240,6 +240,10 @@ export default function Calculator() {
     instanceTypes,
     // Photon multipliers
     photonMultipliers,
+    // DBSQL sizes for warehouse DBU rates
+    dbsqlSizes,
+    // Model Serving GPU types for DBU rates
+    modelServingGPUTypes,
     // State management
     clearEstimateState
   } = useStore()
@@ -738,18 +742,61 @@ export default function Calculator() {
         break
       
       case 'DBSQL':
-        // DBSQL: lookup DBU per hour from warehouse size
-        const warehouseDBUs = DBSQL_DBU_RATES[item.dbsql_warehouse_size || 'Small'] || 8
-        dbuPerHour = warehouseDBUs * (item.dbsql_num_clusters || 1)
+        // DBSQL: lookup DBU per hour from warehouse size using fetched dbsqlSizes
+        const dbsqlSize = dbsqlSizes.find(s => s.id === item.dbsql_warehouse_size || s.name === item.dbsql_warehouse_size)
+        const warehouseDBUs = dbsqlSize?.dbu_per_hour || DBSQL_DBU_RATES[item.dbsql_warehouse_size || 'Small'] || 12
+        const numClusters = item.dbsql_num_clusters || 1
+        
+        // DBU/Hour = warehouse_dbu_rate × num_clusters
+        dbuPerHour = warehouseDBUs * numClusters
         monthlyDBUs = dbuPerHour * hoursPerMonth
-        // No VM costs for DBSQL
+        
+        // VM costs only for CLASSIC and PRO (not SERVERLESS)
+        const dbsqlWarehouseType = item.dbsql_warehouse_type || 'SERVERLESS'
+        if (dbsqlWarehouseType !== 'SERVERLESS') {
+          // Classic/Pro: VM Cost/Hour = (driver_vm_cost + worker_vm_cost × workers) × num_clusters
+          // DBSQL Classic typically uses i3 instances
+          const dbsqlVMPricingTier = item.driver_pricing_tier || 'on_demand'
+          const dbsqlVMPaymentOption = item.driver_payment_option || 'NA'
+          
+          // Get VM cost for the warehouse (use driver node type if specified, otherwise estimate)
+          if (item.driver_node_type) {
+            const dbsqlDriverVMCost = getVMPrice(cloud, region, item.driver_node_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
+            const dbsqlWorkerVMCost = item.worker_node_type 
+              ? getVMPrice(cloud, region, item.worker_node_type, item.worker_pricing_tier || 'spot', item.worker_payment_option || 'NA')
+              : 0
+            const dbsqlNumWorkers = item.num_workers || 0
+            
+            const dbsqlVMCostPerHour = (dbsqlDriverVMCost + (dbsqlWorkerVMCost * dbsqlNumWorkers)) * numClusters
+            vmCost = dbsqlVMCostPerHour * hoursPerMonth
+          }
+        }
+        // SERVERLESS: No VM costs
         break
       
       case 'VECTOR_SEARCH':
+        // Vector Search: Units = CEILING(vector_capacity_millions / divisor)
+        // where divisor = 2 for standard, 64 for storage_optimized
+        const vectorMode = item.vector_search_mode || 'standard'
+        const vectorCapacity = item.vector_capacity_millions || 1
+        const divisor = vectorMode === 'storage_optimized' ? 64 : 2
+        const unitsUsed = Math.ceil(vectorCapacity / divisor)
+        
+        // DBU/Hour = units_used × mode_dbu_rate (use 2 DBU as default rate per unit)
+        const vectorModeDBURate = vectorMode === 'storage_optimized' ? 0.5 : 2.0 // Storage optimized is cheaper per unit
+        dbuPerHour = unitsUsed * vectorModeDBURate
+        monthlyDBUs = dbuPerHour * hoursPerMonth
+        break
+      
       case 'MODEL_SERVING':
-        // Serverless products: flat DBU rate based on size
-        // Using default rate for now (would come from sync_product_serverless_rates)
-        dbuPerHour = 2 // Default rate
+        // Model Serving: DBU/Hour = gpu_type_dbu_rate
+        // Look up DBU rate from fetched modelServingGPUTypes
+        const gpuType = item.model_serving_gpu_type || 'cpu'
+        const gpuTypeData = modelServingGPUTypes.find(g => g.id === gpuType || g.name === gpuType)
+        const gpuDBURate = gpuTypeData?.dbu_per_hour || 2 // Default to 2 DBU/hr if not found
+        
+        // Total Cost = DBU/Hour × hours_per_month × dbu_price
+        dbuPerHour = gpuDBURate
         monthlyDBUs = dbuPerHour * hoursPerMonth
         break
       
@@ -809,7 +856,7 @@ export default function Calculator() {
     })
     
     return { totalDBUs, totalDBUCost, totalVMCost, totalCost }
-  }, [lineItems, formData.cloud, formData.region, workloadTypes, getVMPrice, workloadCosts, isCalculatingCost, instanceTypes, photonMultipliers, dbuRatesMap])
+  }, [lineItems, formData.cloud, formData.region, workloadTypes, getVMPrice, workloadCosts, isCalculatingCost, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes])
   
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {
