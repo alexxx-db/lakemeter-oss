@@ -690,11 +690,13 @@ export default function Calculator() {
     }
     
     // Get photon multiplier - try pricing bundle first, then fetched photonMultipliers
+    // NOTE: For serverless workloads, photon is ALWAYS enabled (built-in)
     const getPhotonMultiplierValue = (): number => {
-      if (!item.photon_enabled || item.serverless_enabled) return 1.0
+      // For classic workloads, only apply if photon is explicitly enabled
+      if (!item.serverless_enabled && !item.photon_enabled) return 1.0
       
       // Extract base SKU type (without "(PHOTON)" suffix) for lookup
-      const baseSKUType = productType.replace('_(PHOTON)', '')
+      const baseSKUType = productType.replace('_(PHOTON)', '').replace('_SERVERLESS', '')
       
       // Try pricing bundle first
       if (isPricingBundleLoaded) {
@@ -737,9 +739,9 @@ export default function Calculator() {
       case 'JOBS':
         if (item.serverless_enabled) {
           // Serverless: DBU/Hour = base_dbu_rate × photon_multiplier (always on) × serverless_multiplier
-          // For serverless, use a base rate since instances don't apply the same way
-          // Photon is ALWAYS enabled in serverless
-          dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * serverlessMultiplier
+          // Photon is ALWAYS enabled in serverless (built-in)
+          // serverlessMultiplier: standard=1x, performance=2x
+          dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier * serverlessMultiplier
         } else {
           // Classic: DBU/Hour = (driver_dbu_rate + worker_dbu_rate × num_workers) × photon_multiplier
           dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier
@@ -767,7 +769,8 @@ export default function Calculator() {
       case 'DLT':
         if (item.serverless_enabled) {
           // DLT Serverless: DBU/Hour = base_dbu_rate × photon (always on) × dlt_multiplier × serverless_multiplier
-          dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * dltMultiplier * serverlessMultiplier
+          // Photon is ALWAYS enabled in serverless (built-in)
+          dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier * dltMultiplier * serverlessMultiplier
         } else {
           // DLT Classic: DBU/Hour = (driver_dbu + worker_dbu × workers) × photon_multiplier × dlt_multiplier
           dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier * dltMultiplier
