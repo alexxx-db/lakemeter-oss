@@ -1540,7 +1540,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           getVMPrice,
           getFMAPIDatabricksRate,
           getFMAPIProprietaryRate,
-          getVectorSearchRate
+          getVectorSearchRate,
+          getDBSQLWarehouseConfig: (warehouseType: string, warehouseSize: string) => {
+            if (!isPricingBundleLoaded) return null
+            return getDBSQLWarehouseConfig(pricingBundle, selectedCloud || 'aws', warehouseType, warehouseSize)
+          }
         }}
       />
       
@@ -1595,6 +1599,11 @@ interface LiveCostPreviewProps {
     dbsql_warehouse_type: string
     dbsql_warehouse_size: string
     dbsql_num_clusters: number
+    // DBSQL driver/worker pricing tiers
+    dbsql_driver_pricing_tier: string
+    dbsql_driver_payment_option: string
+    dbsql_worker_pricing_tier: string
+    dbsql_worker_payment_option: string
     vector_search_mode: string
     vector_capacity_millions: number
     model_serving_gpu_type: string
@@ -1632,6 +1641,11 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
       dbsql_warehouse_type: form.dbsql_warehouse_type,
       dbsql_warehouse_size: form.dbsql_warehouse_size,
       dbsql_num_clusters: form.dbsql_num_clusters,
+      // DBSQL driver/worker pricing tiers
+      dbsql_driver_pricing_tier: form.dbsql_driver_pricing_tier,
+      dbsql_driver_payment_option: form.dbsql_driver_payment_option,
+      dbsql_worker_pricing_tier: form.dbsql_worker_pricing_tier,
+      dbsql_worker_payment_option: form.dbsql_worker_payment_option,
       vector_search_mode: form.vector_search_mode,
       vector_capacity_millions: form.vector_capacity_millions,
       model_serving_gpu_type: form.model_serving_gpu_type,

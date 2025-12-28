@@ -56,6 +56,13 @@ export interface CostBreakdown {
   totalCost: number
 }
 
+export interface DBSQLWarehouseConfig {
+  driver_count: number
+  worker_count: number
+  driver_instance_type: string
+  worker_instance_type: string
+}
+
 export interface CostCalculationContext {
   cloud: string
   region: string
@@ -69,6 +76,7 @@ export interface CostCalculationContext {
   getFMAPIDatabricksRate: (model: string, rateType: string) => { dbu_per_1M_tokens?: number, dbu_per_hour?: number } | null
   getFMAPIProprietaryRate: (provider: string, model: string, rateType: string) => { dbu_per_1M_tokens?: number, dbu_per_hour?: number } | null
   getVectorSearchRate: (mode: string) => { dbu_per_hour?: number, input_divisor?: number } | null
+  getDBSQLWarehouseConfig?: (warehouseType: string, warehouseSize: string) => DBSQLWarehouseConfig | null
 }
 
 /**
@@ -278,7 +286,21 @@ export function calculateWorkloadCost(
         const dbsqlWorkerPricingTier = item.dbsql_worker_pricing_tier || item.worker_pricing_tier || 'spot'
         const dbsqlWorkerPaymentOption = item.dbsql_worker_payment_option || item.worker_payment_option || 'NA'
         
-        if (item.driver_node_type) {
+        // Try to get warehouse config for VM instance types
+        const warehouseConfig = context.getDBSQLWarehouseConfig?.(dbsqlWarehouseType, item.dbsql_warehouse_size || 'Small')
+        
+        if (warehouseConfig) {
+          // Use warehouse config for instance types
+          const dbsqlDriverVMCost = getVMPrice(cloud, region, warehouseConfig.driver_instance_type, dbsqlDriverPricingTier, dbsqlDriverPaymentOption)
+          const dbsqlWorkerVMCost = getVMPrice(cloud, region, warehouseConfig.worker_instance_type, dbsqlWorkerPricingTier, dbsqlWorkerPaymentOption)
+          
+          const dbsqlVMCostPerHour = (
+            (warehouseConfig.driver_count * dbsqlDriverVMCost) + 
+            (warehouseConfig.worker_count * dbsqlWorkerVMCost)
+          ) * numClusters
+          vmCost = dbsqlVMCostPerHour * hoursPerMonth
+        } else if (item.driver_node_type) {
+          // Fallback: use driver/worker node types if specified
           const dbsqlDriverVMCost = getVMPrice(cloud, region, item.driver_node_type, dbsqlDriverPricingTier, dbsqlDriverPaymentOption)
           const dbsqlWorkerVMCost = item.worker_node_type 
             ? getVMPrice(cloud, region, item.worker_node_type, dbsqlWorkerPricingTier, dbsqlWorkerPaymentOption)
