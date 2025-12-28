@@ -54,6 +54,9 @@ export interface CostBreakdown {
   dbuCost: number
   vmCost: number
   totalCost: number
+  // Optional fields for specific workload types
+  unitsUsed?: number  // Vector Search units
+  dbuPerHour?: number // DBU per hour for display
 }
 
 export interface DBSQLWarehouseConfig {
@@ -194,6 +197,7 @@ export function calculateWorkloadCost(
   let dbuPerHour = 0
   let monthlyDBUs = 0
   let vmCost = 0
+  let unitsUsed: number | undefined = undefined  // For Vector Search
   
   // Get instance DBU rates from fetched instanceTypes
   const driverInstance = instanceTypes.find(it => it.id === item.driver_node_type || it.name === item.driver_node_type)
@@ -315,15 +319,25 @@ export function calculateWorkloadCost(
       break
     
     case 'VECTOR_SEARCH':
+      // Vector Search: Units = CEILING(vector_capacity / divisor)
+      // Standard: 2M vectors per unit, 4.00 DBU/hour per unit
+      // Storage Optimized: 64M vectors per unit, 18.29 DBU/hour per unit
       const vectorMode = item.vector_search_mode || 'standard'
       const vectorCapacity = item.vector_capacity_millions || 1
       
+      // Get rate data from context or use defaults
+      // input_divisor is in total vectors (e.g., 2000000 = 2M)
       const vectorRateData = getVectorSearchRate(vectorMode)
-      const divisor = vectorRateData?.input_divisor || (vectorMode === 'storage_optimized' ? 64 : 2)
-      const unitsUsed = Math.ceil(vectorCapacity / divisor)
+      const vectorDivisor = vectorRateData?.input_divisor || (vectorMode === 'storage_optimized' ? 64000000 : 2000000)
+      const vectorModeDBURate = vectorRateData?.dbu_per_hour || (vectorMode === 'storage_optimized' ? 18.29 : 4.0)
       
-      const vectorModeDBURate = vectorRateData?.dbu_per_hour || (vectorMode === 'storage_optimized' ? 0.5 : 2.0)
-      dbuPerHour = unitsUsed * vectorModeDBURate
+      // Convert vector capacity from millions to total vectors
+      const vectorsTotal = vectorCapacity * 1000000
+      const vectorUnitsUsed = Math.ceil(vectorsTotal / vectorDivisor)
+      unitsUsed = vectorUnitsUsed  // Store for return
+      
+      // DBU/Hour = units_used × mode_dbu_rate
+      dbuPerHour = vectorUnitsUsed * vectorModeDBURate
       monthlyDBUs = dbuPerHour * hoursPerMonth
       break
     
@@ -403,6 +417,13 @@ export function calculateWorkloadCost(
   const dbuCost = monthlyDBUs * dbuPrice
   const totalCost = dbuCost + vmCost
   
-  return { monthlyDBUs, dbuCost, vmCost, totalCost }
+  return { 
+    monthlyDBUs, 
+    dbuCost, 
+    vmCost, 
+    totalCost,
+    unitsUsed,  // For Vector Search
+    dbuPerHour  // For display
+  }
 }
 

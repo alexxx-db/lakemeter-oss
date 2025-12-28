@@ -218,6 +218,9 @@ interface CostBreakdown {
   dbuCost: number
   vmCost: number
   totalCost: number
+  // Optional fields for specific workload types
+  unitsUsed?: number  // Vector Search units
+  dbuPerHour?: number // DBU per hour for display
 }
 
 export default function Calculator() {
@@ -671,6 +674,7 @@ export default function Calculator() {
     let dbuPerHour = 0
     let monthlyDBUs = 0
     let vmCost = 0
+    let unitsUsed: number | undefined = undefined  // For Vector Search
     
     // Get instance DBU rates - try pricing bundle first, then fetched instanceTypes
     let driverDBURate = 0.5 // Fallback
@@ -867,7 +871,9 @@ export default function Calculator() {
         break
       
       case 'VECTOR_SEARCH':
-        // Vector Search: Units = CEILING(vector_capacity_millions / divisor)
+        // Vector Search: Units = CEILING(vector_capacity / divisor)
+        // Standard: 2M vectors per unit, 4.00 DBU/hour per unit
+        // Storage Optimized: 64M vectors per unit, 18.29 DBU/hour per unit
         const vectorMode = item.vector_search_mode || 'standard'
         const vectorCapacity = item.vector_capacity_millions || 1
         
@@ -890,12 +896,13 @@ export default function Calculator() {
           }
         }
         
-        // input_divisor is total vectors (e.g., 2000000 = 2M), vectorCapacity is in millions
-        const vectorsInMillions = vectorCapacity * 1000000
-        const unitsUsed = Math.ceil(vectorsInMillions / vectorDivisor)
+        // Convert vector capacity from millions to total vectors
+        const vectorsTotal = vectorCapacity * 1000000
+        const vectorUnitsUsed = Math.ceil(vectorsTotal / vectorDivisor)
+        unitsUsed = vectorUnitsUsed  // Store for return
         
         // DBU/Hour = units_used × mode_dbu_rate
-        dbuPerHour = unitsUsed * vectorModeDBURate
+        dbuPerHour = vectorUnitsUsed * vectorModeDBURate
         monthlyDBUs = dbuPerHour * hoursPerMonth
         break
       
@@ -1045,7 +1052,9 @@ export default function Calculator() {
       monthlyDBUs: safeMonthlyDBUs, 
       dbuCost: isNaN(dbuCost) ? 0 : dbuCost, 
       vmCost: safeVmCost, 
-      totalCost: isNaN(totalCost) ? 0 : totalCost 
+      totalCost: isNaN(totalCost) ? 0 : totalCost,
+      unitsUsed,  // For Vector Search
+      dbuPerHour  // For display
     }
   }
   

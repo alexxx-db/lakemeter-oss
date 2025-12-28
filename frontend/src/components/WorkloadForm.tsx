@@ -1849,6 +1849,10 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
         
         <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
           <span>{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
+          {/* Show units used for Vector Search */}
+          {currentCost.unitsUsed !== undefined && (
+            <span>{currentCost.unitsUsed} unit{currentCost.unitsUsed !== 1 ? 's' : ''}</span>
+          )}
           {currentCost.vmCost > 0 && (
             <span>VM: {formatCurrency(currentCost.vmCost)}</span>
           )}
