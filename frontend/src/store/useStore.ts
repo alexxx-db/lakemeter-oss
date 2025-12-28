@@ -1343,10 +1343,11 @@ export const useStore = create<Store>((set, get) => ({
               ...usageParams
             })
           } else {
-            const dbsqlVMTier = lineItem.dbsql_vm_pricing_tier || 'on_demand'
+            // Use driver pricing tier for API (API doesn't support separate driver/worker pricing)
+            const dbsqlVMTier = lineItem.dbsql_driver_pricing_tier || lineItem.driver_pricing_tier || 'on_demand'
             const dbsqlVMPayment = (dbsqlVMTier === 'on_demand' || dbsqlVMTier === 'spot')
               ? 'NA'
-              : (lineItem.dbsql_vm_payment_option || 'NA')
+              : (lineItem.dbsql_driver_payment_option || lineItem.driver_payment_option || 'NA')
             
             result = await api.calculateDBSQLClassicPro({
               ...baseParams,

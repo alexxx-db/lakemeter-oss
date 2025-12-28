@@ -6,6 +6,7 @@ import { useStore } from '../store/useStore'
 import SearchableSelect from './SearchableSelect'
 import type { LineItem, WorkloadType } from '../types'
 import { calculateWorkloadCost, type CostCalculationContext } from '../utils/costCalculation'
+import { getDBSQLWarehouseConfig } from '../utils/pricingBundle'
 
 // Pricing tier tooltips
 const PRICING_TIER_TOOLTIPS: Record<string, { title: string; description: string }> = {
@@ -118,6 +119,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     selectedRegion,
     dbuRatesMap,
     photonMultipliers,
+    pricingBundle,
+    isPricingBundleLoaded,
     createLineItem,
     updateLineItem,
     fetchLineItems,
@@ -260,8 +263,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     dbsql_warehouse_type: 'SERVERLESS',
     dbsql_warehouse_size: 'Small',
     dbsql_num_clusters: 1,
-    dbsql_vm_pricing_tier: 'on_demand',
-    dbsql_vm_payment_option: 'no_upfront',
+    // Separate driver and worker pricing for DBSQL Pro/Classic
+    dbsql_driver_pricing_tier: 'on_demand',
+    dbsql_driver_payment_option: 'no_upfront',
+    dbsql_worker_pricing_tier: 'spot',
+    dbsql_worker_payment_option: 'NA',
     vector_search_mode: 'standard',
     vector_capacity_millions: 1,
     model_serving_gpu_type: 'cpu',
@@ -301,8 +307,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     dbsql_warehouse_type: 'SERVERLESS',
     dbsql_warehouse_size: 'Small',
     dbsql_num_clusters: 1,
-    dbsql_vm_pricing_tier: 'on_demand',
-    dbsql_vm_payment_option: 'no_upfront',
+    // Separate driver and worker pricing for DBSQL Pro/Classic
+    dbsql_driver_pricing_tier: 'on_demand',
+    dbsql_driver_payment_option: 'no_upfront',
+    dbsql_worker_pricing_tier: 'spot',
+    dbsql_worker_payment_option: 'NA',
     vector_search_mode: 'standard',
     vector_capacity_millions: 1,
     model_serving_gpu_type: 'cpu',
@@ -344,8 +353,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         dbsql_warehouse_type: lineItem.dbsql_warehouse_type || 'SERVERLESS',
         dbsql_warehouse_size: lineItem.dbsql_warehouse_size || 'Small',
         dbsql_num_clusters: lineItem.dbsql_num_clusters || 1,
-        dbsql_vm_pricing_tier: lineItem.dbsql_vm_pricing_tier || 'on_demand',
-        dbsql_vm_payment_option: lineItem.dbsql_vm_payment_option || 'no_upfront',
+        // Separate driver and worker pricing for DBSQL Pro/Classic
+        dbsql_driver_pricing_tier: lineItem.dbsql_driver_pricing_tier || lineItem.driver_pricing_tier || 'on_demand',
+        dbsql_driver_payment_option: lineItem.dbsql_driver_payment_option || lineItem.driver_payment_option || 'no_upfront',
+        dbsql_worker_pricing_tier: lineItem.dbsql_worker_pricing_tier || lineItem.worker_pricing_tier || 'spot',
+        dbsql_worker_payment_option: lineItem.dbsql_worker_payment_option || lineItem.worker_payment_option || 'NA',
         vector_search_mode: lineItem.vector_search_mode || 'standard',
         vector_capacity_millions: lineItem.vector_capacity_millions || 1,
         model_serving_gpu_type: lineItem.model_serving_gpu_type || 'cpu',
@@ -456,14 +468,26 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         data.dbsql_warehouse_type = form.dbsql_warehouse_type
         data.dbsql_warehouse_size = form.dbsql_warehouse_size
         data.dbsql_num_clusters = form.dbsql_num_clusters
-        data.dbsql_vm_pricing_tier = form.dbsql_vm_pricing_tier
-        data.dbsql_vm_payment_option = form.dbsql_vm_payment_option
+        // Separate driver and worker pricing for DBSQL Pro/Classic
+        if (form.dbsql_warehouse_type === 'PRO' || form.dbsql_warehouse_type === 'CLASSIC') {
+          data.dbsql_driver_pricing_tier = form.dbsql_driver_pricing_tier
+          data.dbsql_driver_payment_option = form.dbsql_driver_payment_option
+          data.dbsql_worker_pricing_tier = form.dbsql_worker_pricing_tier
+          data.dbsql_worker_payment_option = form.dbsql_worker_payment_option
+          // Also set generic driver/worker pricing for backwards compat with Calculator.tsx
+          data.driver_pricing_tier = form.dbsql_driver_pricing_tier
+          data.driver_payment_option = form.dbsql_driver_payment_option
+          data.worker_pricing_tier = form.dbsql_worker_pricing_tier
+          data.worker_payment_option = form.dbsql_worker_payment_option
+        }
       } else {
         data.dbsql_warehouse_type = null
         data.dbsql_warehouse_size = null
         data.dbsql_num_clusters = null
-        data.dbsql_vm_pricing_tier = null
-        data.dbsql_vm_payment_option = null
+        data.dbsql_driver_pricing_tier = null
+        data.dbsql_driver_payment_option = null
+        data.dbsql_worker_pricing_tier = null
+        data.dbsql_worker_payment_option = null
       }
       
       // Vector Search config
@@ -1031,41 +1055,118 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               />
             </div>
             
-            {/* Pricing Tier - only for Pro and Classic warehouse types (not Serverless) */}
-            {(form.dbsql_warehouse_type === 'PRO' || form.dbsql_warehouse_type === 'CLASSIC') && (
-              <div>
-                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
-                <select
-                  value={form.dbsql_vm_pricing_tier}
-                  onChange={(e) => setForm(f => ({ ...f, dbsql_vm_pricing_tier: e.target.value }))}
-                  className="w-full text-sm"
-                >
-                  <option value="on_demand">On-Demand</option>
-                  <option value="reserved_1y">1-Year Reserved</option>
-                  <option value="reserved_3y">3-Year Reserved</option>
-                </select>
-              </div>
-            )}
-            
-            {/* Payment Option - only for AWS and reserved pricing tiers */}
-            {(form.dbsql_warehouse_type === 'PRO' || form.dbsql_warehouse_type === 'CLASSIC') && 
-             selectedCloud === 'aws' && 
-             form.dbsql_vm_pricing_tier.startsWith('reserved') && (
-              <div>
-                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
-                <select
-                  value={form.dbsql_vm_payment_option}
-                  onChange={(e) => setForm(f => ({ ...f, dbsql_vm_payment_option: e.target.value }))}
-                  className="w-full text-sm"
-                >
-                  {paymentOptions.map(opt => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* VM Instance Types and Pricing - only for Pro and Classic warehouse types (not Serverless) */}
+            {(form.dbsql_warehouse_type === 'PRO' || form.dbsql_warehouse_type === 'CLASSIC') && (() => {
+              // Get warehouse config for display
+              const warehouseConfig = isPricingBundleLoaded 
+                ? getDBSQLWarehouseConfig(pricingBundle, selectedCloud || 'aws', form.dbsql_warehouse_type, form.dbsql_warehouse_size)
+                : null
+              
+              return (
+                <div className="col-span-2 grid grid-cols-2 gap-4">
+                  {/* Driver Node */}
+                  <div className="p-3 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-2.5 h-2.5 bg-blue-500 rounded-full"></span>
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                        Driver Node ({warehouseConfig?.driver_count || 1} node)
+                      </span>
+                    </div>
+                    
+                    {/* Instance Type - Read Only */}
+                    <div className="mb-3">
+                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
+                      <div className="w-full px-3 py-2 text-sm rounded-md border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed">
+                        {warehouseConfig?.driver_instance_type || 'Loading...'}
+                      </div>
+                    </div>
+                    
+                    {/* Pricing Tier */}
+                    <div className="mb-3">
+                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
+                      <select
+                        value={form.dbsql_driver_pricing_tier}
+                        onChange={(e) => setForm(f => ({ ...f, dbsql_driver_pricing_tier: e.target.value }))}
+                        className="w-full text-sm"
+                      >
+                        <option value="on_demand">On-Demand</option>
+                        <option value="reserved_1y">1-Year Reserved</option>
+                        <option value="reserved_3y">3-Year Reserved</option>
+                      </select>
+                    </div>
+                    
+                    {/* Payment Option - only for AWS and reserved pricing tiers */}
+                    {selectedCloud === 'aws' && form.dbsql_driver_pricing_tier.startsWith('reserved') && (
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
+                        <select
+                          value={form.dbsql_driver_payment_option}
+                          onChange={(e) => setForm(f => ({ ...f, dbsql_driver_payment_option: e.target.value }))}
+                          className="w-full text-sm"
+                        >
+                          {paymentOptions.map(opt => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Worker Nodes */}
+                  <div className="p-3 rounded-lg border bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-2.5 h-2.5 bg-green-500 rounded-full"></span>
+                      <span className="text-xs font-semibold text-green-700 dark:text-green-300">
+                        Worker Nodes ({warehouseConfig?.worker_count || 4} nodes)
+                      </span>
+                    </div>
+                    
+                    {/* Instance Type - Read Only */}
+                    <div className="mb-3">
+                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
+                      <div className="w-full px-3 py-2 text-sm rounded-md border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed">
+                        {warehouseConfig?.worker_instance_type || 'Loading...'}
+                      </div>
+                    </div>
+                    
+                    {/* Pricing Tier - includes Spot for workers */}
+                    <div className="mb-3">
+                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
+                      <select
+                        value={form.dbsql_worker_pricing_tier}
+                        onChange={(e) => setForm(f => ({ ...f, dbsql_worker_pricing_tier: e.target.value }))}
+                        className="w-full text-sm"
+                      >
+                        <option value="spot">Spot Instances</option>
+                        <option value="on_demand">On-Demand</option>
+                        <option value="reserved_1y">1-Year Reserved</option>
+                        <option value="reserved_3y">3-Year Reserved</option>
+                      </select>
+                    </div>
+                    
+                    {/* Payment Option - only for AWS and reserved pricing tiers */}
+                    {selectedCloud === 'aws' && form.dbsql_worker_pricing_tier.startsWith('reserved') && (
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
+                        <select
+                          value={form.dbsql_worker_payment_option}
+                          onChange={(e) => setForm(f => ({ ...f, dbsql_worker_payment_option: e.target.value }))}
+                          className="w-full text-sm"
+                        >
+                          {paymentOptions.map(opt => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
           </>
         )}
         

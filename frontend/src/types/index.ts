@@ -81,8 +81,11 @@ export interface LineItem {
   dbsql_warehouse_type?: string | null
   dbsql_warehouse_size?: string | null
   dbsql_num_clusters?: number | null
-  dbsql_vm_pricing_tier?: string | null
-  dbsql_vm_payment_option?: string | null
+  // Separate driver and worker pricing for DBSQL Pro/Classic
+  dbsql_driver_pricing_tier?: string | null
+  dbsql_driver_payment_option?: string | null
+  dbsql_worker_pricing_tier?: string | null
+  dbsql_worker_payment_option?: string | null
   
   // Vector Search Configuration
   vector_search_mode?: string | null

@@ -272,14 +272,16 @@ export function calculateWorkloadCost(
       
       const dbsqlWarehouseType = item.dbsql_warehouse_type || 'SERVERLESS'
       if (dbsqlWarehouseType !== 'SERVERLESS') {
-        // DBSQL has single pricing tier selection - use same for driver and workers
-        const dbsqlVMPricingTier = item.driver_pricing_tier || 'on_demand'
-        const dbsqlVMPaymentOption = item.driver_payment_option || 'NA'
+        // DBSQL has separate driver and worker pricing tier selections
+        const dbsqlDriverPricingTier = item.dbsql_driver_pricing_tier || item.driver_pricing_tier || 'on_demand'
+        const dbsqlDriverPaymentOption = item.dbsql_driver_payment_option || item.driver_payment_option || 'NA'
+        const dbsqlWorkerPricingTier = item.dbsql_worker_pricing_tier || item.worker_pricing_tier || 'spot'
+        const dbsqlWorkerPaymentOption = item.dbsql_worker_payment_option || item.worker_payment_option || 'NA'
         
         if (item.driver_node_type) {
-          const dbsqlDriverVMCost = getVMPrice(cloud, region, item.driver_node_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
+          const dbsqlDriverVMCost = getVMPrice(cloud, region, item.driver_node_type, dbsqlDriverPricingTier, dbsqlDriverPaymentOption)
           const dbsqlWorkerVMCost = item.worker_node_type 
-            ? getVMPrice(cloud, region, item.worker_node_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
+            ? getVMPrice(cloud, region, item.worker_node_type, dbsqlWorkerPricingTier, dbsqlWorkerPaymentOption)
             : 0
           const dbsqlNumWorkers = item.num_workers || 0
           

@@ -830,12 +830,14 @@ export default function Calculator() {
           
           if (warehouseConfig) {
             // Use config from bundle: driver + workers VM costs
-            // DBSQL has single pricing tier selection - use same for driver and workers
-            const dbsqlVMPricingTier = item.driver_pricing_tier || 'on_demand'
-            const dbsqlVMPaymentOption = item.driver_payment_option || 'NA'
+            // DBSQL has separate driver and worker pricing tier selections
+            const dbsqlDriverPricingTier = item.dbsql_driver_pricing_tier || item.driver_pricing_tier || 'on_demand'
+            const dbsqlDriverPaymentOption = item.dbsql_driver_payment_option || item.driver_payment_option || 'NA'
+            const dbsqlWorkerPricingTier = item.dbsql_worker_pricing_tier || item.worker_pricing_tier || 'spot'
+            const dbsqlWorkerPaymentOption = item.dbsql_worker_payment_option || item.worker_payment_option || 'NA'
             
-            const driverVMCost = getVMPrice(cloud, region, warehouseConfig.driver_instance_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
-            const workerVMCost = getVMPrice(cloud, region, warehouseConfig.worker_instance_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
+            const driverVMCost = getVMPrice(cloud, region, warehouseConfig.driver_instance_type, dbsqlDriverPricingTier, dbsqlDriverPaymentOption)
+            const workerVMCost = getVMPrice(cloud, region, warehouseConfig.worker_instance_type, dbsqlWorkerPricingTier, dbsqlWorkerPaymentOption)
             
             // VM Cost/Hour = (driver_count × driver_vm + worker_count × worker_vm) × num_clusters
             const dbsqlVMCostPerHour = (
@@ -845,12 +847,14 @@ export default function Calculator() {
             vmCost = dbsqlVMCostPerHour * hoursPerMonth
           } else if (item.driver_node_type) {
             // Fallback: use driver/worker node types if specified
-            const dbsqlVMPricingTier = item.driver_pricing_tier || 'on_demand'
-            const dbsqlVMPaymentOption = item.driver_payment_option || 'NA'
+            const dbsqlDriverPricingTier = item.dbsql_driver_pricing_tier || item.driver_pricing_tier || 'on_demand'
+            const dbsqlDriverPaymentOption = item.dbsql_driver_payment_option || item.driver_payment_option || 'NA'
+            const dbsqlWorkerPricingTier = item.dbsql_worker_pricing_tier || item.worker_pricing_tier || 'spot'
+            const dbsqlWorkerPaymentOption = item.dbsql_worker_payment_option || item.worker_payment_option || 'NA'
             
-            const dbsqlDriverVMCost = getVMPrice(cloud, region, item.driver_node_type, dbsqlVMPricingTier, dbsqlVMPaymentOption)
+            const dbsqlDriverVMCost = getVMPrice(cloud, region, item.driver_node_type, dbsqlDriverPricingTier, dbsqlDriverPaymentOption)
             const dbsqlWorkerVMCost = item.worker_node_type 
-              ? getVMPrice(cloud, region, item.worker_node_type, item.worker_pricing_tier || 'spot', item.worker_payment_option || 'NA')
+              ? getVMPrice(cloud, region, item.worker_node_type, dbsqlWorkerPricingTier, dbsqlWorkerPaymentOption)
               : 0
             const dbsqlNumWorkers = item.num_workers || 0
             
