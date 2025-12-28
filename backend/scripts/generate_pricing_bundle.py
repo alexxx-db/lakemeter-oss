@@ -182,7 +182,14 @@ def generate_vm_pricing(conn, output_dir: str):
 
 def generate_dbu_rates(conn, output_dir: str):
     """
-    Generate DBU pricing ($/DBU) from lakemeter.sync_product_dbu_rates.
+    Generate DBU pricing ($/DBU) from lakemeter.sync_pricing_dbu_rates.
+    
+    This table has both GLOBAL and REGIONAL pricing:
+    - GLOBAL: applies to all regions (sku_region is null)
+    - REGIONAL: specific to a region (sku_region has a value)
+    
+    Strategy: For each cloud/region/tier/product_type, use REGIONAL price if available,
+    otherwise fall back to GLOBAL price.
     
     Output structure:
     {
@@ -196,28 +203,93 @@ def generate_dbu_rates(conn, output_dir: str):
     """
     print("\n💵 Generating DBU rates ($/DBU)...")
     
-    result = conn.execute(text("""
-        SELECT cloud, region, tier, product_type, price_per_dbu
-        FROM lakemeter.sync_product_dbu_rates
-        ORDER BY cloud, region, tier, product_type
-    """))
+    # Product types we're interested in for cost calculations
+    RELEVANT_PRODUCT_TYPES = [
+        'JOBS_COMPUTE', 'JOBS_LIGHT_COMPUTE',
+        'ALL_PURPOSE_COMPUTE',
+        'DLT_CORE_COMPUTE', 'DLT_PRO_COMPUTE', 'DLT_ADVANCED_COMPUTE',
+        'JOBS_SERVERLESS_COMPUTE', 'INTERACTIVE_SERVERLESS_COMPUTE',
+        'DELTA_LIVE_TABLES_SERVERLESS',
+        'SQL_COMPUTE', 'SQL_PRO_COMPUTE', 'SERVERLESS_SQL_COMPUTE',
+        'SERVERLESS_REAL_TIME_INFERENCE',
+        'DATABASE_SERVERLESS_COMPUTE',
+        'FOUNDATION_MODEL_TRAINING'
+    ]
     
-    data = {}
-    count = 0
+    # Query all DBU rates
+    result = conn.execute(text("""
+        SELECT cloud, tier, product_type, region, pricing_type, price_per_dbu
+        FROM lakemeter.sync_pricing_dbu_rates
+        WHERE product_type IN :product_types
+        ORDER BY cloud, region, tier, product_type, pricing_type
+    """), {"product_types": tuple(RELEVANT_PRODUCT_TYPES)})
+    
+    # Build a lookup: cloud -> region -> tier -> product_type -> price
+    # For each combination, prefer REGIONAL over GLOBAL
+    global_rates = {}  # cloud:tier:product_type -> price (global fallback)
+    regional_rates = {}  # cloud:region:tier:product_type -> price (region-specific)
     
     for row in result.mappings():
         cloud = row['cloud'].lower() if row['cloud'] else 'aws'
-        key = f"{cloud}:{row['region']}:{row['tier']}"
-        if key not in data:
-            data[key] = {}
-        data[key][row['product_type']] = float(row['price_per_dbu']) if row['price_per_dbu'] else 0
-        count += 1
+        tier = row['tier']
+        product_type = row['product_type']
+        region = row['region']
+        pricing_type = row['pricing_type']
+        price = float(row['price_per_dbu']) if row['price_per_dbu'] else 0
+        
+        if pricing_type == 'GLOBAL':
+            global_key = f"{cloud}:{tier}:{product_type}"
+            global_rates[global_key] = price
+        else:  # REGIONAL
+            regional_key = f"{cloud}:{region}:{tier}:{product_type}"
+            regional_rates[regional_key] = price
+    
+    # Build output: for each cloud/region/tier, collect all product_type prices
+    data = {}
+    count = 0
+    
+    # Get all unique cloud:region:tier combinations
+    all_keys = set()
+    for key in regional_rates.keys():
+        parts = key.split(':')
+        all_keys.add(f"{parts[0]}:{parts[1]}:{parts[2]}")  # cloud:region:tier
+    
+    # Also add global entries for all regions
+    for key in global_rates.keys():
+        parts = key.split(':')
+        cloud = parts[0]
+        tier = parts[1]
+        # We'll need to know all regions per cloud - they come from regional entries
+        for rkey in regional_rates.keys():
+            rparts = rkey.split(':')
+            if rparts[0] == cloud:
+                all_keys.add(f"{cloud}:{rparts[1]}:{tier}")
+    
+    # Build the output data
+    for combo_key in sorted(all_keys):
+        parts = combo_key.split(':')
+        cloud, region, tier = parts[0], parts[1], parts[2]
+        
+        if combo_key not in data:
+            data[combo_key] = {}
+        
+        # For each product type, get regional price or fall back to global
+        for product_type in RELEVANT_PRODUCT_TYPES:
+            regional_key = f"{cloud}:{region}:{tier}:{product_type}"
+            global_key = f"{cloud}:{tier}:{product_type}"
+            
+            if regional_key in regional_rates:
+                data[combo_key][product_type] = regional_rates[regional_key]
+                count += 1
+            elif global_key in global_rates:
+                data[combo_key][product_type] = global_rates[global_key]
+                count += 1
     
     output_file = os.path.join(output_dir, 'dbu-rates.json')
     with open(output_file, 'w') as f:
         json.dump(data, f, indent=2, default=decimal_default)
     
-    print(f"   ✅ Generated {count} DBU rate entries")
+    print(f"   ✅ Generated {count} DBU rate entries across {len(data)} cloud/region/tier combinations")
     return count
 
 

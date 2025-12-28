@@ -53,7 +53,7 @@
     "backend/app/services/ai_client.py": "2025-12-28T05:38:18.464863484+08:00",
     "backend/requirements.txt": "2025-12-22T22:01:53.564995841+08:00",
     "backend/scripts/__init__.py": "2025-12-29T03:25:41.109169411+08:00",
-    "backend/scripts/generate_pricing_bundle.py": "2025-12-29T03:52:02.500246036+08:00",
+    "backend/scripts/generate_pricing_bundle.py": "2025-12-29T03:58:33.084914408+08:00",
     "backend/static/assets/index-BhzDViVR.js": "2025-12-29T03:54:10.988195689+08:00",
     "backend/static/assets/index-C015U150.css": "2025-12-29T03:54:10.98702836+08:00",
     "backend/static/databricks-icon.svg": "2025-12-29T03:54:10.989276894+08:00",
