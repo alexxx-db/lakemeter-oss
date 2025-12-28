@@ -69,7 +69,6 @@ def generate_instance_dbu_rates(conn, output_dir: str):
     result = conn.execute(text("""
         SELECT cloud, instance_type, dbu_rate, vcpus, memory_gb, instance_family
         FROM lakemeter.sync_ref_instance_dbu_rates
-        WHERE is_active = true
         ORDER BY cloud, instance_type
     """))
     
@@ -161,7 +160,6 @@ def generate_vm_pricing(conn, output_dir: str):
     result = conn.execute(text("""
         SELECT cloud, region, instance_type, pricing_tier, payment_option, cost_per_hour
         FROM lakemeter.sync_pricing_vm_costs
-        WHERE is_active = true
         ORDER BY cloud, region, instance_type, pricing_tier
     """))
     
@@ -201,7 +199,6 @@ def generate_dbu_rates(conn, output_dir: str):
     result = conn.execute(text("""
         SELECT cloud, region, tier, product_type, price_per_dbu
         FROM lakemeter.sync_product_dbu_rates
-        WHERE is_active = true
         ORDER BY cloud, region, tier, product_type
     """))
     
@@ -241,7 +238,6 @@ def generate_dbsql_rates(conn, output_dir: str):
     result = conn.execute(text("""
         SELECT cloud, warehouse_type, warehouse_size, sku_product_type, dbu_per_hour, includes_compute
         FROM lakemeter.sync_product_dbsql_rates
-        WHERE is_active = true
         ORDER BY cloud, warehouse_type, warehouse_size
     """))
     
@@ -288,7 +284,6 @@ def generate_dbsql_warehouse_config(conn, output_dir: str):
                driver_count, driver_instance_type,
                worker_count, worker_instance_type
         FROM lakemeter.sync_ref_dbsql_warehouse_config
-        WHERE is_active = true
         ORDER BY cloud, warehouse_type, warehouse_size
     """))
     
@@ -330,7 +325,7 @@ def generate_vector_search_rates(conn, output_dir: str):
     result = conn.execute(text("""
         SELECT cloud, size_or_model as mode, dbu_rate, input_divisor, sku_product_type, description
         FROM lakemeter.sync_product_serverless_rates
-        WHERE product = 'vector_search' AND is_active = true
+        WHERE product = 'vector_search'
         ORDER BY cloud, size_or_model
     """))
     
@@ -372,7 +367,7 @@ def generate_model_serving_rates(conn, output_dir: str):
     result = conn.execute(text("""
         SELECT cloud, size_or_model as gpu_type, dbu_rate, sku_product_type, description
         FROM lakemeter.sync_product_serverless_rates
-        WHERE product = 'model_serving' AND is_active = true
+        WHERE product = 'model_serving'
         ORDER BY cloud, size_or_model
     """))
     
@@ -414,7 +409,6 @@ def generate_fmapi_databricks_rates(conn, output_dir: str):
     result = conn.execute(text("""
         SELECT cloud, model, rate_type, dbu_rate, input_divisor, is_hourly, sku_product_type
         FROM lakemeter.sync_product_fmapi_databricks
-        WHERE is_active = true
         ORDER BY cloud, model, rate_type
     """))
     
@@ -457,7 +451,6 @@ def generate_fmapi_proprietary_rates(conn, output_dir: str):
         SELECT cloud, provider, model, endpoint_type, context_length, 
                rate_type, dbu_rate, input_divisor, is_hourly, sku_product_type
         FROM lakemeter.sync_product_fmapi_proprietary
-        WHERE is_active = true
         ORDER BY cloud, provider, model, endpoint_type, context_length, rate_type
     """))
     
