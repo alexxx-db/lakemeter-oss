@@ -876,12 +876,21 @@ export default function Calculator() {
     }
     
     // ========================================
-    // Step 4: Calculate final costs
+    // Step 4: Calculate final costs (with NaN guards)
     // ========================================
-    const dbuCost = monthlyDBUs * dbuPrice
-    const totalCost = dbuCost + vmCost
+    const safeDbuPrice = isNaN(dbuPrice) || dbuPrice === undefined ? 0 : dbuPrice
+    const safeMonthlyDBUs = isNaN(monthlyDBUs) || monthlyDBUs === undefined ? 0 : monthlyDBUs
+    const safeVmCost = isNaN(vmCost) || vmCost === undefined ? 0 : vmCost
     
-    return { monthlyDBUs, dbuCost, vmCost, totalCost }
+    const dbuCost = safeMonthlyDBUs * safeDbuPrice
+    const totalCost = dbuCost + safeVmCost
+    
+    return { 
+      monthlyDBUs: safeMonthlyDBUs, 
+      dbuCost: isNaN(dbuCost) ? 0 : dbuCost, 
+      vmCost: safeVmCost, 
+      totalCost: isNaN(totalCost) ? 0 : totalCost 
+    }
   }
   
   // Calculate total costs
@@ -893,10 +902,11 @@ export default function Calculator() {
     
     lineItems.forEach(item => {
       const costs = calculateItemCost(item)
-      totalDBUs += costs.monthlyDBUs
-      totalDBUCost += costs.dbuCost
-      totalVMCost += costs.vmCost
-      totalCost += costs.totalCost
+      // Guard against NaN values propagating
+      totalDBUs += isNaN(costs.monthlyDBUs) ? 0 : costs.monthlyDBUs
+      totalDBUCost += isNaN(costs.dbuCost) ? 0 : costs.dbuCost
+      totalVMCost += isNaN(costs.vmCost) ? 0 : costs.vmCost
+      totalCost += isNaN(costs.totalCost) ? 0 : costs.totalCost
     })
     
     return { totalDBUs, totalDBUCost, totalVMCost, totalCost }

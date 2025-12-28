@@ -583,57 +583,103 @@ def get_dbu_rates(cloud: str, region: str, tier: str, product_type: Optional[str
     """Get DBU rates for pricing calculations.
     
     Returns DBU prices per product type for the given cloud/region/tier combination.
+    Product types match the frontend's SKU naming convention (e.g., JOBS_COMPUTE, ALL_PURPOSE_COMPUTE).
     """
     # Default DBU rates by product type and tier
-    # These are representative rates - actual rates come from lakemeter.sync_product_dbu_rates
+    # Product types match the frontend's calculateItemCost SKU naming
     base_rates = {
         "PREMIUM": {
-            "JOBS": 0.15,
-            "JOBS_LIGHT": 0.07,
-            "ALL_PURPOSE": 0.55,
-            "DLT_CORE": 0.20,
-            "DLT_PRO": 0.25,
-            "DLT_ADVANCED": 0.36,
-            "DBSQL_CLASSIC": 0.22,
-            "DBSQL_PRO": 0.55,
-            "DBSQL_SERVERLESS": 0.70,
-            "MODEL_SERVING": 0.07,
-            "VECTOR_SEARCH": 0.07,
-            "FMAPI_DATABRICKS": 0.07,
-            "FMAPI_PROPRIETARY": 0.07,
-            "LAKEBASE": 0.07,
+            # Jobs
+            "JOBS_COMPUTE": 0.15,
+            "JOBS_COMPUTE_(PHOTON)": 0.20,
+            "JOBS_SERVERLESS_COMPUTE": 0.25,
+            # All Purpose
+            "ALL_PURPOSE_COMPUTE": 0.40,
+            "ALL_PURPOSE_COMPUTE_(PHOTON)": 0.55,
+            "INTERACTIVE_SERVERLESS_COMPUTE": 0.70,
+            # DLT
+            "DLT_CORE_COMPUTE": 0.20,
+            "DLT_PRO_COMPUTE": 0.25,
+            "DLT_ADVANCED_COMPUTE": 0.36,
+            "DLT_CORE_COMPUTE_(PHOTON)": 0.25,
+            "DLT_PRO_COMPUTE_(PHOTON)": 0.30,
+            "DLT_ADVANCED_COMPUTE_(PHOTON)": 0.42,
+            "DELTA_LIVE_TABLES_SERVERLESS": 0.30,
+            # SQL
+            "SQL_COMPUTE": 0.22,
+            "SQL_PRO_COMPUTE": 0.55,
+            "SERVERLESS_SQL_COMPUTE": 0.70,
+            # Model Serving & AI
+            "SERVERLESS_REAL_TIME_INFERENCE": 0.07,
+            "VECTOR_SEARCH_ENDPOINT": 0.07,
+            # FMAPI
+            "OPENAI_MODEL_SERVING": 0.07,
+            "ANTHROPIC_MODEL_SERVING": 0.07,
+            "GOOGLE_MODEL_SERVING": 0.07,
+            # Lakebase
+            "DATABASE_SERVERLESS_COMPUTE": 0.07,
         },
         "STANDARD": {
-            "JOBS": 0.10,
-            "JOBS_LIGHT": 0.05,
-            "ALL_PURPOSE": 0.40,
-            "DLT_CORE": 0.15,
-            "DLT_PRO": 0.20,
-            "DLT_ADVANCED": 0.30,
-            "DBSQL_CLASSIC": 0.15,
-            "DBSQL_PRO": 0.40,
-            "DBSQL_SERVERLESS": 0.55,
-            "MODEL_SERVING": 0.05,
-            "VECTOR_SEARCH": 0.05,
-            "FMAPI_DATABRICKS": 0.05,
-            "FMAPI_PROPRIETARY": 0.05,
-            "LAKEBASE": 0.05,
+            # Jobs
+            "JOBS_COMPUTE": 0.10,
+            "JOBS_COMPUTE_(PHOTON)": 0.15,
+            "JOBS_SERVERLESS_COMPUTE": 0.20,
+            # All Purpose
+            "ALL_PURPOSE_COMPUTE": 0.30,
+            "ALL_PURPOSE_COMPUTE_(PHOTON)": 0.40,
+            "INTERACTIVE_SERVERLESS_COMPUTE": 0.55,
+            # DLT
+            "DLT_CORE_COMPUTE": 0.15,
+            "DLT_PRO_COMPUTE": 0.20,
+            "DLT_ADVANCED_COMPUTE": 0.30,
+            "DLT_CORE_COMPUTE_(PHOTON)": 0.20,
+            "DLT_PRO_COMPUTE_(PHOTON)": 0.25,
+            "DLT_ADVANCED_COMPUTE_(PHOTON)": 0.35,
+            "DELTA_LIVE_TABLES_SERVERLESS": 0.25,
+            # SQL
+            "SQL_COMPUTE": 0.15,
+            "SQL_PRO_COMPUTE": 0.40,
+            "SERVERLESS_SQL_COMPUTE": 0.55,
+            # Model Serving & AI
+            "SERVERLESS_REAL_TIME_INFERENCE": 0.05,
+            "VECTOR_SEARCH_ENDPOINT": 0.05,
+            # FMAPI
+            "OPENAI_MODEL_SERVING": 0.05,
+            "ANTHROPIC_MODEL_SERVING": 0.05,
+            "GOOGLE_MODEL_SERVING": 0.05,
+            # Lakebase
+            "DATABASE_SERVERLESS_COMPUTE": 0.05,
         },
         "ENTERPRISE": {
-            "JOBS": 0.20,
-            "JOBS_LIGHT": 0.10,
-            "ALL_PURPOSE": 0.65,
-            "DLT_CORE": 0.25,
-            "DLT_PRO": 0.30,
-            "DLT_ADVANCED": 0.42,
-            "DBSQL_CLASSIC": 0.30,
-            "DBSQL_PRO": 0.65,
-            "DBSQL_SERVERLESS": 0.85,
-            "MODEL_SERVING": 0.10,
-            "VECTOR_SEARCH": 0.10,
-            "FMAPI_DATABRICKS": 0.10,
-            "FMAPI_PROPRIETARY": 0.10,
-            "LAKEBASE": 0.10,
+            # Jobs
+            "JOBS_COMPUTE": 0.20,
+            "JOBS_COMPUTE_(PHOTON)": 0.25,
+            "JOBS_SERVERLESS_COMPUTE": 0.30,
+            # All Purpose
+            "ALL_PURPOSE_COMPUTE": 0.50,
+            "ALL_PURPOSE_COMPUTE_(PHOTON)": 0.65,
+            "INTERACTIVE_SERVERLESS_COMPUTE": 0.85,
+            # DLT
+            "DLT_CORE_COMPUTE": 0.25,
+            "DLT_PRO_COMPUTE": 0.30,
+            "DLT_ADVANCED_COMPUTE": 0.42,
+            "DLT_CORE_COMPUTE_(PHOTON)": 0.30,
+            "DLT_PRO_COMPUTE_(PHOTON)": 0.35,
+            "DLT_ADVANCED_COMPUTE_(PHOTON)": 0.50,
+            "DELTA_LIVE_TABLES_SERVERLESS": 0.35,
+            # SQL
+            "SQL_COMPUTE": 0.30,
+            "SQL_PRO_COMPUTE": 0.65,
+            "SERVERLESS_SQL_COMPUTE": 0.85,
+            # Model Serving & AI
+            "SERVERLESS_REAL_TIME_INFERENCE": 0.10,
+            "VECTOR_SEARCH_ENDPOINT": 0.10,
+            # FMAPI
+            "OPENAI_MODEL_SERVING": 0.10,
+            "ANTHROPIC_MODEL_SERVING": 0.10,
+            "GOOGLE_MODEL_SERVING": 0.10,
+            # Lakebase
+            "DATABASE_SERVERLESS_COMPUTE": 0.10,
         },
     }
     
@@ -656,11 +702,22 @@ def get_dbu_rates(cloud: str, region: str, tier: str, product_type: Optional[str
 def get_product_types(cloud: str, region: str, tier: str):
     """Get available product types for DBU pricing."""
     return [
-        "JOBS", "JOBS_LIGHT", "ALL_PURPOSE",
-        "DLT_CORE", "DLT_PRO", "DLT_ADVANCED",
-        "DBSQL_CLASSIC", "DBSQL_PRO", "DBSQL_SERVERLESS",
-        "MODEL_SERVING", "VECTOR_SEARCH",
-        "FMAPI_DATABRICKS", "FMAPI_PROPRIETARY", "LAKEBASE"
+        # Jobs
+        "JOBS_COMPUTE", "JOBS_COMPUTE_(PHOTON)", "JOBS_SERVERLESS_COMPUTE",
+        # All Purpose
+        "ALL_PURPOSE_COMPUTE", "ALL_PURPOSE_COMPUTE_(PHOTON)", "INTERACTIVE_SERVERLESS_COMPUTE",
+        # DLT
+        "DLT_CORE_COMPUTE", "DLT_PRO_COMPUTE", "DLT_ADVANCED_COMPUTE",
+        "DLT_CORE_COMPUTE_(PHOTON)", "DLT_PRO_COMPUTE_(PHOTON)", "DLT_ADVANCED_COMPUTE_(PHOTON)",
+        "DELTA_LIVE_TABLES_SERVERLESS",
+        # SQL
+        "SQL_COMPUTE", "SQL_PRO_COMPUTE", "SERVERLESS_SQL_COMPUTE",
+        # Model Serving & AI
+        "SERVERLESS_REAL_TIME_INFERENCE", "VECTOR_SEARCH_ENDPOINT",
+        # FMAPI
+        "OPENAI_MODEL_SERVING", "ANTHROPIC_MODEL_SERVING", "GOOGLE_MODEL_SERVING",
+        # Lakebase
+        "DATABASE_SERVERLESS_COMPUTE"
     ]
 
 
