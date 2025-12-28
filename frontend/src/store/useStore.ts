@@ -288,6 +288,7 @@ interface Store {
   
   // Actions - VM Pricing
   fetchVMPricing: (cloud: string, region?: string) => Promise<void>
+  fetchVMCostForInstance: (cloud: string, region: string, instanceType: string, pricingTier?: string, paymentOption?: string) => Promise<number>
   getVMPrice: (cloud: string, region: string, instanceType: string, pricingTier?: string, paymentOption?: string) => number
   
   // Actions - DBU Rates & Pricing (NEW)
@@ -959,7 +960,60 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   
+  // Fetch VM cost for a specific instance on-demand using the new API
+  fetchVMCostForInstance: async (cloud, region, instanceType, pricingTier = 'on_demand', paymentOption = 'NA') => {
+    // Return 0 immediately if no instance type provided
+    if (!instanceType || instanceType.trim() === '') {
+      return 0
+    }
+    
+    // Check if already in cache
+    const { vmPricingMap } = get()
+    const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
+    if (vmPricingMap[exactKey] !== undefined) {
+      return vmPricingMap[exactKey]
+    }
+    
+    try {
+      // Fetch from new API: /instances/vm-costs
+      const vmCosts = await api.fetchInstanceVMCosts({ 
+        cloud, 
+        region, 
+        instance_type: instanceType,
+        pricing_tier: pricingTier,
+        payment_option: paymentOption
+      })
+      
+      // Update cache with fetched data
+      if (vmCosts && vmCosts.length > 0) {
+        const newVmPricingMap = { ...get().vmPricingMap }
+        vmCosts.forEach(vc => {
+          const key = `${cloud.toLowerCase()}:${region}:${instanceType}:${vc.pricing_tier}:${vc.payment_option}`
+          newVmPricingMap[key] = vc.cost_per_hour
+        })
+        set({ vmPricingMap: newVmPricingMap })
+        
+        // Return the requested pricing tier
+        const matchedCost = vmCosts.find(vc => 
+          vc.pricing_tier === pricingTier && 
+          (vc.payment_option === paymentOption || paymentOption === 'NA')
+        )
+        return matchedCost?.cost_per_hour || vmCosts[0]?.cost_per_hour || 0
+      }
+      
+      return 0
+    } catch (error) {
+      console.error(`Failed to fetch VM cost for ${cloud}/${region}/${instanceType}:`, error)
+      return 0
+    }
+  },
+  
   getVMPrice: (cloud, region, instanceType, pricingTier = 'on_demand', paymentOption = 'NA') => {
+    // Return 0 immediately if no instance type provided (serverless workloads, etc.)
+    if (!instanceType || instanceType.trim() === '') {
+      return 0
+    }
+    
     const { vmPricingMap } = get()
     
     const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
@@ -972,6 +1026,7 @@ export const useStore = create<Store>((set, get) => ({
       return vmPricingMap[keyNoPayment]
     }
     
+    // Try with different payment options
     for (const key of Object.keys(vmPricingMap)) {
       const parts = key.split(':')
       if (parts[0] === cloud.toLowerCase() && parts[2] === instanceType && parts[3] === pricingTier) {
@@ -979,6 +1034,15 @@ export const useStore = create<Store>((set, get) => ({
       }
     }
     
+    // Try matching just cloud and instance type (any pricing tier)
+    for (const key of Object.keys(vmPricingMap)) {
+      const parts = key.split(':')
+      if (parts[0] === cloud.toLowerCase() && parts[2] === instanceType) {
+        return vmPricingMap[key]
+      }
+    }
+    
+    // Only warn if instance type was specified but not found
     console.warn(`VM price not found for ${cloud}/${region}/${instanceType}/${pricingTier}`)
     return 0
   },

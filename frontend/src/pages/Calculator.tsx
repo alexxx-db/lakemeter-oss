@@ -629,12 +629,27 @@ export default function Calculator() {
     // Look up the multiplier for the current product type
     const getPhotonMultiplier = () => {
       if (!item.photon_enabled || item.serverless_enabled) return 1.0
-      // Try to find multiplier for the specific SKU type
+      
+      // Extract base SKU type (without "(PHOTON)" suffix) for lookup
+      // The API returns multipliers for base SKU types like "JOBS_COMPUTE", not "JOBS_COMPUTE_(PHOTON)"
+      const baseSKUType = productType.replace('_(PHOTON)', '')
+      
+      // Map workload types to their base SKU types
+      const workloadToSKU: Record<string, string> = {
+        'JOBS': 'JOBS_COMPUTE',
+        'ALL_PURPOSE': 'ALL_PURPOSE_COMPUTE',
+        'DLT': `DLT_${item.dlt_edition || 'CORE'}_COMPUTE`
+      }
+      const skuForLookup = workloadToSKU[item.workload_type || ''] || baseSKUType
+      
+      // Try to find multiplier: first exact match, then by base SKU, then by workload mapping
       const multiplierEntry = photonMultipliers.find(pm => 
-        pm.sku_type === productType || 
-        pm.sku_type?.includes(item.workload_type || '')
+        pm.sku_type === baseSKUType || 
+        pm.sku_type === skuForLookup ||
+        pm.sku_type?.toLowerCase() === baseSKUType.toLowerCase() ||
+        pm.sku_type?.toLowerCase().includes((item.workload_type || '').toLowerCase())
       )
-      return multiplierEntry?.multiplier || 1.3 // Fallback to 1.3 if not found
+      return multiplierEntry?.multiplier || 2.0 // Fallback to 2.0 (typical photon multiplier)
     }
     const photonMultiplier = getPhotonMultiplier()
     
