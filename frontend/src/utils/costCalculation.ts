@@ -177,6 +177,7 @@ export function calculateWorkloadCost(
   
   // Get DBU price for this product type
   const dbuPrice = pricing[productType] || 0.20
+  console.log(`[LiveEstimate] productType=${productType}, dbuPrice=${dbuPrice}, serverless=${item.serverless_enabled}, photon=${item.photon_enabled}`)
   
   // ========================================
   // Step 3: Calculate DBU per hour based on workload type

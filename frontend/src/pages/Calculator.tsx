@@ -651,13 +651,16 @@ export default function Calculator() {
     let dbuPrice = 0.20
     if (isPricingBundleLoaded && formData.tier) {
       const bundlePrice = getBundleDBUPrice(pricingBundle, cloud, region, formData.tier, productType)
+      console.log(`[DBU Price Lookup] ${item.workload_name}: cloud=${cloud}, region=${region}, tier=${formData.tier}, productType=${productType}, bundlePrice=${bundlePrice}, isPricingBundleLoaded=${isPricingBundleLoaded}`)
       if (bundlePrice > 0) {
         dbuPrice = bundlePrice
       } else {
         dbuPrice = pricing[productType] || 0.20
+        console.log(`[DBU Price Fallback] Using fallback: ${dbuPrice}`)
       }
     } else {
       dbuPrice = pricing[productType] || 0.20
+      console.log(`[DBU Price No Bundle] Using fallback: ${dbuPrice}, isPricingBundleLoaded=${isPricingBundleLoaded}, formData.tier=${formData.tier}`)
     }
     
     // ========================================
