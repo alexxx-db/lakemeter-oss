@@ -1,11 +1,99 @@
 import { useState, useEffect, useMemo } from 'react'
-import { BoltIcon, CloudIcon, CurrencyDollarIcon, ArrowTrendingUpIcon, ArrowTrendingDownIcon } from '@heroicons/react/24/outline'
+import { BoltIcon, CloudIcon, CurrencyDollarIcon, ArrowTrendingUpIcon, ArrowTrendingDownIcon, InformationCircleIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { useStore } from '../store/useStore'
 import SearchableSelect from './SearchableSelect'
 import type { LineItem, WorkloadType } from '../types'
 import { calculateWorkloadCost, type CostCalculationContext } from '../utils/costCalculation'
+
+// Pricing tier tooltips
+const PRICING_TIER_TOOLTIPS: Record<string, { title: string; description: string }> = {
+  spot: {
+    title: 'Spot Instances',
+    description: 'Up to 90% cheaper than On-Demand, but can be interrupted with 2-minute notice. Best for fault-tolerant workloads.'
+  },
+  on_demand: {
+    title: 'On-Demand',
+    description: 'Standard pricing with guaranteed availability. No interruptions, pay by the hour.'
+  },
+  reserved_1y: {
+    title: '1-Year Reserved',
+    description: 'Commit to 1 year for 30-40% savings. Best for predictable, steady-state workloads.'
+  },
+  reserved_3y: {
+    title: '3-Year Reserved',
+    description: 'Commit to 3 years for 50-60% savings. Maximum savings for long-term workloads.'
+  }
+}
+
+// Tooltip component
+function PricingTierTooltip({ tier }: { tier: string }) {
+  const [show, setShow] = useState(false)
+  const info = PRICING_TIER_TOOLTIPS[tier]
+  
+  if (!info) return null
+  
+  return (
+    <div className="relative inline-block ml-1">
+      <button
+        type="button"
+        className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={(e) => { e.preventDefault(); setShow(!show) }}
+      >
+        <InformationCircleIcon className="w-3.5 h-3.5" />
+      </button>
+      {show && (
+        <div className="absolute left-0 bottom-full mb-2 w-56 p-2.5 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-lg z-50">
+          <p className="text-xs font-semibold text-[var(--text-primary)] mb-1">{info.title}</p>
+          <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">{info.description}</p>
+          <div className="absolute left-3 bottom-0 translate-y-1/2 rotate-45 w-2 h-2 bg-[var(--bg-primary)] border-r border-b border-[var(--border-primary)]" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Collapsible Notes component
+function CollapsibleNotes({ notes, onChange }: { notes: string; onChange: (value: string) => void }) {
+  const [isExpanded, setIsExpanded] = useState(!!notes) // Expand if has content
+  
+  return (
+    <div className="border border-[var(--border-primary)] rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full px-3 py-2 flex items-center justify-between bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors"
+      >
+        <span className="text-xs font-medium text-[var(--text-secondary)] flex items-center gap-1.5">
+          {isExpanded ? <ChevronDownIcon className="w-3.5 h-3.5" /> : <ChevronRightIcon className="w-3.5 h-3.5" />}
+          Notes
+          {notes && !isExpanded && (
+            <span className="ml-1 text-[var(--text-muted)] font-normal truncate max-w-[200px]">
+              — {notes.split('\n')[0].substring(0, 40)}{notes.length > 40 ? '...' : ''}
+            </span>
+          )}
+        </span>
+        <span className="text-[10px] text-[var(--text-muted)]">
+          {isExpanded ? 'Click to collapse' : 'Click to expand'}
+        </span>
+      </button>
+      {isExpanded && (
+        <div className="p-3 bg-[var(--bg-primary)]">
+          <textarea
+            value={notes}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Configuration rationale and assumptions...&#10;• Why this configuration was chosen&#10;• Sizing assumptions (data volume, users, etc.)&#10;• Cost optimization choices"
+            className="w-full text-sm min-h-[60px] resize-y border-0 bg-transparent p-0 focus:ring-0"
+            rows={2}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   estimateId: string
@@ -686,7 +774,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                       : "grid-cols-1"
                   )}>
                     <div>
-                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
+                      <label className="flex items-center text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                        Pricing Tier
+                        <PricingTierTooltip tier={form.driver_pricing_tier} />
+                      </label>
                       <select
                         value={form.driver_pricing_tier}
                         onChange={(e) => setForm(f => ({ ...f, driver_pricing_tier: e.target.value }))}
@@ -721,22 +812,34 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             
             {/* Worker Configuration Card */}
             <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border-primary)]">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <h4 className="text-sm font-semibold text-[var(--text-primary)]">Worker Nodes</h4>
-                <span className="text-xs text-[var(--text-muted)]">({form.num_workers} node{form.num_workers !== 1 ? 's' : ''})</span>
-                {/* Instance type match indicator */}
-                {form.driver_node_type && form.worker_node_type && (
-                  form.driver_node_type === form.worker_node_type ? (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 font-medium">
-                      Same as Driver
-                    </span>
-                  ) : (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-medium">
-                      Different
-                    </span>
-                  )
-                )}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <h4 className="text-sm font-semibold text-[var(--text-primary)]">Worker Nodes</h4>
+                  <span className="text-xs text-[var(--text-muted)]">({form.num_workers} node{form.num_workers !== 1 ? 's' : ''})</span>
+                </div>
+                {/* Same as Driver checkbox */}
+                <label className="flex items-center gap-1.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={form.driver_node_type === form.worker_node_type && form.driver_node_type !== ''}
+                    onChange={(e) => {
+                      if (e.target.checked && form.driver_node_type) {
+                        setForm(f => ({ ...f, worker_node_type: f.driver_node_type }))
+                      }
+                    }}
+                    disabled={!form.driver_node_type}
+                    className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                  />
+                  <span className={clsx(
+                    "text-xs font-medium transition-colors",
+                    form.driver_node_type === form.worker_node_type && form.driver_node_type !== ''
+                      ? "text-blue-500"
+                      : "text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
+                  )}>
+                    Same as Driver
+                  </span>
+                </label>
               </div>
               
               <div className="space-y-3">
@@ -781,7 +884,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                       : "grid-cols-1"
                   )}>
                     <div>
-                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Pricing Tier</label>
+                      <label className="flex items-center text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                        Pricing Tier
+                        <PricingTierTooltip tier={form.worker_pricing_tier} />
+                      </label>
                       <select
                         value={form.worker_pricing_tier}
                         onChange={(e) => setForm(f => ({ ...f, worker_pricing_tier: e.target.value }))}
@@ -1343,20 +1449,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         
       </div>
       
-      {/* Notes - Multi-line for detailed configuration rationale */}
-      <div>
-        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-          Notes
-          <span className="ml-1 font-normal text-[var(--text-muted)]">(configuration rationale, assumptions, trade-offs)</span>
-        </label>
-        <textarea
-          value={form.notes}
-          onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
-          placeholder="Configuration rationale and assumptions...&#10;• Why this configuration was chosen&#10;• Sizing assumptions (data volume, users, etc.)&#10;• Cost optimization choices&#10;• Trade-offs to be aware of"
-          className="w-full text-sm min-h-[80px] resize-y"
-          rows={3}
-        />
-      </div>
+      {/* Notes - Collapsible by default */}
+      <CollapsibleNotes 
+        notes={form.notes} 
+        onChange={(value) => setForm(f => ({ ...f, notes: value }))} 
+      />
       
       {/* Live Cost Preview */}
       <LiveCostPreview 

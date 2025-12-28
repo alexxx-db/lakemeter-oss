@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -298,6 +298,9 @@ export default function Calculator() {
   
   // Workloads view mode: 'cards' (default, compact), 'expanded', 'table'
   const [workloadsViewMode, setWorkloadsViewMode] = useState<'cards' | 'expanded' | 'table'>('cards')
+  
+  // Bulk selection for delete
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   
   // Track changes
   const markAsChanged = useCallback(() => {
@@ -992,6 +995,53 @@ export default function Calculator() {
     }
   }
   
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    if (selectedItems.size === 0) return
+    
+    const itemNames = lineItems
+      .filter(item => selectedItems.has(item.line_item_id))
+      .map(item => item.workload_name)
+      .join(', ')
+    
+    if (window.confirm(`Delete ${selectedItems.size} workload(s)?\n\n${itemNames}`)) {
+      try {
+        let deletedCount = 0
+        for (const itemId of selectedItems) {
+          await deleteLineItem(itemId)
+          deletedCount++
+        }
+        toast.success(`${deletedCount} workload(s) deleted`)
+        setSelectedItems(new Set())
+        markAsChanged()
+      } catch {
+        toast.error('Failed to delete some workloads')
+      }
+    }
+  }
+  
+  // Toggle item selection
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId)
+      } else {
+        newSet.add(itemId)
+      }
+      return newSet
+    })
+  }
+  
+  // Select/deselect all
+  const toggleSelectAll = () => {
+    if (selectedItems.size === lineItems.length) {
+      setSelectedItems(new Set())
+    } else {
+      setSelectedItems(new Set(lineItems.map(item => item.line_item_id)))
+    }
+  }
+  
   const handleCloneWorkload = async (e: React.MouseEvent, item: LineItem) => {
     e.stopPropagation()
     try {
@@ -1618,7 +1668,7 @@ export default function Calculator() {
             transition={{ delay: 0.1 }}
             className="space-y-4"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-semibold flex items-center gap-2 text-[var(--text-primary)]">
                 <ServerStackIcon className="w-5 h-5 text-orange-500" />
                 Workloads
@@ -1627,47 +1677,60 @@ export default function Calculator() {
                 </span>
               </h2>
               
-              {/* View Mode Toggle */}
-              {lineItems.length > 0 && (
-                <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-lg p-0.5">
+              <div className="flex items-center gap-2">
+                {/* Bulk Delete Button */}
+                {selectedItems.size > 0 && (
                   <button
-                    onClick={() => setWorkloadsViewMode('cards')}
-                    className={clsx(
-                      "p-1.5 rounded-md transition-colors",
-                      workloadsViewMode === 'cards'
-                        ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
-                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                    )}
-                    title="Compact cards (default)"
+                    onClick={handleBulkDelete}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors"
                   >
-                    <Squares2X2Icon className="w-4 h-4" />
+                    <TrashIcon className="w-4 h-4" />
+                    Delete ({selectedItems.size})
                   </button>
-                  <button
-                    onClick={() => setWorkloadsViewMode('expanded')}
-                    className={clsx(
-                      "p-1.5 rounded-md transition-colors",
-                      workloadsViewMode === 'expanded'
-                        ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
-                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                    )}
-                    title="Expanded cards with details"
-                  >
-                    <ListBulletIcon className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setWorkloadsViewMode('table')}
-                    className={clsx(
-                      "p-1.5 rounded-md transition-colors",
-                      workloadsViewMode === 'table'
-                        ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
-                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                    )}
-                    title="Table view for comparison"
-                  >
-                    <TableCellsIcon className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
+                )}
+                
+                {/* View Mode Toggle */}
+                {lineItems.length > 0 && (
+                  <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-lg p-0.5">
+                    <button
+                      onClick={() => setWorkloadsViewMode('cards')}
+                      className={clsx(
+                        "p-1.5 rounded-md transition-colors",
+                        workloadsViewMode === 'cards'
+                          ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                          : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      )}
+                      title="Compact cards (default)"
+                    >
+                      <Squares2X2Icon className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setWorkloadsViewMode('expanded')}
+                      className={clsx(
+                        "p-1.5 rounded-md transition-colors",
+                        workloadsViewMode === 'expanded'
+                          ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                          : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      )}
+                      title="Expanded cards with details"
+                    >
+                      <ListBulletIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setWorkloadsViewMode('table')}
+                      className={clsx(
+                        "p-1.5 rounded-md transition-colors",
+                        workloadsViewMode === 'table'
+                          ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                          : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      )}
+                      title="Table view for comparison"
+                    >
+                      <TableCellsIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             
             {!id ? (
@@ -1705,104 +1768,123 @@ export default function Calculator() {
               </div>
             ) : (
               <>
-                {/* Table View */}
+                {/* Table View - Compact */}
                 {workloadsViewMode === 'table' && lineItems.length > 0 && (
                   <div className="card overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-[var(--border-primary)] bg-[var(--bg-tertiary)]">
-                            <th className="text-left p-3 font-medium text-[var(--text-secondary)]">Name</th>
-                            <th className="text-left p-3 font-medium text-[var(--text-secondary)]">Type</th>
-                            <th className="text-right p-3 font-medium text-[var(--text-secondary)]">DBU Cost</th>
-                            <th className="text-right p-3 font-medium text-[var(--text-secondary)]">VM Cost</th>
-                            <th className="text-right p-3 font-medium text-[var(--text-secondary)]">Total</th>
-                            <th className="text-right p-3 font-medium text-[var(--text-secondary)]">DBUs/mo</th>
-                            <th className="text-center p-3 font-medium text-[var(--text-secondary)]">Actions</th>
-                          </tr>
-                        </thead>
-                          {lineItems.map((item) => {
-                            const costs = calculateItemCost(item)
-                            const typeConfig = getWorkloadTypeConfig(item.workload_type)
-                            const TypeIcon = typeConfig.icon
-                            const isExpanded = expandedItems.has(item.line_item_id)
-                            
-                            return (
-                              <tbody key={item.line_item_id}>
-                                <tr 
-                                  className="border-b border-[var(--border-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors"
-                                  onClick={() => toggleExpand(item.line_item_id)}
-                                >
-                                  <td className="p-3">
-                                    <div className="flex items-center gap-2">
-                                      <div className={clsx("w-6 h-6 rounded flex items-center justify-center flex-shrink-0", typeConfig.bgColor)}>
-                                        <TypeIcon className={clsx("w-3.5 h-3.5", typeConfig.color)} />
-                                      </div>
-                                      <div className="min-w-0">
-                                        <p className="font-medium truncate text-[var(--text-primary)]">{item.workload_name}</p>
-                                        <div className="flex items-center gap-1 mt-0.5">
-                                          {(item.serverless_enabled || (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')) && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-600 dark:text-teal-400">Serverless</span>
-                                          )}
-                                          {item.photon_enabled && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 dark:text-orange-400">Photon</span>
-                                          )}
-                                        </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-[var(--border-primary)] bg-[var(--bg-tertiary)]">
+                          <th className="w-8 p-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedItems.size === lineItems.length && lineItems.length > 0}
+                              onChange={toggleSelectAll}
+                              className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                            />
+                          </th>
+                          <th className="text-left p-2 font-medium text-[var(--text-secondary)]">Workload</th>
+                          <th className="text-right p-2 font-medium text-[var(--text-secondary)] whitespace-nowrap">DBU</th>
+                          <th className="text-right p-2 font-medium text-[var(--text-secondary)] whitespace-nowrap">VM</th>
+                          <th className="text-right p-2 font-medium text-[var(--text-secondary)] whitespace-nowrap">Total</th>
+                          <th className="text-right p-2 font-medium text-[var(--text-secondary)] whitespace-nowrap">DBUs</th>
+                          <th className="w-20 p-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lineItems.map((item) => {
+                          const costs = calculateItemCost(item)
+                          const typeConfig = getWorkloadTypeConfig(item.workload_type)
+                          const TypeIcon = typeConfig.icon
+                          const isExpanded = expandedItems.has(item.line_item_id)
+                          const isSelected = selectedItems.has(item.line_item_id)
+                          
+                          return (
+                            <React.Fragment key={item.line_item_id}>
+                              <tr 
+                                className={clsx(
+                                  "border-b border-[var(--border-primary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors",
+                                  isSelected && "bg-orange-500/5"
+                                )}
+                                onClick={() => toggleExpand(item.line_item_id)}
+                              >
+                                <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleItemSelection(item.line_item_id)}
+                                    className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className={clsx("w-5 h-5 rounded flex items-center justify-center flex-shrink-0", typeConfig.bgColor)}>
+                                      <TypeIcon className={clsx("w-3 h-3", typeConfig.color)} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-medium truncate text-[var(--text-primary)] text-xs">{item.workload_name}</p>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[10px] text-[var(--text-muted)] truncate">
+                                          {workloadTypes.find(w => w.workload_type === item.workload_type)?.display_name || item.workload_type}
+                                        </span>
+                                        {(item.serverless_enabled || (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')) && (
+                                          <span className="text-[9px] px-1 py-0 rounded bg-teal-500/10 text-teal-600 dark:text-teal-400">S</span>
+                                        )}
+                                        {item.photon_enabled && (
+                                          <span className="text-[9px] px-1 py-0 rounded bg-orange-500/10 text-orange-600 dark:text-orange-400">P</span>
+                                        )}
                                       </div>
                                     </div>
-                                  </td>
-                                  <td className="p-3 text-[var(--text-muted)]">
-                                    {workloadTypes.find(w => w.workload_type === item.workload_type)?.display_name || item.workload_type}
-                                  </td>
-                                  <td className="p-3 text-right font-medium text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</td>
-                                  <td className="p-3 text-right font-medium text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</td>
-                                  <td className="p-3 text-right font-bold text-orange-500">{formatCurrency(costs.totalCost)}</td>
-                                  <td className="p-3 text-right text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)}</td>
-                                  <td className="p-3">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button
-                                        onClick={(e) => handleCloneWorkload(e, item)}
-                                        className="p-1 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
-                                        title="Clone"
-                                      >
-                                        <DocumentDuplicateIcon className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteLineItem(item) }}
-                                        className="p-1 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
-                                        title="Delete"
-                                      >
-                                        <TrashIcon className="w-4 h-4" />
-                                      </button>
-                                      {isExpanded ? (
-                                        <ChevronUpIcon className="w-4 h-4 text-[var(--text-muted)]" />
-                                      ) : (
-                                        <ChevronDownIcon className="w-4 h-4 text-[var(--text-muted)]" />
-                                      )}
+                                  </div>
+                                </td>
+                                <td className="p-2 text-right font-medium text-[var(--text-primary)] whitespace-nowrap">{formatCurrency(costs.dbuCost)}</td>
+                                <td className="p-2 text-right font-medium text-[var(--text-primary)] whitespace-nowrap">{formatCurrency(costs.vmCost)}</td>
+                                <td className="p-2 text-right font-bold text-orange-500 whitespace-nowrap">{formatCurrency(costs.totalCost)}</td>
+                                <td className="p-2 text-right text-[var(--text-muted)] whitespace-nowrap">{formatNumber(costs.monthlyDBUs)}</td>
+                                <td className="p-2">
+                                  <div className="flex items-center justify-end gap-0.5">
+                                    <button
+                                      onClick={(e) => handleCloneWorkload(e, item)}
+                                      className="p-1 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
+                                      title="Clone"
+                                    >
+                                      <DocumentDuplicateIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteLineItem(item) }}
+                                      className="p-1 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
+                                      title="Delete"
+                                    >
+                                      <TrashIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                    {isExpanded ? (
+                                      <ChevronUpIcon className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                                    ) : (
+                                      <ChevronDownIcon className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                              {/* Expanded Form Row */}
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan={7} className="p-0 bg-[var(--bg-tertiary)]">
+                                    <div className="p-4">
+                                      <WorkloadForm
+                                        estimateId={id}
+                                        lineItem={item}
+                                        onClose={() => setExpandedItems(new Set())}
+                                        onSave={markAsChanged}
+                                        inline
+                                      />
                                     </div>
                                   </td>
                                 </tr>
-                                {/* Expanded Form Row */}
-                                {isExpanded && (
-                                  <tr>
-                                    <td colSpan={7} className="p-0 bg-[var(--bg-tertiary)]">
-                                      <div className="p-4">
-                                        <WorkloadForm
-                                          estimateId={id}
-                                          lineItem={item}
-                                          onClose={() => setExpandedItems(new Set())}
-                                          onSave={markAsChanged}
-                                          inline
-                                        />
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            )
-                          })}
-                      </table>
-                    </div>
+                              )}
+                            </React.Fragment>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
                 
@@ -2187,6 +2269,73 @@ export default function Calculator() {
                     </span>
                   </div>
                 </div>
+                
+                {/* Cost Distribution Chart */}
+                {lineItems.length > 1 && totalCosts.totalCost > 0 && (
+                  <div className="pt-4 border-t border-[var(--border-primary)]">
+                    <p className="text-xs font-medium uppercase tracking-wider mb-3 text-[var(--text-muted)]">Cost Distribution</p>
+                    <div className="space-y-2">
+                      {(() => {
+                        // Sort by cost descending and take top items
+                        const sortedItems = [...lineItems]
+                          .map(item => ({
+                            item,
+                            costs: calculateItemCost(item)
+                          }))
+                          .sort((a, b) => b.costs.totalCost - a.costs.totalCost)
+                        
+                        // Show top 5 individually, group rest as "Other"
+                        const topItems = sortedItems.slice(0, 5)
+                        const otherItems = sortedItems.slice(5)
+                        const otherCost = otherItems.reduce((sum, i) => sum + i.costs.totalCost, 0)
+                        
+                        const barColors = [
+                          'bg-orange-500',
+                          'bg-amber-500',
+                          'bg-blue-500',
+                          'bg-emerald-500',
+                          'bg-purple-500',
+                        ]
+                        
+                        return (
+                          <>
+                            {topItems.map(({ item, costs }, idx) => {
+                              const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
+                              return (
+                                <div key={item.line_item_id} className="space-y-1">
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-[var(--text-secondary)] truncate max-w-[120px]">{item.workload_name}</span>
+                                    <span className="text-[var(--text-muted)] ml-2">{percent.toFixed(1)}%</span>
+                                  </div>
+                                  <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                                    <div 
+                                      className={clsx("h-full rounded-full transition-all duration-300", barColors[idx])}
+                                      style={{ width: `${percent}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            {otherCost > 0 && (
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-[var(--text-muted)]">Other ({otherItems.length})</span>
+                                  <span className="text-[var(--text-muted)] ml-2">{((otherCost / totalCosts.totalCost) * 100).toFixed(1)}%</span>
+                                </div>
+                                <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full rounded-full transition-all duration-300 bg-gray-400"
+                                    style={{ width: `${(otherCost / totalCosts.totalCost) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                )}
                 
                 {/* Per Workload Breakdown */}
                 {lineItems.length > 1 && (
