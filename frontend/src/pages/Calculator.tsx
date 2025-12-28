@@ -244,6 +244,12 @@ export default function Calculator() {
     dbsqlSizes,
     // Model Serving GPU types for DBU rates
     modelServingGPUTypes,
+    // Vector Search modes for DBU rates
+    vectorSearchModes,
+    getVectorSearchRate,
+    // FMAPI rates (cached lookups)
+    getFMAPIDatabricksRate,
+    getFMAPIProprietaryRate,
     // State management
     clearEstimateState
   } = useStore()
@@ -507,17 +513,14 @@ export default function Calculator() {
   const canAddWorkload = Boolean(formData.region && formData.tier)
   
   // Calculate cost for a single line item with full breakdown
-  // Prefers API-calculated costs, falls back to local calculation
+  // Uses LOCAL calculation for instant feedback - no API dependency
+  // All reference data (instanceTypes, dbuRatesMap, vectorSearchModes, etc.) is pre-fetched
   const calculateItemCost = (item: LineItem): CostBreakdown => {
-    // Check if we have API-calculated cost for this item
+    // Check if we have API-calculated cost for this item (optional validation)
     const apiResponse = workloadCosts[item.line_item_id]
     
-    // If we're actively calculating and don't have API data yet, return zeros
-    // This prevents showing stale local calculations during API fetch
-    if (isCalculatingCost && !apiResponse) {
-      return { monthlyDBUs: 0, dbuCost: 0, vmCost: 0, totalCost: 0 }
-    }
-    
+    // If API result is available and successful, we can use it (more accurate for edge cases)
+    // But we no longer block/show zeros during API fetch - local calc is always available
     if (apiResponse?.success && apiResponse?.data) {
       const data = apiResponse.data
       
@@ -544,7 +547,8 @@ export default function Calculator() {
       }
     }
     
-    // Fall back to local calculation if API cost not available
+    // LOCAL CALCULATION - Instant feedback using pre-fetched reference data
+    // No network calls, no loading states, immediate results as user types
     const cloud = formData.cloud || 'aws'
     const region = formData.region // No default - must be set
     // Try to use dynamic DBU rates first, fall back to hardcoded
@@ -776,14 +780,17 @@ export default function Calculator() {
       
       case 'VECTOR_SEARCH':
         // Vector Search: Units = CEILING(vector_capacity_millions / divisor)
-        // where divisor = 2 for standard, 64 for storage_optimized
+        // Use fetched vectorSearchModes for accurate rates
         const vectorMode = item.vector_search_mode || 'standard'
         const vectorCapacity = item.vector_capacity_millions || 1
-        const divisor = vectorMode === 'storage_optimized' ? 64 : 2
+        
+        // Get rate from fetched data, fallback to defaults
+        const vectorRateData = getVectorSearchRate(vectorMode)
+        const divisor = vectorRateData?.input_divisor || (vectorMode === 'storage_optimized' ? 64 : 2)
         const unitsUsed = Math.ceil(vectorCapacity / divisor)
         
-        // DBU/Hour = units_used × mode_dbu_rate (use 2 DBU as default rate per unit)
-        const vectorModeDBURate = vectorMode === 'storage_optimized' ? 0.5 : 2.0 // Storage optimized is cheaper per unit
+        // DBU/Hour = units_used × mode_dbu_rate
+        const vectorModeDBURate = vectorRateData?.dbu_per_hour || (vectorMode === 'storage_optimized' ? 0.5 : 2.0)
         dbuPerHour = unitsUsed * vectorModeDBURate
         monthlyDBUs = dbuPerHour * hoursPerMonth
         break
@@ -813,47 +820,57 @@ export default function Calculator() {
       
       case 'FMAPI_DATABRICKS':
         // Foundation Models (Databricks) - llama, gpt-oss, gemma, bge, gte, etc.
-        // Rate Types: input_token, output_token, provisioned_scaling, provisioned_entry
+        // Use cached rate data if available, otherwise use defaults
         const fmapiDbxQuantity = item.fmapi_quantity || 0
         const fmapiDbxRateType = item.fmapi_rate_type || 'input_token'
         const fmapiDbxIsProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(fmapiDbxRateType)
         
+        // Try to get cached rate from store
+        const dbxRateData = item.fmapi_model 
+          ? getFMAPIDatabricksRate(item.fmapi_model, fmapiDbxRateType) 
+          : null
+        
         if (fmapiDbxIsProvisioned) {
           // Provisioned: Cost = quantity (hours) × dbu_per_hour × dbu_price
-          // Default DBU rates: scaling ~200 DBU/hr, entry ~50 DBU/hr (varies by model)
-          const provisionedDbxDbuPerHour = fmapiDbxRateType === 'provisioned_scaling' ? 200 : 50
+          const provisionedDbxDbuPerHour = dbxRateData?.dbu_per_hour || 
+            (fmapiDbxRateType === 'provisioned_scaling' ? 200 : 50)
           monthlyDBUs = fmapiDbxQuantity * provisionedDbxDbuPerHour
         } else {
-          // Token-based: Cost = (quantity / 1,000,000) × dbu_per_1M_tokens × dbu_price
-          // Note: quantity is already in millions (M), so formula is: quantity × dbu_per_1M
-          // Default rates: input ~1.0 DBU/1M, output ~3.0 DBU/1M (varies by model)
-          const tokenDbxRate = fmapiDbxRateType === 'output_token' ? 3.0 : 1.0
+          // Token-based: Cost = quantity × dbu_per_1M_tokens × dbu_price
+          // quantity is in millions (M), so formula is: quantity × dbu_per_1M
+          const tokenDbxRate = dbxRateData?.dbu_per_1M_tokens || 
+            (fmapiDbxRateType === 'output_token' ? 3.0 : 1.0)
           monthlyDBUs = fmapiDbxQuantity * tokenDbxRate
         }
         break
       
       case 'FMAPI_PROPRIETARY':
         // Foundation Models (Proprietary) - OpenAI, Anthropic, Google
-        // Rate Types: input_token, output_token, cache_read, cache_write, provisioned_scaling
+        // Use cached rate data if available, otherwise use defaults
         const fmapiPropQuantity = item.fmapi_quantity || 0
         const fmapiPropRateType = item.fmapi_rate_type || 'input_token'
         const fmapiPropIsProvisioned = fmapiPropRateType === 'provisioned_scaling'
         
+        // Try to get cached rate from store
+        const propRateData = (item.fmapi_provider && item.fmapi_model)
+          ? getFMAPIProprietaryRate(item.fmapi_provider, item.fmapi_model, fmapiPropRateType)
+          : null
+        
         if (fmapiPropIsProvisioned) {
           // Provisioned: Cost = quantity (hours) × dbu_per_hour × dbu_price
-          // Default ~150 DBU/hr for proprietary provisioned
-          const provisionedPropDbuPerHour = 150
+          const provisionedPropDbuPerHour = propRateData?.dbu_per_hour || 150
           monthlyDBUs = fmapiPropQuantity * provisionedPropDbuPerHour
         } else {
-          // Token-based: Cost = (quantity / 1,000,000) × dbu_per_1M_tokens × dbu_price
-          // Rates vary by provider and model, use reasonable defaults:
-          // input: ~2.0 DBU/1M, output: ~6.0 DBU/1M, cache_read: ~0.5, cache_write: ~1.0
-          let tokenPropRate = 2.0
-          switch (fmapiPropRateType) {
-            case 'output_token': tokenPropRate = 6.0; break
-            case 'cache_read': tokenPropRate = 0.5; break
-            case 'cache_write': tokenPropRate = 1.0; break
-            default: tokenPropRate = 2.0 // input_token
+          // Token-based: Cost = quantity × dbu_per_1M_tokens × dbu_price
+          // Use cached rate or fall back to reasonable defaults
+          let tokenPropRate = propRateData?.dbu_per_1M_tokens
+          if (!tokenPropRate) {
+            switch (fmapiPropRateType) {
+              case 'output_token': tokenPropRate = 6.0; break
+              case 'cache_read': tokenPropRate = 0.5; break
+              case 'cache_write': tokenPropRate = 1.0; break
+              default: tokenPropRate = 2.0 // input_token
+            }
           }
           monthlyDBUs = fmapiPropQuantity * tokenPropRate
         }
@@ -888,7 +905,7 @@ export default function Calculator() {
     })
     
     return { totalDBUs, totalDBUCost, totalVMCost, totalCost }
-  }, [lineItems, formData.cloud, formData.region, workloadTypes, getVMPrice, workloadCosts, isCalculatingCost, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes])
+  }, [lineItems, formData.cloud, formData.region, workloadTypes, getVMPrice, workloadCosts, isCalculatingCost, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate])
   
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {

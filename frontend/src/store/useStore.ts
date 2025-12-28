@@ -24,7 +24,10 @@ import type {
   Tier,
   DBURate,
   ServerlessMode,
-  PhotonMultiplier
+  PhotonMultiplier,
+  VectorSearchMode,
+  FMAPIDatabricksModel,
+  FMAPIProprietaryModel
 } from '../api/client'
 
 // =============================================================================
@@ -234,6 +237,11 @@ interface Store {
   serverlessModes: ServerlessMode[]
   photonMultipliers: PhotonMultiplier[]
   
+  // Vector Search & FMAPI Pricing (for local calculations)
+  vectorSearchModes: VectorSearchMode[]  // modes with dbu_per_hour and input_divisor
+  fmapiDatabricksRates: Record<string, FMAPIDatabricksModel>  // "model:rate_type" -> rate data
+  fmapiProprietaryRates: Record<string, FMAPIProprietaryModel>  // "provider:model:rate_type" -> rate data
+  
   // Cost Calculations (NEW)
   workloadCosts: Record<string, CostCalculationResponse>  // Map of line_item_id -> cost
   isCalculatingCost: boolean
@@ -287,6 +295,14 @@ interface Store {
   getDBURate: (productType: string) => number
   fetchServerlessModes: () => Promise<void>
   fetchPhotonMultipliers: (cloud: string) => Promise<void>
+  
+  // Actions - Vector Search & FMAPI Pricing (for local calculations)
+  fetchVectorSearchModes: (cloud: string) => Promise<void>
+  getVectorSearchRate: (mode: string) => { dbu_per_hour: number; input_divisor: number } | null
+  fetchFMAPIDatabricksRate: (model: string, cloud: string, rate_type: string) => Promise<FMAPIDatabricksModel | null>
+  fetchFMAPIProprietaryRate: (provider: string, model: string, cloud: string, rate_type: string) => Promise<FMAPIProprietaryModel | null>
+  getFMAPIDatabricksRate: (model: string, rate_type: string) => FMAPIDatabricksModel | null
+  getFMAPIProprietaryRate: (provider: string, model: string, rate_type: string) => FMAPIProprietaryModel | null
   
   // Actions - Cost Calculation (NEW)
   calculateWorkloadCost: (lineItem: LineItem, estimateCloud: string, estimateRegion: string, estimateTier: string) => Promise<CostCalculationResponse | null>
@@ -364,6 +380,11 @@ export const useStore = create<Store>((set, get) => ({
   dbuRatesMap: {},
   serverlessModes: STATIC_SERVERLESS_MODES,
   photonMultipliers: [],
+  
+  // Vector Search & FMAPI Pricing (for local calculations)
+  vectorSearchModes: [],
+  fmapiDatabricksRates: {},
+  fmapiProprietaryRates: {},
   
   // Cost Calculations
   workloadCosts: {},
@@ -698,17 +719,18 @@ export const useStore = create<Store>((set, get) => ({
       
       // Fetch cloud-specific data for default cloud (AWS) + regions for ALL clouds
       const defaultCloud = 'aws'
-      const [instanceTypes, modelServingGPUTypes, awsRegions, azureRegions, gcpRegions, photonMultipliers] = await Promise.all([
+      const [instanceTypes, modelServingGPUTypes, awsRegions, azureRegions, gcpRegions, photonMultipliers, vectorSearchModes] = await Promise.all([
         api.fetchInstanceTypes(defaultCloud).catch(() => []),
         api.fetchModelServingGPUTypes(defaultCloud).catch(() => []),
         api.fetchRegions('aws').catch(() => []),
         api.fetchRegions('azure').catch(() => []),
         api.fetchRegions('gcp').catch(() => []),
-        api.fetchPhotonMultipliers(defaultCloud).catch(() => [])
+        api.fetchPhotonMultipliers(defaultCloud).catch(() => []),
+        api.fetchVectorSearchModesWithPricing(defaultCloud).catch(() => [])
       ])
       const regionsMap = { aws: awsRegions, azure: azureRegions, gcp: gcpRegions }
       const regions = awsRegions // Default to AWS regions for backwards compatibility
-      set({ instanceTypes, modelServingGPUTypes, regions, regionsMap, photonMultipliers })
+      set({ instanceTypes, modelServingGPUTypes, regions, regionsMap, photonMultipliers, vectorSearchModes })
       console.log('[RefData] Loaded regions for all clouds:', { aws: awsRegions.length, azure: azureRegions.length, gcp: gcpRegions.length })
       
       // Also try to fetch instance families and DBSQL warehouse types
@@ -875,6 +897,7 @@ export const useStore = create<Store>((set, get) => ({
     get().fetchModelServingGPUTypes(cloud)
     get().fetchVMPricing(cloud, region || undefined)
     get().fetchPhotonMultipliers(cloud)
+    get().fetchVectorSearchModes(cloud)
   },
   
   setSelectedRegion: (region) => {
@@ -994,6 +1017,70 @@ export const useStore = create<Store>((set, get) => ({
     } catch (error) {
       console.error('Failed to fetch photon multipliers:', error)
     }
+  },
+  
+  // Vector Search & FMAPI Pricing Actions
+  fetchVectorSearchModes: async (cloud) => {
+    try {
+      const vectorSearchModes = await api.fetchVectorSearchModesWithPricing(cloud)
+      set({ vectorSearchModes })
+    } catch (error) {
+      console.error('Failed to fetch vector search modes:', error)
+    }
+  },
+  
+  getVectorSearchRate: (mode) => {
+    const { vectorSearchModes } = get()
+    const found = vectorSearchModes.find(m => m.mode === mode)
+    return found ? { dbu_per_hour: found.dbu_per_hour, input_divisor: found.input_divisor } : null
+  },
+  
+  fetchFMAPIDatabricksRate: async (model, cloud, rate_type) => {
+    try {
+      const results = await api.fetchFMAPIDatabricksModels(model, cloud, rate_type)
+      if (results.length > 0) {
+        const rate = results[0]
+        const cacheKey = `${model}:${rate_type}`
+        set((state) => ({
+          fmapiDatabricksRates: { ...state.fmapiDatabricksRates, [cacheKey]: rate }
+        }))
+        return rate
+      }
+      return null
+    } catch (error) {
+      console.error('Failed to fetch FMAPI Databricks rate:', error)
+      return null
+    }
+  },
+  
+  fetchFMAPIProprietaryRate: async (provider, model, cloud, rate_type) => {
+    try {
+      const results = await api.fetchFMAPIProprietaryModels({ provider, model, cloud, rate_type })
+      if (results.length > 0) {
+        const rate = results[0]
+        const cacheKey = `${provider}:${model}:${rate_type}`
+        set((state) => ({
+          fmapiProprietaryRates: { ...state.fmapiProprietaryRates, [cacheKey]: rate }
+        }))
+        return rate
+      }
+      return null
+    } catch (error) {
+      console.error('Failed to fetch FMAPI Proprietary rate:', error)
+      return null
+    }
+  },
+  
+  getFMAPIDatabricksRate: (model, rate_type) => {
+    const { fmapiDatabricksRates } = get()
+    const cacheKey = `${model}:${rate_type}`
+    return fmapiDatabricksRates[cacheKey] || null
+  },
+  
+  getFMAPIProprietaryRate: (provider, model, rate_type) => {
+    const { fmapiProprietaryRates } = get()
+    const cacheKey = `${provider}:${model}:${rate_type}`
+    return fmapiProprietaryRates[cacheKey] || null
   },
   
   // Cost Calculation
