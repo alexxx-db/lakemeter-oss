@@ -221,6 +221,7 @@ interface CostBreakdown {
   // Optional fields for specific workload types
   unitsUsed?: number  // Vector Search units
   dbuPerHour?: number // DBU per hour for display
+  dbuPrice?: number   // $/DBU rate for display
 }
 
 export default function Calculator() {
@@ -1054,7 +1055,8 @@ export default function Calculator() {
       vmCost: safeVmCost, 
       totalCost: isNaN(totalCost) ? 0 : totalCost,
       unitsUsed,  // For Vector Search
-      dbuPerHour  // For display
+      dbuPerHour, // For display
+      dbuPrice: safeDbuPrice  // $/DBU rate for display
     }
   }
   
@@ -2214,6 +2216,7 @@ export default function Calculator() {
                                     (item.runs_per_day && item.avg_runtime_minutes 
                                       ? item.runs_per_day * (item.avg_runtime_minutes / 60) * (item.days_per_month || 30)
                                       : 730)
+                                  const dbuPriceDisplay = costs.dbuPrice?.toFixed(2) || '0.00'
                                   
                                   // Vector Search
                                   if (item.workload_type === 'VECTOR_SEARCH') {
@@ -2226,7 +2229,9 @@ export default function Calculator() {
                                         <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
                                         <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                        <span>→</span>
+                                        <span>×</span>
+                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                        <span>=</span>
                                         <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
@@ -2241,7 +2246,9 @@ export default function Calculator() {
                                         <span className="text-purple-500">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
                                         <span>=</span>
                                         <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                        <span>→</span>
+                                        <span>×</span>
+                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                        <span>=</span>
                                         <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
@@ -2258,7 +2265,9 @@ export default function Calculator() {
                                         <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
                                         <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                        <span>→</span>
+                                        <span>×</span>
+                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                        <span>=</span>
                                         <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
@@ -2273,7 +2282,9 @@ export default function Calculator() {
                                         <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
                                         <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                        <span>→</span>
+                                        <span>×</span>
+                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                        <span>=</span>
                                         <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
@@ -2283,7 +2294,7 @@ export default function Calculator() {
                                   const hasVMCost = costs.vmCost > 0
                                   return (
                                     <>
-                                      {costs.dbuPerHour && (
+                                      {costs.dbuPerHour && costs.dbuPerHour > 0 && (
                                         <>
                                           <span className="text-purple-500">{costs.dbuPerHour.toFixed(2)} DBU/hr</span>
                                           <span>×</span>
@@ -2292,15 +2303,19 @@ export default function Calculator() {
                                       <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                       <span>=</span>
                                       <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                      {hasVMCost && (
+                                      <span>×</span>
+                                      <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                      {hasVMCost ? (
                                         <>
                                           <span className="mx-1">|</span>
-                                          <span className="text-blue-500">DBU: {formatCurrency(costs.dbuCost)}</span>
+                                          <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
                                           <span>+</span>
                                           <span className="text-teal-500">VM: {formatCurrency(costs.vmCost)}</span>
+                                          <span>=</span>
                                         </>
+                                      ) : (
+                                        <span>=</span>
                                       )}
-                                      <span>=</span>
                                       <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                     </>
                                   )

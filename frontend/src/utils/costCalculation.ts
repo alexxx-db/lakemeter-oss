@@ -57,6 +57,7 @@ export interface CostBreakdown {
   // Optional fields for specific workload types
   unitsUsed?: number  // Vector Search units
   dbuPerHour?: number // DBU per hour for display
+  dbuPrice?: number   // $/DBU rate for display
 }
 
 export interface DBSQLWarehouseConfig {
@@ -69,6 +70,7 @@ export interface DBSQLWarehouseConfig {
 export interface CostCalculationContext {
   cloud: string
   region: string
+  tier?: string  // Databricks tier (PREMIUM, STANDARD, ENTERPRISE)
   dbuRatesMap: Record<string, number>
   instanceTypes: InstanceType[]
   dbsqlSizes: DBSQLSize[]
@@ -80,6 +82,10 @@ export interface CostCalculationContext {
   getFMAPIProprietaryRate: (provider: string, model: string, rateType: string, endpointType?: string, contextLength?: string) => { dbu_per_1M_tokens?: number, dbu_per_hour?: number } | null
   getVectorSearchRate: (mode: string) => { dbu_per_hour?: number, input_divisor?: number } | null
   getDBSQLWarehouseConfig?: (warehouseType: string, warehouseSize: string) => DBSQLWarehouseConfig | null
+  // Functions for pricing bundle lookups (for consistent calculations)
+  getInstanceDBURate?: (instanceType: string) => number | null
+  getPhotonMultiplier?: (skuType: string) => number | null
+  getDBUPrice?: (productType: string) => number | null
 }
 
 /**
@@ -90,7 +96,11 @@ export function calculateWorkloadCost(
   item: Partial<LineItem>,
   context: CostCalculationContext
 ): CostBreakdown {
-  const { cloud, region, dbuRatesMap, instanceTypes, dbsqlSizes, photonMultipliers, modelServingGPUTypes, getVMPrice, getFMAPIDatabricksRate, getFMAPIProprietaryRate, getVectorSearchRate } = context
+  const { 
+    cloud, region, dbuRatesMap, instanceTypes, dbsqlSizes, photonMultipliers, modelServingGPUTypes, 
+    getVMPrice, getFMAPIDatabricksRate, getFMAPIProprietaryRate, getVectorSearchRate,
+    getInstanceDBURate, getPhotonMultiplier: getBundlePhotonMultiplier, getDBUPrice 
+  } = context
   
   // If no region selected, return zero costs
   if (!region) {
@@ -187,8 +197,15 @@ export function calculateWorkloadCost(
       productType = 'JOBS_COMPUTE'
   }
   
-  // Get DBU price for this product type
-  const dbuPrice = pricing[productType] || 0.20
+  // Get DBU price for this product type - try pricing bundle function first
+  let dbuPrice = 0.20  // Fallback
+  if (getDBUPrice) {
+    const bundlePrice = getDBUPrice(productType)
+    if (bundlePrice !== null && bundlePrice > 0) dbuPrice = bundlePrice
+  }
+  if (dbuPrice === 0.20) {
+    dbuPrice = pricing[productType] || 0.20
+  }
   console.log(`[LiveEstimate] productType=${productType}, dbuPrice=${dbuPrice}, serverless=${item.serverless_enabled}, photon=${item.photon_enabled}`)
   
   // ========================================
@@ -199,21 +216,43 @@ export function calculateWorkloadCost(
   let vmCost = 0
   let unitsUsed: number | undefined = undefined  // For Vector Search
   
-  // Get instance DBU rates from fetched instanceTypes
-  const driverInstance = instanceTypes.find(it => it.id === item.driver_node_type || it.name === item.driver_node_type)
-  const workerInstance = instanceTypes.find(it => it.id === item.worker_node_type || it.name === item.worker_node_type)
-  const driverDBURate = driverInstance?.dbu_rate || 0.5
-  const workerDBURate = workerInstance?.dbu_rate || 0.5
+  // Get instance DBU rates - try pricing bundle function first, then fetched instanceTypes
+  let driverDBURate = 0.5 // Fallback
+  let workerDBURate = 0.5
   
-  // Get photon multiplier from fetched photonMultipliers
+  if (getInstanceDBURate && item.driver_node_type) {
+    const bundleRate = getInstanceDBURate(item.driver_node_type)
+    if (bundleRate !== null && bundleRate > 0) driverDBURate = bundleRate
+  }
+  if (driverDBURate === 0.5) {
+    const driverInstance = instanceTypes.find(it => it.id === item.driver_node_type || it.name === item.driver_node_type)
+    if (driverInstance?.dbu_rate) driverDBURate = driverInstance.dbu_rate
+  }
+  
+  if (getInstanceDBURate && item.worker_node_type) {
+    const bundleRate = getInstanceDBURate(item.worker_node_type)
+    if (bundleRate !== null && bundleRate > 0) workerDBURate = bundleRate
+  }
+  if (workerDBURate === 0.5) {
+    const workerInstance = instanceTypes.find(it => it.id === item.worker_node_type || it.name === item.worker_node_type)
+    if (workerInstance?.dbu_rate) workerDBURate = workerInstance.dbu_rate
+  }
+  
+  // Get photon multiplier - try pricing bundle function first, then fetched photonMultipliers
   // NOTE: For serverless workloads, photon is ALWAYS enabled (built-in)
-  const getPhotonMultiplier = () => {
-    // For serverless, photon is always enabled - use multiplier
+  const getPhotonMultiplierValue = (): number => {
     // For classic, only apply if photon is explicitly enabled
     if (!item.serverless_enabled && !item.photon_enabled) return 1.0
     
-    // Try to get from fetched data
-    const baseSKUType = productType.replace('_(PHOTON)', '').replace('_SERVERLESS', '')
+    const baseSKUType = productType.replace('_(PHOTON)', '').replace('_SERVERLESS', '').replace('_COMPUTE', '')
+    
+    // Try pricing bundle function first
+    if (getBundlePhotonMultiplier) {
+      const bundleMultiplier = getBundlePhotonMultiplier(baseSKUType)
+      if (bundleMultiplier !== null && bundleMultiplier !== 2.0) return bundleMultiplier
+    }
+    
+    // Fall back to fetched photonMultipliers
     const multiplierEntry = photonMultipliers.find(pm => 
       pm.sku_type === baseSKUType || 
       pm.sku_type === productType ||
@@ -221,7 +260,7 @@ export function calculateWorkloadCost(
     )
     return multiplierEntry?.multiplier || 2.0  // Default to 2.0 (standard photon multiplier)
   }
-  const photonMultiplier = getPhotonMultiplier()
+  const photonMultiplier = getPhotonMultiplierValue()
   
   // Serverless mode multiplier
   const serverlessMultiplier = (item.serverless_enabled && item.serverless_mode === 'performance') ? 2 : 1
@@ -423,7 +462,8 @@ export function calculateWorkloadCost(
     vmCost, 
     totalCost,
     unitsUsed,  // For Vector Search
-    dbuPerHour  // For display
+    dbuPerHour, // For display
+    dbuPrice    // $/DBU rate for display
   }
 }
 

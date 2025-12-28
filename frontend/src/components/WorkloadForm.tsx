@@ -6,7 +6,13 @@ import { useStore } from '../store/useStore'
 import SearchableSelect from './SearchableSelect'
 import type { LineItem, WorkloadType } from '../types'
 import { calculateWorkloadCost, type CostCalculationContext } from '../utils/costCalculation'
-import { getDBSQLWarehouseConfig, type PricingBundle } from '../utils/pricingBundle'
+import { 
+  getDBSQLWarehouseConfig, 
+  getInstanceDBURate as getBundleInstanceDBURate, 
+  getPhotonMultiplier as getBundlePhotonMultiplier,
+  getDBUPrice as getBundleDBUPrice,
+  type PricingBundle 
+} from '../utils/pricingBundle'
 
 // Helper to get available context lengths for FMAPI Proprietary models from pricing bundle
 function getAvailableContextLengths(
@@ -173,6 +179,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     fmapiProprietaryConfig,
     selectedCloud,
     selectedRegion,
+    selectedTier,
     dbuRatesMap,
     photonMultipliers,
     pricingBundle,
@@ -1649,6 +1656,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         context={{
           cloud: selectedCloud,
           region: selectedRegion,
+          tier: selectedTier,
           dbuRatesMap,
           instanceTypes,
           dbsqlSizes,
@@ -1657,6 +1665,19 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           vectorSearchModes,
           getVMPrice,
           getFMAPIDatabricksRate,
+          // Pricing bundle lookup functions for consistency with Calculator.tsx
+          getInstanceDBURate: (instanceType: string) => {
+            if (!isPricingBundleLoaded) return null
+            return getBundleInstanceDBURate(pricingBundle, selectedCloud || 'aws', instanceType)
+          },
+          getPhotonMultiplier: (skuType: string) => {
+            if (!isPricingBundleLoaded) return null
+            return getBundlePhotonMultiplier(pricingBundle, selectedCloud || 'aws', skuType)
+          },
+          getDBUPrice: (productType: string) => {
+            if (!isPricingBundleLoaded) return null
+            return getBundleDBUPrice(pricingBundle, selectedCloud || 'aws', selectedRegion || '', selectedTier || 'PREMIUM', productType)
+          },
           getFMAPIProprietaryRate: (provider: string, model: string, rateType: string, endpointType?: string, contextLength?: string) => {
             // Try pricing bundle first (with full key: cloud:provider:model:endpoint:context:rate)
             if (isPricingBundleLoaded && pricingBundle.fmapiProprietaryRates) {
@@ -1886,6 +1907,7 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
               (form.runs_per_day && form.avg_runtime_minutes 
                 ? form.runs_per_day * (form.avg_runtime_minutes / 60) * (form.days_per_month || 30)
                 : 730)
+            const dbuPriceDisplay = currentCost.dbuPrice?.toFixed(2) || '0.00'
             
             // Vector Search
             if (form.workload_type === 'VECTOR_SEARCH') {
@@ -1898,7 +1920,9 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
                   <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                   <span>=</span>
                   <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                  <span>→</span>
+                  <span>×</span>
+                  <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                  <span>=</span>
                   <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
                 </>
               )
@@ -1914,7 +1938,9 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
                   <span className="text-purple-500">{dbuPerMToken} DBU/M</span>
                   <span>=</span>
                   <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                  <span>→</span>
+                  <span>×</span>
+                  <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                  <span>=</span>
                   <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
                 </>
               )
@@ -1931,7 +1957,9 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
                   <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                   <span>=</span>
                   <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                  <span>→</span>
+                  <span>×</span>
+                  <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                  <span>=</span>
                   <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
                 </>
               )
@@ -1946,7 +1974,9 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
                   <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                   <span>=</span>
                   <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                  <span>→</span>
+                  <span>×</span>
+                  <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                  <span>=</span>
                   <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
                 </>
               )
@@ -1965,15 +1995,19 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
                 <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                 <span>=</span>
                 <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                {hasVMCost && (
+                <span>×</span>
+                <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                {hasVMCost ? (
                   <>
                     <span className="mx-1">|</span>
-                    <span className="text-blue-500">DBU: {formatCurrency(currentCost.dbuCost)}</span>
+                    <span className="text-blue-500">{formatCurrency(currentCost.dbuCost)}</span>
                     <span>+</span>
                     <span className="text-teal-500">VM: {formatCurrency(currentCost.vmCost)}</span>
+                    <span>=</span>
                   </>
+                ) : (
+                  <span>=</span>
                 )}
-                <span>=</span>
                 <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
               </>
             )
