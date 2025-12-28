@@ -369,7 +369,7 @@ export function calculateWorkloadCost(
       const fmapiPropRateType = item.fmapi_rate_type || 'input_token'
       const fmapiPropIsProvisioned = fmapiPropRateType === 'provisioned_scaling'
       const fmapiEndpointType = item.fmapi_endpoint_type || 'global'
-      const fmapiContextLength = item.fmapi_context_length || 'all'
+      const fmapiContextLength = item.fmapi_context_length || 'long'
       
       const propRateData = (item.fmapi_provider && item.fmapi_model)
         ? getFMAPIProprietaryRate(item.fmapi_provider, item.fmapi_model, fmapiPropRateType, fmapiEndpointType, fmapiContextLength)

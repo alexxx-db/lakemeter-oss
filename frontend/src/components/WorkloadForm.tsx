@@ -6,7 +6,63 @@ import { useStore } from '../store/useStore'
 import SearchableSelect from './SearchableSelect'
 import type { LineItem, WorkloadType } from '../types'
 import { calculateWorkloadCost, type CostCalculationContext } from '../utils/costCalculation'
-import { getDBSQLWarehouseConfig } from '../utils/pricingBundle'
+import { getDBSQLWarehouseConfig, type PricingBundle } from '../utils/pricingBundle'
+
+// Helper to get available context lengths for FMAPI Proprietary models from pricing bundle
+function getAvailableContextLengths(
+  bundle: PricingBundle,
+  cloud: string,
+  provider: string,
+  model: string
+): string[] {
+  if (!bundle.isLoaded || !bundle.fmapiProprietaryRates) return ['all', 'short', 'long']
+  
+  const contextLengths = new Set<string>()
+  const prefix = `${cloud.toLowerCase()}:${provider.toLowerCase()}:${model.toLowerCase()}:`
+  
+  Object.keys(bundle.fmapiProprietaryRates).forEach(key => {
+    if (key.startsWith(prefix)) {
+      // Key format: cloud:provider:model:endpoint:context:rate_type
+      const parts = key.split(':')
+      if (parts.length >= 5) {
+        contextLengths.add(parts[4])
+      }
+    }
+  })
+  
+  // Return sorted array, or default if none found
+  const result = Array.from(contextLengths)
+  return result.length > 0 ? result.sort() : ['all', 'short', 'long']
+}
+
+// Helper to get available rate types for FMAPI Proprietary models
+function getAvailableRateTypes(
+  bundle: PricingBundle,
+  cloud: string,
+  provider: string,
+  model: string,
+  endpointType: string,
+  contextLength: string
+): string[] {
+  if (!bundle.isLoaded || !bundle.fmapiProprietaryRates) {
+    return ['input_token', 'output_token', 'cache_read', 'cache_write']
+  }
+  
+  const rateTypes = new Set<string>()
+  const prefix = `${cloud.toLowerCase()}:${provider.toLowerCase()}:${model.toLowerCase()}:${endpointType}:${contextLength}:`
+  
+  Object.keys(bundle.fmapiProprietaryRates).forEach(key => {
+    if (key.startsWith(prefix)) {
+      const parts = key.split(':')
+      if (parts.length >= 6) {
+        rateTypes.add(parts[5])
+      }
+    }
+  })
+  
+  const result = Array.from(rateTypes)
+  return result.length > 0 ? result : ['input_token', 'output_token', 'cache_read', 'cache_write']
+}
 
 // Pricing tier tooltips
 const PRICING_TIER_TOOLTIPS: Record<string, { title: string; description: string }> = {
@@ -279,7 +335,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     fmapi_provider: 'anthropic',
     fmapi_model: 'llama-3-3-70b',
     fmapi_endpoint_type: 'global',  // global, in_geo (for proprietary)
-    fmapi_context_length: 'all',
+    fmapi_context_length: 'long',  // 'long' is more commonly available than 'all'
     fmapi_rate_type: 'input_token',  // input_token, output_token, cache_read, cache_write
     fmapi_quantity: 0,  // quantity in millions (M)
     runs_per_day: 1,
@@ -323,7 +379,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     fmapi_provider: 'anthropic',
     fmapi_model: 'llama-3-3-70b',
     fmapi_endpoint_type: 'global',
-    fmapi_context_length: 'all',
+    fmapi_context_length: 'long',  // 'long' is more commonly available
     fmapi_rate_type: 'input_token',
     fmapi_quantity: 0,
     runs_per_day: 1,
@@ -369,7 +425,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         fmapi_provider: lineItem.fmapi_provider || 'anthropic',
         fmapi_model: lineItem.fmapi_model || 'llama-3-3-70b',
         fmapi_endpoint_type: lineItem.fmapi_endpoint_type || 'global',
-        fmapi_context_length: lineItem.fmapi_context_length || 'all',
+        fmapi_context_length: lineItem.fmapi_context_length || 'long',
         fmapi_rate_type: lineItem.fmapi_rate_type || 'input_token',
         fmapi_quantity: lineItem.fmapi_quantity || 0,
         runs_per_day: lineItem.runs_per_day || 1,
@@ -1282,7 +1338,13 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Provider</label>
               <select
                 value={form.fmapi_provider}
-                onChange={(e) => setForm(f => ({ ...f, fmapi_provider: e.target.value, fmapi_model: '' }))}
+                onChange={(e) => setForm(f => ({ 
+                  ...f, 
+                  fmapi_provider: e.target.value, 
+                  fmapi_model: '',
+                  fmapi_context_length: 'long', // Reset to a common default
+                  fmapi_rate_type: 'input_token' // Reset rate type
+                }))}
                 className="w-full text-sm"
               >
                 {fmapiProprietaryModels.providers.map(provider => (
@@ -1294,7 +1356,20 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Model</label>
               <select
                 value={form.fmapi_model}
-                onChange={(e) => setForm(f => ({ ...f, fmapi_model: e.target.value }))}
+                onChange={(e) => {
+                  const newModel = e.target.value
+                  // Reset context_length to first available option when model changes
+                  const availableCtxLengths = getAvailableContextLengths(
+                    pricingBundle, 
+                    selectedCloud || 'aws', 
+                    form.fmapi_provider, 
+                    newModel
+                  )
+                  const newCtxLength = availableCtxLengths.includes(form.fmapi_context_length) 
+                    ? form.fmapi_context_length 
+                    : availableCtxLengths[0] || 'all'
+                  setForm(f => ({ ...f, fmapi_model: newModel, fmapi_context_length: newCtxLength }))
+                }}
                 className="w-full text-sm"
               >
                 <option value="">Select model</option>
@@ -1327,9 +1402,25 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, fmapi_context_length: e.target.value }))}
                 className="w-full text-sm"
               >
-                {fmapiProprietaryModels.context_lengths.map(length => (
-                  <option key={length.id} value={length.id}>{length.name}</option>
-                ))}
+                {(() => {
+                  // Get available context lengths for the selected model
+                  const availableCtxLengths = form.fmapi_model
+                    ? getAvailableContextLengths(pricingBundle, selectedCloud || 'aws', form.fmapi_provider, form.fmapi_model)
+                    : ['all', 'short', 'long']
+                  
+                  // Map to display names
+                  const contextLengthNames: Record<string, string> = {
+                    'all': 'All',
+                    'short': 'Short',
+                    'long': 'Long'
+                  }
+                  
+                  return availableCtxLengths.map(length => (
+                    <option key={length} value={length}>
+                      {contextLengthNames[length] || length}
+                    </option>
+                  ))
+                })()}
               </select>
             </div>
             
@@ -1341,10 +1432,35 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, fmapi_rate_type: e.target.value }))}
                 className="w-full text-sm"
               >
-                <option value="input_token">Input Token</option>
-                <option value="output_token">Output Token</option>
-                <option value="cache_read">Cache Read</option>
-                <option value="cache_write">Cache Write</option>
+                {(() => {
+                  // Get available rate types for the selected model/endpoint/context
+                  const availableRateTypes = form.fmapi_model
+                    ? getAvailableRateTypes(
+                        pricingBundle, 
+                        selectedCloud || 'aws', 
+                        form.fmapi_provider, 
+                        form.fmapi_model,
+                        form.fmapi_endpoint_type,
+                        form.fmapi_context_length
+                      )
+                    : ['input_token', 'output_token', 'cache_read', 'cache_write']
+                  
+                  // Map to display names
+                  const rateTypeNames: Record<string, string> = {
+                    'input_token': 'Input Token',
+                    'output_token': 'Output Token',
+                    'cache_read': 'Cache Read',
+                    'cache_write': 'Cache Write',
+                    'batch_inference': 'Batch Inference',
+                    'provisioned_scaling': 'Provisioned Scaling'
+                  }
+                  
+                  return availableRateTypes.map(type => (
+                    <option key={type} value={type}>
+                      {rateTypeNames[type] || type}
+                    </option>
+                  ))
+                })()}
               </select>
             </div>
             <div>

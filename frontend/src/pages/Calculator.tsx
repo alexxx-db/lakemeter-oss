@@ -602,7 +602,8 @@ export default function Calculator() {
       
       case 'DLT':
         if (item.serverless_enabled) {
-          productType = 'DELTA_LIVE_TABLES_SERVERLESS'
+          // DLT Serverless uses same rate as Jobs Serverless ($0.39)
+          productType = 'JOBS_SERVERLESS_COMPUTE'
         } else {
           productType = `DLT_${dltEdition}_COMPUTE`
           if (item.photon_enabled) {
@@ -987,7 +988,7 @@ export default function Calculator() {
           // Bundle key format: "cloud:provider:model:endpoint_type:context_length:rate_type"
           // Use defaults for endpoint_type and context_length if not specified
           const endpointType = item.fmapi_endpoint_type || 'global'
-          const contextLength = item.fmapi_context_length || 'all'
+          const contextLength = item.fmapi_context_length || 'long'
           const bundlePropRate = getBundleFMAPIProprietaryRate(
             pricingBundle, cloud, item.fmapi_provider, item.fmapi_model, 
             endpointType, contextLength, fmapiPropRateType
