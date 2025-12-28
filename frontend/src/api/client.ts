@@ -495,6 +495,27 @@ export const fetchFMAPIDatabricksModels = async (model: string, cloud?: string, 
   return data
 }
 
+// Fetch ALL FMAPI Databricks rates for all models (for pre-caching)
+export const fetchAllFMAPIDatabricksRates = async (cloud: string): Promise<FMAPIDatabricksModel[]> => {
+  const allRates: FMAPIDatabricksModel[] = []
+  try {
+    // Get all model names first
+    const models = await fetchFMAPIDatabricksModelsList()
+    // Fetch rates for each model in parallel (batched)
+    const batchSize = 5
+    for (let i = 0; i < models.length; i += batchSize) {
+      const batch = models.slice(i, i + batchSize)
+      const results = await Promise.all(
+        batch.map(model => fetchFMAPIDatabricksModels(model, cloud).catch(() => []))
+      )
+      results.forEach(rates => allRates.push(...rates))
+    }
+  } catch (error) {
+    console.warn('Failed to fetch all FMAPI Databricks rates:', error)
+  }
+  return allRates
+}
+
 // Foundation Models (Databricks) configuration (Legacy - for compatibility)
 export const fetchFMAPIDatabricksConfig = async (): Promise<FMAPIDatabricksConfig> => {
   const { data } = await api.get('/reference/fmapi-databricks')
@@ -542,6 +563,24 @@ export const fetchFMAPIProprietaryModels = async (params: {
 }): Promise<FMAPIProprietaryModel[]> => {
   const { data } = await api.get('/fmapi/proprietary-models', { params })
   return data
+}
+
+// Fetch ALL FMAPI Proprietary rates for all providers (for pre-caching)
+export const fetchAllFMAPIProprietaryRates = async (cloud: string): Promise<FMAPIProprietaryModel[]> => {
+  const providers = ['openai', 'anthropic', 'google']
+  const allRates: FMAPIProprietaryModel[] = []
+  try {
+    // Fetch rates for each provider in parallel
+    const results = await Promise.all(
+      providers.map(provider => 
+        fetchFMAPIProprietaryModels({ provider, cloud }).catch(() => [])
+      )
+    )
+    results.forEach(rates => allRates.push(...rates))
+  } catch (error) {
+    console.warn('Failed to fetch all FMAPI Proprietary rates:', error)
+  }
+  return allRates
 }
 
 // Foundation Models (Proprietary) configuration (Legacy - for compatibility)

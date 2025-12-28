@@ -719,19 +719,39 @@ export const useStore = create<Store>((set, get) => ({
       
       // Fetch cloud-specific data for default cloud (AWS) + regions for ALL clouds
       const defaultCloud = 'aws'
-      const [instanceTypes, modelServingGPUTypes, awsRegions, azureRegions, gcpRegions, photonMultipliers, vectorSearchModes] = await Promise.all([
+      const [instanceTypes, modelServingGPUTypes, awsRegions, azureRegions, gcpRegions, photonMultipliers, vectorSearchModes, fmapiDbxRates, fmapiPropRates] = await Promise.all([
         api.fetchInstanceTypes(defaultCloud).catch(() => []),
         api.fetchModelServingGPUTypes(defaultCloud).catch(() => []),
         api.fetchRegions('aws').catch(() => []),
         api.fetchRegions('azure').catch(() => []),
         api.fetchRegions('gcp').catch(() => []),
         api.fetchPhotonMultipliers(defaultCloud).catch(() => []),
-        api.fetchVectorSearchModesWithPricing(defaultCloud).catch(() => [])
+        api.fetchVectorSearchModesWithPricing(defaultCloud).catch(() => []),
+        api.fetchAllFMAPIDatabricksRates(defaultCloud).catch(() => []),
+        api.fetchAllFMAPIProprietaryRates(defaultCloud).catch(() => [])
       ])
       const regionsMap = { aws: awsRegions, azure: azureRegions, gcp: gcpRegions }
       const regions = awsRegions // Default to AWS regions for backwards compatibility
-      set({ instanceTypes, modelServingGPUTypes, regions, regionsMap, photonMultipliers, vectorSearchModes })
+      
+      // Build FMAPI rate lookup maps
+      const fmapiDatabricksRates: Record<string, any> = {}
+      fmapiDbxRates.forEach((rate: any) => {
+        const key = `${rate.model}:${rate.rate_type}`
+        fmapiDatabricksRates[key] = rate
+      })
+      
+      const fmapiProprietaryRates: Record<string, any> = {}
+      fmapiPropRates.forEach((rate: any) => {
+        const key = `${rate.provider}:${rate.model}:${rate.rate_type}`
+        fmapiProprietaryRates[key] = rate
+      })
+      
+      set({ 
+        instanceTypes, modelServingGPUTypes, regions, regionsMap, photonMultipliers, vectorSearchModes,
+        fmapiDatabricksRates, fmapiProprietaryRates
+      })
       console.log('[RefData] Loaded regions for all clouds:', { aws: awsRegions.length, azure: azureRegions.length, gcp: gcpRegions.length })
+      console.log('[RefData] Pre-cached FMAPI rates:', { databricks: Object.keys(fmapiDatabricksRates).length, proprietary: Object.keys(fmapiProprietaryRates).length })
       
       // Also try to fetch instance families and DBSQL warehouse types
       let instanceFamilies: string[] = []
