@@ -150,7 +150,7 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
     'JOBS_SERVERLESS_COMPUTE': 0.39,  // Serverless has higher $/DBU
     'ALL_PURPOSE_COMPUTE': 0.40,
     'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.40,
-    'INTERACTIVE_SERVERLESS_COMPUTE': 0.70,
+    'ALL_PURPOSE_SERVERLESS_COMPUTE': 0.83,  // All-Purpose Serverless
     'DLT_CORE_COMPUTE': 0.20,
     'DLT_PRO_COMPUTE': 0.25,
     'DLT_ADVANCED_COMPUTE': 0.30,
@@ -169,7 +169,7 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
     'JOBS_SERVERLESS_COMPUTE': 0.39,
     'ALL_PURPOSE_COMPUTE': 0.40,
     'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.40,
-    'INTERACTIVE_SERVERLESS_COMPUTE': 0.70,
+    'ALL_PURPOSE_SERVERLESS_COMPUTE': 0.83,
     'DLT_CORE_COMPUTE': 0.20,
     'DLT_PRO_COMPUTE': 0.25,
     'DLT_ADVANCED_COMPUTE': 0.30,
@@ -188,7 +188,7 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
     'JOBS_SERVERLESS_COMPUTE': 0.39,
     'ALL_PURPOSE_COMPUTE': 0.40,
     'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.40,
-    'INTERACTIVE_SERVERLESS_COMPUTE': 0.70,
+    'ALL_PURPOSE_SERVERLESS_COMPUTE': 0.83,
     'DLT_CORE_COMPUTE': 0.20,
     'DLT_PRO_COMPUTE': 0.25,
     'DLT_ADVANCED_COMPUTE': 0.30,
@@ -592,7 +592,7 @@ export default function Calculator() {
       
       case 'ALL_PURPOSE':
         if (item.serverless_enabled) {
-          productType = 'INTERACTIVE_SERVERLESS_COMPUTE'
+          productType = 'ALL_PURPOSE_SERVERLESS_COMPUTE'
         } else if (item.photon_enabled) {
           productType = 'ALL_PURPOSE_COMPUTE_(PHOTON)'
         } else {
