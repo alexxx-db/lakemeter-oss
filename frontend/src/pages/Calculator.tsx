@@ -801,29 +801,61 @@ export default function Calculator() {
         break
       
       case 'LAKEBASE':
-        // LAKEBASE: CU = DBU per hour (1 CU = 1 DBU)
-        dbuPerHour = item.lakebase_cu || 0
+        // LAKEBASE (Managed PostgreSQL)
+        // Formula: DBU/Hour = cu_size × num_nodes
+        // Total Cost = DBU/Hour × hours_per_month × dbu_price
+        const lakebaseCU = item.lakebase_cu || 1
+        const lakebaseNodes = item.lakebase_ha_nodes || 1  // 1-3 nodes for HA
+        
+        dbuPerHour = lakebaseCU * lakebaseNodes
         monthlyDBUs = dbuPerHour * hoursPerMonth
         break
       
       case 'FMAPI_DATABRICKS':
-      case 'FMAPI_PROPRIETARY':
-        // Two pricing models:
-        // 1. Token-based: quantity is in millions, rate_type determines pricing
-        // 2. Provisioned: quantity is hours, rate_type is provisioned_scaling or provisioned_entry
-        const fmapiQuantity = item.fmapi_quantity || 0
-        const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(item.fmapi_rate_type || '')
+        // Foundation Models (Databricks) - llama, gpt-oss, gemma, bge, gte, etc.
+        // Rate Types: input_token, output_token, provisioned_scaling, provisioned_entry
+        const fmapiDbxQuantity = item.fmapi_quantity || 0
+        const fmapiDbxRateType = item.fmapi_rate_type || 'input_token'
+        const fmapiDbxIsProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(fmapiDbxRateType)
         
-        if (isProvisioned) {
-          // Provisioned throughput: Cost = hours × DBU/hour × DBU price
-          // Default DBU rates for provisioned (would come from pricing tables)
-          const provisionedDbuPerHour = item.fmapi_rate_type === 'provisioned_scaling' ? 200 : 50 // Example rates
-          monthlyDBUs = fmapiQuantity * provisionedDbuPerHour
+        if (fmapiDbxIsProvisioned) {
+          // Provisioned: Cost = quantity (hours) × dbu_per_hour × dbu_price
+          // Default DBU rates: scaling ~200 DBU/hr, entry ~50 DBU/hr (varies by model)
+          const provisionedDbxDbuPerHour = fmapiDbxRateType === 'provisioned_scaling' ? 200 : 50
+          monthlyDBUs = fmapiDbxQuantity * provisionedDbxDbuPerHour
         } else {
-          // Token-based: Cost = (quantity / 1M) × DBU per 1M tokens × DBU price
-          // Default token pricing (would come from sync_product_fmapi_* tables)
-          const tokenRate = item.fmapi_rate_type === 'output_token' ? 3.0 : 1.0 // DBU per million tokens
-          monthlyDBUs = fmapiQuantity * tokenRate
+          // Token-based: Cost = (quantity / 1,000,000) × dbu_per_1M_tokens × dbu_price
+          // Note: quantity is already in millions (M), so formula is: quantity × dbu_per_1M
+          // Default rates: input ~1.0 DBU/1M, output ~3.0 DBU/1M (varies by model)
+          const tokenDbxRate = fmapiDbxRateType === 'output_token' ? 3.0 : 1.0
+          monthlyDBUs = fmapiDbxQuantity * tokenDbxRate
+        }
+        break
+      
+      case 'FMAPI_PROPRIETARY':
+        // Foundation Models (Proprietary) - OpenAI, Anthropic, Google
+        // Rate Types: input_token, output_token, cache_read, cache_write, provisioned_scaling
+        const fmapiPropQuantity = item.fmapi_quantity || 0
+        const fmapiPropRateType = item.fmapi_rate_type || 'input_token'
+        const fmapiPropIsProvisioned = fmapiPropRateType === 'provisioned_scaling'
+        
+        if (fmapiPropIsProvisioned) {
+          // Provisioned: Cost = quantity (hours) × dbu_per_hour × dbu_price
+          // Default ~150 DBU/hr for proprietary provisioned
+          const provisionedPropDbuPerHour = 150
+          monthlyDBUs = fmapiPropQuantity * provisionedPropDbuPerHour
+        } else {
+          // Token-based: Cost = (quantity / 1,000,000) × dbu_per_1M_tokens × dbu_price
+          // Rates vary by provider and model, use reasonable defaults:
+          // input: ~2.0 DBU/1M, output: ~6.0 DBU/1M, cache_read: ~0.5, cache_write: ~1.0
+          let tokenPropRate = 2.0
+          switch (fmapiPropRateType) {
+            case 'output_token': tokenPropRate = 6.0; break
+            case 'cache_read': tokenPropRate = 0.5; break
+            case 'cache_write': tokenPropRate = 1.0; break
+            default: tokenPropRate = 2.0 // input_token
+          }
+          monthlyDBUs = fmapiPropQuantity * tokenPropRate
         }
         break
       
