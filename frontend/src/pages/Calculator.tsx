@@ -2148,53 +2148,166 @@ export default function Calculator() {
                         
                         {/* Bottom row: Cost breakdown & config summary (only in expanded mode or when item is expanded) */}
                         {showDetailsRow && (
-                          <div className="mt-3 pt-3 border-t border-[var(--border-primary)] grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
-                            <div>
-                              <span className="text-[var(--text-muted)]">DBU Cost</span>
-                              <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
+                          <>
+                            <div className="mt-3 pt-3 border-t border-[var(--border-primary)] grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
+                              <div>
+                                <span className="text-[var(--text-muted)]">DBU Cost</span>
+                                <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
+                              </div>
+                              {/* Hide VM Cost for serverless workloads */}
+                              {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'].includes(item.workload_type || '') && (
+                                <div>
+                                  <span className="text-[var(--text-muted)]">VM Cost</span>
+                                  <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
+                                </div>
+                              )}
+                              
+                              {/* Vector Search: Units Used (prominent) */}
+                              {item.workload_type === 'VECTOR_SEARCH' && costs.unitsUsed !== undefined && (
+                                <div>
+                                  <span className="text-[var(--text-muted)]">Units Used</span>
+                                  <p className="font-semibold text-blue-600 dark:text-blue-400">{costs.unitsUsed} unit{costs.unitsUsed !== 1 ? 's' : ''}</p>
+                                </div>
+                              )}
+                              
+                              {/* Compute workloads: show driver/worker nodes */}
+                              {(item.workload_type === 'JOBS' || item.workload_type === 'ALL_PURPOSE' || item.workload_type === 'DLT') && (
+                                <>
+                                  {item.driver_node_type && (
+                                    <div>
+                                      <span className="text-[var(--text-muted)]">Driver</span>
+                                      <p className="font-mono text-[var(--text-primary)] text-[10px]">{item.driver_node_type}</p>
+                                    </div>
+                                  )}
+                                  {item.worker_node_type && (
+                                    <div>
+                                      <span className="text-[var(--text-muted)]">Workers</span>
+                                      <p className="text-[var(--text-primary)]">{item.num_workers}× <span className="font-mono text-[10px]">{item.worker_node_type}</span></p>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              
+                              {/* Workload-specific details */}
+                              {getWorkloadSummaryDetails(item).map((detail, idx) => (
+                                <div key={idx}>
+                                  <span className="text-[var(--text-muted)]">{detail.label}</span>
+                                  <p className="text-[var(--text-primary)]">{detail.value}</p>
+                                </div>
+                              ))}
+                              
+                              {/* Usage summary */}
+                              {usageSummary && (
+                                <div>
+                                  <span className="text-[var(--text-muted)]">Usage</span>
+                                  <p className="text-[var(--text-primary)]">{usageSummary}</p>
+                                </div>
+                              )}
                             </div>
-                            {/* Hide VM Cost for serverless workloads */}
-                            {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'].includes(item.workload_type || '') && (
-                              <div>
-                                <span className="text-[var(--text-muted)]">VM Cost</span>
-                                <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
-                              </div>
-                            )}
                             
-                            {/* Compute workloads: show driver/worker nodes */}
-                            {(item.workload_type === 'JOBS' || item.workload_type === 'ALL_PURPOSE' || item.workload_type === 'DLT') && (
-                              <>
-                                {item.driver_node_type && (
-                                  <div>
-                                    <span className="text-[var(--text-muted)]">Driver</span>
-                                    <p className="font-mono text-[var(--text-primary)] text-[10px]">{item.driver_node_type}</p>
-                                  </div>
-                                )}
-                                {item.worker_node_type && (
-                                  <div>
-                                    <span className="text-[var(--text-muted)]">Workers</span>
-                                    <p className="text-[var(--text-primary)]">{item.num_workers}× <span className="font-mono text-[10px]">{item.worker_node_type}</span></p>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                            
-                            {/* Workload-specific details */}
-                            {getWorkloadSummaryDetails(item).map((detail, idx) => (
-                              <div key={idx}>
-                                <span className="text-[var(--text-muted)]">{detail.label}</span>
-                                <p className="text-[var(--text-primary)]">{detail.value}</p>
+                            {/* Calculation Formula Display */}
+                            <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
+                              <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
+                                {(() => {
+                                  const hoursPerMonth = item.hours_per_month || 
+                                    (item.runs_per_day && item.avg_runtime_minutes 
+                                      ? item.runs_per_day * (item.avg_runtime_minutes / 60) * (item.days_per_month || 30)
+                                      : 730)
+                                  
+                                  // Vector Search
+                                  if (item.workload_type === 'VECTOR_SEARCH') {
+                                    return (
+                                      <>
+                                        <span className="text-blue-500">{costs.unitsUsed || 1} units</span>
+                                        <span>×</span>
+                                        <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '4.00'} DBU/hr</span>
+                                        <span>×</span>
+                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                        <span>=</span>
+                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span>→</span>
+                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                      </>
+                                    )
+                                  }
+                                  
+                                  // FMAPI (token-based)
+                                  if (item.workload_type === 'FMAPI_DATABRICKS' || item.workload_type === 'FMAPI_PROPRIETARY') {
+                                    return (
+                                      <>
+                                        <span className="text-blue-500">{item.fmapi_quantity || 0}M tokens</span>
+                                        <span>×</span>
+                                        <span className="text-purple-500">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
+                                        <span>=</span>
+                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span>→</span>
+                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                      </>
+                                    )
+                                  }
+                                  
+                                  // Lakebase
+                                  if (item.workload_type === 'LAKEBASE') {
+                                    return (
+                                      <>
+                                        <span className="text-blue-500">{item.lakebase_cu || 1} CU</span>
+                                        <span>×</span>
+                                        <span className="text-purple-500">{item.lakebase_ha_nodes || 1} nodes</span>
+                                        <span>×</span>
+                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                        <span>=</span>
+                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span>→</span>
+                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                      </>
+                                    )
+                                  }
+                                  
+                                  // Model Serving
+                                  if (item.workload_type === 'MODEL_SERVING') {
+                                    return (
+                                      <>
+                                        <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '2.00'} DBU/hr</span>
+                                        <span>×</span>
+                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                        <span>=</span>
+                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span>→</span>
+                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                      </>
+                                    )
+                                  }
+                                  
+                                  // Compute workloads (JOBS, ALL_PURPOSE, DLT, DBSQL)
+                                  const hasVMCost = costs.vmCost > 0
+                                  return (
+                                    <>
+                                      {costs.dbuPerHour && (
+                                        <>
+                                          <span className="text-purple-500">{costs.dbuPerHour.toFixed(2)} DBU/hr</span>
+                                          <span>×</span>
+                                        </>
+                                      )}
+                                      <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                      <span>=</span>
+                                      <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                      {hasVMCost && (
+                                        <>
+                                          <span className="mx-1">|</span>
+                                          <span className="text-blue-500">DBU: {formatCurrency(costs.dbuCost)}</span>
+                                          <span>+</span>
+                                          <span className="text-teal-500">VM: {formatCurrency(costs.vmCost)}</span>
+                                        </>
+                                      )}
+                                      <span>=</span>
+                                      <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                    </>
+                                  )
+                                })()}
                               </div>
-                            ))}
-                            
-                            {/* Usage summary */}
-                            {usageSummary && (
-                              <div>
-                                <span className="text-[var(--text-muted)]">Usage</span>
-                                <p className="text-[var(--text-primary)]">{usageSummary}</p>
-                              </div>
-                            )}
-                          </div>
+                            </div>
+                          </>
                         )}
                       </div>
                       

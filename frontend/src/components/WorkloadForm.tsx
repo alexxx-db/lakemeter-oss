@@ -1853,7 +1853,7 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
           <span>{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
           {/* Show units used for Vector Search */}
           {currentCost.unitsUsed !== undefined && (
-            <span>{currentCost.unitsUsed} unit{currentCost.unitsUsed !== 1 ? 's' : ''}</span>
+            <span className="text-blue-500 font-medium">{currentCost.unitsUsed} unit{currentCost.unitsUsed !== 1 ? 's' : ''}</span>
           )}
           {currentCost.vmCost > 0 && (
             <span>VM: {formatCurrency(currentCost.vmCost)}</span>
@@ -1875,6 +1875,109 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
               <span>{costDelta > 0 ? '+' : ''}{formatCurrency(costDelta)}</span>
             </div>
           )}
+        </div>
+      </div>
+      
+      {/* Calculation Formula */}
+      <div className="mt-2 pt-2 border-t border-orange-500/20">
+        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+          {(() => {
+            const hoursPerMonth = form.hours_per_month || 
+              (form.runs_per_day && form.avg_runtime_minutes 
+                ? form.runs_per_day * (form.avg_runtime_minutes / 60) * (form.days_per_month || 30)
+                : 730)
+            
+            // Vector Search
+            if (form.workload_type === 'VECTOR_SEARCH') {
+              return (
+                <>
+                  <span className="text-blue-500">{currentCost.unitsUsed || 1} units</span>
+                  <span>×</span>
+                  <span className="text-purple-500">{currentCost.dbuPerHour?.toFixed(2) || '4.00'} DBU/hr</span>
+                  <span>×</span>
+                  <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                  <span>=</span>
+                  <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
+                  <span>→</span>
+                  <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
+                </>
+              )
+            }
+            
+            // FMAPI (token-based)
+            if (form.workload_type === 'FMAPI_DATABRICKS' || form.workload_type === 'FMAPI_PROPRIETARY') {
+              const dbuPerMToken = form.fmapi_quantity > 0 ? (currentCost.monthlyDBUs / form.fmapi_quantity).toFixed(2) : '0'
+              return (
+                <>
+                  <span className="text-blue-500">{form.fmapi_quantity || 0}M tokens</span>
+                  <span>×</span>
+                  <span className="text-purple-500">{dbuPerMToken} DBU/M</span>
+                  <span>=</span>
+                  <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
+                  <span>→</span>
+                  <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
+                </>
+              )
+            }
+            
+            // Lakebase
+            if (form.workload_type === 'LAKEBASE') {
+              return (
+                <>
+                  <span className="text-blue-500">{form.lakebase_cu || 1} CU</span>
+                  <span>×</span>
+                  <span className="text-purple-500">{form.lakebase_ha_nodes || 1} nodes</span>
+                  <span>×</span>
+                  <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                  <span>=</span>
+                  <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
+                  <span>→</span>
+                  <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
+                </>
+              )
+            }
+            
+            // Model Serving
+            if (form.workload_type === 'MODEL_SERVING') {
+              return (
+                <>
+                  <span className="text-purple-500">{currentCost.dbuPerHour?.toFixed(2) || '2.00'} DBU/hr</span>
+                  <span>×</span>
+                  <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                  <span>=</span>
+                  <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
+                  <span>→</span>
+                  <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
+                </>
+              )
+            }
+            
+            // Compute workloads (JOBS, ALL_PURPOSE, DLT, DBSQL)
+            const hasVMCost = currentCost.vmCost > 0
+            return (
+              <>
+                {currentCost.dbuPerHour && currentCost.dbuPerHour > 0 && (
+                  <>
+                    <span className="text-purple-500">{currentCost.dbuPerHour.toFixed(2)} DBU/hr</span>
+                    <span>×</span>
+                  </>
+                )}
+                <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                <span>=</span>
+                <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
+                {hasVMCost && (
+                  <>
+                    <span className="mx-1">|</span>
+                    <span className="text-blue-500">DBU: {formatCurrency(currentCost.dbuCost)}</span>
+                    <span>+</span>
+                    <span className="text-teal-500">VM: {formatCurrency(currentCost.vmCost)}</span>
+                  </>
+                )}
+                <span>=</span>
+                <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
+              </>
+            )
+          })()}
         </div>
       </div>
     </div>
