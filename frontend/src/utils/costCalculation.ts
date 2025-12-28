@@ -74,7 +74,7 @@ export interface CostCalculationContext {
   vectorSearchModes: VectorSearchMode[]
   getVMPrice: (cloud: string, region: string, instanceType: string, pricingTier: string, paymentOption: string) => number
   getFMAPIDatabricksRate: (model: string, rateType: string) => { dbu_per_1M_tokens?: number, dbu_per_hour?: number } | null
-  getFMAPIProprietaryRate: (provider: string, model: string, rateType: string) => { dbu_per_1M_tokens?: number, dbu_per_hour?: number } | null
+  getFMAPIProprietaryRate: (provider: string, model: string, rateType: string, endpointType?: string, contextLength?: string) => { dbu_per_1M_tokens?: number, dbu_per_hour?: number } | null
   getVectorSearchRate: (mode: string) => { dbu_per_hour?: number, input_divisor?: number } | null
   getDBSQLWarehouseConfig?: (warehouseType: string, warehouseSize: string) => DBSQLWarehouseConfig | null
 }
@@ -139,7 +139,8 @@ export function calculateWorkloadCost(
     
     case 'DLT':
       if (item.serverless_enabled) {
-        productType = 'DELTA_LIVE_TABLES_SERVERLESS'
+        // DLT Serverless uses same rate as Jobs Serverless ($0.39)
+        productType = 'JOBS_SERVERLESS_COMPUTE'
       } else {
         productType = `DLT_${dltEdition}_COMPUTE`
         if (item.photon_enabled) {
@@ -367,9 +368,11 @@ export function calculateWorkloadCost(
       const fmapiPropQuantity = item.fmapi_quantity || 0
       const fmapiPropRateType = item.fmapi_rate_type || 'input_token'
       const fmapiPropIsProvisioned = fmapiPropRateType === 'provisioned_scaling'
+      const fmapiEndpointType = item.fmapi_endpoint_type || 'global'
+      const fmapiContextLength = item.fmapi_context_length || 'all'
       
       const propRateData = (item.fmapi_provider && item.fmapi_model)
-        ? getFMAPIProprietaryRate(item.fmapi_provider, item.fmapi_model, fmapiPropRateType)
+        ? getFMAPIProprietaryRate(item.fmapi_provider, item.fmapi_model, fmapiPropRateType, fmapiEndpointType, fmapiContextLength)
         : null
       
       if (fmapiPropIsProvisioned) {
@@ -378,11 +381,12 @@ export function calculateWorkloadCost(
       } else {
         let tokenPropRate = propRateData?.dbu_per_1M_tokens
         if (!tokenPropRate) {
+          // Fallback rates based on model complexity and rate type
           switch (fmapiPropRateType) {
-            case 'output_token': tokenPropRate = 6.0; break
-            case 'cache_read': tokenPropRate = 0.5; break
-            case 'cache_write': tokenPropRate = 1.0; break
-            default: tokenPropRate = 2.0
+            case 'output_token': tokenPropRate = 321.43; break  // Claude Sonnet 4.5 output
+            case 'cache_read': tokenPropRate = 8.57; break
+            case 'cache_write': tokenPropRate = 85.71; break
+            default: tokenPropRate = 21.43  // input_token
           }
         }
         monthlyDBUs = fmapiPropQuantity * tokenPropRate

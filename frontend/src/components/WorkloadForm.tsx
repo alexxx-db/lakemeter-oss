@@ -1539,7 +1539,30 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           vectorSearchModes,
           getVMPrice,
           getFMAPIDatabricksRate,
-          getFMAPIProprietaryRate,
+          getFMAPIProprietaryRate: (provider: string, model: string, rateType: string, endpointType?: string, contextLength?: string) => {
+            // Try pricing bundle first (with full key: cloud:provider:model:endpoint:context:rate)
+            if (isPricingBundleLoaded && pricingBundle.fmapiProprietaryRates) {
+              const cloud = (selectedCloud || 'aws').toLowerCase()
+              const ep = endpointType || 'global'
+              const ctx = contextLength || 'all'
+              // Try exact match first
+              let key = `${cloud}:${provider.toLowerCase()}:${model.toLowerCase()}:${ep}:${ctx}:${rateType}`
+              let data = pricingBundle.fmapiProprietaryRates[key]
+              // If not found, try with 'all' context length (some models use 'all')
+              if (!data && ctx !== 'all') {
+                key = `${cloud}:${provider.toLowerCase()}:${model.toLowerCase()}:${ep}:all:${rateType}`
+                data = pricingBundle.fmapiProprietaryRates[key]
+              }
+              if (data) {
+                return {
+                  dbu_per_1M_tokens: data.is_hourly ? undefined : data.dbu_rate,
+                  dbu_per_hour: data.is_hourly ? data.dbu_rate : undefined
+                }
+              }
+            }
+            // Fallback to store function
+            return getFMAPIProprietaryRate(provider, model, rateType)
+          },
           getVectorSearchRate,
           getDBSQLWarehouseConfig: (warehouseType: string, warehouseSize: string) => {
             if (!isPricingBundleLoaded) return null
@@ -1611,6 +1634,8 @@ interface LiveCostPreviewProps {
     lakebase_ha_nodes: number
     fmapi_provider: string
     fmapi_model: string
+    fmapi_endpoint_type: string
+    fmapi_context_length: string
     fmapi_rate_type: string
     fmapi_quantity: number
     runs_per_day: number
@@ -1653,6 +1678,8 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
       lakebase_ha_nodes: form.lakebase_ha_nodes,
       fmapi_provider: form.fmapi_provider,
       fmapi_model: form.fmapi_model,
+      fmapi_endpoint_type: form.fmapi_endpoint_type,
+      fmapi_context_length: form.fmapi_context_length,
       fmapi_rate_type: form.fmapi_rate_type,
       fmapi_quantity: form.fmapi_quantity,
       runs_per_day: form.runs_per_day,
