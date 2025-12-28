@@ -278,16 +278,25 @@ export function getDBUPrice(
   tier: string,
   productType: string
 ): number {
-  const key = `${cloud.toLowerCase()}:${region}:${tier}`
+  // Normalize tier to uppercase (JSON keys use PREMIUM, STANDARD, etc.)
+  const normalizedTier = tier.toUpperCase()
+  const key = `${cloud.toLowerCase()}:${region}:${normalizedTier}`
   const tierData = bundle.dbuRates[key]
   
   if (tierData && tierData[productType] !== undefined) {
     return tierData[productType]
   }
   
-  // Fallback: try without region (for generic rates)
+  // Fallback: try global rates (for products without regional pricing)
+  const globalKey = `${cloud.toLowerCase()}:global:${normalizedTier}`
+  const globalData = bundle.dbuRates[globalKey]
+  if (globalData && globalData[productType] !== undefined) {
+    return globalData[productType]
+  }
+  
+  // Fallback: try any region with this tier
   for (const k of Object.keys(bundle.dbuRates)) {
-    if (k.startsWith(`${cloud.toLowerCase()}:`) && k.endsWith(`:${tier}`)) {
+    if (k.startsWith(`${cloud.toLowerCase()}:`) && k.endsWith(`:${normalizedTier}`)) {
       const data = bundle.dbuRates[k]
       if (data && data[productType] !== undefined) {
         return data[productType]
