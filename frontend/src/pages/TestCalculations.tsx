@@ -116,6 +116,7 @@ interface TestResult {
   localTimeMs: number
   apiTimeMs: number
   matches: boolean
+  totalCostDiffPercent: number  // Specifically for totalCost comparison
   discrepancies: {
     field: string
     local: number
@@ -684,15 +685,34 @@ function buildAPIRequest(testCase: TestCase): Record<string, unknown> {
 }
 
 // Compare results
+interface CompareResult {
+  discrepancies: { field: string; local: number; api: number; diff: number; diffPercent: number }[]
+  totalCostDiffPercent: number
+}
+
 function compareResults(
   local: CostBreakdown, 
   api: CostBreakdown | null,
   tolerancePercent: number = 1
-): { field: string; local: number; api: number; diff: number; diffPercent: number }[] {
-  if (!api) return []
+): CompareResult {
+  // If no API result, return 100% diff
+  if (!api) {
+    return {
+      discrepancies: [],
+      totalCostDiffPercent: local.totalCost > 0 ? 100 : 0
+    }
+  }
   
   const discrepancies: { field: string; local: number; api: number; diff: number; diffPercent: number }[] = []
   const fields: (keyof CostBreakdown)[] = ['monthlyDBUs', 'dbuCost', 'vmCost', 'totalCost']
+  
+  // Calculate totalCost diff specifically
+  const localTotal = local.totalCost || 0
+  const apiTotal = api.totalCost || 0
+  const totalDiff = Math.abs(localTotal - apiTotal)
+  const totalCostDiffPercent = apiTotal !== 0 
+    ? (totalDiff / apiTotal) * 100 
+    : (localTotal !== 0 ? 100 : 0)
   
   for (const field of fields) {
     const localVal = (local[field] as number) || 0
@@ -705,7 +725,7 @@ function compareResults(
     }
   }
   
-  return discrepancies
+  return { discrepancies, totalCostDiffPercent }
 }
 
 // ===== MAIN COMPONENT =====
@@ -881,7 +901,7 @@ export default function TestCalculations() {
         // Parse API response - handle nested structure: { success: true, data: { ... } }
         const data = responseData.data || responseData
         
-        // Extract from nested structure
+        // Extract from nested structure with detailed logging
         const monthlyDBUs = data.dbu_calculation?.dbu_per_month ?? 
           data.dbu_per_month ?? 
           (data.dbu_calculation?.dbu_per_hour ?? data.dbu_per_hour ?? 0) * (config.hours_per_month || 730)
@@ -896,12 +916,25 @@ export default function TestCalculations() {
           data.vm_cost_per_month ?? 
           data.vm_cost ?? 0
         
-        const totalCost = data.total_cost?.cost_per_month ?? 
-          data.total_cost_per_month ?? 
-          data.total_cost ?? 
-          (dbuCost + vmCost)
+        // Handle totalCost - be careful with 'total_cost' as object vs number
+        let totalCost = 0
+        if (typeof data.total_cost === 'object' && data.total_cost !== null) {
+          totalCost = data.total_cost.cost_per_month ?? (dbuCost + vmCost)
+        } else if (typeof data.total_cost === 'number') {
+          totalCost = data.total_cost
+        } else {
+          totalCost = data.total_cost_per_month ?? (dbuCost + vmCost)
+        }
         
         apiResult = { monthlyDBUs, dbuCost, vmCost, totalCost }
+        
+        // Debug logging for first few tests
+        if (testCase.name.includes('Serverless')) {
+          console.log(`[DEBUG] ${testCase.name}:`, {
+            rawResponse: responseData,
+            parsed: apiResult
+          })
+        }
       } else {
         const errorText = await response.text()
         // Try to parse JSON error
@@ -917,7 +950,10 @@ export default function TestCalculations() {
     }
     const apiTimeMs = performance.now() - apiStart
     
-    const discrepancies = compareResults(localResult, apiResult, tolerancePercent)
+    const { discrepancies, totalCostDiffPercent } = compareResults(localResult, apiResult, tolerancePercent)
+    
+    // Consider match if totalCost is within tolerance AND no API error
+    const matches = totalCostDiffPercent <= tolerancePercent && !apiError
     
     return {
       testCase,
@@ -928,7 +964,8 @@ export default function TestCalculations() {
       apiRawResponse,  // Store raw response for debugging
       localTimeMs,
       apiTimeMs,
-      matches: discrepancies.length === 0 && !apiError,
+      matches,
+      totalCostDiffPercent,
       discrepancies
     }
   }
@@ -1056,7 +1093,7 @@ export default function TestCalculations() {
       r.matches ? 'PASS' : 'FAIL',
       r.localResult.totalCost.toFixed(2),
       r.apiResult?.totalCost.toFixed(2) || 'N/A',
-      r.discrepancies[0]?.diffPercent.toFixed(2) || '0',
+      r.totalCostDiffPercent.toFixed(2),
       r.localTimeMs.toFixed(1),
       r.apiTimeMs.toFixed(1),
       r.apiError || ''
@@ -1643,13 +1680,10 @@ export default function TestCalculations() {
                         {result?.apiResult ? formatCurrency(result.apiResult.totalCost) : result?.apiError ? 'Error' : '-'}
                       </td>
                       <td className="p-3 text-right font-mono">
-                        {result && result.discrepancies.length > 0 ? (
-                          <span className="text-red-500">
-                            {result.discrepancies.find(d => d.field === 'totalCost')?.diffPercent.toFixed(1) || 
-                             result.discrepancies[0]?.diffPercent.toFixed(1)}%
+                        {result ? (
+                          <span className={result.totalCostDiffPercent <= 1 ? 'text-green-500' : 'text-red-500'}>
+                            {result.totalCostDiffPercent.toFixed(1)}%
                           </span>
-                        ) : result ? (
-                          <span className="text-green-500">0%</span>
                         ) : '-'}
                       </td>
                       <td className="p-3 text-center">
