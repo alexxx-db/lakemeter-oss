@@ -111,6 +111,7 @@ interface TestResult {
   localResult: CostBreakdown
   apiResult: CostBreakdown | null
   apiError?: string
+  apiRequestBody?: Record<string, unknown>  // For debugging
   localTimeMs: number
   apiTimeMs: number
   matches: boolean
@@ -861,11 +862,10 @@ export default function TestCalculations() {
     const apiStart = performance.now()
     let apiResult: CostBreakdown | null = null
     let apiError: string | undefined
+    const endpoint = getAPIEndpoint(workloadType, config)
+    const body = buildAPIRequest(testCase)
     
     try {
-      const endpoint = getAPIEndpoint(workloadType, config)
-      const body = buildAPIRequest(testCase)
-      
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -881,7 +881,14 @@ export default function TestCalculations() {
           totalCost: data.total_cost_per_month || data.total_cost || 0
         }
       } else {
-        apiError = `HTTP ${response.status}: ${await response.text()}`
+        const errorText = await response.text()
+        // Try to parse JSON error
+        try {
+          const errorJson = JSON.parse(errorText)
+          apiError = `HTTP ${response.status}: ${errorJson.detail?.message || errorJson.detail || errorJson.message || errorText}`
+        } catch {
+          apiError = `HTTP ${response.status}: ${errorText}`
+        }
       }
     } catch (e) {
       apiError = e instanceof Error ? e.message : 'Unknown error'
@@ -895,6 +902,7 @@ export default function TestCalculations() {
       localResult,
       apiResult,
       apiError,
+      apiRequestBody: body,  // Store for debugging
       localTimeMs,
       apiTimeMs,
       matches: discrepancies.length === 0 && !apiError,
@@ -1739,9 +1747,19 @@ export default function TestCalculations() {
                             </div>
                           )}
                           
+                          {/* API Request Body */}
+                          {result.apiRequestBody && (
+                            <div className="mt-4">
+                              <h4 className="font-semibold text-blue-500 mb-2">API Request Body (sent to server)</h4>
+                              <pre className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-xs overflow-x-auto">
+                                <code className="text-blue-300">{JSON.stringify(result.apiRequestBody, null, 2)}</code>
+                              </pre>
+                            </div>
+                          )}
+                          
                           {/* Test Config */}
                           <div className="mt-4">
-                            <h4 className="font-semibold text-[var(--text-secondary)] mb-2">Test Configuration</h4>
+                            <h4 className="font-semibold text-[var(--text-secondary)] mb-2">Test Configuration (internal)</h4>
                             <pre className="bg-[var(--bg-primary)] rounded-lg p-3 text-xs overflow-x-auto">
                               {JSON.stringify({ environment: result.testCase.environment, config: result.testCase.config }, null, 2)}
                             </pre>
