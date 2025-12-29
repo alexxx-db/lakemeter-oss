@@ -614,45 +614,66 @@ function buildAPIRequest(testCase: TestCase): Record<string, unknown> {
       }
       
     case 'VECTOR_SEARCH':
+      // Vector Search
       return {
         ...base,
-        mode: config.vector_search_mode,
-        vector_capacity_millions: config.vector_capacity_millions,
-        hours_per_month: config.hours_per_month
+        mode: config.vector_search_mode || 'standard',
+        vector_capacity_millions: config.vector_capacity_millions || 1,
+        hours_per_month: config.hours_per_month || 730
       }
       
     case 'MODEL_SERVING':
+      // Model Serving
       return {
         ...base,
-        gpu_type: config.model_serving_gpu_type,
-        hours_per_month: config.hours_per_month
+        gpu_type: config.model_serving_gpu_type || 'cpu',
+        hours_per_month: config.hours_per_month || 730
       }
       
     case 'LAKEBASE':
+      // Lakebase
       return {
         ...base,
-        cu_size: config.lakebase_cu,
-        num_nodes: config.lakebase_ha_nodes,
-        hours_per_month: config.hours_per_month
+        cu_size: config.lakebase_cu || 2,
+        num_nodes: config.lakebase_ha_nodes || 1,
+        hours_per_month: config.hours_per_month || 730
       }
       
     case 'FMAPI_DATABRICKS':
-      return {
-        ...base,
-        model: config.fmapi_model,
-        rate_type: config.fmapi_rate_type,
-        quantity: config.fmapi_quantity
+      // Foundation Model (Databricks)
+      // For token-based: quantity = actual token count (e.g., 1000000 for 1M tokens)
+      // For provisioned: quantity = hours
+      {
+        const isProvisioned = config.fmapi_rate_type?.includes('provisioned')
+        const quantity = isProvisioned 
+          ? (config.fmapi_quantity || 730) // hours for provisioned
+          : (config.fmapi_quantity || 1) * 1000000 // convert millions to actual tokens
+        return {
+          ...base,
+          model: config.fmapi_model,
+          rate_type: config.fmapi_rate_type || 'input_token',
+          quantity
+        }
       }
       
     case 'FMAPI_PROPRIETARY':
-      return {
-        ...base,
-        provider: config.fmapi_provider,
-        model: config.fmapi_model,
-        endpoint_type: config.fmapi_endpoint_type,
-        context_length: config.fmapi_context_length,
-        rate_type: config.fmapi_rate_type,
-        quantity: config.fmapi_quantity
+      // Foundation Model (Proprietary)
+      // For token-based: quantity = actual token count (e.g., 1000000 for 1M tokens)
+      // For provisioned: quantity = hours
+      {
+        const isProvisioned = config.fmapi_rate_type?.includes('provisioned')
+        const quantity = isProvisioned 
+          ? (config.fmapi_quantity || 730) // hours for provisioned
+          : (config.fmapi_quantity || 1) * 1000000 // convert millions to actual tokens
+        return {
+          ...base,
+          provider: config.fmapi_provider || 'openai',
+          model: config.fmapi_model,
+          endpoint_type: config.fmapi_endpoint_type || 'global',
+          context_length: config.fmapi_context_length || 'all',
+          rate_type: config.fmapi_rate_type || 'input_token',
+          quantity
+        }
       }
       
     default:
