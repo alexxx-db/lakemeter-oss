@@ -875,15 +875,31 @@ export default function TestCalculations() {
       })
       
       if (response.ok) {
-        const data = await response.json()
-        apiRawResponse = data  // Store raw response for debugging
+        const responseData = await response.json()
+        apiRawResponse = responseData  // Store raw response for debugging
         
-        // Parse API response - handle different field naming conventions
-        const monthlyDBUs = data.dbu_per_month ?? 
-          (data.dbu_per_hour ? data.dbu_per_hour * (config.hours_per_month || 730) : 0)
-        const dbuCost = data.dbu_cost_per_month ?? data.dbu_cost ?? data.total_cost ?? 0
-        const vmCost = data.vm_cost_per_month ?? data.vm_cost ?? 0
-        const totalCost = data.total_cost_per_month ?? data.total_cost ?? (dbuCost + vmCost)
+        // Parse API response - handle nested structure: { success: true, data: { ... } }
+        const data = responseData.data || responseData
+        
+        // Extract from nested structure
+        const monthlyDBUs = data.dbu_calculation?.dbu_per_month ?? 
+          data.dbu_per_month ?? 
+          (data.dbu_calculation?.dbu_per_hour ?? data.dbu_per_hour ?? 0) * (config.hours_per_month || 730)
+        
+        const dbuCost = data.dbu_calculation?.dbu_cost_per_month ?? 
+          data.total_cost?.breakdown?.dbu_cost ??
+          data.dbu_cost_per_month ?? 
+          data.dbu_cost ?? 0
+        
+        const vmCost = data.vm_costs?.vm_cost_per_month ?? 
+          data.total_cost?.breakdown?.vm_cost ??
+          data.vm_cost_per_month ?? 
+          data.vm_cost ?? 0
+        
+        const totalCost = data.total_cost?.cost_per_month ?? 
+          data.total_cost_per_month ?? 
+          data.total_cost ?? 
+          (dbuCost + vmCost)
         
         apiResult = { monthlyDBUs, dbuCost, vmCost, totalCost }
       } else {
