@@ -518,88 +518,99 @@ function getAPIEndpoint(workloadType: string, config: Partial<LineItem>): string
 // Build API request body
 function buildAPIRequest(testCase: TestCase): Record<string, unknown> {
   const { workloadType, config, environment } = testCase
-  const base = { cloud: environment.cloud, region: environment.region, tier: environment.tier }
+  // API expects uppercase cloud names
+  const base = { 
+    cloud: environment.cloud.toUpperCase(), 
+    region: environment.region, 
+    tier: environment.tier 
+  }
+  
+  // Helper to build time-based params (either runs_per_day OR hours_per_month)
+  const getTimeParams = () => {
+    if (config.hours_per_month) {
+      return { hours_per_month: config.hours_per_month }
+    }
+    return {
+      runs_per_day: config.runs_per_day || 1,
+      avg_runtime_minutes: config.avg_runtime_minutes || 30,
+      days_per_month: config.days_per_month || 22
+    }
+  }
   
   switch (workloadType) {
     case 'JOBS':
     case 'ALL_PURPOSE':
       if (config.serverless_enabled) {
+        // Jobs/All-Purpose Serverless
         return {
           ...base,
           driver_node_type: config.driver_node_type,
           worker_node_type: config.worker_node_type,
-          num_workers: config.num_workers,
+          num_workers: config.num_workers || 2,
           serverless_mode: config.serverless_mode || 'standard',
-          runs_per_day: config.runs_per_day,
-          avg_runtime_minutes: config.avg_runtime_minutes,
-          days_per_month: config.days_per_month,
-          hours_per_month: config.hours_per_month
+          ...getTimeParams()
         }
       }
+      // Jobs/All-Purpose Classic
       return {
         ...base,
         driver_node_type: config.driver_node_type,
         worker_node_type: config.worker_node_type,
-        num_workers: config.num_workers,
+        num_workers: config.num_workers || 2,
         photon_enabled: config.photon_enabled || false,
         driver_pricing_tier: config.driver_pricing_tier || 'on_demand',
         worker_pricing_tier: config.worker_pricing_tier || 'spot',
-        driver_payment_option: 'NA',
-        worker_payment_option: 'NA',
-        runs_per_day: config.runs_per_day,
-        avg_runtime_minutes: config.avg_runtime_minutes,
-        days_per_month: config.days_per_month,
-        hours_per_month: config.hours_per_month
+        driver_payment_option: config.driver_payment_option || 'NA',
+        worker_payment_option: config.worker_payment_option || 'NA',
+        ...getTimeParams()
       }
       
     case 'DLT':
       if (config.serverless_enabled) {
+        // DLT Serverless
         return {
           ...base,
           driver_node_type: config.driver_node_type,
           worker_node_type: config.worker_node_type,
-          num_workers: config.num_workers,
+          num_workers: config.num_workers || 2,
           serverless_mode: config.serverless_mode || 'standard',
-          runs_per_day: config.runs_per_day,
-          avg_runtime_minutes: config.avg_runtime_minutes,
-          days_per_month: config.days_per_month
+          ...getTimeParams()
         }
       }
+      // DLT Classic
       return {
         ...base,
-        driver_node_type: config.driver_node_type,
-        worker_node_type: config.worker_node_type,
-        num_workers: config.num_workers,
         dlt_edition: config.dlt_edition || 'CORE',
         photon_enabled: config.photon_enabled || false,
+        driver_node_type: config.driver_node_type,
+        worker_node_type: config.worker_node_type,
+        num_workers: config.num_workers || 2,
         driver_pricing_tier: config.driver_pricing_tier || 'on_demand',
         worker_pricing_tier: config.worker_pricing_tier || 'spot',
-        driver_payment_option: 'NA',
-        worker_payment_option: 'NA',
-        runs_per_day: config.runs_per_day,
-        avg_runtime_minutes: config.avg_runtime_minutes,
-        days_per_month: config.days_per_month
+        driver_payment_option: config.driver_payment_option || 'NA',
+        worker_payment_option: config.worker_payment_option || 'NA',
+        ...getTimeParams()
       }
       
     case 'DBSQL':
       if (config.dbsql_warehouse_type === 'SERVERLESS') {
+        // DBSQL Serverless - no VM pricing
         return {
           ...base,
           warehouse_size: config.dbsql_warehouse_size,
           num_clusters: config.dbsql_num_clusters || 1,
-          hours_per_month: config.hours_per_month
+          ...getTimeParams()
         }
       }
+      // DBSQL Classic/Pro - uses vm_pricing_tier and vm_payment_option
       return {
         ...base,
         warehouse_type: config.dbsql_warehouse_type,
         warehouse_size: config.dbsql_warehouse_size,
         num_clusters: config.dbsql_num_clusters || 1,
-        driver_pricing_tier: config.dbsql_driver_pricing_tier || 'on_demand',
-        worker_pricing_tier: config.dbsql_worker_pricing_tier || 'spot',
-        driver_payment_option: 'NA',
-        worker_payment_option: 'NA',
-        hours_per_month: config.hours_per_month
+        vm_pricing_tier: config.dbsql_driver_pricing_tier || 'on_demand',
+        vm_payment_option: config.dbsql_driver_payment_option || 'NA',
+        ...getTimeParams()
       }
       
     case 'VECTOR_SEARCH':
