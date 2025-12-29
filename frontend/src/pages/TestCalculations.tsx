@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { 
   BeakerIcon, 
@@ -9,7 +9,9 @@ import {
   DocumentArrowDownIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  CogIcon,
+  AdjustmentsHorizontalIcon
 } from '@heroicons/react/24/outline'
 import { useStore } from '../store/useStore'
 import { calculateWorkloadCost, type CostBreakdown, type CostCalculationContext } from '../utils/costCalculation'
@@ -21,17 +23,86 @@ import {
 } from '../utils/pricingBundle'
 import type { LineItem } from '../types'
 
-// Test case definition
+// ===== TEST CONFIGURATION =====
+
+// Environments to test
+const TEST_ENVIRONMENTS = {
+  aws: {
+    regions: ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'],
+    tiers: ['STANDARD', 'PREMIUM', 'ENTERPRISE'],
+    vmTypes: [
+      'c5.xlarge', 'c5.2xlarge', 'c5.4xlarge', 'c5.9xlarge',
+      'm5.xlarge', 'm5.2xlarge', 'm5.4xlarge',
+      'r5.xlarge', 'r5.2xlarge', 'r5.4xlarge',
+      'i3.xlarge', 'i3.2xlarge',
+      'g4dn.xlarge', 'g4dn.2xlarge', 'p3.2xlarge'
+    ]
+  },
+  azure: {
+    regions: ['eastus', 'westus2', 'westeurope', 'southeastasia'],
+    tiers: ['STANDARD', 'PREMIUM'],
+    vmTypes: [
+      'Standard_D4s_v3', 'Standard_D8s_v3', 'Standard_D16s_v3',
+      'Standard_E4s_v3', 'Standard_E8s_v3',
+      'Standard_F4s_v2', 'Standard_F8s_v2',
+      'Standard_L8s_v2', 'Standard_NC6s_v3'
+    ]
+  },
+  gcp: {
+    regions: ['us-central1', 'us-east1', 'europe-west1', 'asia-southeast1'],
+    tiers: ['STANDARD', 'PREMIUM', 'ENTERPRISE'],
+    vmTypes: [
+      'n2-standard-4', 'n2-standard-8', 'n2-standard-16',
+      'n2-highmem-4', 'n2-highmem-8',
+      'c2-standard-4', 'c2-standard-8',
+      'n1-standard-4', 'n1-standard-8'
+    ]
+  }
+}
+
+// FMAPI Databricks models
+const FMAPI_DATABRICKS_MODELS = [
+  'llama-3-1-70b', 'llama-3-1-8b', 'llama-3-3-70b',
+  'mixtral-8x7b', 'dbrx-instruct',
+  'bge-large', 'gte-large'
+]
+
+// FMAPI Proprietary configurations
+const FMAPI_PROPRIETARY_CONFIGS = [
+  { provider: 'openai', model: 'gpt-4o', contexts: ['all', 'short', 'long'] },
+  { provider: 'openai', model: 'gpt-4o-mini', contexts: ['all'] },
+  { provider: 'openai', model: 'gpt-4-turbo', contexts: ['all'] },
+  { provider: 'anthropic', model: 'claude-sonnet-4', contexts: ['short', 'long'] },
+  { provider: 'anthropic', model: 'claude-haiku-4', contexts: ['short', 'long'] },
+  { provider: 'anthropic', model: 'claude-opus-4', contexts: ['short', 'long'] },
+  { provider: 'google', model: 'gemini-2-0-flash', contexts: ['short', 'long'] },
+  { provider: 'google', model: 'gemini-1-5-pro', contexts: ['short', 'long'] }
+]
+
+// DBSQL warehouse sizes
+const DBSQL_SIZES = ['2X-Small', 'X-Small', 'Small', 'Medium', 'Large', 'X-Large', '2X-Large', '3X-Large', '4X-Large']
+
+// Model serving GPU types
+const GPU_TYPES = ['cpu', 'gpu_small_t4', 'gpu_medium_a10g_1x', 'gpu_large_a10g_4x']
+
+// Vector search modes
+const VECTOR_MODES = ['standard', 'storage_optimized']
+
+// ===== INTERFACES =====
+
 interface TestCase {
   id: string
   name: string
   category: string
   workloadType: string
   config: Partial<LineItem>
-  description?: string
+  environment: {
+    cloud: string
+    region: string
+    tier: string
+  }
 }
 
-// Test result
 interface TestResult {
   testCase: TestCase
   localResult: CostBreakdown
@@ -49,346 +120,365 @@ interface TestResult {
   }[]
 }
 
-// Comprehensive test cases for all workload types
-const TEST_CASES: TestCase[] = [
-  // ===== JOBS =====
-  {
-    id: 'jobs-classic-standard',
-    name: 'Jobs Classic - No Photon',
-    category: 'Jobs',
-    workloadType: 'JOBS',
-    config: {
-      serverless_enabled: false,
-      photon_enabled: false,
-      driver_node_type: 'c5.4xlarge',
-      worker_node_type: 'c5.4xlarge',
-      num_workers: 2,
-      driver_pricing_tier: 'on_demand',
-      worker_pricing_tier: 'spot',
-      runs_per_day: 1,
-      avg_runtime_minutes: 30,
-      days_per_month: 22
-    }
-  },
-  {
-    id: 'jobs-classic-photon',
-    name: 'Jobs Classic - Photon Enabled',
-    category: 'Jobs',
-    workloadType: 'JOBS',
-    config: {
-      serverless_enabled: false,
-      photon_enabled: true,
-      driver_node_type: 'c5.4xlarge',
-      worker_node_type: 'c5.4xlarge',
-      num_workers: 4,
-      driver_pricing_tier: 'on_demand',
-      worker_pricing_tier: 'spot',
-      runs_per_day: 2,
-      avg_runtime_minutes: 60,
-      days_per_month: 22
-    }
-  },
-  {
-    id: 'jobs-serverless-standard',
-    name: 'Jobs Serverless - Standard Mode',
-    category: 'Jobs',
-    workloadType: 'JOBS',
-    config: {
-      serverless_enabled: true,
-      serverless_mode: 'standard',
-      driver_node_type: 'c5.4xlarge',
-      worker_node_type: 'c5.4xlarge',
-      num_workers: 2,
-      runs_per_day: 1,
-      avg_runtime_minutes: 30,
-      days_per_month: 22
-    }
-  },
-  {
-    id: 'jobs-serverless-performance',
-    name: 'Jobs Serverless - Performance Mode',
-    category: 'Jobs',
-    workloadType: 'JOBS',
-    config: {
-      serverless_enabled: true,
-      serverless_mode: 'performance',
-      driver_node_type: 'c5.4xlarge',
-      worker_node_type: 'c5.4xlarge',
-      num_workers: 2,
-      runs_per_day: 1,
-      avg_runtime_minutes: 30,
-      days_per_month: 22
-    }
-  },
+interface TestConfig {
+  clouds: string[]
+  regionsPerCloud: number
+  tiersPerCloud: number
+  vmSamplesPerCloud: number
+  includeJobs: boolean
+  includeAllPurpose: boolean
+  includeDLT: boolean
+  includeDBSQL: boolean
+  includeVectorSearch: boolean
+  includeModelServing: boolean
+  includeFMAPIDB: boolean
+  includeFMAPIProp: boolean
+  includeLakebase: boolean
+}
+
+// ===== HELPER FUNCTIONS =====
+
+// Random sample from array
+function sampleArray<T>(arr: T[], count: number): T[] {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5)
+  return shuffled.slice(0, Math.min(count, arr.length))
+}
+
+// Generate all test cases based on config
+function generateTestCases(config: TestConfig): TestCase[] {
+  const testCases: TestCase[] = []
+  let idCounter = 0
   
-  // ===== ALL PURPOSE =====
-  {
-    id: 'ap-classic-standard',
-    name: 'All Purpose Classic - No Photon',
-    category: 'All Purpose',
-    workloadType: 'ALL_PURPOSE',
-    config: {
-      serverless_enabled: false,
-      photon_enabled: false,
-      driver_node_type: 'm5.xlarge',
-      worker_node_type: 'm5.xlarge',
-      num_workers: 2,
-      driver_pricing_tier: 'on_demand',
-      worker_pricing_tier: 'on_demand',
-      hours_per_month: 160
-    }
-  },
-  {
-    id: 'ap-serverless-standard',
-    name: 'All Purpose Serverless - Standard',
-    category: 'All Purpose',
-    workloadType: 'ALL_PURPOSE',
-    config: {
-      serverless_enabled: true,
-      serverless_mode: 'standard',
-      driver_node_type: 'm5.xlarge',
-      worker_node_type: 'm5.xlarge',
-      num_workers: 2,
-      hours_per_month: 160
-    }
-  },
-  
-  // ===== DLT =====
-  {
-    id: 'dlt-classic-core',
-    name: 'DLT Classic - Core Edition',
-    category: 'DLT',
-    workloadType: 'DLT',
-    config: {
-      serverless_enabled: false,
-      photon_enabled: false,
-      dlt_edition: 'CORE',
-      driver_node_type: 'c5.4xlarge',
-      worker_node_type: 'c5.4xlarge',
-      num_workers: 2,
-      driver_pricing_tier: 'on_demand',
-      worker_pricing_tier: 'spot',
-      runs_per_day: 4,
-      avg_runtime_minutes: 30,
-      days_per_month: 30
-    }
-  },
-  {
-    id: 'dlt-classic-pro',
-    name: 'DLT Classic - Pro Edition',
-    category: 'DLT',
-    workloadType: 'DLT',
-    config: {
-      serverless_enabled: false,
-      photon_enabled: true,
-      dlt_edition: 'PRO',
-      driver_node_type: 'c5.4xlarge',
-      worker_node_type: 'c5.4xlarge',
-      num_workers: 4,
-      driver_pricing_tier: 'on_demand',
-      worker_pricing_tier: 'spot',
-      runs_per_day: 6,
-      avg_runtime_minutes: 45,
-      days_per_month: 30
-    }
-  },
-  {
-    id: 'dlt-serverless',
-    name: 'DLT Serverless',
-    category: 'DLT',
-    workloadType: 'DLT',
-    config: {
-      serverless_enabled: true,
-      serverless_mode: 'standard',
-      driver_node_type: 'c5.4xlarge',
-      worker_node_type: 'c5.4xlarge',
-      num_workers: 2,
-      runs_per_day: 4,
-      avg_runtime_minutes: 30,
-      days_per_month: 30
-    }
-  },
-  
-  // ===== DBSQL =====
-  {
-    id: 'dbsql-serverless-small',
-    name: 'DBSQL Serverless - Small',
-    category: 'DBSQL',
-    workloadType: 'DBSQL',
-    config: {
-      dbsql_warehouse_type: 'SERVERLESS',
-      dbsql_warehouse_size: 'Small',
-      dbsql_num_clusters: 1,
-      hours_per_month: 160
-    }
-  },
-  {
-    id: 'dbsql-serverless-medium',
-    name: 'DBSQL Serverless - Medium',
-    category: 'DBSQL',
-    workloadType: 'DBSQL',
-    config: {
-      dbsql_warehouse_type: 'SERVERLESS',
-      dbsql_warehouse_size: 'Medium',
-      dbsql_num_clusters: 2,
-      hours_per_month: 200
-    }
-  },
-  {
-    id: 'dbsql-pro-small',
-    name: 'DBSQL Pro - Small',
-    category: 'DBSQL',
-    workloadType: 'DBSQL',
-    config: {
-      dbsql_warehouse_type: 'PRO',
-      dbsql_warehouse_size: 'Small',
-      dbsql_num_clusters: 1,
-      dbsql_driver_pricing_tier: 'on_demand',
-      dbsql_worker_pricing_tier: 'spot',
-      hours_per_month: 160
-    }
-  },
-  {
-    id: 'dbsql-classic-medium',
-    name: 'DBSQL Classic - Medium',
-    category: 'DBSQL',
-    workloadType: 'DBSQL',
-    config: {
-      dbsql_warehouse_type: 'CLASSIC',
-      dbsql_warehouse_size: 'Medium',
-      dbsql_num_clusters: 1,
-      dbsql_driver_pricing_tier: 'on_demand',
-      dbsql_worker_pricing_tier: 'spot',
-      hours_per_month: 100
-    }
-  },
-  
-  // ===== VECTOR SEARCH =====
-  {
-    id: 'vs-standard-1m',
-    name: 'Vector Search Standard - 1M',
-    category: 'Vector Search',
-    workloadType: 'VECTOR_SEARCH',
-    config: {
-      vector_search_mode: 'standard',
-      vector_capacity_millions: 1,
-      hours_per_month: 730
-    }
-  },
-  {
-    id: 'vs-standard-5m',
-    name: 'Vector Search Standard - 5M',
-    category: 'Vector Search',
-    workloadType: 'VECTOR_SEARCH',
-    config: {
-      vector_search_mode: 'standard',
-      vector_capacity_millions: 5,
-      hours_per_month: 730
-    }
-  },
-  {
-    id: 'vs-storage-optimized-64m',
-    name: 'Vector Search Storage Optimized - 64M',
-    category: 'Vector Search',
-    workloadType: 'VECTOR_SEARCH',
-    config: {
-      vector_search_mode: 'storage_optimized',
-      vector_capacity_millions: 64,
-      hours_per_month: 730
-    }
-  },
-  
-  // ===== MODEL SERVING =====
-  {
-    id: 'ms-cpu',
-    name: 'Model Serving - CPU',
-    category: 'Model Serving',
-    workloadType: 'MODEL_SERVING',
-    config: {
-      model_serving_gpu_type: 'cpu',
-      hours_per_month: 730
-    }
-  },
-  {
-    id: 'ms-gpu-small',
-    name: 'Model Serving - GPU Small (T4)',
-    category: 'Model Serving',
-    workloadType: 'MODEL_SERVING',
-    config: {
-      model_serving_gpu_type: 'gpu_small_t4',
-      hours_per_month: 200
-    }
-  },
-  
-  // ===== LAKEBASE =====
-  {
-    id: 'lakebase-cu2-1node',
-    name: 'Lakebase - 2 CU, 1 Node',
-    category: 'Lakebase',
-    workloadType: 'LAKEBASE',
-    config: {
-      lakebase_cu: 2,
-      lakebase_ha_nodes: 1,
-      hours_per_month: 730
-    }
-  },
-  {
-    id: 'lakebase-cu4-2nodes',
-    name: 'Lakebase - 4 CU, 2 Nodes (HA)',
-    category: 'Lakebase',
-    workloadType: 'LAKEBASE',
-    config: {
-      lakebase_cu: 4,
-      lakebase_ha_nodes: 2,
-      hours_per_month: 730
-    }
-  },
-  
-  // ===== FMAPI DATABRICKS =====
-  {
-    id: 'fmapi-db-llama-input',
-    name: 'FMAPI Databricks - Llama Input Tokens',
-    category: 'FMAPI',
-    workloadType: 'FMAPI_DATABRICKS',
-    config: {
-      fmapi_model: 'llama-3-1-70b',
-      fmapi_rate_type: 'input_token',
-      fmapi_quantity: 10 // 10M tokens
-    }
-  },
-  
-  // ===== FMAPI PROPRIETARY =====
-  {
-    id: 'fmapi-prop-gpt4o',
-    name: 'FMAPI Proprietary - GPT-4o Input',
-    category: 'FMAPI',
-    workloadType: 'FMAPI_PROPRIETARY',
-    config: {
-      fmapi_provider: 'openai',
-      fmapi_model: 'gpt-4o',
-      fmapi_endpoint_type: 'global',
-      fmapi_context_length: 'all',
-      fmapi_rate_type: 'input_token',
-      fmapi_quantity: 5 // 5M tokens
-    }
-  },
-  {
-    id: 'fmapi-prop-claude',
-    name: 'FMAPI Proprietary - Claude Sonnet',
-    category: 'FMAPI',
-    workloadType: 'FMAPI_PROPRIETARY',
-    config: {
-      fmapi_provider: 'anthropic',
-      fmapi_model: 'claude-sonnet-4',
-      fmapi_endpoint_type: 'global',
-      fmapi_context_length: 'long',
-      fmapi_rate_type: 'input_token',
-      fmapi_quantity: 5
+  for (const cloud of config.clouds) {
+    const envConfig = TEST_ENVIRONMENTS[cloud as keyof typeof TEST_ENVIRONMENTS]
+    if (!envConfig) continue
+    
+    const regions = sampleArray(envConfig.regions, config.regionsPerCloud)
+    const tiers = sampleArray(envConfig.tiers, config.tiersPerCloud)
+    const vmTypes = sampleArray(envConfig.vmTypes, config.vmSamplesPerCloud)
+    
+    for (const region of regions) {
+      for (const tier of tiers) {
+        const env = { cloud, region, tier }
+        
+        // Jobs tests
+        if (config.includeJobs) {
+          for (const vm of vmTypes.slice(0, 2)) {
+            // Classic no photon
+            testCases.push({
+              id: `${++idCounter}`,
+              name: `Jobs Classic - ${vm}`,
+              category: 'Jobs',
+              workloadType: 'JOBS',
+              environment: env,
+              config: {
+                serverless_enabled: false,
+                photon_enabled: false,
+                driver_node_type: vm,
+                worker_node_type: vm,
+                num_workers: 2,
+                driver_pricing_tier: 'on_demand',
+                worker_pricing_tier: 'spot',
+                runs_per_day: 1,
+                avg_runtime_minutes: 30,
+                days_per_month: 22
+              }
+            })
+            
+            // Classic with photon
+            testCases.push({
+              id: `${++idCounter}`,
+              name: `Jobs Classic Photon - ${vm}`,
+              category: 'Jobs',
+              workloadType: 'JOBS',
+              environment: env,
+              config: {
+                serverless_enabled: false,
+                photon_enabled: true,
+                driver_node_type: vm,
+                worker_node_type: vm,
+                num_workers: 4,
+                driver_pricing_tier: 'on_demand',
+                worker_pricing_tier: 'spot',
+                runs_per_day: 2,
+                avg_runtime_minutes: 45,
+                days_per_month: 22
+              }
+            })
+          }
+          
+          // Serverless modes
+          for (const mode of ['standard', 'performance']) {
+            testCases.push({
+              id: `${++idCounter}`,
+              name: `Jobs Serverless ${mode}`,
+              category: 'Jobs',
+              workloadType: 'JOBS',
+              environment: env,
+              config: {
+                serverless_enabled: true,
+                serverless_mode: mode,
+                driver_node_type: vmTypes[0],
+                worker_node_type: vmTypes[0],
+                num_workers: 2,
+                runs_per_day: 3,
+                avg_runtime_minutes: 20,
+                days_per_month: 22
+              }
+            })
+          }
+        }
+        
+        // All Purpose tests
+        if (config.includeAllPurpose) {
+          for (const vm of vmTypes.slice(0, 2)) {
+            testCases.push({
+              id: `${++idCounter}`,
+              name: `All Purpose Classic - ${vm}`,
+              category: 'All Purpose',
+              workloadType: 'ALL_PURPOSE',
+              environment: env,
+              config: {
+                serverless_enabled: false,
+                photon_enabled: false,
+                driver_node_type: vm,
+                worker_node_type: vm,
+                num_workers: 2,
+                driver_pricing_tier: 'on_demand',
+                worker_pricing_tier: 'on_demand',
+                hours_per_month: 160
+              }
+            })
+          }
+          
+          // Serverless
+          testCases.push({
+            id: `${++idCounter}`,
+            name: 'All Purpose Serverless',
+            category: 'All Purpose',
+            workloadType: 'ALL_PURPOSE',
+            environment: env,
+            config: {
+              serverless_enabled: true,
+              serverless_mode: 'standard',
+              driver_node_type: vmTypes[0],
+              worker_node_type: vmTypes[0],
+              num_workers: 2,
+              hours_per_month: 100
+            }
+          })
+        }
+        
+        // DLT tests
+        if (config.includeDLT) {
+          for (const edition of ['CORE', 'PRO', 'ADVANCED']) {
+            testCases.push({
+              id: `${++idCounter}`,
+              name: `DLT Classic ${edition}`,
+              category: 'DLT',
+              workloadType: 'DLT',
+              environment: env,
+              config: {
+                serverless_enabled: false,
+                photon_enabled: edition !== 'CORE',
+                dlt_edition: edition,
+                driver_node_type: vmTypes[0],
+                worker_node_type: vmTypes[0],
+                num_workers: 2,
+                driver_pricing_tier: 'on_demand',
+                worker_pricing_tier: 'spot',
+                runs_per_day: 4,
+                avg_runtime_minutes: 30,
+                days_per_month: 30
+              }
+            })
+          }
+          
+          // DLT Serverless
+          testCases.push({
+            id: `${++idCounter}`,
+            name: 'DLT Serverless',
+            category: 'DLT',
+            workloadType: 'DLT',
+            environment: env,
+            config: {
+              serverless_enabled: true,
+              serverless_mode: 'standard',
+              driver_node_type: vmTypes[0],
+              worker_node_type: vmTypes[0],
+              num_workers: 2,
+              runs_per_day: 6,
+              avg_runtime_minutes: 20,
+              days_per_month: 30
+            }
+          })
+        }
+        
+        // DBSQL tests
+        if (config.includeDBSQL) {
+          // Serverless - different sizes
+          for (const size of sampleArray(DBSQL_SIZES, 3)) {
+            testCases.push({
+              id: `${++idCounter}`,
+              name: `DBSQL Serverless ${size}`,
+              category: 'DBSQL',
+              workloadType: 'DBSQL',
+              environment: env,
+              config: {
+                dbsql_warehouse_type: 'SERVERLESS',
+                dbsql_warehouse_size: size,
+                dbsql_num_clusters: 1,
+                hours_per_month: 160
+              }
+            })
+          }
+          
+          // Pro - different sizes
+          for (const size of sampleArray(DBSQL_SIZES, 2)) {
+            testCases.push({
+              id: `${++idCounter}`,
+              name: `DBSQL Pro ${size}`,
+              category: 'DBSQL',
+              workloadType: 'DBSQL',
+              environment: env,
+              config: {
+                dbsql_warehouse_type: 'PRO',
+                dbsql_warehouse_size: size,
+                dbsql_num_clusters: 1,
+                dbsql_driver_pricing_tier: 'on_demand',
+                dbsql_worker_pricing_tier: 'spot',
+                hours_per_month: 100
+              }
+            })
+          }
+          
+          // Classic
+          testCases.push({
+            id: `${++idCounter}`,
+            name: 'DBSQL Classic Medium',
+            category: 'DBSQL',
+            workloadType: 'DBSQL',
+            environment: env,
+            config: {
+              dbsql_warehouse_type: 'CLASSIC',
+              dbsql_warehouse_size: 'Medium',
+              dbsql_num_clusters: 1,
+              dbsql_driver_pricing_tier: 'on_demand',
+              dbsql_worker_pricing_tier: 'spot',
+              hours_per_month: 80
+            }
+          })
+        }
+        
+        // Vector Search tests
+        if (config.includeVectorSearch) {
+          for (const mode of VECTOR_MODES) {
+            for (const capacity of [1, 5, 20]) {
+              testCases.push({
+                id: `${++idCounter}`,
+                name: `Vector Search ${mode} ${capacity}M`,
+                category: 'Vector Search',
+                workloadType: 'VECTOR_SEARCH',
+                environment: env,
+                config: {
+                  vector_search_mode: mode,
+                  vector_capacity_millions: capacity,
+                  hours_per_month: 730
+                }
+              })
+            }
+          }
+        }
+        
+        // Model Serving tests
+        if (config.includeModelServing) {
+          for (const gpu of GPU_TYPES) {
+            testCases.push({
+              id: `${++idCounter}`,
+              name: `Model Serving ${gpu}`,
+              category: 'Model Serving',
+              workloadType: 'MODEL_SERVING',
+              environment: env,
+              config: {
+                model_serving_gpu_type: gpu,
+                hours_per_month: 200
+              }
+            })
+          }
+        }
+        
+        // FMAPI Databricks tests
+        if (config.includeFMAPIDB) {
+          for (const model of sampleArray(FMAPI_DATABRICKS_MODELS, 3)) {
+            for (const rateType of ['input_token', 'output_token']) {
+              testCases.push({
+                id: `${++idCounter}`,
+                name: `FMAPI DB ${model} ${rateType}`,
+                category: 'FMAPI Databricks',
+                workloadType: 'FMAPI_DATABRICKS',
+                environment: env,
+                config: {
+                  fmapi_model: model,
+                  fmapi_rate_type: rateType,
+                  fmapi_quantity: 10
+                }
+              })
+            }
+          }
+        }
+        
+        // FMAPI Proprietary tests
+        if (config.includeFMAPIProp) {
+          for (const propConfig of sampleArray(FMAPI_PROPRIETARY_CONFIGS, 4)) {
+            for (const context of propConfig.contexts.slice(0, 2)) {
+              for (const rateType of ['input_token', 'output_token']) {
+                testCases.push({
+                  id: `${++idCounter}`,
+                  name: `FMAPI ${propConfig.provider} ${propConfig.model} ${context} ${rateType}`,
+                  category: 'FMAPI Proprietary',
+                  workloadType: 'FMAPI_PROPRIETARY',
+                  environment: env,
+                  config: {
+                    fmapi_provider: propConfig.provider,
+                    fmapi_model: propConfig.model,
+                    fmapi_endpoint_type: 'global',
+                    fmapi_context_length: context,
+                    fmapi_rate_type: rateType,
+                    fmapi_quantity: 5
+                  }
+                })
+              }
+            }
+          }
+        }
+        
+        // Lakebase tests
+        if (config.includeLakebase) {
+          for (const cu of [1, 2, 4, 8]) {
+            for (const nodes of [1, 2]) {
+              testCases.push({
+                id: `${++idCounter}`,
+                name: `Lakebase ${cu}CU ${nodes}node`,
+                category: 'Lakebase',
+                workloadType: 'LAKEBASE',
+                environment: env,
+                config: {
+                  lakebase_cu: cu,
+                  lakebase_ha_nodes: nodes,
+                  hours_per_month: 730
+                }
+              })
+            }
+          }
+        }
+      }
     }
   }
-]
+  
+  return testCases
+}
 
-// API endpoint mapping for different workload types
+// API endpoint mapping
 function getAPIEndpoint(workloadType: string, config: Partial<LineItem>): string {
   switch (workloadType) {
     case 'JOBS':
@@ -423,14 +513,9 @@ function getAPIEndpoint(workloadType: string, config: Partial<LineItem>): string
 }
 
 // Build API request body
-function buildAPIRequest(
-  testCase: TestCase, 
-  cloud: string, 
-  region: string, 
-  tier: string
-): Record<string, unknown> {
-  const { workloadType, config } = testCase
-  const base = { cloud, region, tier }
+function buildAPIRequest(testCase: TestCase): Record<string, unknown> {
+  const { workloadType, config, environment } = testCase
+  const base = { cloud: environment.cloud, region: environment.region, tier: environment.tier }
   
   switch (workloadType) {
     case 'JOBS':
@@ -561,7 +646,7 @@ function buildAPIRequest(
   }
 }
 
-// Compare two cost breakdowns
+// Compare results
 function compareResults(
   local: CostBreakdown, 
   api: CostBreakdown | null,
@@ -586,6 +671,8 @@ function compareResults(
   return discrepancies
 }
 
+// ===== MAIN COMPONENT =====
+
 export default function TestCalculations() {
   const [results, setResults] = useState<TestResult[]>([])
   const [running, setRunning] = useState(false)
@@ -593,11 +680,27 @@ export default function TestCalculations() {
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set())
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [tolerancePercent, setTolerancePercent] = useState(1)
+  const [showConfig, setShowConfig] = useState(false)
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
+  
+  // Test configuration
+  const [testConfig, setTestConfig] = useState<TestConfig>({
+    clouds: ['aws'],
+    regionsPerCloud: 2,
+    tiersPerCloud: 2,
+    vmSamplesPerCloud: 3,
+    includeJobs: true,
+    includeAllPurpose: true,
+    includeDLT: true,
+    includeDBSQL: true,
+    includeVectorSearch: true,
+    includeModelServing: true,
+    includeFMAPIDB: true,
+    includeFMAPIProp: true,
+    includeLakebase: true
+  })
   
   const {
-    selectedCloud,
-    selectedRegion,
-    selectedTier,
     dbuRatesMap,
     instanceTypes,
     dbsqlSizes,
@@ -612,11 +715,26 @@ export default function TestCalculations() {
     getVectorSearchRate
   } = useStore()
   
-  // Build context for local calculations
-  const context: CostCalculationContext = useMemo(() => ({
-    cloud: selectedCloud || 'aws',
-    region: selectedRegion || 'us-east-1',
-    tier: selectedTier || 'PREMIUM',
+  // Generate test cases based on config
+  const testCases = useMemo(() => generateTestCases(testConfig), [testConfig])
+  
+  // Filter by category
+  const filteredTests = useMemo(() => {
+    if (selectedCategory === 'all') return testCases
+    return testCases.filter(t => t.category === selectedCategory)
+  }, [testCases, selectedCategory])
+  
+  // Get unique categories
+  const categories = useMemo(() => {
+    const cats = new Set(testCases.map(t => t.category))
+    return ['all', ...Array.from(cats)]
+  }, [testCases])
+  
+  // Build context for a specific environment
+  const buildContext = useCallback((cloud: string, region: string, tier: string): CostCalculationContext => ({
+    cloud,
+    region,
+    tier,
     dbuRatesMap,
     instanceTypes,
     dbsqlSizes,
@@ -627,10 +745,9 @@ export default function TestCalculations() {
     getFMAPIDatabricksRate,
     getFMAPIProprietaryRate: (provider: string, model: string, rateType: string, endpointType?: string, contextLength?: string) => {
       if (isPricingBundleLoaded && pricingBundle.fmapiProprietaryRates) {
-        const cloud = (selectedCloud || 'aws').toLowerCase()
         const ep = endpointType || 'global'
         const ctx = contextLength || 'all'
-        const key = `${cloud}:${provider.toLowerCase()}:${model.toLowerCase()}:${ep}:${ctx}:${rateType}`
+        const key = `${cloud.toLowerCase()}:${provider.toLowerCase()}:${model.toLowerCase()}:${ep}:${ctx}:${rateType}`
         const data = pricingBundle.fmapiProprietaryRates[key]
         if (data) {
           return {
@@ -644,39 +761,30 @@ export default function TestCalculations() {
     getVectorSearchRate,
     getInstanceDBURate: (instanceType: string) => {
       if (!isPricingBundleLoaded) return null
-      return getBundleInstanceDBURate(pricingBundle, selectedCloud || 'aws', instanceType)
+      return getBundleInstanceDBURate(pricingBundle, cloud, instanceType)
     },
     getPhotonMultiplier: (skuType: string) => {
       if (!isPricingBundleLoaded) return null
-      return getBundlePhotonMultiplier(pricingBundle, selectedCloud || 'aws', skuType)
+      return getBundlePhotonMultiplier(pricingBundle, cloud, skuType)
     },
     getDBUPrice: (productType: string) => {
       if (!isPricingBundleLoaded) return null
-      return getBundleDBUPrice(pricingBundle, selectedCloud || 'aws', selectedRegion || '', selectedTier || 'PREMIUM', productType)
+      return getBundleDBUPrice(pricingBundle, cloud, region, tier, productType)
     },
     getDBSQLWarehouseConfig: (warehouseType: string, warehouseSize: string) => {
       if (!isPricingBundleLoaded) return null
-      return getDBSQLWarehouseConfig(pricingBundle, selectedCloud || 'aws', warehouseType, warehouseSize)
+      return getDBSQLWarehouseConfig(pricingBundle, cloud, warehouseType, warehouseSize)
     }
-  }), [selectedCloud, selectedRegion, selectedTier, dbuRatesMap, instanceTypes, dbsqlSizes, photonMultipliers, modelServingGPUTypes, vectorSearchModes, isPricingBundleLoaded, pricingBundle, getVMPrice, getFMAPIDatabricksRate, getFMAPIProprietaryRate, getVectorSearchRate])
-  
-  // Filter test cases by category
-  const filteredTests = useMemo(() => {
-    if (selectedCategory === 'all') return TEST_CASES
-    return TEST_CASES.filter(t => t.category === selectedCategory)
-  }, [selectedCategory])
-  
-  // Get unique categories
-  const categories = useMemo(() => {
-    const cats = new Set(TEST_CASES.map(t => t.category))
-    return ['all', ...Array.from(cats)]
-  }, [])
+  }), [dbuRatesMap, instanceTypes, dbsqlSizes, photonMultipliers, modelServingGPUTypes, vectorSearchModes, isPricingBundleLoaded, pricingBundle, getVMPrice, getFMAPIDatabricksRate, getFMAPIProprietaryRate, getVectorSearchRate])
   
   // Run a single test
   const runSingleTest = async (testCase: TestCase): Promise<TestResult> => {
+    const { environment, workloadType, config } = testCase
+    const context = buildContext(environment.cloud, environment.region, environment.tier)
+    
     const lineItem: Partial<LineItem> = {
-      ...testCase.config,
-      workload_type: testCase.workloadType
+      ...config,
+      workload_type: workloadType
     }
     
     // Local calculation
@@ -690,8 +798,8 @@ export default function TestCalculations() {
     let apiError: string | undefined
     
     try {
-      const endpoint = getAPIEndpoint(testCase.workloadType, testCase.config)
-      const body = buildAPIRequest(testCase, selectedCloud || 'aws', selectedRegion || 'us-east-1', selectedTier || 'PREMIUM')
+      const endpoint = getAPIEndpoint(workloadType, config)
+      const body = buildAPIRequest(testCase)
       
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -702,7 +810,7 @@ export default function TestCalculations() {
       if (response.ok) {
         const data = await response.json()
         apiResult = {
-          monthlyDBUs: data.dbu_per_month || data.dbu_per_hour * (testCase.config.hours_per_month || 730) || 0,
+          monthlyDBUs: data.dbu_per_month || data.dbu_per_hour * (config.hours_per_month || 730) || 0,
           dbuCost: data.dbu_cost_per_month || data.total_cost || 0,
           vmCost: data.vm_cost_per_month || 0,
           totalCost: data.total_cost_per_month || data.total_cost || 0
@@ -715,7 +823,6 @@ export default function TestCalculations() {
     }
     const apiTimeMs = performance.now() - apiStart
     
-    // Compare results
     const discrepancies = compareResults(localResult, apiResult, tolerancePercent)
     
     return {
@@ -734,9 +841,12 @@ export default function TestCalculations() {
   const runAllTests = async () => {
     setRunning(true)
     setResults([])
+    setProgress({ current: 0, total: filteredTests.length })
     
-    for (const testCase of filteredTests) {
+    for (let i = 0; i < filteredTests.length; i++) {
+      const testCase = filteredTests[i]
       setCurrentTest(testCase.id)
+      setProgress({ current: i + 1, total: filteredTests.length })
       const result = await runSingleTest(testCase)
       setResults(prev => [...prev, result])
     }
@@ -756,15 +866,26 @@ export default function TestCalculations() {
     const avgApiTime = results.length > 0
       ? results.reduce((sum, r) => sum + r.apiTimeMs, 0) / results.length
       : 0
-    return { passed, failed, apiErrors, avgLocalTime, avgApiTime }
+    const byCategory: Record<string, { passed: number; failed: number }> = {}
+    results.forEach(r => {
+      const cat = r.testCase.category
+      if (!byCategory[cat]) byCategory[cat] = { passed: 0, failed: 0 }
+      if (r.matches) byCategory[cat].passed++
+      else byCategory[cat].failed++
+    })
+    return { passed, failed, apiErrors, avgLocalTime, avgApiTime, byCategory }
   }, [results])
   
-  // Export results to CSV
+  // Export CSV
   const exportCSV = () => {
-    const headers = ['Test Name', 'Category', 'Status', 'Local Total', 'API Total', 'Diff %', 'Local Time (ms)', 'API Time (ms)', 'Error']
+    const headers = ['Test ID', 'Test Name', 'Category', 'Cloud', 'Region', 'Tier', 'Status', 'Local Total', 'API Total', 'Diff %', 'Local Time (ms)', 'API Time (ms)', 'Error']
     const rows = results.map(r => [
+      r.testCase.id,
       r.testCase.name,
       r.testCase.category,
+      r.testCase.environment.cloud,
+      r.testCase.environment.region,
+      r.testCase.environment.tier,
       r.matches ? 'PASS' : 'FAIL',
       r.localResult.totalCost.toFixed(2),
       r.apiResult?.totalCost.toFixed(2) || 'N/A',
@@ -774,7 +895,7 @@ export default function TestCalculations() {
       r.apiError || ''
     ])
     
-    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+    const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -818,14 +939,21 @@ export default function TestCalculations() {
             <BeakerIcon className="w-6 h-6 text-purple-500" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-[var(--text-primary)]">Calculation Tests</h1>
+            <h1 className="text-2xl font-bold text-[var(--text-primary)]">Calculation Test Suite</h1>
             <p className="text-sm text-[var(--text-muted)]">
-              Compare local frontend calculations vs API results
+              Bulk testing across clouds, regions, tiers, and workload types
             </p>
           </div>
         </div>
         
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowConfig(!showConfig)}
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            <AdjustmentsHorizontalIcon className="w-4 h-4" />
+            Configure
+          </button>
           {results.length > 0 && (
             <button
               onClick={exportCSV}
@@ -837,7 +965,7 @@ export default function TestCalculations() {
           )}
           <button
             onClick={runAllTests}
-            disabled={running || !selectedRegion}
+            disabled={running}
             className="btn btn-primary flex items-center gap-2"
           >
             {running ? (
@@ -845,72 +973,186 @@ export default function TestCalculations() {
             ) : (
               <PlayIcon className="w-4 h-4" />
             )}
-            {running ? 'Running...' : 'Run All Tests'}
+            {running ? `Running ${progress.current}/${progress.total}` : `Run ${filteredTests.length} Tests`}
           </button>
         </div>
       </div>
       
-      {/* Warning if no region selected */}
-      {!selectedRegion && (
-        <div className="mb-6 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-3">
-          <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500" />
-          <p className="text-sm text-yellow-600 dark:text-yellow-400">
-            Please select a region in the main calculator before running tests.
-          </p>
-        </div>
+      {/* Configuration Panel */}
+      {showConfig && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="card p-4 mb-6"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <CogIcon className="w-5 h-5 text-[var(--text-muted)]" />
+            <h3 className="font-semibold text-[var(--text-primary)]">Test Configuration</h3>
+          </div>
+          
+          <div className="grid grid-cols-4 gap-6">
+            {/* Cloud Selection */}
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Clouds</label>
+              <div className="space-y-1">
+                {['aws', 'azure', 'gcp'].map(cloud => (
+                  <label key={cloud} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={testConfig.clouds.includes(cloud)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setTestConfig({ ...testConfig, clouds: [...testConfig.clouds, cloud] })
+                        } else {
+                          setTestConfig({ ...testConfig, clouds: testConfig.clouds.filter(c => c !== cloud) })
+                        }
+                      }}
+                      className="rounded"
+                    />
+                    {cloud.toUpperCase()}
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            {/* Sampling */}
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Sampling</label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-[var(--text-muted)] w-24">Regions/Cloud:</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={4}
+                    value={testConfig.regionsPerCloud}
+                    onChange={(e) => setTestConfig({ ...testConfig, regionsPerCloud: parseInt(e.target.value) || 1 })}
+                    className="w-16 text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-[var(--text-muted)] w-24">Tiers/Cloud:</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={3}
+                    value={testConfig.tiersPerCloud}
+                    onChange={(e) => setTestConfig({ ...testConfig, tiersPerCloud: parseInt(e.target.value) || 1 })}
+                    className="w-16 text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-[var(--text-muted)] w-24">VM Samples:</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={testConfig.vmSamplesPerCloud}
+                    onChange={(e) => setTestConfig({ ...testConfig, vmSamplesPerCloud: parseInt(e.target.value) || 1 })}
+                    className="w-16 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* Workload Types - Column 1 */}
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Workloads (1)</label>
+              <div className="space-y-1">
+                {[
+                  { key: 'includeJobs', label: 'Jobs' },
+                  { key: 'includeAllPurpose', label: 'All Purpose' },
+                  { key: 'includeDLT', label: 'DLT' },
+                  { key: 'includeDBSQL', label: 'DBSQL' },
+                  { key: 'includeVectorSearch', label: 'Vector Search' }
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={testConfig[key as keyof TestConfig] as boolean}
+                      onChange={(e) => setTestConfig({ ...testConfig, [key]: e.target.checked })}
+                      className="rounded"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            {/* Workload Types - Column 2 */}
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Workloads (2)</label>
+              <div className="space-y-1">
+                {[
+                  { key: 'includeModelServing', label: 'Model Serving' },
+                  { key: 'includeFMAPIDB', label: 'FMAPI Databricks' },
+                  { key: 'includeFMAPIProp', label: 'FMAPI Proprietary' },
+                  { key: 'includeLakebase', label: 'Lakebase' }
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={testConfig[key as keyof TestConfig] as boolean}
+                      onChange={(e) => setTestConfig({ ...testConfig, [key]: e.target.checked })}
+                      className="rounded"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4 pt-4 border-t border-[var(--border-primary)] flex items-center justify-between">
+            <p className="text-sm text-[var(--text-muted)]">
+              <span className="font-semibold text-[var(--text-primary)]">{testCases.length}</span> test cases will be generated
+            </p>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-[var(--text-muted)]">Tolerance %:</label>
+                <input
+                  type="number"
+                  value={tolerancePercent}
+                  onChange={(e) => setTolerancePercent(parseFloat(e.target.value) || 1)}
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  className="w-16 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-[var(--text-muted)]">Category:</label>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="text-sm"
+                >
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>
+                      {cat === 'all' ? `All (${testCases.length})` : cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       )}
       
-      {/* Config & Filters */}
-      <div className="card p-4 mb-6">
-        <div className="flex flex-wrap items-center gap-4">
-          <div>
-            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Environment</label>
-            <div className="text-sm font-mono text-[var(--text-primary)]">
-              {selectedCloud?.toUpperCase() || 'AWS'} / {selectedRegion || 'us-east-1'} / {selectedTier || 'PREMIUM'}
-            </div>
+      {/* Bundle Status */}
+      <div className="card p-3 mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className={`flex items-center gap-2 ${isPricingBundleLoaded ? 'text-green-500' : 'text-yellow-500'}`}>
+            {isPricingBundleLoaded ? <CheckCircleIcon className="w-5 h-5" /> : <ExclamationTriangleIcon className="w-5 h-5" />}
+            <span className="text-sm font-medium">
+              Pricing Bundle: {isPricingBundleLoaded ? 'Loaded' : 'Not Loaded (using fallbacks)'}
+            </span>
           </div>
-          
-          <div>
-            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Category Filter</label>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="text-sm"
-            >
-              {categories.map(cat => (
-                <option key={cat} value={cat}>
-                  {cat === 'all' ? 'All Categories' : cat}
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Tolerance %</label>
-            <input
-              type="number"
-              value={tolerancePercent}
-              onChange={(e) => setTolerancePercent(parseFloat(e.target.value) || 1)}
-              min={0}
-              max={100}
-              step={0.5}
-              className="w-20 text-sm"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Tests</label>
-            <div className="text-sm text-[var(--text-primary)]">
-              {filteredTests.length} test cases
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Bundle Status</label>
-            <div className={`text-sm ${isPricingBundleLoaded ? 'text-green-500' : 'text-yellow-500'}`}>
-              {isPricingBundleLoaded ? '✓ Loaded' : '⚠ Not loaded'}
-            </div>
-          </div>
+        </div>
+        <div className="text-sm text-[var(--text-muted)]">
+          Testing: {testConfig.clouds.map(c => c.toUpperCase()).join(', ')} • 
+          {testConfig.regionsPerCloud} regions × {testConfig.tiersPerCloud} tiers × {testConfig.vmSamplesPerCloud} VMs
         </div>
       </div>
       
@@ -931,225 +1173,251 @@ export default function TestCalculations() {
           </div>
           <div className="card p-4 text-center">
             <p className="text-2xl font-bold text-blue-500">{stats.avgLocalTime.toFixed(1)}ms</p>
-            <p className="text-xs text-[var(--text-muted)]">Avg Local Time</p>
+            <p className="text-xs text-[var(--text-muted)]">Avg Local</p>
           </div>
           <div className="card p-4 text-center">
             <p className="text-2xl font-bold text-purple-500">{stats.avgApiTime.toFixed(0)}ms</p>
-            <p className="text-xs text-[var(--text-muted)]">Avg API Time</p>
+            <p className="text-xs text-[var(--text-muted)]">Avg API</p>
           </div>
+        </div>
+      )}
+      
+      {/* Category Breakdown */}
+      {results.length > 0 && Object.keys(stats.byCategory).length > 0 && (
+        <div className="card p-4 mb-6">
+          <h3 className="text-sm font-semibold text-[var(--text-secondary)] mb-3">Results by Category</h3>
+          <div className="flex flex-wrap gap-3">
+            {Object.entries(stats.byCategory).map(([cat, { passed, failed }]) => (
+              <div key={cat} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)]">
+                <span className="text-sm text-[var(--text-primary)]">{cat}</span>
+                <span className="text-xs text-green-500">{passed} ✓</span>
+                {failed > 0 && <span className="text-xs text-red-500">{failed} ✗</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Progress bar */}
+      {running && (
+        <div className="mb-6">
+          <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-orange-500"
+              initial={{ width: 0 }}
+              animate={{ width: `${(progress.current / progress.total) * 100}%` }}
+            />
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-1 text-center">
+            {progress.current} / {progress.total} tests completed
+          </p>
         </div>
       )}
       
       {/* Results Table */}
       <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-[var(--bg-tertiary)]">
-            <tr>
-              <th className="text-left p-3 font-medium text-[var(--text-secondary)]">Test</th>
-              <th className="text-left p-3 font-medium text-[var(--text-secondary)]">Category</th>
-              <th className="text-right p-3 font-medium text-[var(--text-secondary)]">Local</th>
-              <th className="text-right p-3 font-medium text-[var(--text-secondary)]">API</th>
-              <th className="text-right p-3 font-medium text-[var(--text-secondary)]">Diff %</th>
-              <th className="text-right p-3 font-medium text-[var(--text-secondary)]">Time</th>
-              <th className="text-center p-3 font-medium text-[var(--text-secondary)]">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredTests.map((test) => {
-              const result = results.find(r => r.testCase.id === test.id)
-              const isExpanded = expandedResults.has(test.id)
-              const isRunning = currentTest === test.id
-              
-              return (
-                <motion.tr
-                  key={test.id}
-                  initial={false}
-                  className={`
-                    border-t border-[var(--border-primary)] 
-                    ${result && !result.matches ? 'bg-red-500/5' : ''}
-                    ${isRunning ? 'bg-blue-500/10' : ''}
-                    hover:bg-[var(--bg-hover)] cursor-pointer
-                  `}
-                  onClick={() => result && toggleExpanded(test.id)}
-                >
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
-                      {result && (
-                        isExpanded 
-                          ? <ChevronDownIcon className="w-4 h-4 text-[var(--text-muted)]" />
-                          : <ChevronRightIcon className="w-4 h-4 text-[var(--text-muted)]" />
-                      )}
-                      <span className="font-medium text-[var(--text-primary)]">{test.name}</span>
-                    </div>
-                  </td>
-                  <td className="p-3 text-[var(--text-muted)]">{test.category}</td>
-                  <td className="p-3 text-right font-mono text-[var(--text-primary)]">
-                    {result ? formatCurrency(result.localResult.totalCost) : '-'}
-                  </td>
-                  <td className="p-3 text-right font-mono text-[var(--text-primary)]">
-                    {result?.apiResult ? formatCurrency(result.apiResult.totalCost) : result?.apiError ? 'Error' : '-'}
-                  </td>
-                  <td className="p-3 text-right font-mono">
-                    {result && result.discrepancies.length > 0 ? (
-                      <span className="text-red-500">
-                        {result.discrepancies.find(d => d.field === 'totalCost')?.diffPercent.toFixed(1) || 
-                         result.discrepancies[0]?.diffPercent.toFixed(1)}%
-                      </span>
-                    ) : result ? (
-                      <span className="text-green-500">0%</span>
-                    ) : '-'}
-                  </td>
-                  <td className="p-3 text-right font-mono text-[var(--text-muted)]">
-                    {result ? `${result.localTimeMs.toFixed(0)}/${result.apiTimeMs.toFixed(0)}ms` : '-'}
-                  </td>
-                  <td className="p-3 text-center">
-                    {isRunning ? (
-                      <ArrowPathIcon className="w-5 h-5 text-blue-500 animate-spin mx-auto" />
-                    ) : result ? (
-                      result.matches ? (
-                        <CheckCircleIcon className="w-5 h-5 text-green-500 mx-auto" />
-                      ) : (
-                        <XCircleIcon className="w-5 h-5 text-red-500 mx-auto" />
-                      )
-                    ) : (
-                      <span className="text-[var(--text-muted)]">-</span>
-                    )}
-                  </td>
-                </motion.tr>
-              )
-            })}
-            
-            {/* Expanded details row */}
-            {results.map((result) => {
-              if (!expandedResults.has(result.testCase.id)) return null
-              
-              return (
-                <tr key={`${result.testCase.id}-details`} className="bg-[var(--bg-tertiary)]">
-                  <td colSpan={7} className="p-4">
-                    <div className="grid grid-cols-2 gap-6">
-                      {/* Local Result */}
-                      <div>
-                        <h4 className="font-semibold text-[var(--text-primary)] mb-2">Local Calculation</h4>
-                        <div className="bg-[var(--bg-primary)] rounded-lg p-3 space-y-1 font-mono text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-[var(--text-muted)]">Monthly DBUs:</span>
-                            <span className="text-[var(--text-primary)]">{formatNumber(result.localResult.monthlyDBUs)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-[var(--text-muted)]">DBU Cost:</span>
-                            <span className="text-[var(--text-primary)]">{formatCurrency(result.localResult.dbuCost)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-[var(--text-muted)]">VM Cost:</span>
-                            <span className="text-[var(--text-primary)]">{formatCurrency(result.localResult.vmCost)}</span>
-                          </div>
-                          <div className="flex justify-between border-t border-[var(--border-primary)] pt-1 mt-1">
-                            <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
-                            <span className="text-orange-500 font-semibold">{formatCurrency(result.localResult.totalCost)}</span>
-                          </div>
-                          {result.localResult.dbuPrice && (
-                            <div className="flex justify-between text-[10px]">
-                              <span className="text-[var(--text-muted)]">$/DBU:</span>
-                              <span className="text-pink-500">${result.localResult.dbuPrice.toFixed(2)}</span>
-                            </div>
+        <div className="max-h-[600px] overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-[var(--bg-tertiary)] sticky top-0">
+              <tr>
+                <th className="text-left p-3 font-medium text-[var(--text-secondary)]">Test</th>
+                <th className="text-left p-3 font-medium text-[var(--text-secondary)]">Category</th>
+                <th className="text-left p-3 font-medium text-[var(--text-secondary)]">Environment</th>
+                <th className="text-right p-3 font-medium text-[var(--text-secondary)]">Local</th>
+                <th className="text-right p-3 font-medium text-[var(--text-secondary)]">API</th>
+                <th className="text-right p-3 font-medium text-[var(--text-secondary)]">Diff %</th>
+                <th className="text-center p-3 font-medium text-[var(--text-secondary)]">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTests.map((test) => {
+                const result = results.find(r => r.testCase.id === test.id)
+                const isExpanded = expandedResults.has(test.id)
+                const isRunning = currentTest === test.id
+                
+                return (
+                  <>
+                    <tr
+                      key={test.id}
+                      className={`
+                        border-t border-[var(--border-primary)] 
+                        ${result && !result.matches ? 'bg-red-500/5' : ''}
+                        ${isRunning ? 'bg-blue-500/10' : ''}
+                        hover:bg-[var(--bg-hover)] cursor-pointer
+                      `}
+                      onClick={() => result && toggleExpanded(test.id)}
+                    >
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          {result && (
+                            isExpanded 
+                              ? <ChevronDownIcon className="w-4 h-4 text-[var(--text-muted)]" />
+                              : <ChevronRightIcon className="w-4 h-4 text-[var(--text-muted)]" />
                           )}
-                          {result.localResult.dbuPerHour && (
-                            <div className="flex justify-between text-[10px]">
-                              <span className="text-[var(--text-muted)]">DBU/hr:</span>
-                              <span className="text-purple-500">{result.localResult.dbuPerHour.toFixed(2)}</span>
-                            </div>
-                          )}
+                          <span className="font-medium text-[var(--text-primary)] truncate max-w-[200px]" title={test.name}>
+                            {test.name}
+                          </span>
                         </div>
-                      </div>
-                      
-                      {/* API Result */}
-                      <div>
-                        <h4 className="font-semibold text-[var(--text-primary)] mb-2">API Calculation</h4>
-                        {result.apiError ? (
-                          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                            <p className="text-red-500 text-xs">{result.apiError}</p>
-                          </div>
-                        ) : result.apiResult ? (
-                          <div className="bg-[var(--bg-primary)] rounded-lg p-3 space-y-1 font-mono text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-[var(--text-muted)]">Monthly DBUs:</span>
-                              <span className={result.discrepancies.some(d => d.field === 'monthlyDBUs') ? 'text-red-500' : 'text-[var(--text-primary)]'}>
-                                {formatNumber(result.apiResult.monthlyDBUs)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[var(--text-muted)]">DBU Cost:</span>
-                              <span className={result.discrepancies.some(d => d.field === 'dbuCost') ? 'text-red-500' : 'text-[var(--text-primary)]'}>
-                                {formatCurrency(result.apiResult.dbuCost)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[var(--text-muted)]">VM Cost:</span>
-                              <span className={result.discrepancies.some(d => d.field === 'vmCost') ? 'text-red-500' : 'text-[var(--text-primary)]'}>
-                                {formatCurrency(result.apiResult.vmCost)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between border-t border-[var(--border-primary)] pt-1 mt-1">
-                              <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
-                              <span className={result.discrepancies.some(d => d.field === 'totalCost') ? 'text-red-500 font-semibold' : 'text-orange-500 font-semibold'}>
-                                {formatCurrency(result.apiResult.totalCost)}
-                              </span>
-                            </div>
-                          </div>
+                      </td>
+                      <td className="p-3 text-[var(--text-muted)]">{test.category}</td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 text-xs rounded bg-blue-500/10 text-blue-500">{test.environment.cloud}</span>
+                          <span className="text-xs text-[var(--text-muted)]">{test.environment.region}</span>
+                          <span className="px-1.5 py-0.5 text-xs rounded bg-purple-500/10 text-purple-500">{test.environment.tier}</span>
+                        </div>
+                      </td>
+                      <td className="p-3 text-right font-mono text-[var(--text-primary)]">
+                        {result ? formatCurrency(result.localResult.totalCost) : '-'}
+                      </td>
+                      <td className="p-3 text-right font-mono text-[var(--text-primary)]">
+                        {result?.apiResult ? formatCurrency(result.apiResult.totalCost) : result?.apiError ? 'Error' : '-'}
+                      </td>
+                      <td className="p-3 text-right font-mono">
+                        {result && result.discrepancies.length > 0 ? (
+                          <span className="text-red-500">
+                            {result.discrepancies.find(d => d.field === 'totalCost')?.diffPercent.toFixed(1) || 
+                             result.discrepancies[0]?.diffPercent.toFixed(1)}%
+                          </span>
+                        ) : result ? (
+                          <span className="text-green-500">0%</span>
+                        ) : '-'}
+                      </td>
+                      <td className="p-3 text-center">
+                        {isRunning ? (
+                          <ArrowPathIcon className="w-5 h-5 text-blue-500 animate-spin mx-auto" />
+                        ) : result ? (
+                          result.matches ? (
+                            <CheckCircleIcon className="w-5 h-5 text-green-500 mx-auto" />
+                          ) : (
+                            <XCircleIcon className="w-5 h-5 text-red-500 mx-auto" />
+                          )
                         ) : (
-                          <div className="bg-[var(--bg-primary)] rounded-lg p-3">
-                            <p className="text-[var(--text-muted)] text-xs">No result</p>
-                          </div>
+                          <span className="text-[var(--text-muted)]">-</span>
                         )}
-                      </div>
-                    </div>
+                      </td>
+                    </tr>
                     
-                    {/* Discrepancies */}
-                    {result.discrepancies.length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="font-semibold text-red-500 mb-2">Discrepancies</h4>
-                        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="text-red-400">
-                                <th className="text-left pb-1">Field</th>
-                                <th className="text-right pb-1">Local</th>
-                                <th className="text-right pb-1">API</th>
-                                <th className="text-right pb-1">Diff</th>
-                                <th className="text-right pb-1">Diff %</th>
-                              </tr>
-                            </thead>
-                            <tbody className="font-mono">
-                              {result.discrepancies.map((d, i) => (
-                                <tr key={i} className="text-red-300">
-                                  <td className="py-0.5">{d.field}</td>
-                                  <td className="text-right">{d.local.toFixed(2)}</td>
-                                  <td className="text-right">{d.api.toFixed(2)}</td>
-                                  <td className="text-right">{d.diff.toFixed(2)}</td>
-                                  <td className="text-right">{d.diffPercent.toFixed(2)}%</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
+                    {/* Expanded details */}
+                    {result && isExpanded && (
+                      <tr key={`${test.id}-details`} className="bg-[var(--bg-tertiary)]">
+                        <td colSpan={7} className="p-4">
+                          <div className="grid grid-cols-2 gap-6">
+                            {/* Local Result */}
+                            <div>
+                              <h4 className="font-semibold text-[var(--text-primary)] mb-2">Local Calculation</h4>
+                              <div className="bg-[var(--bg-primary)] rounded-lg p-3 space-y-1 font-mono text-xs">
+                                <div className="flex justify-between">
+                                  <span className="text-[var(--text-muted)]">Monthly DBUs:</span>
+                                  <span className="text-[var(--text-primary)]">{formatNumber(result.localResult.monthlyDBUs)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[var(--text-muted)]">DBU Cost:</span>
+                                  <span className="text-[var(--text-primary)]">{formatCurrency(result.localResult.dbuCost)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[var(--text-muted)]">VM Cost:</span>
+                                  <span className="text-[var(--text-primary)]">{formatCurrency(result.localResult.vmCost)}</span>
+                                </div>
+                                <div className="flex justify-between border-t border-[var(--border-primary)] pt-1 mt-1">
+                                  <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
+                                  <span className="text-orange-500 font-semibold">{formatCurrency(result.localResult.totalCost)}</span>
+                                </div>
+                                {result.localResult.dbuPrice && (
+                                  <div className="flex justify-between text-[10px]">
+                                    <span className="text-[var(--text-muted)]">$/DBU:</span>
+                                    <span className="text-pink-500">${result.localResult.dbuPrice.toFixed(2)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* API Result */}
+                            <div>
+                              <h4 className="font-semibold text-[var(--text-primary)] mb-2">API Calculation</h4>
+                              {result.apiError ? (
+                                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                                  <p className="text-red-500 text-xs break-all">{result.apiError}</p>
+                                </div>
+                              ) : result.apiResult ? (
+                                <div className="bg-[var(--bg-primary)] rounded-lg p-3 space-y-1 font-mono text-xs">
+                                  <div className="flex justify-between">
+                                    <span className="text-[var(--text-muted)]">Monthly DBUs:</span>
+                                    <span className={result.discrepancies.some(d => d.field === 'monthlyDBUs') ? 'text-red-500' : 'text-[var(--text-primary)]'}>
+                                      {formatNumber(result.apiResult.monthlyDBUs)}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-[var(--text-muted)]">DBU Cost:</span>
+                                    <span className={result.discrepancies.some(d => d.field === 'dbuCost') ? 'text-red-500' : 'text-[var(--text-primary)]'}>
+                                      {formatCurrency(result.apiResult.dbuCost)}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-[var(--text-muted)]">VM Cost:</span>
+                                    <span className={result.discrepancies.some(d => d.field === 'vmCost') ? 'text-red-500' : 'text-[var(--text-primary)]'}>
+                                      {formatCurrency(result.apiResult.vmCost)}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between border-t border-[var(--border-primary)] pt-1 mt-1">
+                                    <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
+                                    <span className={result.discrepancies.some(d => d.field === 'totalCost') ? 'text-red-500 font-semibold' : 'text-orange-500 font-semibold'}>
+                                      {formatCurrency(result.apiResult.totalCost)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                          
+                          {/* Discrepancies */}
+                          {result.discrepancies.length > 0 && (
+                            <div className="mt-4">
+                              <h4 className="font-semibold text-red-500 mb-2">Discrepancies</h4>
+                              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="text-red-400">
+                                      <th className="text-left pb-1">Field</th>
+                                      <th className="text-right pb-1">Local</th>
+                                      <th className="text-right pb-1">API</th>
+                                      <th className="text-right pb-1">Diff</th>
+                                      <th className="text-right pb-1">Diff %</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="font-mono">
+                                    {result.discrepancies.map((d, i) => (
+                                      <tr key={i} className="text-red-300">
+                                        <td className="py-0.5">{d.field}</td>
+                                        <td className="text-right">{d.local.toFixed(2)}</td>
+                                        <td className="text-right">{d.api.toFixed(2)}</td>
+                                        <td className="text-right">{d.diff.toFixed(2)}</td>
+                                        <td className="text-right">{d.diffPercent.toFixed(2)}%</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Test Config */}
+                          <div className="mt-4">
+                            <h4 className="font-semibold text-[var(--text-secondary)] mb-2">Test Configuration</h4>
+                            <pre className="bg-[var(--bg-primary)] rounded-lg p-3 text-xs overflow-x-auto">
+                              {JSON.stringify({ environment: result.testCase.environment, config: result.testCase.config }, null, 2)}
+                            </pre>
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                    
-                    {/* Test Config */}
-                    <div className="mt-4">
-                      <h4 className="font-semibold text-[var(--text-secondary)] mb-2">Test Configuration</h4>
-                      <pre className="bg-[var(--bg-primary)] rounded-lg p-3 text-xs overflow-x-auto">
-                        {JSON.stringify(result.testCase.config, null, 2)}
-                      </pre>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                  </>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
 }
-
