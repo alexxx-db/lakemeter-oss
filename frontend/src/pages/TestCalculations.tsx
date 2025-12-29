@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { 
   BeakerIcon, 
@@ -11,7 +11,10 @@ import {
   ChevronRightIcon,
   ExclamationTriangleIcon,
   CogIcon,
-  AdjustmentsHorizontalIcon
+  AdjustmentsHorizontalIcon,
+  PauseIcon,
+  StopIcon,
+  BoltIcon
 } from '@heroicons/react/24/outline'
 import { useStore } from '../store/useStore'
 import { calculateWorkloadCost, type CostBreakdown, type CostCalculationContext } from '../utils/costCalculation'
@@ -676,12 +679,36 @@ function compareResults(
 export default function TestCalculations() {
   const [results, setResults] = useState<TestResult[]>([])
   const [running, setRunning] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [stopped, setStopped] = useState(false)
   const [currentTest, setCurrentTest] = useState<string | null>(null)
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set())
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [tolerancePercent, setTolerancePercent] = useState(1)
   const [showConfig, setShowConfig] = useState(false)
+  const [showSingleTest, setShowSingleTest] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
+  
+  // Single test configuration
+  const [singleTestConfig, setSingleTestConfig] = useState({
+    cloud: 'aws',
+    region: 'us-east-1',
+    tier: 'PREMIUM',
+    workloadType: 'JOBS',
+    serverless: false,
+    photon: false,
+    driverNode: 'c5.xlarge',
+    workerNode: 'c5.xlarge',
+    numWorkers: 2,
+    runsPerDay: 1,
+    avgRuntime: 30,
+    daysPerMonth: 22,
+    hoursPerMonth: 160
+  })
+  
+  // Refs for pause/stop control
+  const pausedRef = useRef(false)
+  const stoppedRef = useRef(false)
   
   // Test configuration
   const [testConfig, setTestConfig] = useState<TestConfig>({
@@ -709,11 +736,17 @@ export default function TestCalculations() {
     vectorSearchModes,
     pricingBundle,
     isPricingBundleLoaded,
+    loadPricingBundle,
     getVMPrice,
     getFMAPIDatabricksRate,
     getFMAPIProprietaryRate,
     getVectorSearchRate
   } = useStore()
+  
+  // Load pricing bundle on mount
+  useEffect(() => {
+    loadPricingBundle()
+  }, [loadPricingBundle])
   
   // Generate test cases based on config
   const testCases = useMemo(() => generateTestCases(testConfig), [testConfig])
@@ -837,13 +870,49 @@ export default function TestCalculations() {
     }
   }
   
+  // Pause/Resume/Stop handlers
+  const handlePause = () => {
+    pausedRef.current = true
+    setPaused(true)
+  }
+  
+  const handleResume = () => {
+    pausedRef.current = false
+    setPaused(false)
+  }
+  
+  const handleStop = () => {
+    stoppedRef.current = true
+    setStopped(true)
+    pausedRef.current = false
+    setPaused(false)
+  }
+  
+  // Wait while paused
+  const waitIfPaused = async () => {
+    while (pausedRef.current && !stoppedRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  }
+  
   // Run all tests
   const runAllTests = async () => {
     setRunning(true)
+    setPaused(false)
+    setStopped(false)
+    pausedRef.current = false
+    stoppedRef.current = false
     setResults([])
     setProgress({ current: 0, total: filteredTests.length })
     
     for (let i = 0; i < filteredTests.length; i++) {
+      // Check for stop
+      if (stoppedRef.current) break
+      
+      // Wait if paused
+      await waitIfPaused()
+      if (stoppedRef.current) break
+      
       const testCase = filteredTests[i]
       setCurrentTest(testCase.id)
       setProgress({ current: i + 1, total: filteredTests.length })
@@ -851,6 +920,41 @@ export default function TestCalculations() {
       setResults(prev => [...prev, result])
     }
     
+    setCurrentTest(null)
+    setRunning(false)
+    setPaused(false)
+    setStopped(false)
+  }
+  
+  // Run a custom single test
+  const runCustomSingleTest = async () => {
+    const { cloud, region, tier, workloadType, serverless, photon, driverNode, workerNode, numWorkers, runsPerDay, avgRuntime, daysPerMonth, hoursPerMonth } = singleTestConfig
+    
+    const testCase: TestCase = {
+      id: 'custom-single',
+      name: `Custom ${workloadType} Test`,
+      category: workloadType,
+      workloadType,
+      environment: { cloud, region, tier },
+      config: {
+        serverless_enabled: serverless,
+        photon_enabled: photon,
+        driver_node_type: driverNode,
+        worker_node_type: workerNode,
+        num_workers: numWorkers,
+        runs_per_day: runsPerDay,
+        avg_runtime_minutes: avgRuntime,
+        days_per_month: daysPerMonth,
+        hours_per_month: hoursPerMonth,
+        driver_pricing_tier: 'on_demand',
+        worker_pricing_tier: 'spot'
+      }
+    }
+    
+    setRunning(true)
+    setCurrentTest('custom-single')
+    const result = await runSingleTest(testCase)
+    setResults([result])
     setCurrentTest(null)
     setRunning(false)
   }
@@ -946,10 +1050,17 @@ export default function TestCalculations() {
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSingleTest(!showSingleTest)}
+            className={`btn ${showSingleTest ? 'btn-primary' : 'btn-secondary'} flex items-center gap-2`}
+          >
+            <BoltIcon className="w-4 h-4" />
+            Single Test
+          </button>
           <button
             onClick={() => setShowConfig(!showConfig)}
-            className="btn btn-secondary flex items-center gap-2"
+            className={`btn ${showConfig ? 'btn-primary' : 'btn-secondary'} flex items-center gap-2`}
           >
             <AdjustmentsHorizontalIcon className="w-4 h-4" />
             Configure
@@ -960,23 +1071,216 @@ export default function TestCalculations() {
               className="btn btn-secondary flex items-center gap-2"
             >
               <DocumentArrowDownIcon className="w-4 h-4" />
-              Export CSV
+              Export
             </button>
           )}
-          <button
-            onClick={runAllTests}
-            disabled={running}
-            className="btn btn-primary flex items-center gap-2"
-          >
-            {running ? (
-              <ArrowPathIcon className="w-4 h-4 animate-spin" />
-            ) : (
+          
+          {/* Run controls */}
+          {running && !paused && (
+            <button
+              onClick={handlePause}
+              className="btn btn-secondary flex items-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-600"
+            >
+              <PauseIcon className="w-4 h-4" />
+              Pause
+            </button>
+          )}
+          {running && paused && (
+            <button
+              onClick={handleResume}
+              className="btn btn-secondary flex items-center gap-2 bg-green-500/10 hover:bg-green-500/20 text-green-600"
+            >
               <PlayIcon className="w-4 h-4" />
-            )}
-            {running ? `Running ${progress.current}/${progress.total}` : `Run ${filteredTests.length} Tests`}
-          </button>
+              Resume
+            </button>
+          )}
+          {running && (
+            <button
+              onClick={handleStop}
+              className="btn btn-secondary flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-600"
+            >
+              <StopIcon className="w-4 h-4" />
+              Stop
+            </button>
+          )}
+          {!running && (
+            <button
+              onClick={runAllTests}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              <PlayIcon className="w-4 h-4" />
+              Run {filteredTests.length} Tests
+            </button>
+          )}
         </div>
       </div>
+      
+      {/* Single Test Panel */}
+      {showSingleTest && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="card p-4 mb-6 border-2 border-orange-500/30"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <BoltIcon className="w-5 h-5 text-orange-500" />
+              <h3 className="font-semibold text-[var(--text-primary)]">Single Test Configuration</h3>
+            </div>
+            <button
+              onClick={runCustomSingleTest}
+              disabled={running}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              <PlayIcon className="w-4 h-4" />
+              Run Single Test
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-6 gap-4">
+            {/* Environment */}
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Cloud</label>
+              <select
+                value={singleTestConfig.cloud}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, cloud: e.target.value })}
+                className="w-full text-sm"
+              >
+                <option value="aws">AWS</option>
+                <option value="azure">Azure</option>
+                <option value="gcp">GCP</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Region</label>
+              <select
+                value={singleTestConfig.region}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, region: e.target.value })}
+                className="w-full text-sm"
+              >
+                {TEST_ENVIRONMENTS[singleTestConfig.cloud as keyof typeof TEST_ENVIRONMENTS]?.regions.map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Tier</label>
+              <select
+                value={singleTestConfig.tier}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, tier: e.target.value })}
+                className="w-full text-sm"
+              >
+                {TEST_ENVIRONMENTS[singleTestConfig.cloud as keyof typeof TEST_ENVIRONMENTS]?.tiers.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Workload</label>
+              <select
+                value={singleTestConfig.workloadType}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, workloadType: e.target.value })}
+                className="w-full text-sm"
+              >
+                <option value="JOBS">Jobs</option>
+                <option value="ALL_PURPOSE">All Purpose</option>
+                <option value="DLT">DLT</option>
+                <option value="DBSQL">DBSQL</option>
+              </select>
+            </div>
+            <div className="flex items-end gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={singleTestConfig.serverless}
+                  onChange={(e) => setSingleTestConfig({ ...singleTestConfig, serverless: e.target.checked })}
+                  className="rounded"
+                />
+                Serverless
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={singleTestConfig.photon}
+                  onChange={(e) => setSingleTestConfig({ ...singleTestConfig, photon: e.target.checked })}
+                  className="rounded"
+                />
+                Photon
+              </label>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-6 gap-4 mt-4">
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Driver Node</label>
+              <select
+                value={singleTestConfig.driverNode}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, driverNode: e.target.value })}
+                className="w-full text-sm"
+              >
+                {TEST_ENVIRONMENTS[singleTestConfig.cloud as keyof typeof TEST_ENVIRONMENTS]?.vmTypes.map(vm => (
+                  <option key={vm} value={vm}>{vm}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Worker Node</label>
+              <select
+                value={singleTestConfig.workerNode}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, workerNode: e.target.value })}
+                className="w-full text-sm"
+              >
+                {TEST_ENVIRONMENTS[singleTestConfig.cloud as keyof typeof TEST_ENVIRONMENTS]?.vmTypes.map(vm => (
+                  <option key={vm} value={vm}>{vm}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Workers</label>
+              <input
+                type="number"
+                value={singleTestConfig.numWorkers}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, numWorkers: parseInt(e.target.value) || 1 })}
+                min={0}
+                max={100}
+                className="w-full text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Runs/Day</label>
+              <input
+                type="number"
+                value={singleTestConfig.runsPerDay}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, runsPerDay: parseInt(e.target.value) || 1 })}
+                min={1}
+                className="w-full text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Avg Runtime (min)</label>
+              <input
+                type="number"
+                value={singleTestConfig.avgRuntime}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, avgRuntime: parseInt(e.target.value) || 1 })}
+                min={1}
+                className="w-full text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Days/Month</label>
+              <input
+                type="number"
+                value={singleTestConfig.daysPerMonth}
+                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, daysPerMonth: parseInt(e.target.value) || 1 })}
+                min={1}
+                max={31}
+                className="w-full text-sm"
+              />
+            </div>
+          </div>
+        </motion.div>
+      )}
       
       {/* Configuration Panel */}
       {showConfig && (
@@ -1203,13 +1507,15 @@ export default function TestCalculations() {
         <div className="mb-6">
           <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
             <motion.div
-              className="h-full bg-orange-500"
+              className={`h-full ${paused ? 'bg-yellow-500' : 'bg-orange-500'}`}
               initial={{ width: 0 }}
               animate={{ width: `${(progress.current / progress.total) * 100}%` }}
             />
           </div>
           <p className="text-xs text-[var(--text-muted)] mt-1 text-center">
             {progress.current} / {progress.total} tests completed
+            {paused && <span className="ml-2 text-yellow-500 font-medium">(PAUSED)</span>}
+            {stopped && <span className="ml-2 text-red-500 font-medium">(STOPPED)</span>}
           </p>
         </div>
       )}
