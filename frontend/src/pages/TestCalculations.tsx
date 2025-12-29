@@ -112,6 +112,7 @@ interface TestResult {
   apiResult: CostBreakdown | null
   apiError?: string
   apiRequestBody?: Record<string, unknown>  // For debugging
+  apiRawResponse?: Record<string, unknown>  // Raw API response for debugging
   localTimeMs: number
   apiTimeMs: number
   matches: boolean
@@ -862,6 +863,7 @@ export default function TestCalculations() {
     const apiStart = performance.now()
     let apiResult: CostBreakdown | null = null
     let apiError: string | undefined
+    let apiRawResponse: Record<string, unknown> | undefined
     const endpoint = getAPIEndpoint(workloadType, config)
     const body = buildAPIRequest(testCase)
     
@@ -874,12 +876,16 @@ export default function TestCalculations() {
       
       if (response.ok) {
         const data = await response.json()
-        apiResult = {
-          monthlyDBUs: data.dbu_per_month || data.dbu_per_hour * (config.hours_per_month || 730) || 0,
-          dbuCost: data.dbu_cost_per_month || data.total_cost || 0,
-          vmCost: data.vm_cost_per_month || 0,
-          totalCost: data.total_cost_per_month || data.total_cost || 0
-        }
+        apiRawResponse = data  // Store raw response for debugging
+        
+        // Parse API response - handle different field naming conventions
+        const monthlyDBUs = data.dbu_per_month ?? 
+          (data.dbu_per_hour ? data.dbu_per_hour * (config.hours_per_month || 730) : 0)
+        const dbuCost = data.dbu_cost_per_month ?? data.dbu_cost ?? data.total_cost ?? 0
+        const vmCost = data.vm_cost_per_month ?? data.vm_cost ?? 0
+        const totalCost = data.total_cost_per_month ?? data.total_cost ?? (dbuCost + vmCost)
+        
+        apiResult = { monthlyDBUs, dbuCost, vmCost, totalCost }
       } else {
         const errorText = await response.text()
         // Try to parse JSON error
@@ -902,7 +908,8 @@ export default function TestCalculations() {
       localResult,
       apiResult,
       apiError,
-      apiRequestBody: body,  // Store for debugging
+      apiRequestBody: body,
+      apiRawResponse,  // Store raw response for debugging
       localTimeMs,
       apiTimeMs,
       matches: discrepancies.length === 0 && !apiError,
@@ -1744,6 +1751,16 @@ export default function TestCalculations() {
                                   </tbody>
                                 </table>
                               </div>
+                            </div>
+                          )}
+                          
+                          {/* API Raw Response */}
+                          {result.apiRawResponse && (
+                            <div className="mt-4">
+                              <h4 className="font-semibold text-green-500 mb-2">API Raw Response (from server)</h4>
+                              <pre className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 text-xs overflow-x-auto">
+                                <code className="text-green-300">{JSON.stringify(result.apiRawResponse, null, 2)}</code>
+                              </pre>
                             </div>
                           )}
                           
