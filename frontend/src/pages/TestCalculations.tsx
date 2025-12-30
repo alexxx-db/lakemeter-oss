@@ -22,45 +22,87 @@ import {
   getInstanceDBURate as getBundleInstanceDBURate,
   getPhotonMultiplier as getBundlePhotonMultiplier,
   getDBUPrice as getBundleDBUPrice,
-  getDBSQLWarehouseConfig
+  getDBSQLWarehouseConfig,
+  type PricingBundle
 } from '../utils/pricingBundle'
 import type { LineItem } from '../types'
 
 // ===== TEST CONFIGURATION =====
 
-// Environments to test
-const TEST_ENVIRONMENTS = {
+// Default fallback environments (used when pricing bundle not loaded)
+const DEFAULT_ENVIRONMENTS = {
   aws: {
     regions: ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'],
-    tiers: ['PREMIUM', 'ENTERPRISE'],  // Standard tier deprecated
-    vmTypes: [
-      'c5.xlarge', 'c5.2xlarge', 'c5.4xlarge', 'c5.9xlarge',
-      'm5.xlarge', 'm5.2xlarge', 'm5.4xlarge',
-      'r5.xlarge', 'r5.2xlarge', 'r5.4xlarge',
-      'i3.xlarge', 'i3.2xlarge',
-      'g4dn.xlarge', 'g4dn.2xlarge', 'p3.2xlarge'
-    ]
+    tiers: ['PREMIUM', 'ENTERPRISE'],
+    vmTypes: ['c5.xlarge', 'c5.2xlarge', 'm5.xlarge', 'm5.2xlarge', 'r5.xlarge', 'i3.xlarge']
   },
   azure: {
     regions: ['eastus', 'westus2', 'westeurope', 'southeastasia'],
-    tiers: ['PREMIUM'],  // Standard tier deprecated, Azure has no Enterprise
-    vmTypes: [
-      'Standard_D4s_v3', 'Standard_D8s_v3', 'Standard_D16s_v3',
-      'Standard_E4s_v3', 'Standard_E8s_v3',
-      'Standard_F4s_v2', 'Standard_F8s_v2',
-      'Standard_L8s_v2', 'Standard_NC6s_v3'
-    ]
+    tiers: ['PREMIUM'],
+    vmTypes: ['Standard_D4s_v3', 'Standard_D8s_v3', 'Standard_E4s_v3', 'Standard_F4s_v2']
   },
   gcp: {
     regions: ['us-central1', 'us-east1', 'europe-west1', 'asia-southeast1'],
-    tiers: ['PREMIUM', 'ENTERPRISE'],  // Standard tier deprecated
-    vmTypes: [
-      'n2-standard-4', 'n2-standard-8', 'n2-standard-16',
-      'n2-highmem-4', 'n2-highmem-8',
-      'c2-standard-4', 'c2-standard-8',
-      'n1-standard-4', 'n1-standard-8'
-    ]
+    tiers: ['PREMIUM', 'ENTERPRISE'],
+    vmTypes: ['n2-standard-4', 'n2-standard-8', 'n2-highmem-4', 'c2-standard-4']
   }
+}
+
+// ===== HELPER: Get valid VM types from pricing bundle =====
+function getValidVMTypesForCloudRegion(
+  bundle: PricingBundle | null,
+  cloud: string,
+  region: string
+): string[] {
+  if (!bundle?.isLoaded || !bundle.vmCosts) {
+    // Fallback to defaults
+    return DEFAULT_ENVIRONMENTS[cloud.toLowerCase() as keyof typeof DEFAULT_ENVIRONMENTS]?.vmTypes || []
+  }
+  
+  // Extract unique VM types from vmCosts keys (format: cloud:region:instance:tier:payment)
+  const vmTypes = new Set<string>()
+  const prefix = `${cloud.toLowerCase()}:${region}:`
+  
+  Object.keys(bundle.vmCosts).forEach(key => {
+    if (key.startsWith(prefix)) {
+      const parts = key.split(':')
+      if (parts.length >= 3) {
+        vmTypes.add(parts[2])
+      }
+    }
+  })
+  
+  return Array.from(vmTypes).sort()
+}
+
+// Get available regions from vmCosts for a cloud
+function getAvailableRegions(bundle: PricingBundle | null, cloud: string): string[] {
+  if (!bundle?.isLoaded || !bundle.vmCosts) {
+    return DEFAULT_ENVIRONMENTS[cloud.toLowerCase() as keyof typeof DEFAULT_ENVIRONMENTS]?.regions || []
+  }
+  
+  const regions = new Set<string>()
+  const prefix = `${cloud.toLowerCase()}:`
+  
+  Object.keys(bundle.vmCosts).forEach(key => {
+    if (key.startsWith(prefix)) {
+      const parts = key.split(':')
+      if (parts.length >= 2) {
+        regions.add(parts[1])
+      }
+    }
+  })
+  
+  return Array.from(regions).sort()
+}
+
+// Get tiers for a cloud
+function getTiersForCloud(cloud: string): string[] {
+  const cloudLower = cloud.toLowerCase()
+  if (cloudLower === 'azure') {
+    return ['PREMIUM']
+  }
+  return ['PREMIUM', 'ENTERPRISE']
 }
 
 // FMAPI Databricks models (validated against pricing bundle)
@@ -97,6 +139,14 @@ const GPU_TYPES = ['cpu', 'gpu_small_t4']
 
 // Vector search modes
 const VECTOR_MODES = ['standard', 'storage_optimized']
+
+// Manual test environment configuration interface
+interface ManualTestEnvironment {
+  enabled: boolean
+  cloud: string
+  region: string
+  tier: string
+}
 
 // ===== INTERFACES =====
 
@@ -147,6 +197,8 @@ interface TestConfig {
   includeFMAPIDB: boolean
   includeFMAPIProp: boolean
   includeLakebase: boolean
+  // Manual environment override (tests only this environment when enabled)
+  manualEnvironment: ManualTestEnvironment
 }
 
 // ===== HELPER FUNCTIONS =====
@@ -157,20 +209,354 @@ function sampleArray<T>(arr: T[], count: number): T[] {
   return shuffled.slice(0, Math.min(count, arr.length))
 }
 
-// Generate all test cases based on config
-function generateTestCases(config: TestConfig): TestCase[] {
+// Helper to generate tests for a single environment
+function generateTestsForEnvironment(
+  env: { cloud: string; region: string; tier: string },
+  vmTypes: string[],
+  config: TestConfig,
+  startIdCounter: number,
+  cloud: string
+): TestCase[] {
+  const testCases: TestCase[] = []
+  let idCounter = startIdCounter
+  
+  // Jobs tests
+  if (config.includeJobs) {
+    for (const vm of vmTypes.slice(0, 2)) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `Jobs Classic - ${vm}`,
+        category: 'Jobs',
+        workloadType: 'JOBS',
+        environment: env,
+        config: {
+          serverless_enabled: false,
+          photon_enabled: false,
+          driver_node_type: vm,
+          worker_node_type: vm,
+          num_workers: 2,
+          driver_pricing_tier: 'on_demand',
+          worker_pricing_tier: 'spot',
+          runs_per_day: 1,
+          avg_runtime_minutes: 30,
+          days_per_month: 22
+        }
+      })
+      
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `Jobs Classic Photon - ${vm}`,
+        category: 'Jobs',
+        workloadType: 'JOBS',
+        environment: env,
+        config: {
+          serverless_enabled: false,
+          photon_enabled: true,
+          driver_node_type: vm,
+          worker_node_type: vm,
+          num_workers: 4,
+          driver_pricing_tier: 'on_demand',
+          worker_pricing_tier: 'spot',
+          runs_per_day: 2,
+          avg_runtime_minutes: 45,
+          days_per_month: 22
+        }
+      })
+    }
+    
+    for (const mode of ['standard', 'performance']) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `Jobs Serverless ${mode}`,
+        category: 'Jobs',
+        workloadType: 'JOBS',
+        environment: env,
+        config: {
+          serverless_enabled: true,
+          serverless_mode: mode,
+          driver_node_type: vmTypes[0] || 'c5.xlarge',
+          worker_node_type: vmTypes[0] || 'c5.xlarge',
+          num_workers: 2,
+          runs_per_day: 3,
+          avg_runtime_minutes: 20,
+          days_per_month: 22
+        }
+      })
+    }
+  }
+  
+  // All Purpose tests
+  if (config.includeAllPurpose) {
+    for (const vm of vmTypes.slice(0, 2)) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `All Purpose Classic - ${vm}`,
+        category: 'All Purpose',
+        workloadType: 'ALL_PURPOSE',
+        environment: env,
+        config: {
+          serverless_enabled: false,
+          photon_enabled: false,
+          driver_node_type: vm,
+          worker_node_type: vm,
+          num_workers: 2,
+          driver_pricing_tier: 'on_demand',
+          worker_pricing_tier: 'on_demand',
+          hours_per_month: 160
+        }
+      })
+    }
+    
+    testCases.push({
+      id: `${++idCounter}`,
+      name: 'All Purpose Serverless',
+      category: 'All Purpose',
+      workloadType: 'ALL_PURPOSE',
+      environment: env,
+      config: {
+        serverless_enabled: true,
+        serverless_mode: 'performance',
+        driver_node_type: vmTypes[0] || 'c5.xlarge',
+        worker_node_type: vmTypes[0] || 'c5.xlarge',
+        num_workers: 2,
+        hours_per_month: 100
+      }
+    })
+  }
+  
+  // DLT tests
+  if (config.includeDLT) {
+    for (const edition of ['CORE', 'PRO', 'ADVANCED']) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `DLT Classic ${edition}`,
+        category: 'DLT',
+        workloadType: 'DLT',
+        environment: env,
+        config: {
+          serverless_enabled: false,
+          photon_enabled: edition !== 'CORE',
+          dlt_edition: edition,
+          driver_node_type: vmTypes[0] || 'c5.xlarge',
+          worker_node_type: vmTypes[0] || 'c5.xlarge',
+          num_workers: 2,
+          driver_pricing_tier: 'on_demand',
+          worker_pricing_tier: 'spot',
+          runs_per_day: 4,
+          avg_runtime_minutes: 30,
+          days_per_month: 30
+        }
+      })
+    }
+    
+    testCases.push({
+      id: `${++idCounter}`,
+      name: 'DLT Serverless',
+      category: 'DLT',
+      workloadType: 'DLT',
+      environment: env,
+      config: {
+        serverless_enabled: true,
+        serverless_mode: 'standard',
+        driver_node_type: vmTypes[0] || 'c5.xlarge',
+        worker_node_type: vmTypes[0] || 'c5.xlarge',
+        num_workers: 2,
+        runs_per_day: 6,
+        avg_runtime_minutes: 20,
+        days_per_month: 30
+      }
+    })
+  }
+  
+  // DBSQL tests
+  if (config.includeDBSQL) {
+    for (const size of sampleArray(DBSQL_SIZES, 3)) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `DBSQL Serverless ${size}`,
+        category: 'DBSQL',
+        workloadType: 'DBSQL',
+        environment: env,
+        config: {
+          dbsql_warehouse_type: 'SERVERLESS',
+          dbsql_warehouse_size: size,
+          dbsql_num_clusters: 1,
+          hours_per_month: 160
+        }
+      })
+    }
+    
+    for (const size of sampleArray(DBSQL_SIZES, 2)) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `DBSQL Pro ${size}`,
+        category: 'DBSQL',
+        workloadType: 'DBSQL',
+        environment: env,
+        config: {
+          dbsql_warehouse_type: 'PRO',
+          dbsql_warehouse_size: size,
+          dbsql_num_clusters: 1,
+          dbsql_driver_pricing_tier: 'on_demand',
+          dbsql_worker_pricing_tier: 'on_demand',
+          hours_per_month: 100
+        }
+      })
+    }
+    
+    testCases.push({
+      id: `${++idCounter}`,
+      name: 'DBSQL Classic Medium',
+      category: 'DBSQL',
+      workloadType: 'DBSQL',
+      environment: env,
+      config: {
+        dbsql_warehouse_type: 'CLASSIC',
+        dbsql_warehouse_size: 'Medium',
+        dbsql_num_clusters: 1,
+        dbsql_driver_pricing_tier: 'on_demand',
+        dbsql_worker_pricing_tier: 'on_demand',
+        hours_per_month: 80
+      }
+    })
+  }
+  
+  // Vector Search tests
+  if (config.includeVectorSearch) {
+    for (const mode of VECTOR_MODES) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `Vector Search ${mode}`,
+        category: 'Vector Search',
+        workloadType: 'VECTOR_SEARCH',
+        environment: env,
+        config: {
+          vector_search_mode: mode,
+          vector_capacity_millions: 5,
+          hours_per_month: 730
+        }
+      })
+    }
+  }
+  
+  // Model Serving tests
+  if (config.includeModelServing) {
+    const cloudGPUs = GPU_TYPES_BY_CLOUD[cloud.toLowerCase()] || GPU_TYPES
+    for (const gpu of cloudGPUs) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `Model Serving ${gpu}`,
+        category: 'Model Serving',
+        workloadType: 'MODEL_SERVING',
+        environment: env,
+        config: {
+          model_serving_gpu_type: gpu,
+          hours_per_month: 200
+        }
+      })
+    }
+  }
+  
+  // FMAPI Databricks tests
+  if (config.includeFMAPIDB) {
+    for (const model of sampleArray(FMAPI_DATABRICKS_MODELS, 3)) {
+      for (const rateType of ['input_token', 'output_token']) {
+        testCases.push({
+          id: `${++idCounter}`,
+          name: `FMAPI DB ${model} ${rateType}`,
+          category: 'FMAPI Databricks',
+          workloadType: 'FMAPI_DATABRICKS',
+          environment: env,
+          config: {
+            fmapi_model: model,
+            fmapi_rate_type: rateType,
+            fmapi_quantity: 10
+          }
+        })
+      }
+    }
+  }
+  
+  // FMAPI Proprietary tests
+  if (config.includeFMAPIProp) {
+    for (const propConfig of sampleArray(FMAPI_PROPRIETARY_CONFIGS, 4)) {
+      for (const context of propConfig.contexts.slice(0, 2)) {
+        for (const rateType of ['input_token', 'output_token']) {
+          testCases.push({
+            id: `${++idCounter}`,
+            name: `FMAPI ${propConfig.provider} ${propConfig.model} ${context} ${rateType}`,
+            category: 'FMAPI Proprietary',
+            workloadType: 'FMAPI_PROPRIETARY',
+            environment: env,
+            config: {
+              fmapi_provider: propConfig.provider,
+              fmapi_model: propConfig.model,
+              fmapi_endpoint_type: 'global',
+              fmapi_context_length: context,
+              fmapi_rate_type: rateType,
+              fmapi_quantity: 10
+            }
+          })
+        }
+      }
+    }
+  }
+  
+  // Lakebase tests
+  if (config.includeLakebase) {
+    for (const cuSize of [1, 2, 4]) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `Lakebase CU${cuSize}`,
+        category: 'Lakebase',
+        workloadType: 'LAKEBASE',
+        environment: env,
+        config: {
+          lakebase_cu: cuSize,
+          lakebase_ha_nodes: 1,
+          hours_per_month: 730
+        }
+      })
+    }
+  }
+  
+  return testCases
+}
+
+// Generate all test cases based on config and pricing bundle
+function generateTestCases(config: TestConfig, bundle: PricingBundle | null): TestCase[] {
   const testCases: TestCase[] = []
   let idCounter = 0
   
-  for (const cloud of config.clouds) {
-    const envConfig = TEST_ENVIRONMENTS[cloud as keyof typeof TEST_ENVIRONMENTS]
-    if (!envConfig) continue
+  // If manual environment is enabled, use only that environment
+  if (config.manualEnvironment.enabled) {
+    const { cloud, region, tier } = config.manualEnvironment
+    const vmTypes = getValidVMTypesForCloudRegion(bundle, cloud, region)
+    const sampledVMs = vmTypes.length > 0 ? sampleArray(vmTypes, config.vmSamplesPerCloud) : ['c5.xlarge']
     
-    const regions = sampleArray(envConfig.regions, config.regionsPerCloud)
-    const tiers = sampleArray(envConfig.tiers, config.tiersPerCloud)
-    const vmTypes = sampleArray(envConfig.vmTypes, config.vmSamplesPerCloud)
+    // Generate tests for this single environment
+    return generateTestsForEnvironment(
+      { cloud, region, tier }, 
+      sampledVMs, 
+      config, 
+      idCounter,
+      cloud
+    )
+  }
+  
+  for (const cloud of config.clouds) {
+    // Get valid regions from pricing bundle, or use defaults
+    const availableRegions = getAvailableRegions(bundle, cloud)
+    const regions = sampleArray(availableRegions.length > 0 ? availableRegions : DEFAULT_ENVIRONMENTS[cloud as keyof typeof DEFAULT_ENVIRONMENTS]?.regions || [], config.regionsPerCloud)
+    const tiers = sampleArray(getTiersForCloud(cloud), config.tiersPerCloud)
     
     for (const region of regions) {
+      // Get valid VM types from pricing bundle for this specific cloud/region
+      const validVMTypes = getValidVMTypesForCloudRegion(bundle, cloud, region)
+      const vmTypes = validVMTypes.length > 0 
+        ? sampleArray(validVMTypes, config.vmSamplesPerCloud)
+        : DEFAULT_ENVIRONMENTS[cloud as keyof typeof DEFAULT_ENVIRONMENTS]?.vmTypes?.slice(0, config.vmSamplesPerCloud) || ['c5.xlarge']
+      
       for (const tier of tiers) {
         const env = { cloud, region, tier }
         
@@ -234,8 +620,8 @@ function generateTestCases(config: TestConfig): TestCase[] {
               config: {
                 serverless_enabled: true,
                 serverless_mode: mode,
-                driver_node_type: vmTypes[0],
-                worker_node_type: vmTypes[0],
+                driver_node_type: vmTypes[0] || 'c5.xlarge',
+                worker_node_type: vmTypes[0] || 'c5.xlarge',
                 num_workers: 2,
                 runs_per_day: 3,
                 avg_runtime_minutes: 20,
@@ -277,8 +663,8 @@ function generateTestCases(config: TestConfig): TestCase[] {
             config: {
               serverless_enabled: true,
               serverless_mode: 'performance',  // All-Purpose Serverless only supports Performance mode
-              driver_node_type: vmTypes[0],
-              worker_node_type: vmTypes[0],
+              driver_node_type: vmTypes[0] || 'c5.xlarge',
+              worker_node_type: vmTypes[0] || 'c5.xlarge',
               num_workers: 2,
               hours_per_month: 100
             }
@@ -298,8 +684,8 @@ function generateTestCases(config: TestConfig): TestCase[] {
                 serverless_enabled: false,
                 photon_enabled: edition !== 'CORE',
                 dlt_edition: edition,
-                driver_node_type: vmTypes[0],
-                worker_node_type: vmTypes[0],
+                driver_node_type: vmTypes[0] || 'c5.xlarge',
+                worker_node_type: vmTypes[0] || 'c5.xlarge',
                 num_workers: 2,
                 driver_pricing_tier: 'on_demand',
                 worker_pricing_tier: 'spot',
@@ -320,8 +706,8 @@ function generateTestCases(config: TestConfig): TestCase[] {
             config: {
               serverless_enabled: true,
               serverless_mode: 'standard',
-              driver_node_type: vmTypes[0],
-              worker_node_type: vmTypes[0],
+              driver_node_type: vmTypes[0] || 'c5.xlarge',
+              worker_node_type: vmTypes[0] || 'c5.xlarge',
               num_workers: 2,
               runs_per_day: 6,
               avg_runtime_minutes: 20,
@@ -790,7 +1176,13 @@ export default function TestCalculations() {
     includeModelServing: true,
     includeFMAPIDB: true,
     includeFMAPIProp: true,
-    includeLakebase: true
+    includeLakebase: true,
+    manualEnvironment: {
+      enabled: false,
+      cloud: 'aws',
+      region: 'us-east-1',
+      tier: 'PREMIUM'
+    }
   })
   
   const {
@@ -814,8 +1206,8 @@ export default function TestCalculations() {
     loadPricingBundle()
   }, [loadPricingBundle])
   
-  // Generate test cases based on config
-  const testCases = useMemo(() => generateTestCases(testConfig), [testConfig])
+  // Generate test cases based on config and pricing bundle
+  const testCases = useMemo(() => generateTestCases(testConfig, pricingBundle), [testConfig, pricingBundle])
   
   // Filter by category
   const filteredTests = useMemo(() => {
@@ -1309,16 +1701,20 @@ export default function TestCalculations() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Region</label>
-              <select
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Region (type or select)</label>
+              <input
+                type="text"
                 value={singleTestConfig.region}
                 onChange={(e) => setSingleTestConfig({ ...singleTestConfig, region: e.target.value })}
                 className="w-full text-sm"
-              >
-                {TEST_ENVIRONMENTS[singleTestConfig.cloud as keyof typeof TEST_ENVIRONMENTS]?.regions.map(r => (
+                placeholder="e.g., us-east-1"
+                list="single-test-regions"
+              />
+              <datalist id="single-test-regions">
+                {getAvailableRegions(pricingBundle, singleTestConfig.cloud).slice(0, 20).map(r => (
                   <option key={r} value={r}>{r}</option>
                 ))}
-              </select>
+              </datalist>
             </div>
             <div>
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Tier</label>
@@ -1327,7 +1723,7 @@ export default function TestCalculations() {
                 onChange={(e) => setSingleTestConfig({ ...singleTestConfig, tier: e.target.value })}
                 className="w-full text-sm"
               >
-                {TEST_ENVIRONMENTS[singleTestConfig.cloud as keyof typeof TEST_ENVIRONMENTS]?.tiers.map(t => (
+                {getTiersForCloud(singleTestConfig.cloud).map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
@@ -1369,28 +1765,36 @@ export default function TestCalculations() {
           
           <div className="grid grid-cols-6 gap-4 mt-4">
             <div>
-              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Driver Node</label>
-              <select
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Driver Node (type or select)</label>
+              <input
+                type="text"
                 value={singleTestConfig.driverNode}
                 onChange={(e) => setSingleTestConfig({ ...singleTestConfig, driverNode: e.target.value })}
                 className="w-full text-sm"
-              >
-                {TEST_ENVIRONMENTS[singleTestConfig.cloud as keyof typeof TEST_ENVIRONMENTS]?.vmTypes.map(vm => (
+                placeholder="e.g., c5.xlarge"
+                list="single-test-driver-vms"
+              />
+              <datalist id="single-test-driver-vms">
+                {getValidVMTypesForCloudRegion(pricingBundle, singleTestConfig.cloud, singleTestConfig.region).slice(0, 50).map(vm => (
                   <option key={vm} value={vm}>{vm}</option>
                 ))}
-              </select>
+              </datalist>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Worker Node</label>
-              <select
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Worker Node (type or select)</label>
+              <input
+                type="text"
                 value={singleTestConfig.workerNode}
                 onChange={(e) => setSingleTestConfig({ ...singleTestConfig, workerNode: e.target.value })}
                 className="w-full text-sm"
-              >
-                {TEST_ENVIRONMENTS[singleTestConfig.cloud as keyof typeof TEST_ENVIRONMENTS]?.vmTypes.map(vm => (
+                placeholder="e.g., c5.xlarge"
+                list="single-test-worker-vms"
+              />
+              <datalist id="single-test-worker-vms">
+                {getValidVMTypesForCloudRegion(pricingBundle, singleTestConfig.cloud, singleTestConfig.region).slice(0, 50).map(vm => (
                   <option key={vm} value={vm}>{vm}</option>
                 ))}
-              </select>
+              </datalist>
             </div>
             <div>
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Workers</label>
@@ -1451,9 +1855,85 @@ export default function TestCalculations() {
             <h3 className="font-semibold text-[var(--text-primary)]">Test Configuration</h3>
           </div>
           
+          {/* Manual Environment Override */}
+          <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+            <label className="flex items-center gap-2 mb-3">
+              <input
+                type="checkbox"
+                checked={testConfig.manualEnvironment.enabled}
+                onChange={(e) => setTestConfig({
+                  ...testConfig,
+                  manualEnvironment: { ...testConfig.manualEnvironment, enabled: e.target.checked }
+                })}
+                className="rounded"
+              />
+              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Override: Test specific environment only</span>
+            </label>
+            
+            {testConfig.manualEnvironment.enabled && (
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Cloud</label>
+                  <select
+                    value={testConfig.manualEnvironment.cloud}
+                    onChange={(e) => setTestConfig({
+                      ...testConfig,
+                      manualEnvironment: { ...testConfig.manualEnvironment, cloud: e.target.value }
+                    })}
+                    className="w-full text-sm"
+                  >
+                    <option value="aws">AWS</option>
+                    <option value="azure">Azure</option>
+                    <option value="gcp">GCP</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Region (type or select)</label>
+                  <input
+                    type="text"
+                    value={testConfig.manualEnvironment.region}
+                    onChange={(e) => setTestConfig({
+                      ...testConfig,
+                      manualEnvironment: { ...testConfig.manualEnvironment, region: e.target.value }
+                    })}
+                    className="w-full text-sm"
+                    placeholder="e.g., us-east-1"
+                    list="available-regions"
+                  />
+                  <datalist id="available-regions">
+                    {getAvailableRegions(pricingBundle, testConfig.manualEnvironment.cloud).slice(0, 20).map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Tier</label>
+                  <select
+                    value={testConfig.manualEnvironment.tier}
+                    onChange={(e) => setTestConfig({
+                      ...testConfig,
+                      manualEnvironment: { ...testConfig.manualEnvironment, tier: e.target.value }
+                    })}
+                    className="w-full text-sm"
+                  >
+                    {getTiersForCloud(testConfig.manualEnvironment.cloud).map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+            
+            {testConfig.manualEnvironment.enabled && (
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                VM types will be auto-detected from pricing bundle for {testConfig.manualEnvironment.cloud.toUpperCase()} / {testConfig.manualEnvironment.region}
+              </p>
+            )}
+          </div>
+          
           <div className="grid grid-cols-4 gap-6">
             {/* Cloud Selection */}
-            <div>
+            <div className={testConfig.manualEnvironment.enabled ? 'opacity-50 pointer-events-none' : ''}>
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Clouds</label>
               <div className="space-y-1">
                 {['aws', 'azure', 'gcp'].map(cloud => (
@@ -1469,6 +1949,7 @@ export default function TestCalculations() {
                         }
                       }}
                       className="rounded"
+                      disabled={testConfig.manualEnvironment.enabled}
                     />
                     {cloud.toUpperCase()}
                   </label>
