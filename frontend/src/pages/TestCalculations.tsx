@@ -63,30 +63,37 @@ const TEST_ENVIRONMENTS = {
   }
 }
 
-// FMAPI Databricks models
+// FMAPI Databricks models (validated against pricing bundle)
 const FMAPI_DATABRICKS_MODELS = [
-  'llama-3-1-70b', 'llama-3-1-8b', 'llama-3-3-70b',
-  'mixtral-8x7b', 'dbrx-instruct',
-  'bge-large', 'gte-large'
+  'llama-3-3-70b', 'llama-3-1-8b', 'llama-4-maverick',
+  'gpt-oss-120b', 'gpt-oss-20b', 'gemma-3-12b',
+  'bge-large', 'gte'
 ]
 
-// FMAPI Proprietary configurations
+// FMAPI Proprietary configurations (validated against pricing bundle)
+// Note: context lengths vary by model - use only valid combinations
 const FMAPI_PROPRIETARY_CONFIGS = [
-  { provider: 'openai', model: 'gpt-4o', contexts: ['all', 'short', 'long'] },
-  { provider: 'openai', model: 'gpt-4o-mini', contexts: ['all'] },
-  { provider: 'openai', model: 'gpt-4-turbo', contexts: ['all'] },
+  { provider: 'openai', model: 'gpt-5', contexts: ['all'] },
+  { provider: 'openai', model: 'gpt-5-mini', contexts: ['all'] },
   { provider: 'anthropic', model: 'claude-sonnet-4', contexts: ['short', 'long'] },
-  { provider: 'anthropic', model: 'claude-haiku-4', contexts: ['short', 'long'] },
-  { provider: 'anthropic', model: 'claude-opus-4', contexts: ['short', 'long'] },
-  { provider: 'google', model: 'gemini-2-0-flash', contexts: ['short', 'long'] },
-  { provider: 'google', model: 'gemini-1-5-pro', contexts: ['short', 'long'] }
+  { provider: 'anthropic', model: 'claude-sonnet-4-5', contexts: ['short', 'long'] },
+  { provider: 'anthropic', model: 'claude-haiku-4-5', contexts: ['all'] },
+  { provider: 'anthropic', model: 'claude-opus-4', contexts: ['all'] },
+  { provider: 'google', model: 'gemini-2-5-flash', contexts: ['short', 'long'] },
+  { provider: 'google', model: 'gemini-2-5-pro', contexts: ['short', 'long'] }
 ]
 
 // DBSQL warehouse sizes
 const DBSQL_SIZES = ['2X-Small', 'X-Small', 'Small', 'Medium', 'Large', 'X-Large', '2X-Large', '3X-Large', '4X-Large']
 
-// Model serving GPU types
-const GPU_TYPES = ['cpu', 'gpu_small_t4', 'gpu_medium_a10g_1x', 'gpu_large_a10g_4x']
+// Model serving GPU types by cloud (different clouds support different GPUs)
+const GPU_TYPES_BY_CLOUD: Record<string, string[]> = {
+  aws: ['cpu', 'gpu_small_t4', 'gpu_medium_a10g_1x', 'gpu_medium_a10g_4x'],
+  azure: ['cpu', 'gpu_small_t4', 'gpu_xlarge_a100_80gb_1x'],
+  gcp: ['cpu', 'gpu_medium_g2_standard_8']
+}
+// Fallback for backward compatibility
+const GPU_TYPES = ['cpu', 'gpu_small_t4']
 
 // Vector search modes
 const VECTOR_MODES = ['standard', 'storage_optimized']
@@ -400,9 +407,10 @@ function generateTestCases(config: TestConfig): TestCase[] {
           }
         }
         
-        // Model Serving tests
+        // Model Serving tests - use cloud-specific GPU types
         if (config.includeModelServing) {
-          for (const gpu of GPU_TYPES) {
+          const cloudGPUs = GPU_TYPES_BY_CLOUD[cloud.toLowerCase()] || GPU_TYPES
+          for (const gpu of cloudGPUs) {
             testCases.push({
               id: `${++idCounter}`,
               name: `Model Serving ${gpu}`,
