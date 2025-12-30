@@ -340,6 +340,7 @@ function generateTestCases(config: TestConfig): TestCase[] {
           }
           
           // Pro - different sizes
+          // NOTE: API only supports single vm_pricing_tier for all VMs, so we use the same for driver/worker
           for (const size of sampleArray(DBSQL_SIZES, 2)) {
             testCases.push({
               id: `${++idCounter}`,
@@ -352,7 +353,7 @@ function generateTestCases(config: TestConfig): TestCase[] {
                 dbsql_warehouse_size: size,
                 dbsql_num_clusters: 1,
                 dbsql_driver_pricing_tier: 'on_demand',
-                dbsql_worker_pricing_tier: 'spot',
+                dbsql_worker_pricing_tier: 'on_demand',  // Same as driver for API consistency
                 hours_per_month: 100
               }
             })
@@ -370,7 +371,7 @@ function generateTestCases(config: TestConfig): TestCase[] {
               dbsql_warehouse_size: 'Medium',
               dbsql_num_clusters: 1,
               dbsql_driver_pricing_tier: 'on_demand',
-              dbsql_worker_pricing_tier: 'spot',
+              dbsql_worker_pricing_tier: 'on_demand',  // Same as driver for API consistency
               hours_per_month: 80
             }
           })

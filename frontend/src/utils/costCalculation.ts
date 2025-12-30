@@ -244,17 +244,19 @@ export function calculateWorkloadCost(
     // For classic, only apply if photon is explicitly enabled
     if (!item.serverless_enabled && !item.photon_enabled) return 1.0
     
-    const baseSKUType = productType.replace('_(PHOTON)', '').replace('_SERVERLESS', '').replace('_COMPUTE', '')
+    // Strip _(PHOTON) suffix but keep _COMPUTE suffix for bundle lookup
+    // Bundle keys are like: aws:DLT_ADVANCED_COMPUTE:photon, aws:JOBS_COMPUTE:photon
+    const skuTypeForLookup = productType.replace('_(PHOTON)', '')
     
     // Try pricing bundle function first
     if (getBundlePhotonMultiplier) {
-      const bundleMultiplier = getBundlePhotonMultiplier(baseSKUType)
-      if (bundleMultiplier !== null && bundleMultiplier !== 2.0) return bundleMultiplier
+      const bundleMultiplier = getBundlePhotonMultiplier(skuTypeForLookup)
+      if (bundleMultiplier !== null && bundleMultiplier > 1.0) return bundleMultiplier
     }
     
     // Fall back to fetched photonMultipliers
     const multiplierEntry = photonMultipliers.find(pm => 
-      pm.sku_type === baseSKUType || 
+      pm.sku_type === skuTypeForLookup || 
       pm.sku_type === productType ||
       pm.sku_type?.includes(item.workload_type || '')
     )
