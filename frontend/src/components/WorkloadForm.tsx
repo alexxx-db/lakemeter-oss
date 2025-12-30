@@ -1483,7 +1483,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               />
               {!['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) && (
                 <p className="text-xs text-[var(--text-muted)] mt-1">
-                  1 = 1,000,000 tokens • 10 = 10M tokens
+                  Enter in millions: 1 = 1M, 5 = 5M, 10 = 10M tokens
                 </p>
               )}
             </div>
@@ -1646,7 +1646,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 placeholder="e.g., 10"
               />
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                1 = 1,000,000 tokens • 10 = 10M tokens
+                Enter in millions: 1 = 1M, 5 = 5M, 10 = 10M tokens
               </p>
             </div>
             
