@@ -210,12 +210,15 @@ export function calculateWorkloadCost(
   }
   
   // Get DBU price for this product type - try pricing bundle function first
-  let dbuPrice = 0.20  // Fallback
+  let dbuPrice: number | null = null
   if (getDBUPrice) {
     const bundlePrice = getDBUPrice(productType)
-    if (bundlePrice !== null && bundlePrice > 0) dbuPrice = bundlePrice
+    if (bundlePrice !== null && bundlePrice > 0) {
+      dbuPrice = bundlePrice
+    }
   }
-  if (dbuPrice === 0.20) {
+  // Only fall back to hardcoded pricing if bundle didn't provide a price
+  if (dbuPrice === null) {
     dbuPrice = pricing[productType] || 0.20
   }
   console.log(`[LiveEstimate] productType=${productType}, dbuPrice=${dbuPrice}, serverless=${item.serverless_enabled}, photon=${item.photon_enabled}`)
