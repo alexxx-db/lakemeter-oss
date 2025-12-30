@@ -1706,7 +1706,6 @@ export default function Calculator() {
                           )}
                         >
                           <option value="">Select tier</option>
-                          <option value="standard">Standard</option>
                           <option value="premium">Premium</option>
                           {formData.cloud !== 'azure' && (
                             <option value="enterprise">Enterprise</option>

@@ -32,7 +32,7 @@ import type { LineItem } from '../types'
 const TEST_ENVIRONMENTS = {
   aws: {
     regions: ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'],
-    tiers: ['STANDARD', 'PREMIUM', 'ENTERPRISE'],
+    tiers: ['PREMIUM', 'ENTERPRISE'],  // Standard tier deprecated
     vmTypes: [
       'c5.xlarge', 'c5.2xlarge', 'c5.4xlarge', 'c5.9xlarge',
       'm5.xlarge', 'm5.2xlarge', 'm5.4xlarge',
@@ -43,7 +43,7 @@ const TEST_ENVIRONMENTS = {
   },
   azure: {
     regions: ['eastus', 'westus2', 'westeurope', 'southeastasia'],
-    tiers: ['STANDARD', 'PREMIUM'],
+    tiers: ['PREMIUM'],  // Standard tier deprecated, Azure has no Enterprise
     vmTypes: [
       'Standard_D4s_v3', 'Standard_D8s_v3', 'Standard_D16s_v3',
       'Standard_E4s_v3', 'Standard_E8s_v3',
@@ -53,7 +53,7 @@ const TEST_ENVIRONMENTS = {
   },
   gcp: {
     regions: ['us-central1', 'us-east1', 'europe-west1', 'asia-southeast1'],
-    tiers: ['STANDARD', 'PREMIUM', 'ENTERPRISE'],
+    tiers: ['PREMIUM', 'ENTERPRISE'],  // Standard tier deprecated
     vmTypes: [
       'n2-standard-4', 'n2-standard-8', 'n2-standard-16',
       'n2-highmem-4', 'n2-highmem-8',
