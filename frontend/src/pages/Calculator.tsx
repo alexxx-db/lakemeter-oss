@@ -159,9 +159,8 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
     'SQL_COMPUTE': 0.22,
     'SQL_PRO_COMPUTE': 0.55,
     'SERVERLESS_SQL_COMPUTE': 0.70,
-    'VECTOR_SEARCH_ENDPOINT': 0.40,
-    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,
-    'DATABASE_SERVERLESS_COMPUTE': 0.35
+    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // Vector Search, Model Serving, FMAPI Databricks
+    'DATABASE_SERVERLESS_COMPUTE': 0.48  // Lakebase
   },
   azure: {
     'JOBS_COMPUTE': 0.15,
@@ -178,9 +177,8 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
     'SQL_COMPUTE': 0.22,
     'SQL_PRO_COMPUTE': 0.55,
     'SERVERLESS_SQL_COMPUTE': 0.70,
-    'VECTOR_SEARCH_ENDPOINT': 0.40,
-    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,
-    'DATABASE_SERVERLESS_COMPUTE': 0.35
+    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // Vector Search, Model Serving, FMAPI Databricks
+    'DATABASE_SERVERLESS_COMPUTE': 0.48  // Lakebase
   },
   gcp: {
     'JOBS_COMPUTE': 0.15,
@@ -197,9 +195,8 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
     'SQL_COMPUTE': 0.22,
     'SQL_PRO_COMPUTE': 0.55,
     'SERVERLESS_SQL_COMPUTE': 0.70,
-    'VECTOR_SEARCH_ENDPOINT': 0.40,
-    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,
-    'DATABASE_SERVERLESS_COMPUTE': 0.35
+    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // Vector Search, Model Serving, FMAPI Databricks
+    'DATABASE_SERVERLESS_COMPUTE': 0.48  // Lakebase
   }
 }
 
@@ -628,7 +625,8 @@ export default function Calculator() {
         break
       
       case 'VECTOR_SEARCH':
-        productType = 'VECTOR_SEARCH_ENDPOINT'
+        // Vector Search uses SERVERLESS_REAL_TIME_INFERENCE pricing ($0.07/DBU)
+        productType = 'SERVERLESS_REAL_TIME_INFERENCE'
         break
       
       case 'MODEL_SERVING':

@@ -822,51 +822,95 @@ export default function TestCalculations() {
   }, [testCases])
   
   // Build context for a specific environment
-  const buildContext = useCallback((cloud: string, region: string, tier: string): CostCalculationContext => ({
-    cloud,
-    region,
-    tier,
-    dbuRatesMap,
-    instanceTypes,
-    dbsqlSizes,
-    photonMultipliers,
-    modelServingGPUTypes,
-    vectorSearchModes,
-    getVMPrice,
-    getFMAPIDatabricksRate,
-    getFMAPIProprietaryRate: (provider: string, model: string, rateType: string, endpointType?: string, contextLength?: string) => {
-      if (isPricingBundleLoaded && pricingBundle.fmapiProprietaryRates) {
-        const ep = endpointType || 'global'
-        const ctx = contextLength || 'all'
-        const key = `${cloud.toLowerCase()}:${provider.toLowerCase()}:${model.toLowerCase()}:${ep}:${ctx}:${rateType}`
-        const data = pricingBundle.fmapiProprietaryRates[key]
-        if (data) {
-          return {
-            dbu_per_1M_tokens: data.is_hourly ? undefined : data.dbu_rate,
-            dbu_per_hour: data.is_hourly ? data.dbu_rate : undefined
+  const buildContext = useCallback((cloud: string, region: string, tier: string): CostCalculationContext => {
+    // Transform model serving GPU types from pricing bundle to expected format
+    // The pricing bundle has dbu_rate, but the calculation expects id, name, dbu_per_hour
+    const transformedModelServingGPUTypes = isPricingBundleLoaded && pricingBundle.modelServingRates
+      ? Object.entries(pricingBundle.modelServingRates)
+          .filter(([key]) => key.startsWith(`${cloud.toLowerCase()}:`))
+          .map(([key, data]) => {
+            const gpuType = key.split(':')[1]
+            return {
+              id: gpuType,
+              name: gpuType,
+              dbu_per_hour: (data as { dbu_rate: number }).dbu_rate
+            }
+          })
+      : modelServingGPUTypes
+    
+    return {
+      cloud,
+      region,
+      tier,
+      dbuRatesMap,
+      instanceTypes,
+      dbsqlSizes,
+      photonMultipliers,
+      modelServingGPUTypes: transformedModelServingGPUTypes,
+      vectorSearchModes,
+      getVMPrice,
+      // Transform FMAPI Databricks rate from pricing bundle (dbu_rate -> dbu_per_1M_tokens/dbu_per_hour)
+      getFMAPIDatabricksRate: (model: string, rateType: string) => {
+        if (isPricingBundleLoaded && pricingBundle.fmapiDatabricksRates) {
+          const key = `${cloud.toLowerCase()}:${model}:${rateType}`
+          const data = pricingBundle.fmapiDatabricksRates[key]
+          if (data) {
+            return {
+              dbu_per_1M_tokens: data.is_hourly ? undefined : data.dbu_rate,
+              dbu_per_hour: data.is_hourly ? data.dbu_rate : undefined
+            }
           }
         }
+        return getFMAPIDatabricksRate(model, rateType)
+      },
+      // Transform FMAPI Proprietary rate from pricing bundle
+      getFMAPIProprietaryRate: (provider: string, model: string, rateType: string, endpointType?: string, contextLength?: string) => {
+        if (isPricingBundleLoaded && pricingBundle.fmapiProprietaryRates) {
+          const ep = endpointType || 'global'
+          const ctx = contextLength || 'all'
+          const key = `${cloud.toLowerCase()}:${provider.toLowerCase()}:${model.toLowerCase()}:${ep}:${ctx}:${rateType}`
+          const data = pricingBundle.fmapiProprietaryRates[key]
+          if (data) {
+            return {
+              dbu_per_1M_tokens: data.is_hourly ? undefined : data.dbu_rate,
+              dbu_per_hour: data.is_hourly ? data.dbu_rate : undefined
+            }
+          }
+        }
+        return getFMAPIProprietaryRate(provider, model, rateType)
+      },
+      // Transform Vector Search rate from pricing bundle (dbu_rate -> dbu_per_hour)
+      getVectorSearchRate: (mode: string) => {
+        if (isPricingBundleLoaded && pricingBundle.vectorSearchRates) {
+          const key = `${cloud.toLowerCase()}:${mode}`
+          const data = pricingBundle.vectorSearchRates[key]
+          if (data) {
+            return {
+              dbu_per_hour: data.dbu_rate,
+              input_divisor: data.input_divisor
+            }
+          }
+        }
+        return getVectorSearchRate(mode)
+      },
+      getInstanceDBURate: (instanceType: string) => {
+        if (!isPricingBundleLoaded) return null
+        return getBundleInstanceDBURate(pricingBundle, cloud, instanceType)
+      },
+      getPhotonMultiplier: (skuType: string) => {
+        if (!isPricingBundleLoaded) return null
+        return getBundlePhotonMultiplier(pricingBundle, cloud, skuType)
+      },
+      getDBUPrice: (productType: string) => {
+        if (!isPricingBundleLoaded) return null
+        return getBundleDBUPrice(pricingBundle, cloud, region, tier, productType)
+      },
+      getDBSQLWarehouseConfig: (warehouseType: string, warehouseSize: string) => {
+        if (!isPricingBundleLoaded) return null
+        return getDBSQLWarehouseConfig(pricingBundle, cloud, warehouseType, warehouseSize)
       }
-      return getFMAPIProprietaryRate(provider, model, rateType)
-    },
-    getVectorSearchRate,
-    getInstanceDBURate: (instanceType: string) => {
-      if (!isPricingBundleLoaded) return null
-      return getBundleInstanceDBURate(pricingBundle, cloud, instanceType)
-    },
-    getPhotonMultiplier: (skuType: string) => {
-      if (!isPricingBundleLoaded) return null
-      return getBundlePhotonMultiplier(pricingBundle, cloud, skuType)
-    },
-    getDBUPrice: (productType: string) => {
-      if (!isPricingBundleLoaded) return null
-      return getBundleDBUPrice(pricingBundle, cloud, region, tier, productType)
-    },
-    getDBSQLWarehouseConfig: (warehouseType: string, warehouseSize: string) => {
-      if (!isPricingBundleLoaded) return null
-      return getDBSQLWarehouseConfig(pricingBundle, cloud, warehouseType, warehouseSize)
     }
-  }), [dbuRatesMap, instanceTypes, dbsqlSizes, photonMultipliers, modelServingGPUTypes, vectorSearchModes, isPricingBundleLoaded, pricingBundle, getVMPrice, getFMAPIDatabricksRate, getFMAPIProprietaryRate, getVectorSearchRate])
+  }, [dbuRatesMap, instanceTypes, dbsqlSizes, photonMultipliers, modelServingGPUTypes, vectorSearchModes, isPricingBundleLoaded, pricingBundle, getVMPrice, getFMAPIDatabricksRate, getFMAPIProprietaryRate, getVectorSearchRate])
   
   // Run a single test
   const runSingleTest = async (testCase: TestCase): Promise<TestResult> => {
