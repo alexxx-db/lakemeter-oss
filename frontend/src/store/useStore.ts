@@ -32,7 +32,7 @@ import type {
 import { 
   loadPricingBundle, 
   createEmptyBundle,
-  getVMCost as getBundleVMCost,
+  // NOTE: getVMCost removed - VM costs are now fetched on-demand via API
   getDBUPrice as getBundleDBUPrice,
   type PricingBundle
 } from '../utils/pricingBundle'
@@ -847,9 +847,9 @@ export const useStore = create<Store>((set, get) => ({
       const bundle = await loadPricingBundle()
       set({ pricingBundle: bundle, isPricingBundleLoaded: bundle.isLoaded })
       
-      // If bundle loaded successfully, populate vmPricingMap from bundle for backwards compatibility
-      if (bundle.isLoaded && Object.keys(bundle.vmCosts).length > 0) {
-        console.log('[PricingBundle] Loaded', Object.keys(bundle.vmCosts).length, 'VM costs')
+      // NOTE: vmCosts removed from bundle to save ~50 MB - VM costs are now fetched on-demand via API
+      if (bundle.isLoaded) {
+        console.log('[PricingBundle] Loaded successfully (DBU rates, multipliers, etc.)')
       }
     } catch (error) {
       console.error('[PricingBundle] Failed to load:', error)
@@ -966,7 +966,7 @@ export const useStore = create<Store>((set, get) => ({
     get().fetchRegions(cloud)
     get().fetchInstanceTypes(cloud, region || undefined)
     get().fetchModelServingGPUTypes(cloud)
-    get().fetchVMPricing(cloud, region || undefined)
+    // NOTE: Removed fetchVMPricing (16+ MB) - VM costs are now fetched on-demand per instance
     get().fetchPhotonMultipliers(cloud)
     get().fetchVectorSearchModes(cloud)
   },
@@ -976,7 +976,7 @@ export const useStore = create<Store>((set, get) => ({
     const cloud = get().selectedCloud
     const tier = get().selectedTier
     get().fetchInstanceTypes(cloud, region || undefined)
-    get().fetchVMPricing(cloud, region || undefined)
+    // NOTE: Removed fetchVMPricing (16+ MB) - VM costs are now fetched on-demand per instance
     // Fetch DBU rates when region changes
     if (region) {
       get().fetchDBURates(cloud, region, tier)
@@ -1064,17 +1064,12 @@ export const useStore = create<Store>((set, get) => ({
       return 0
     }
     
-    const { vmPricingMap, pricingBundle, isPricingBundleLoaded } = get()
+    const { vmPricingMap } = get()
     
-    // Try pricing bundle first (static data - instant lookup)
-    if (isPricingBundleLoaded && Object.keys(pricingBundle.vmCosts).length > 0) {
-      const bundlePrice = getBundleVMCost(pricingBundle, cloud, region, instanceType, pricingTier, paymentOption)
-      if (bundlePrice > 0) {
-        return bundlePrice
-      }
-    }
+    // NOTE: vmCosts removed from bundle to save ~50 MB
+    // VM prices are now fetched on-demand via fetchVMCostForInstance() and cached in vmPricingMap
     
-    // Fall back to runtime-cached vmPricingMap
+    // Look up in runtime-cached vmPricingMap (populated by on-demand API calls)
     const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
     if (vmPricingMap[exactKey] !== undefined) {
       return vmPricingMap[exactKey]

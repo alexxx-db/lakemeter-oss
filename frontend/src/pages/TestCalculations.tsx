@@ -49,51 +49,33 @@ const DEFAULT_ENVIRONMENTS = {
 }
 
 // ===== HELPER: Get valid VM types from pricing bundle =====
+// NOTE: vmCosts removed from bundle to save ~50 MB. VM types now extracted from instanceDBURates.
 function getValidVMTypesForCloudRegion(
   bundle: PricingBundle | null,
   cloud: string,
-  region: string
+  _region: string // Region not used since instanceDBURates are cloud-level
 ): string[] {
-  if (!bundle?.isLoaded || !bundle.vmCosts) {
+  if (!bundle?.isLoaded || !bundle.instanceDBURates) {
     // Fallback to defaults
     return DEFAULT_ENVIRONMENTS[cloud.toLowerCase() as keyof typeof DEFAULT_ENVIRONMENTS]?.vmTypes || []
   }
   
-  // Extract unique VM types from vmCosts keys (format: cloud:region:instance:tier:payment)
-  const vmTypes = new Set<string>()
-  const prefix = `${cloud.toLowerCase()}:${region}:`
+  // Extract VM types from instanceDBURates (format: cloud -> instance_type -> rate)
+  const cloudKey = cloud.toLowerCase()
+  const cloudRates = bundle.instanceDBURates[cloudKey]
   
-  Object.keys(bundle.vmCosts).forEach(key => {
-    if (key.startsWith(prefix)) {
-      const parts = key.split(':')
-      if (parts.length >= 3) {
-        vmTypes.add(parts[2])
-      }
-    }
-  })
-  
-  return Array.from(vmTypes).sort()
-}
-
-// Get available regions from vmCosts for a cloud
-function getAvailableRegions(bundle: PricingBundle | null, cloud: string): string[] {
-  if (!bundle?.isLoaded || !bundle.vmCosts) {
-    return DEFAULT_ENVIRONMENTS[cloud.toLowerCase() as keyof typeof DEFAULT_ENVIRONMENTS]?.regions || []
+  if (!cloudRates || Object.keys(cloudRates).length === 0) {
+    return DEFAULT_ENVIRONMENTS[cloud.toLowerCase() as keyof typeof DEFAULT_ENVIRONMENTS]?.vmTypes || []
   }
   
-  const regions = new Set<string>()
-  const prefix = `${cloud.toLowerCase()}:`
-  
-  Object.keys(bundle.vmCosts).forEach(key => {
-    if (key.startsWith(prefix)) {
-      const parts = key.split(':')
-      if (parts.length >= 2) {
-        regions.add(parts[1])
-      }
-    }
-  })
-  
-  return Array.from(regions).sort()
+  return Object.keys(cloudRates).sort()
+}
+
+// Get available regions for a cloud
+// NOTE: vmCosts removed from bundle. Regions are now fetched via API and cached in regionsMap.
+function getAvailableRegions(_bundle: PricingBundle | null, cloud: string): string[] {
+  // Use DEFAULT_ENVIRONMENTS which has common regions for each cloud
+  return DEFAULT_ENVIRONMENTS[cloud.toLowerCase() as keyof typeof DEFAULT_ENVIRONMENTS]?.regions || []
 }
 
 // Get tiers for a cloud

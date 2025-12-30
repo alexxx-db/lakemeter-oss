@@ -604,7 +604,8 @@ def generate_all_pricing_bundles():
         # Generate all pricing files
         total_count += generate_instance_dbu_rates(conn, output_dir)
         total_count += generate_dbu_multipliers(conn, output_dir)
-        total_count += generate_vm_pricing(conn, output_dir)
+        # NOTE: Skipping vm-costs.json - too large (50+ MB). VM costs are fetched on-demand per instance.
+        # total_count += generate_vm_pricing(conn, output_dir)
         total_count += generate_dbu_rates(conn, output_dir)
         total_count += generate_dbsql_rates(conn, output_dir)
         total_count += generate_dbsql_warehouse_config(conn, output_dir)
@@ -619,13 +620,13 @@ def generate_all_pricing_bundles():
     print("=" * 60)
     
     # Generate a manifest file with metadata
+    # NOTE: vm-costs.json excluded - too large, fetched on-demand per instance instead
     manifest = {
         'generated_at': datetime.now().isoformat(),
         'total_entries': total_count,
         'files': [
             'instance-dbu-rates.json',
-            'photon-multipliers.json',
-            'vm-costs.json',
+            'dbu-multipliers.json',
             'dbu-rates.json',
             'dbsql-rates.json',
             'dbsql-warehouse-config.json',

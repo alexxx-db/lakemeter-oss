@@ -241,7 +241,6 @@ export default function Calculator() {
     cloneLineItem,
     setSelectedCloud,
     setSelectedRegion,
-    fetchVMPricing,
     fetchVMCostForInstance,
     getVMPrice,
     // DBU Rates
@@ -419,12 +418,9 @@ export default function Calculator() {
     return () => clearTimeout(timeoutId)
   }, [formData.sfdc_account_id, sfUseCaseSearch])
   
-  // Fetch VM pricing when cloud or region changes
-  useEffect(() => {
-    if (formData.cloud) {
-      fetchVMPricing(formData.cloud, formData.region || undefined)
-    }
-  }, [formData.cloud, formData.region, fetchVMPricing])
+  // NOTE: Removed bulk fetchVMPricing call (was loading 16+ MB of data)
+  // VM pricing is now fetched on-demand via fetchVMCostForInstance for each selected instance type
+  // This reduces data transfer from ~16 MB to ~1 KB per instance
   
   // Fetch VM costs for all unique instance types used in line items
   // This ensures VM pricing is available for cost calculations

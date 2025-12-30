@@ -64,7 +64,7 @@ export interface FMAPIRate {
 export interface PricingBundle {
   instanceDBURates: Record<string, Record<string, InstanceDBURate>>  // cloud -> instance_type -> rate
   dbuMultipliers: Record<string, DBUMultiplier>                       // "cloud:sku_type:feature" -> multiplier (photon, serverless, lakebase)
-  vmCosts: Record<string, number>                                     // "cloud:region:instance:tier:payment" -> cost
+  // NOTE: vmCosts removed - too large (50+ MB). VM costs are now fetched on-demand via API per instance.
   dbuRates: Record<string, Record<string, number>>                   // "cloud:region:tier" -> product_type -> price
   dbsqlRates: Record<string, DBSQLRate>                              // "cloud:type:size" -> rate
   dbsqlWarehouseConfig: Record<string, DBSQLWarehouseConfig>         // "cloud:type:size" -> config
@@ -99,10 +99,10 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
   const startTime = Date.now()
   
   try {
+    // NOTE: vm-costs.json excluded - too large (50+ MB). VM costs are now fetched on-demand via API.
     const [
       instanceDBURates,
       dbuMultipliers,
-      vmCosts,
       dbuRates,
       dbsqlRates,
       dbsqlWarehouseConfig,
@@ -113,7 +113,6 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
     ] = await Promise.all([
       loadJSON<Record<string, Record<string, InstanceDBURate>>>('instance-dbu-rates.json'),
       loadJSON<Record<string, DBUMultiplier>>('dbu-multipliers.json'),
-      loadJSON<Record<string, number>>('vm-costs.json'),
       loadJSON<Record<string, Record<string, number>>>('dbu-rates.json'),
       loadJSON<Record<string, DBSQLRate>>('dbsql-rates.json'),
       loadJSON<Record<string, DBSQLWarehouseConfig>>('dbsql-warehouse-config.json'),
@@ -129,7 +128,6 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
     return {
       instanceDBURates,
       dbuMultipliers,
-      vmCosts,
       dbuRates,
       dbsqlRates,
       dbsqlWarehouseConfig,
@@ -154,7 +152,6 @@ export function createEmptyBundle(): PricingBundle {
   return {
     instanceDBURates: {},
     dbuMultipliers: {},
-    vmCosts: {},
     dbuRates: {},
     dbsqlRates: {},
     dbsqlWarehouseConfig: {},
@@ -235,37 +232,23 @@ export function getServerlessMultiplier(
 
 /**
  * Get VM cost per hour.
+ * 
+ * @deprecated VM costs are no longer stored in the pricing bundle (was 50+ MB).
+ * Use the on-demand API via fetchVMCostForInstance() in useStore instead.
+ * This function always returns 0 - the actual VM cost is fetched from the API
+ * and cached in vmPricingMap when a specific instance type is selected.
  */
 export function getVMCost(
-  bundle: PricingBundle,
-  cloud: string,
-  region: string,
-  instanceType: string,
-  pricingTier: string = 'on_demand',
-  paymentOption: string = 'NA'
+  _bundle: PricingBundle,
+  _cloud: string,
+  _region: string,
+  _instanceType: string,
+  _pricingTier: string = 'on_demand',
+  _paymentOption: string = 'NA'
 ): number {
-  if (!instanceType) return 0
-  
-  // Try exact match
-  const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
-  if (bundle.vmCosts[exactKey] !== undefined) {
-    return bundle.vmCosts[exactKey]
-  }
-  
-  // Try without payment option
-  const keyNoPayment = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:NA`
-  if (bundle.vmCosts[keyNoPayment] !== undefined) {
-    return bundle.vmCosts[keyNoPayment]
-  }
-  
-  // Try any pricing tier for this instance
-  for (const key of Object.keys(bundle.vmCosts)) {
-    if (key.startsWith(`${cloud.toLowerCase()}:${region}:${instanceType}:`)) {
-      return bundle.vmCosts[key]
-    }
-  }
-  
-  return 0 // VM cost not found
+  // VM costs are now fetched on-demand via API to avoid loading 50+ MB of data
+  // The actual cost lookup happens in useStore.getVMPrice() which uses cached API responses
+  return 0
 }
 
 /**
