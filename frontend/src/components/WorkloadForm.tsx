@@ -1696,8 +1696,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* Run-based usage inputs */}
         {!useDirectHours && (
           <>
-            {/* Usage - Runs */}
-            {selectedWorkloadType?.show_usage_runs && (
+            {/* Usage - Runs (not for Lakebase, Vector Search, Model Serving, FMAPI which use hours_per_month directly) */}
+            {selectedWorkloadType?.show_usage_runs && !selectedWorkloadType?.show_lakebase_config && !selectedWorkloadType?.show_vector_search_mode && !selectedWorkloadType?.show_fmapi_config && form.workload_type !== 'MODEL_SERVING' && (
               <div>
                 <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Runs/Day</label>
                 <input
@@ -1926,6 +1926,15 @@ interface LiveCostPreviewProps {
 function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) {
   // Calculate current cost based on form values
   const currentCost = useMemo(() => {
+    // Determine if this is an hours-based workload type
+    const isHoursBasedWorkload = ['LAKEBASE', 'VECTOR_SEARCH', 'MODEL_SERVING'].includes(form.workload_type) ||
+      form.vector_search_mode !== undefined && form.workload_type === 'VECTOR_SEARCH'
+    
+    // For hours-based workloads, use 730 as default if hours_per_month is 0 or undefined
+    const effectiveHoursPerMonth = isHoursBasedWorkload
+      ? (form.hours_per_month || 730)
+      : form.hours_per_month
+    
     const formAsItem: Partial<LineItem> = {
       workload_type: form.workload_type,
       serverless_enabled: form.serverless_enabled,
@@ -1957,7 +1966,7 @@ function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) 
       runs_per_day: form.runs_per_day,
       avg_runtime_minutes: form.avg_runtime_minutes,
       days_per_month: form.days_per_month,
-      hours_per_month: form.hours_per_month || undefined,
+      hours_per_month: effectiveHoursPerMonth || undefined,
       driver_pricing_tier: form.driver_pricing_tier,
       worker_pricing_tier: form.worker_pricing_tier,
       driver_payment_option: form.driver_payment_option,
