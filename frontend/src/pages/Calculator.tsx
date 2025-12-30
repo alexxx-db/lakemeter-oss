@@ -703,28 +703,35 @@ export default function Calculator() {
       // For classic workloads, only apply if photon is explicitly enabled
       if (!item.serverless_enabled && !item.photon_enabled) return 1.0
       
-      // Extract base SKU type (without "(PHOTON)" suffix) for lookup
-      const baseSKUType = productType.replace('_(PHOTON)', '').replace('_SERVERLESS', '')
+      // For SERVERLESS workloads, use the corresponding CLASSIC SKU type for photon lookup
+      // The photon multiplier for serverless is the same as classic (photon is built-in)
+      let skuTypeForLookup: string
+      if (item.serverless_enabled) {
+        if (item.workload_type === 'JOBS') {
+          skuTypeForLookup = 'JOBS_COMPUTE'
+        } else if (item.workload_type === 'ALL_PURPOSE') {
+          skuTypeForLookup = 'ALL_PURPOSE_COMPUTE'
+        } else if (item.workload_type === 'DLT') {
+          // DLT serverless uses JOBS_SERVERLESS_COMPUTE for pricing, but photon from DLT_CORE_COMPUTE
+          skuTypeForLookup = 'DLT_CORE_COMPUTE'
+        } else {
+          skuTypeForLookup = productType.replace('_(PHOTON)', '')
+        }
+      } else {
+        // For classic, strip _(PHOTON) suffix but keep _COMPUTE suffix
+        skuTypeForLookup = productType.replace('_(PHOTON)', '')
+      }
       
       // Try pricing bundle first
       if (isPricingBundleLoaded) {
-        const bundleMultiplier = getBundlePhotonMultiplier(pricingBundle, cloud, baseSKUType)
+        const bundleMultiplier = getBundlePhotonMultiplier(pricingBundle, cloud, skuTypeForLookup)
         if (bundleMultiplier !== 2.0) return bundleMultiplier // 2.0 is the fallback in bundle helper
       }
       
-      // Map workload types to their base SKU types for API data lookup
-      const workloadToSKU: Record<string, string> = {
-        'JOBS': 'JOBS_COMPUTE',
-        'ALL_PURPOSE': 'ALL_PURPOSE_COMPUTE',
-        'DLT': `DLT_${item.dlt_edition || 'CORE'}_COMPUTE`
-      }
-      const skuForLookup = workloadToSKU[item.workload_type || ''] || baseSKUType
-      
       // Fall back to fetched photonMultipliers
       const multiplierEntry = photonMultipliers.find(pm => 
-        pm.sku_type === baseSKUType || 
-        pm.sku_type === skuForLookup ||
-        pm.sku_type?.toLowerCase() === baseSKUType.toLowerCase() ||
+        pm.sku_type === skuTypeForLookup || 
+        pm.sku_type?.toLowerCase() === skuTypeForLookup.toLowerCase() ||
         pm.sku_type?.toLowerCase().includes((item.workload_type || '').toLowerCase())
       )
       return multiplierEntry?.multiplier || 2.0 // Fallback to 2.0 (typical photon multiplier)

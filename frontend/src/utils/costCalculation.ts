@@ -249,7 +249,20 @@ export function calculateWorkloadCost(
     
     // Strip _(PHOTON) suffix but keep _COMPUTE suffix for bundle lookup
     // Bundle keys are like: aws:DLT_ADVANCED_COMPUTE:photon, aws:JOBS_COMPUTE:photon
-    const skuTypeForLookup = productType.replace('_(PHOTON)', '')
+    let skuTypeForLookup = productType.replace('_(PHOTON)', '')
+    
+    // For SERVERLESS workloads, use the corresponding CLASSIC SKU type for photon lookup
+    // e.g., JOBS_SERVERLESS_COMPUTE -> JOBS_COMPUTE (photon multiplier is same as classic)
+    if (item.serverless_enabled) {
+      if (item.workload_type === 'JOBS') {
+        skuTypeForLookup = 'JOBS_COMPUTE'
+      } else if (item.workload_type === 'ALL_PURPOSE') {
+        skuTypeForLookup = 'ALL_PURPOSE_COMPUTE'
+      } else if (item.workload_type === 'DLT') {
+        // DLT serverless uses JOBS_SERVERLESS_COMPUTE for pricing, but photon from DLT_CORE_COMPUTE
+        skuTypeForLookup = 'DLT_CORE_COMPUTE'
+      }
+    }
     
     // Try pricing bundle function first
     if (getBundlePhotonMultiplier) {
