@@ -394,7 +394,7 @@ export default function Estimates() {
       {/* Header with Summary */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Pricing Estimates v2</h1>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Pricing Estimates</h1>
           <p className="text-sm mt-1 flex items-center gap-3" style={{ color: 'var(--text-muted)' }}>
             <span className="flex items-center gap-1">
               <FolderIcon className="w-4 h-4" />
