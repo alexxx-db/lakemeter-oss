@@ -1,6 +1,7 @@
 """Line Item API routes."""
 from typing import List, Optional
 from uuid import UUID
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -11,6 +12,14 @@ from app.models import LineItem, Estimate, User
 from app.models.sharing import Sharing
 from app.schemas import LineItemCreate, LineItemUpdate, LineItemResponse
 from app.auth import get_current_user
+
+
+def _touch_estimate(estimate_id: UUID, db: Session):
+    """Update the estimate's updated_at timestamp."""
+    estimate = db.query(Estimate).filter(Estimate.estimate_id == estimate_id).first()
+    if estimate:
+        estimate.updated_at = datetime.utcnow()
+        db.add(estimate)
 
 
 class CloneRequest(BaseModel):
@@ -104,6 +113,7 @@ def create_line_item(
         db_item.display_order = max_order
     
     db.add(db_item)
+    _touch_estimate(line_item.estimate_id, db)  # Update estimate timestamp
     db.commit()
     db.refresh(db_item)
     return db_item
@@ -149,6 +159,7 @@ def update_line_item(
     for field, value in update_data.items():
         setattr(item, field, value)
     
+    _touch_estimate(item.estimate_id, db)  # Update estimate timestamp
     db.commit()
     db.refresh(item)
     return item
@@ -170,7 +181,9 @@ def delete_line_item(
     
     _check_estimate_access(item.estimate_id, current_user, db, require_edit=True)
     
+    estimate_id = item.estimate_id  # Store before delete
     db.delete(item)
+    _touch_estimate(estimate_id, db)  # Update estimate timestamp
     db.commit()
 
 
@@ -193,6 +206,7 @@ def reorder_line_items(
         if item:
             item.display_order = index
     
+    _touch_estimate(estimate_id, db)  # Update estimate timestamp
     db.commit()
     return {"message": "Line items reordered successfully"}
 
@@ -284,6 +298,7 @@ def clone_line_item(
     )
     
     db.add(cloned)
+    _touch_estimate(original.estimate_id, db)  # Update estimate timestamp
     db.commit()
     db.refresh(cloned)
     
