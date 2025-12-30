@@ -195,6 +195,7 @@ def generate_dbu_rates(conn, output_dir: str):
     {
         "aws:us-east-1:PREMIUM": {
             "JOBS_COMPUTE": 0.15,
+            "JOBS_COMPUTE_(PHOTON)": 0.15,
             "ALL_PURPOSE_COMPUTE": 0.40,
             ...
         },
@@ -204,16 +205,29 @@ def generate_dbu_rates(conn, output_dir: str):
     print("\n💵 Generating DBU rates ($/DBU)...")
     
     # Product types we're interested in for cost calculations
+    # Include both base and _(PHOTON) variants, as well as provider-specific FMAPI rates
     RELEVANT_PRODUCT_TYPES = [
-        'JOBS_COMPUTE', 'JOBS_LIGHT_COMPUTE',
-        'ALL_PURPOSE_COMPUTE',
-        'DLT_CORE_COMPUTE', 'DLT_PRO_COMPUTE', 'DLT_ADVANCED_COMPUTE',
-        'JOBS_SERVERLESS_COMPUTE', 'INTERACTIVE_SERVERLESS_COMPUTE',
-        'DELTA_LIVE_TABLES_SERVERLESS',
+        # Classic compute
+        'JOBS_COMPUTE', 'JOBS_COMPUTE_(PHOTON)', 'JOBS_LIGHT_COMPUTE',
+        'ALL_PURPOSE_COMPUTE', 'ALL_PURPOSE_COMPUTE_(PHOTON)', 'ALL_PURPOSE_COMPUTE_(DLT)',
+        # DLT
+        'DLT_CORE_COMPUTE', 'DLT_CORE_COMPUTE_(PHOTON)',
+        'DLT_PRO_COMPUTE', 'DLT_PRO_COMPUTE_(PHOTON)',
+        'DLT_ADVANCED_COMPUTE', 'DLT_ADVANCED_COMPUTE_(PHOTON)',
+        # Serverless compute
+        'JOBS_SERVERLESS_COMPUTE', 'ALL_PURPOSE_SERVERLESS_COMPUTE',
+        'INTERACTIVE_SERVERLESS_COMPUTE', 'DELTA_LIVE_TABLES_SERVERLESS',
+        # SQL
         'SQL_COMPUTE', 'SQL_PRO_COMPUTE', 'SERVERLESS_SQL_COMPUTE',
-        'SERVERLESS_REAL_TIME_INFERENCE',
+        # Inference/AI
+        'SERVERLESS_REAL_TIME_INFERENCE', 'SERVERLESS_REAL_TIME_INFERENCE_LAUNCH',
+        'MODEL_TRAINING',
+        # Provider-specific FMAPI (for $/DBU lookup)
+        'OPENAI_MODEL_SERVING', 'ANTHROPIC_MODEL_SERVING', 'GEMINI_MODEL_SERVING',
+        # Lakebase
         'DATABASE_SERVERLESS_COMPUTE',
-        'FOUNDATION_MODEL_TRAINING'
+        # Storage
+        'DATABRICKS_STORAGE'
     ]
     
     # Query all DBU rates
@@ -229,6 +243,10 @@ def generate_dbu_rates(conn, output_dir: str):
     global_rates = {}  # cloud:tier:product_type -> price (global fallback)
     regional_rates = {}  # cloud:region:tier:product_type -> price (region-specific)
     
+    # Also track all unique regions per cloud and all tiers per cloud
+    regions_per_cloud = {}  # cloud -> set of regions
+    tiers_per_cloud = {}    # cloud -> set of tiers
+    
     for row in result.mappings():
         cloud = row['cloud'].lower() if row['cloud'] else 'aws'
         tier = row['tier']
@@ -237,33 +255,45 @@ def generate_dbu_rates(conn, output_dir: str):
         pricing_type = row['pricing_type']
         price = float(row['price_per_dbu']) if row['price_per_dbu'] else 0
         
+        # Track tiers
+        if cloud not in tiers_per_cloud:
+            tiers_per_cloud[cloud] = set()
+        tiers_per_cloud[cloud].add(tier)
+        
         if pricing_type == 'GLOBAL':
             global_key = f"{cloud}:{tier}:{product_type}"
             global_rates[global_key] = price
         else:  # REGIONAL
             regional_key = f"{cloud}:{region}:{tier}:{product_type}"
             regional_rates[regional_key] = price
+            # Track regions
+            if cloud not in regions_per_cloud:
+                regions_per_cloud[cloud] = set()
+            regions_per_cloud[cloud].add(region)
     
     # Build output: for each cloud/region/tier, collect all product_type prices
     data = {}
     count = 0
     
     # Get all unique cloud:region:tier combinations
+    # Key insight: We need to create entries for ALL tiers (including ENTERPRISE) 
+    # for ALL regions, even if that tier only has GLOBAL rates
     all_keys = set()
+    
+    # First, add all regional combinations found directly
     for key in regional_rates.keys():
         parts = key.split(':')
         all_keys.add(f"{parts[0]}:{parts[1]}:{parts[2]}")  # cloud:region:tier
     
-    # Also add global entries for all regions
-    for key in global_rates.keys():
-        parts = key.split(':')
-        cloud = parts[0]
-        tier = parts[1]
-        # We'll need to know all regions per cloud - they come from regional entries
-        for rkey in regional_rates.keys():
-            rparts = rkey.split(':')
-            if rparts[0] == cloud:
-                all_keys.add(f"{cloud}:{rparts[1]}:{tier}")
+    # Then, for each cloud's regions, add entries for ALL tiers that cloud supports
+    # This ensures ENTERPRISE tier (which may only have GLOBAL rates) gets entries for all regions
+    for cloud, regions in regions_per_cloud.items():
+        cloud_tiers = tiers_per_cloud.get(cloud, set())
+        for region in regions:
+            for tier in cloud_tiers:
+                all_keys.add(f"{cloud}:{region}:{tier}")
+    
+    print(f"   Found {len(regions_per_cloud)} clouds with regions, {len(all_keys)} total combinations")
     
     # Build the output data
     for combo_key in sorted(all_keys):
