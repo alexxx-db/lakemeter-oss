@@ -33,32 +33,7 @@ const cloudBadges: Record<string, { label: string; bg: string; text: string; bor
   gcp: { label: 'GCP', bg: 'rgba(244, 63, 94, 0.15)', text: '#f43f5e', border: 'rgba(244, 63, 94, 0.25)' }
 }
 
-const statusConfig: Record<string, { label: string; bg: string; text: string; border: string; description: string }> = {
-  draft: { 
-    label: 'Draft', 
-    bg: 'var(--bg-tertiary)', 
-    text: 'var(--text-secondary)', 
-    border: 'var(--border-primary)',
-    description: 'Work in progress - still being configured'
-  },
-  active: { 
-    label: 'Active', 
-    bg: 'rgba(16, 185, 129, 0.15)', 
-    text: '#10b981', 
-    border: 'rgba(16, 185, 129, 0.25)',
-    description: 'Currently in use or proposed to customer'
-  },
-  archived: { 
-    label: 'Archived', 
-    bg: 'var(--bg-tertiary)', 
-    text: 'var(--text-muted)', 
-    border: 'var(--border-primary)',
-    description: 'No longer active, kept for reference'
-  }
-}
-
 type SortOption = 'updated' | 'name' | 'workloads'
-type StatusFilter = 'all' | 'draft' | 'active' | 'archived'
 type CloudFilter = 'all' | 'aws' | 'azure' | 'gcp'
 
 // ============================================================================
@@ -94,42 +69,14 @@ function formatRelativeTime(dateString: string): string {
 // ============================================================================
 
 interface FilterTabsProps {
-  statusFilter: StatusFilter
-  setStatusFilter: (status: StatusFilter) => void
   cloudFilter: CloudFilter
   setCloudFilter: (cloud: CloudFilter) => void
-  counts: { all: number; draft: number; active: number; archived: number }
   cloudCounts: { all: number; aws: number; azure: number; gcp: number }
 }
 
-function FilterTabs({ statusFilter, setStatusFilter, cloudFilter, setCloudFilter, counts, cloudCounts }: FilterTabsProps) {
+function FilterTabs({ cloudFilter, setCloudFilter, cloudCounts }: FilterTabsProps) {
   return (
     <div className="flex flex-col sm:flex-row gap-4 mb-6">
-      {/* Status Tabs */}
-      <div className="flex items-center gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-        {(['all', 'draft', 'active', 'archived'] as StatusFilter[]).map((status) => (
-          <button
-            key={status}
-            onClick={() => setStatusFilter(status)}
-            className={clsx(
-              'px-3 py-1.5 text-sm font-medium rounded-md transition-all',
-              statusFilter === status
-                ? 'bg-white shadow-sm'
-                : 'hover:bg-white/50'
-            )}
-            style={{
-              color: statusFilter === status ? 'var(--text-primary)' : 'var(--text-muted)',
-              backgroundColor: statusFilter === status ? 'var(--bg-primary)' : 'transparent'
-            }}
-          >
-            {status === 'all' ? 'All' : statusConfig[status].label}
-            <span className="ml-1.5 text-xs opacity-60">
-              {counts[status]}
-            </span>
-          </button>
-        ))}
-      </div>
-      
       {/* Cloud Filter */}
       <div className="flex items-center gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
         <button
@@ -255,7 +202,6 @@ export default function Estimates() {
   const [isExporting, setIsExporting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [cloudFilter, setCloudFilter] = useState<CloudFilter>('all')
   const [sortBy, setSortBy] = useState<SortOption>('updated')
   
@@ -278,15 +224,7 @@ export default function Estimates() {
     toast.success('Refreshed')
   }, [fetchEstimates])
   
-  // Calculate counts for filters
-  const counts = useMemo(() => {
-    const all = estimates.length
-    const draft = estimates.filter(e => (e.status || 'draft') === 'draft').length
-    const active = estimates.filter(e => e.status === 'active').length
-    const archived = estimates.filter(e => e.status === 'archived').length
-    return { all, draft, active, archived }
-  }, [estimates])
-  
+  // Calculate cloud counts for filter tabs
   const cloudCounts = useMemo(() => {
     const all = estimates.length
     const aws = estimates.filter(e => e.cloud?.toLowerCase() === 'aws').length
@@ -317,11 +255,6 @@ export default function Estimates() {
       )
     }
     
-    // Status filter
-    if (statusFilter !== 'all') {
-      result = result.filter(e => (e.status || 'draft') === statusFilter)
-    }
-    
     // Cloud filter
     if (cloudFilter !== 'all') {
       result = result.filter(e => e.cloud?.toLowerCase() === cloudFilter)
@@ -341,7 +274,7 @@ export default function Estimates() {
     }
     
     return result
-  }, [estimates, searchQuery, statusFilter, cloudFilter, sortBy])
+  }, [estimates, searchQuery, cloudFilter, sortBy])
   
   // Handlers
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
@@ -550,13 +483,10 @@ export default function Estimates() {
         </div>
       </div>
       
-      {/* Filter Tabs */}
+      {/* Cloud Filter Tabs */}
       <FilterTabs
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
         cloudFilter={cloudFilter}
         setCloudFilter={setCloudFilter}
-        counts={counts}
         cloudCounts={cloudCounts}
       />
       
@@ -626,16 +556,16 @@ export default function Estimates() {
             <FolderIcon className="w-8 h-8" style={{ color: 'var(--text-muted)' }} />
           </div>
           <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
-            {searchQuery || statusFilter !== 'all' || cloudFilter !== 'all' 
+            {searchQuery || cloudFilter !== 'all' 
               ? 'No matches found' 
               : 'No estimates yet'}
           </h3>
           <p className="text-sm mb-6 max-w-sm mx-auto" style={{ color: 'var(--text-muted)' }}>
-            {searchQuery || statusFilter !== 'all' || cloudFilter !== 'all'
+            {searchQuery || cloudFilter !== 'all'
               ? 'Try adjusting your filters' 
               : 'Create your first pricing estimate to get started'}
           </p>
-          {!searchQuery && statusFilter === 'all' && cloudFilter === 'all' && (
+          {!searchQuery && cloudFilter === 'all' && (
             <Link to="/calculator" className="btn btn-primary">
               <PlusIcon className="w-4 h-4" />
               Create Estimate
@@ -645,7 +575,6 @@ export default function Estimates() {
       ) : (
         <div className="space-y-3">
           {filteredEstimates.map((estimate, index) => {
-            const status = statusConfig[estimate.status || 'draft']
             const isSelected = selectedIds.has(estimate.estimate_id)
             
             return (
@@ -718,16 +647,6 @@ export default function Estimates() {
                           {cloudBadges[estimate.cloud].label}
                         </span>
                       )}
-                      <span 
-                        className="badge border text-xs"
-                        style={{
-                          backgroundColor: status.bg,
-                          color: status.text,
-                          borderColor: status.border
-                        }}
-                      >
-                        {status.label}
-                      </span>
                     </div>
                     <div className="flex items-center gap-4 text-sm flex-wrap" style={{ color: 'var(--text-muted)' }}>
                       {estimate.customer_name && (
@@ -788,33 +707,6 @@ export default function Estimates() {
         </div>
       )}
       
-      {/* Status Legend */}
-      {estimates.length > 0 && (
-        <div className="mt-8 pt-6 border-t" style={{ borderColor: 'var(--border-primary)' }}>
-          <p className="text-xs font-medium mb-3" style={{ color: 'var(--text-muted)' }}>
-            STATUS GUIDE
-          </p>
-          <div className="flex flex-wrap gap-4">
-            {Object.entries(statusConfig).map(([key, config]) => (
-              <div key={key} className="flex items-center gap-2">
-                <span 
-                  className="badge border text-xs"
-                  style={{
-                    backgroundColor: config.bg,
-                    color: config.text,
-                    borderColor: config.border
-                  }}
-                >
-                  {config.label}
-                </span>
-                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {config.description}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
