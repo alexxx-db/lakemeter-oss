@@ -638,7 +638,15 @@ export default function Calculator() {
         break
       
       case 'FMAPI_PROPRIETARY':
-        productType = `${(item.fmapi_provider || 'OPENAI').toUpperCase()}_MODEL_SERVING`
+        // Proprietary models use their provider-specific pricing
+        // Note: Provider names must match the bundle keys (ANTHROPIC, OPENAI, GEMINI - not GOOGLE)
+        const fmapiProvider = (item.fmapi_provider || 'openai').toLowerCase()
+        const providerMapping: Record<string, string> = {
+          'google': 'GEMINI',  // Google uses GEMINI_MODEL_SERVING in the bundle
+          'anthropic': 'ANTHROPIC',
+          'openai': 'OPENAI'
+        }
+        productType = `${providerMapping[fmapiProvider] || fmapiProvider.toUpperCase()}_MODEL_SERVING`
         break
       
       case 'LAKEBASE':

@@ -8,11 +8,13 @@ import type { LineItem, InstanceType, DBSQLSize, ModelServingGPUType } from '../
 import type { VectorSearchMode, PhotonMultiplier } from '../api/client'
 
 // Fallback DBU rates if fetched data not available ($/DBU)
-// These should match the actual Databricks pricing
+// These should match the actual Databricks pricing (PREMIUM tier defaults)
+// Note: ENTERPRISE tier rates are typically higher (e.g., Jobs Compute $0.20 vs $0.15)
+// The pricing bundle lookup will provide tier-specific rates when available
 export const DEFAULT_DBU_PRICING: Record<string, Record<string, number>> = {
   aws: {
-    'JOBS_COMPUTE': 0.15,
-    'JOBS_COMPUTE_(PHOTON)': 0.15,  // Photon doesn't change $/DBU, only DBU consumption
+    'JOBS_COMPUTE': 0.15,  // PREMIUM: $0.15, ENTERPRISE: $0.20 (use bundle for tier-specific)
+    'JOBS_COMPUTE_(PHOTON)': 0.15,  // PREMIUM: $0.15, ENTERPRISE: $0.20
     'JOBS_SERVERLESS_COMPUTE': 0.39,  // Serverless has higher $/DBU
     'ALL_PURPOSE_COMPUTE': 0.40,
     'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.40,
@@ -188,8 +190,15 @@ export function calculateWorkloadCost(
       break
     
     case 'FMAPI_PROPRIETARY':
-      // Proprietary models use their provider-specific pricing (e.g., ANTHROPIC_MODEL_SERVING)
-      productType = `${(item.fmapi_provider || 'OPENAI').toUpperCase()}_MODEL_SERVING`
+      // Proprietary models use their provider-specific pricing
+      // Note: Provider names must match the bundle keys (ANTHROPIC, OPENAI, GEMINI - not GOOGLE)
+      const provider = (item.fmapi_provider || 'openai').toLowerCase()
+      const providerMapping: Record<string, string> = {
+        'google': 'GEMINI',  // Google uses GEMINI_MODEL_SERVING in the bundle
+        'anthropic': 'ANTHROPIC',
+        'openai': 'OPENAI'
+      }
+      productType = `${providerMapping[provider] || provider.toUpperCase()}_MODEL_SERVING`
       break
     
     case 'LAKEBASE':

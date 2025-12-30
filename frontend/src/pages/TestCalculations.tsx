@@ -106,9 +106,13 @@ function getTiersForCloud(cloud: string): string[] {
 }
 
 // FMAPI Databricks models (validated against pricing bundle)
-const FMAPI_DATABRICKS_MODELS = [
+// LLMs support both input_token and output_token
+// Embedding models only support input_token
+const FMAPI_DATABRICKS_LLM_MODELS = [
   'llama-3-3-70b', 'llama-3-1-8b', 'llama-4-maverick',
-  'gpt-oss-120b', 'gpt-oss-20b', 'gemma-3-12b',
+  'gpt-oss-120b', 'gpt-oss-20b', 'gemma-3-12b'
+]
+const FMAPI_DATABRICKS_EMBEDDING_MODELS = [
   'bge-large', 'gte'
 ]
 
@@ -459,7 +463,8 @@ function generateTestsForEnvironment(
   
   // FMAPI Databricks tests
   if (config.includeFMAPIDB) {
-    for (const model of sampleArray(FMAPI_DATABRICKS_MODELS, 3)) {
+    // LLM models - support both input and output tokens
+    for (const model of sampleArray(FMAPI_DATABRICKS_LLM_MODELS, 3)) {
       for (const rateType of ['input_token', 'output_token']) {
         testCases.push({
           id: `${++idCounter}`,
@@ -474,6 +479,21 @@ function generateTestsForEnvironment(
           }
         })
       }
+    }
+    // Embedding models - only support input tokens
+    for (const model of sampleArray(FMAPI_DATABRICKS_EMBEDDING_MODELS, 1)) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `FMAPI DB ${model} input_token`,
+        category: 'FMAPI Databricks',
+        workloadType: 'FMAPI_DATABRICKS',
+        environment: env,
+        config: {
+          fmapi_model: model,
+          fmapi_rate_type: 'input_token',
+          fmapi_quantity: 10
+        }
+      })
     }
   }
   
@@ -813,7 +833,8 @@ function generateTestCases(config: TestConfig, bundle: PricingBundle | null): Te
         
         // FMAPI Databricks tests
         if (config.includeFMAPIDB) {
-          for (const model of sampleArray(FMAPI_DATABRICKS_MODELS, 3)) {
+          // LLM models - support both input and output tokens
+          for (const model of sampleArray(FMAPI_DATABRICKS_LLM_MODELS, 3)) {
             for (const rateType of ['input_token', 'output_token']) {
               testCases.push({
                 id: `${++idCounter}`,
@@ -828,6 +849,21 @@ function generateTestCases(config: TestConfig, bundle: PricingBundle | null): Te
                 }
               })
             }
+          }
+          // Embedding models - only support input tokens
+          for (const model of sampleArray(FMAPI_DATABRICKS_EMBEDDING_MODELS, 1)) {
+            testCases.push({
+              id: `${++idCounter}`,
+              name: `FMAPI DB ${model} input_token`,
+              category: 'FMAPI Databricks',
+              workloadType: 'FMAPI_DATABRICKS',
+              environment: env,
+              config: {
+                fmapi_model: model,
+                fmapi_rate_type: 'input_token',
+                fmapi_quantity: 10
+              }
+            })
           }
         }
         
