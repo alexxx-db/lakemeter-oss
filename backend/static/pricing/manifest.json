@@ -1,16 +1,16 @@
 {
-  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "files": {
-    "instance-dbu-rates.json": "Instance DBU rates by cloud/instance_type",
-    "dbu-multipliers.json": "Photon, serverless, and lakebase multipliers",
-    "vm-costs.json": "VM hourly costs by cloud/region/instance/tier/payment",
-    "dbu-rates.json": "DBU pricing ($/DBU) by cloud/region/tier/product_type",
-    "dbsql-rates.json": "DBSQL warehouse DBU rates by type/size",
-    "dbsql-warehouse-config.json": "DBSQL warehouse VM configuration",
-    "vector-search-rates.json": "Vector Search mode rates",
-    "model-serving-rates.json": "Model Serving GPU type rates",
-    "fmapi-databricks-rates.json": "FMAPI Databricks model rates",
-    "fmapi-proprietary-rates.json": "FMAPI Proprietary model rates (OpenAI, Anthropic, Google)"
-  },
-  "source": "Generated from Lakebase tables via psql"
+  "generated_at": "2025-12-30T17:28:17.374777",
+  "total_entries": 116385,
+  "files": [
+    "instance-dbu-rates.json",
+    "photon-multipliers.json",
+    "vm-costs.json",
+    "dbu-rates.json",
+    "dbsql-rates.json",
+    "dbsql-warehouse-config.json",
+    "vector-search-rates.json",
+    "model-serving-rates.json",
+    "fmapi-databricks-rates.json",
+    "fmapi-proprietary-rates.json"
+  ]
 }
