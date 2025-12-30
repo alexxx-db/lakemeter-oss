@@ -229,7 +229,7 @@ export default function Calculator() {
     lineItems,
     workloadTypes,
     fetchEstimateWithLineItems,
-    fetchReferenceData,
+    fetchReferenceData, // Still needed for manual refresh button
     clearReferenceCache,
     isLoadingReferenceData,
     isReferenceDataLoaded,
@@ -264,7 +264,7 @@ export default function Calculator() {
     // Pricing Bundle (for instant local calculations)
     pricingBundle,
     isPricingBundleLoaded,
-    loadPricingBundle,
+    // NOTE: loadPricingBundle is now called in Layout.tsx at app startup
     // State management
     clearEstimateState
   } = useStore()
@@ -331,30 +331,43 @@ export default function Calculator() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges])
   
-  useEffect(() => {
-    fetchReferenceData()
-    loadPricingBundle()  // Load static pricing bundle for instant calculations
-  }, [fetchReferenceData, loadPricingBundle])
+  // NOTE: fetchReferenceData() and loadPricingBundle() are now called in Layout.tsx at app startup
+  // This significantly speeds up Calculator page load
   
-  // Fetch Salesforce accounts on mount or when search changes (debounced)
+  // Salesforce lazy loading state - only fetch when user interacts with dropdown
+  const [sfAccountsFetched, setSfAccountsFetched] = useState(false)
+  
+  // Lazy load Salesforce accounts - only fetch when user starts searching or dropdown is opened
+  // This is a major performance optimization - Salesforce API calls are slow
+  const fetchSfAccountsLazy = useCallback(async (search?: string) => {
+    setIsLoadingSfAccounts(true)
+    try {
+      const accounts = await fetchSalesforceAccounts({ 
+        search: search || undefined,
+        limit: 1000 
+      })
+      setSfAccounts(accounts)
+      setSfAccountsFetched(true)
+    } catch (error) {
+      console.error('Failed to fetch Salesforce accounts:', error)
+    } finally {
+      setIsLoadingSfAccounts(false)
+    }
+  }, [])
+  
+  // Fetch when search changes (debounced), but only if already fetched once or user is searching
   useEffect(() => {
-    const timeoutId = setTimeout(async () => {
-      setIsLoadingSfAccounts(true)
-      try {
-        const accounts = await fetchSalesforceAccounts({ 
-          search: sfAccountSearch || undefined,
-          limit: 1000 
-        })
-        setSfAccounts(accounts)
-      } catch (error) {
-        console.error('Failed to fetch Salesforce accounts:', error)
-      } finally {
-        setIsLoadingSfAccounts(false)
-      }
+    if (!sfAccountsFetched && !sfAccountSearch) {
+      // Don't auto-fetch on mount - wait for user interaction
+      return
+    }
+    
+    const timeoutId = setTimeout(() => {
+      fetchSfAccountsLazy(sfAccountSearch)
     }, 300) // 300ms debounce
     
     return () => clearTimeout(timeoutId)
-  }, [sfAccountSearch])
+  }, [sfAccountSearch, sfAccountsFetched, fetchSfAccountsLazy])
   
   // Fetch Salesforce opportunities when account is selected or search changes
   useEffect(() => {
@@ -1776,6 +1789,12 @@ export default function Calculator() {
                           markAsChanged()
                         }}
                         onSearchChange={setSfAccountSearch}
+                        onOpen={() => {
+                          // Lazy load Salesforce accounts when dropdown opens (first time only)
+                          if (!sfAccountsFetched && !isLoadingSfAccounts) {
+                            fetchSfAccountsLazy()
+                          }
+                        }}
                         placeholder={isLoadingSfAccounts ? "Loading accounts..." : "Select account..."}
                         searchPlaceholder="Search accounts..."
                         isLoading={isLoadingSfAccounts}

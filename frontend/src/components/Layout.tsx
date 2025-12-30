@@ -76,7 +76,12 @@ export default function Layout() {
     workloadCosts,
     createLineItem,
     calculateAllWorkloadCosts,
-    setSessionExpired
+    setSessionExpired,
+    // Reference data loading (moved to app startup for faster page loads)
+    fetchReferenceData,
+    loadPricingBundle,
+    isReferenceDataLoaded,
+    isPricingBundleLoaded
   } = useStore()
   
   // Determine if we're on an estimate detail page (AI assistant only available there)
@@ -116,6 +121,18 @@ export default function Layout() {
   useEffect(() => {
     fetchCurrentUser()
   }, [fetchCurrentUser])
+  
+  // Pre-load reference data and pricing bundle at app startup
+  // This speeds up Calculator page load significantly
+  useEffect(() => {
+    // Start loading in parallel (non-blocking)
+    if (!isReferenceDataLoaded) {
+      fetchReferenceData()
+    }
+    if (!isPricingBundleLoaded) {
+      loadPricingBundle()
+    }
+  }, [fetchReferenceData, loadPricingBundle, isReferenceDataLoaded, isPricingBundleLoaded])
   
   // Close dropdown when clicking outside
   useEffect(() => {

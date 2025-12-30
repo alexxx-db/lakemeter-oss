@@ -13,6 +13,7 @@ interface SearchableSelectProps {
   value: string
   onChange: (value: string) => void
   onSearchChange?: (search: string) => void
+  onOpen?: () => void  // Called when dropdown opens (for lazy loading)
   placeholder?: string
   searchPlaceholder?: string
   isLoading?: boolean
@@ -27,6 +28,7 @@ export default function SearchableSelect({
   value,
   onChange,
   onSearchChange,
+  onOpen,
   placeholder = 'Select...',
   searchPlaceholder = 'Search...',
   isLoading = false,
@@ -115,8 +117,11 @@ export default function SearchableSelect({
       <div
         onClick={() => {
           if (!disabled) {
+            const wasOpen = isOpen
             setIsOpen(!isOpen)
-            if (!isOpen) {
+            if (!wasOpen) {
+              // Opening the dropdown
+              onOpen?.()  // Trigger lazy loading callback
               setTimeout(() => inputRef.current?.focus(), 0)
             }
           }

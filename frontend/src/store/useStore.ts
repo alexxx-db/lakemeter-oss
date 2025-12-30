@@ -693,10 +693,14 @@ export const useStore = create<Store>((set, get) => ({
     }
     
     // No cache or force refresh - fetch from API
-    console.log('[RefData] Fetching from API (forceRefresh:', forceRefresh, ')')
+    // OPTIMIZATION: All API calls run in parallel (single batch instead of 3 sequential batches)
+    console.log('[RefData] Fetching from API (forceRefresh:', forceRefresh, ') - all calls in parallel')
     set({ isLoadingReferenceData: true })
     
+    const defaultCloud = 'aws'
+    
     try {
+      // ALL API calls in ONE parallel batch (was 3 sequential batches = 3 round-trips)
       const [
         workloadTypes, 
         cloudProviders, 
@@ -707,8 +711,23 @@ export const useStore = create<Store>((set, get) => ({
         vmPaymentOptions,
         fmapiDatabricksConfig,
         fmapiProprietaryConfig,
-        serverlessModes
+        serverlessModes,
+        // Cloud-specific data (previously in batch 2)
+        instanceTypes, 
+        modelServingGPUTypes, 
+        awsRegions, 
+        azureRegions, 
+        gcpRegions, 
+        photonMultipliers, 
+        vectorSearchModes, 
+        fmapiDbxRates, 
+        fmapiPropRates,
+        // Additional data (previously in batch 3)
+        instanceFamilies,
+        dbsqlWarehouseTypes,
+        fmapiDatabricksModels
       ] = await Promise.all([
+        // Batch 1 items
         api.fetchWorkloadTypes().catch(() => state.workloadTypes),
         api.fetchCloudProviders().catch(() => STATIC_CLOUD_PROVIDERS),
         api.fetchDBSQLSizes().catch(() => STATIC_DBSQL_SIZES),
@@ -718,25 +737,8 @@ export const useStore = create<Store>((set, get) => ({
         api.fetchVMPaymentOptions().catch(() => STATIC_VM_PAYMENT_OPTIONS),
         api.fetchFMAPIDatabricksConfig().catch(() => null),
         api.fetchFMAPIProprietaryConfig().catch(() => null),
-        api.fetchServerlessModes().catch(() => STATIC_SERVERLESS_MODES)
-      ])
-      
-      set({ 
-        workloadTypes,
-        cloudProviders, 
-        dbsqlSizes, 
-        dltEditions, 
-        fmapiProviders,
-        vmPricingTiers,
-        vmPaymentOptions,
-        fmapiDatabricksConfig,
-        fmapiProprietaryConfig,
-        serverlessModes
-      })
-      
-      // Fetch cloud-specific data for default cloud (AWS) + regions for ALL clouds
-      const defaultCloud = 'aws'
-      const [instanceTypes, modelServingGPUTypes, awsRegions, azureRegions, gcpRegions, photonMultipliers, vectorSearchModes, fmapiDbxRates, fmapiPropRates] = await Promise.all([
+        api.fetchServerlessModes().catch(() => STATIC_SERVERLESS_MODES),
+        // Batch 2 items (cloud-specific)
         api.fetchInstanceTypes(defaultCloud).catch(() => []),
         api.fetchModelServingGPUTypes(defaultCloud).catch(() => []),
         api.fetchRegions('aws').catch(() => []),
@@ -745,8 +747,13 @@ export const useStore = create<Store>((set, get) => ({
         api.fetchPhotonMultipliers(defaultCloud).catch(() => []),
         api.fetchVectorSearchModesWithPricing(defaultCloud).catch(() => []),
         api.fetchAllFMAPIDatabricksRates(defaultCloud).catch(() => []),
-        api.fetchAllFMAPIProprietaryRates(defaultCloud).catch(() => [])
+        api.fetchAllFMAPIProprietaryRates(defaultCloud).catch(() => []),
+        // Batch 3 items
+        api.fetchInstanceFamilies().catch(() => []),
+        api.fetchDBSQLWarehouseTypes().catch(() => []),
+        api.fetchFMAPIDatabricksModelsList().catch(() => [])
       ])
+      
       const regionsMap = { aws: awsRegions, azure: azureRegions, gcp: gcpRegions }
       const regions = awsRegions // Default to AWS regions for backwards compatibility
       
@@ -763,30 +770,37 @@ export const useStore = create<Store>((set, get) => ({
         fmapiProprietaryRates[key] = rate
       })
       
+      // Set all state in one update
       set({ 
-        instanceTypes, modelServingGPUTypes, regions, regionsMap, photonMultipliers, vectorSearchModes,
-        fmapiDatabricksRates, fmapiProprietaryRates
+        workloadTypes,
+        cloudProviders, 
+        dbsqlSizes, 
+        dltEditions, 
+        fmapiProviders,
+        vmPricingTiers,
+        vmPaymentOptions,
+        fmapiDatabricksConfig,
+        fmapiProprietaryConfig,
+        serverlessModes,
+        instanceTypes, 
+        modelServingGPUTypes, 
+        regions, 
+        regionsMap, 
+        photonMultipliers, 
+        vectorSearchModes,
+        fmapiDatabricksRates, 
+        fmapiProprietaryRates,
+        instanceFamilies,
+        dbsqlWarehouseTypes,
+        fmapiDatabricksModels,
+        isReferenceDataLoaded: true, 
+        isLoadingReferenceData: false
       })
-      console.log('[RefData] Loaded regions for all clouds:', { aws: awsRegions.length, azure: azureRegions.length, gcp: gcpRegions.length })
-      console.log('[RefData] Pre-cached FMAPI rates:', { databricks: Object.keys(fmapiDatabricksRates).length, proprietary: Object.keys(fmapiProprietaryRates).length })
       
-      // Also try to fetch instance families and DBSQL warehouse types
-      let instanceFamilies: string[] = []
-      let dbsqlWarehouseTypes: string[] = []
-      let fmapiDatabricksModels: string[] = []
-      try {
-        const results = await Promise.all([
-          api.fetchInstanceFamilies().catch(() => []),
-          api.fetchDBSQLWarehouseTypes().catch(() => []),
-          api.fetchFMAPIDatabricksModelsList().catch(() => [])
-        ])
-        instanceFamilies = results[0]
-        dbsqlWarehouseTypes = results[1]
-        fmapiDatabricksModels = results[2]
-        set({ instanceFamilies, dbsqlWarehouseTypes, fmapiDatabricksModels })
-      } catch (e) {
-        console.warn('Some reference data endpoints not available:', e)
-      }
+      console.log('[RefData] Loaded all reference data in parallel:', { 
+        regions: { aws: awsRegions.length, azure: azureRegions.length, gcp: gcpRegions.length },
+        fmapi: { databricks: Object.keys(fmapiDatabricksRates).length, proprietary: Object.keys(fmapiProprietaryRates).length }
+      })
       
       // Save to localStorage cache (including all cloud regions)
       setCachedReferenceData({
@@ -809,8 +823,6 @@ export const useStore = create<Store>((set, get) => ({
         dbsqlWarehouseTypes,
         fmapiDatabricksModels
       })
-      
-      set({ isReferenceDataLoaded: true, isLoadingReferenceData: false })
     } catch (error) {
       console.error('Failed to fetch reference data:', error)
       // Keep using static defaults, don't set error that blocks UI
