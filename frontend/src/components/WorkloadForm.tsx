@@ -833,7 +833,14 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </div>
               <button
                 type="button"
-                onClick={() => !isServerlessDisabled && setForm(f => ({ ...f, serverless_enabled: !f.serverless_enabled }))}
+                onClick={() => !isServerlessDisabled && setForm(f => {
+                  const newServerlessEnabled = !f.serverless_enabled
+                  // All-Purpose Serverless only supports Performance mode
+                  const newServerlessMode = (f.workload_type === 'ALL_PURPOSE' && newServerlessEnabled) 
+                    ? 'performance' 
+                    : f.serverless_mode
+                  return { ...f, serverless_enabled: newServerlessEnabled, serverless_mode: newServerlessMode }
+                })}
                 disabled={isServerlessDisabled}
                 className={clsx(
                   'toggle', 
@@ -846,21 +853,38 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             </div>
             
             {/* Serverless Mode Dropdown - appears when serverless is enabled */}
+            {/* Note: All-Purpose Serverless only supports Performance mode (no Standard option) */}
             {form.serverless_enabled && !isServerlessDisabled && (
               <div className="mt-3 pt-3 border-t border-teal-200 dark:border-teal-700">
-                <label className="block text-xs font-medium mb-1.5 text-teal-700 dark:text-teal-300">Serverless Mode</label>
-                <select
-                  value={form.serverless_mode}
-                  onChange={(e) => setForm(f => ({ ...f, serverless_mode: e.target.value }))}
-                  className="w-full text-sm bg-white dark:bg-slate-800 border-teal-200 dark:border-teal-600"
-                >
-                  {serverlessModeOptions.map(mode => (
-                    <option key={mode.id} value={mode.id}>{mode.name}</option>
-                  ))}
-                </select>
-                <p className="text-xs mt-1 text-teal-600 dark:text-teal-400">
-                  {serverlessModeOptions.find(m => m.id === form.serverless_mode)?.description}
-                </p>
+                {form.workload_type === 'ALL_PURPOSE' ? (
+                  // All-Purpose Serverless: Performance mode only (shown as info, not a selector)
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <span className="text-xs font-medium text-teal-700 dark:text-teal-300">Mode: </span>
+                      <span className="text-sm font-semibold text-teal-800 dark:text-teal-200">Performance</span>
+                    </div>
+                    <span className="text-xs px-2 py-0.5 bg-teal-100 dark:bg-teal-800 text-teal-700 dark:text-teal-300 rounded">
+                      Fixed
+                    </span>
+                  </div>
+                ) : (
+                  // Jobs/DLT Serverless: Allow mode selection
+                  <>
+                    <label className="block text-xs font-medium mb-1.5 text-teal-700 dark:text-teal-300">Serverless Mode</label>
+                    <select
+                      value={form.serverless_mode}
+                      onChange={(e) => setForm(f => ({ ...f, serverless_mode: e.target.value }))}
+                      className="w-full text-sm bg-white dark:bg-slate-800 border-teal-200 dark:border-teal-600"
+                    >
+                      {serverlessModeOptions.map(mode => (
+                        <option key={mode.id} value={mode.id}>{mode.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs mt-1 text-teal-600 dark:text-teal-400">
+                      {serverlessModeOptions.find(m => m.id === form.serverless_mode)?.description}
+                    </p>
+                  </>
+                )}
               </div>
             )}
             

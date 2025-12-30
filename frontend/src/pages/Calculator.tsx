@@ -739,7 +739,11 @@ export default function Calculator() {
     const photonMultiplier = getPhotonMultiplierValue()
     
     // Serverless mode multiplier (performance = 2x, standard = 1x)
-    const serverlessMultiplier = (item.serverless_enabled && item.serverless_mode === 'performance') ? 2 : 1
+    // Note: All-Purpose Serverless ONLY supports Performance mode (always 2x)
+    // Jobs/DLT Serverless support both Standard (1x) and Performance (2x)
+    const serverlessMultiplier = !item.serverless_enabled ? 1 
+      : (item.workload_type === 'ALL_PURPOSE') ? 2  // All-Purpose Serverless is always Performance (2x)
+      : (item.serverless_mode === 'performance') ? 2 : 1
     
     // DLT multiplier (varies by edition for classic DLT)
     const getDLTMultiplier = () => {

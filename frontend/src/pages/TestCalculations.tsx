@@ -260,7 +260,7 @@ function generateTestCases(config: TestConfig): TestCase[] {
             })
           }
           
-          // Serverless
+          // Serverless - All-Purpose only supports Performance mode (no Standard option)
           testCases.push({
             id: `${++idCounter}`,
             name: 'All Purpose Serverless',
@@ -269,7 +269,7 @@ function generateTestCases(config: TestConfig): TestCase[] {
             environment: env,
             config: {
               serverless_enabled: true,
-              serverless_mode: 'standard',
+              serverless_mode: 'performance',  // All-Purpose Serverless only supports Performance mode
               driver_node_type: vmTypes[0],
               worker_node_type: vmTypes[0],
               num_workers: 2,

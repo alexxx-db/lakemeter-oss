@@ -281,7 +281,11 @@ export function calculateWorkloadCost(
   const photonMultiplier = getPhotonMultiplierValue()
   
   // Serverless mode multiplier
-  const serverlessMultiplier = (item.serverless_enabled && item.serverless_mode === 'performance') ? 2 : 1
+  // Note: All-Purpose Serverless ONLY supports Performance mode (always 2x)
+  // Jobs/DLT Serverless support both Standard (1x) and Performance (2x)
+  const serverlessMultiplier = !item.serverless_enabled ? 1 
+    : (item.workload_type === 'ALL_PURPOSE') ? 2  // All-Purpose Serverless is always Performance (2x)
+    : (item.serverless_mode === 'performance') ? 2 : 1
   
   switch (item.workload_type) {
     case 'ALL_PURPOSE':
