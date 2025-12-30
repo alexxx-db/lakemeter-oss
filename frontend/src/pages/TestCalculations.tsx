@@ -167,6 +167,10 @@ function generateTestCases(config: TestConfig): TestCase[] {
       for (const tier of tiers) {
         const env = { cloud, region, tier }
         
+        // STANDARD tier only supports classic (non-serverless) workloads
+        // Premium-only workloads: Serverless, Vector Search, Model Serving, FMAPI, Lakebase
+        const isStandardTier = tier.toUpperCase() === 'STANDARD'
+        
         // Jobs tests
         if (config.includeJobs) {
           for (const vm of vmTypes.slice(0, 2)) {
@@ -213,25 +217,27 @@ function generateTestCases(config: TestConfig): TestCase[] {
             })
           }
           
-          // Serverless modes
-          for (const mode of ['standard', 'performance']) {
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `Jobs Serverless ${mode}`,
-              category: 'Jobs',
-              workloadType: 'JOBS',
-              environment: env,
-              config: {
-                serverless_enabled: true,
-                serverless_mode: mode,
-                driver_node_type: vmTypes[0],
-                worker_node_type: vmTypes[0],
-                num_workers: 2,
-                runs_per_day: 3,
-                avg_runtime_minutes: 20,
-                days_per_month: 22
-              }
-            })
+          // Serverless modes - only for PREMIUM/ENTERPRISE tiers
+          if (!isStandardTier) {
+            for (const mode of ['standard', 'performance']) {
+              testCases.push({
+                id: `${++idCounter}`,
+                name: `Jobs Serverless ${mode}`,
+                category: 'Jobs',
+                workloadType: 'JOBS',
+                environment: env,
+                config: {
+                  serverless_enabled: true,
+                  serverless_mode: mode,
+                  driver_node_type: vmTypes[0],
+                  worker_node_type: vmTypes[0],
+                  num_workers: 2,
+                  runs_per_day: 3,
+                  avg_runtime_minutes: 20,
+                  days_per_month: 22
+                }
+              })
+            }
           }
         }
         
@@ -257,22 +263,24 @@ function generateTestCases(config: TestConfig): TestCase[] {
             })
           }
           
-          // Serverless
-          testCases.push({
-            id: `${++idCounter}`,
-            name: 'All Purpose Serverless',
-            category: 'All Purpose',
-            workloadType: 'ALL_PURPOSE',
-            environment: env,
-            config: {
-              serverless_enabled: true,
-              serverless_mode: 'standard',
-              driver_node_type: vmTypes[0],
-              worker_node_type: vmTypes[0],
-              num_workers: 2,
-              hours_per_month: 100
-            }
-          })
+          // Serverless - only for PREMIUM/ENTERPRISE tiers
+          if (!isStandardTier) {
+            testCases.push({
+              id: `${++idCounter}`,
+              name: 'All Purpose Serverless',
+              category: 'All Purpose',
+              workloadType: 'ALL_PURPOSE',
+              environment: env,
+              config: {
+                serverless_enabled: true,
+                serverless_mode: 'standard',
+                driver_node_type: vmTypes[0],
+                worker_node_type: vmTypes[0],
+                num_workers: 2,
+                hours_per_month: 100
+              }
+            })
+          }
         }
         
         // DLT tests
@@ -300,43 +308,47 @@ function generateTestCases(config: TestConfig): TestCase[] {
             })
           }
           
-          // DLT Serverless
-          testCases.push({
-            id: `${++idCounter}`,
-            name: 'DLT Serverless',
-            category: 'DLT',
-            workloadType: 'DLT',
-            environment: env,
-            config: {
-              serverless_enabled: true,
-              serverless_mode: 'standard',
-              driver_node_type: vmTypes[0],
-              worker_node_type: vmTypes[0],
-              num_workers: 2,
-              runs_per_day: 6,
-              avg_runtime_minutes: 20,
-              days_per_month: 30
-            }
-          })
+          // DLT Serverless - only for PREMIUM/ENTERPRISE tiers
+          if (!isStandardTier) {
+            testCases.push({
+              id: `${++idCounter}`,
+              name: 'DLT Serverless',
+              category: 'DLT',
+              workloadType: 'DLT',
+              environment: env,
+              config: {
+                serverless_enabled: true,
+                serverless_mode: 'standard',
+                driver_node_type: vmTypes[0],
+                worker_node_type: vmTypes[0],
+                num_workers: 2,
+                runs_per_day: 6,
+                avg_runtime_minutes: 20,
+                days_per_month: 30
+              }
+            })
+          }
         }
         
         // DBSQL tests
         if (config.includeDBSQL) {
-          // Serverless - different sizes
-          for (const size of sampleArray(DBSQL_SIZES, 3)) {
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `DBSQL Serverless ${size}`,
-              category: 'DBSQL',
-              workloadType: 'DBSQL',
-              environment: env,
-              config: {
-                dbsql_warehouse_type: 'SERVERLESS',
-                dbsql_warehouse_size: size,
-                dbsql_num_clusters: 1,
-                hours_per_month: 160
-              }
-            })
+          // Serverless - different sizes - only for PREMIUM/ENTERPRISE tiers
+          if (!isStandardTier) {
+            for (const size of sampleArray(DBSQL_SIZES, 3)) {
+              testCases.push({
+                id: `${++idCounter}`,
+                name: `DBSQL Serverless ${size}`,
+                category: 'DBSQL',
+                workloadType: 'DBSQL',
+                environment: env,
+                config: {
+                  dbsql_warehouse_type: 'SERVERLESS',
+                  dbsql_warehouse_size: size,
+                  dbsql_num_clusters: 1,
+                  hours_per_month: 160
+                }
+              })
+            }
           }
           
           // Pro - different sizes
@@ -377,8 +389,8 @@ function generateTestCases(config: TestConfig): TestCase[] {
           })
         }
         
-        // Vector Search tests
-        if (config.includeVectorSearch) {
+        // Vector Search tests - only for PREMIUM/ENTERPRISE tiers
+        if (config.includeVectorSearch && !isStandardTier) {
           for (const mode of VECTOR_MODES) {
             for (const capacity of [1, 5, 20]) {
               testCases.push({
@@ -397,8 +409,8 @@ function generateTestCases(config: TestConfig): TestCase[] {
           }
         }
         
-        // Model Serving tests
-        if (config.includeModelServing) {
+        // Model Serving tests - only for PREMIUM/ENTERPRISE tiers
+        if (config.includeModelServing && !isStandardTier) {
           for (const gpu of GPU_TYPES) {
             testCases.push({
               id: `${++idCounter}`,
@@ -414,8 +426,8 @@ function generateTestCases(config: TestConfig): TestCase[] {
           }
         }
         
-        // FMAPI Databricks tests
-        if (config.includeFMAPIDB) {
+        // FMAPI Databricks tests - only for PREMIUM/ENTERPRISE tiers
+        if (config.includeFMAPIDB && !isStandardTier) {
           for (const model of sampleArray(FMAPI_DATABRICKS_MODELS, 3)) {
             for (const rateType of ['input_token', 'output_token']) {
               testCases.push({
@@ -434,8 +446,8 @@ function generateTestCases(config: TestConfig): TestCase[] {
           }
         }
         
-        // FMAPI Proprietary tests
-        if (config.includeFMAPIProp) {
+        // FMAPI Proprietary tests - only for PREMIUM/ENTERPRISE tiers
+        if (config.includeFMAPIProp && !isStandardTier) {
           for (const propConfig of sampleArray(FMAPI_PROPRIETARY_CONFIGS, 4)) {
             for (const context of propConfig.contexts.slice(0, 2)) {
               for (const rateType of ['input_token', 'output_token']) {
@@ -459,8 +471,8 @@ function generateTestCases(config: TestConfig): TestCase[] {
           }
         }
         
-        // Lakebase tests
-        if (config.includeLakebase) {
+        // Lakebase tests - only for PREMIUM/ENTERPRISE tiers
+        if (config.includeLakebase && !isStandardTier) {
           for (const cu of [1, 2, 4, 8]) {
             for (const nodes of [1, 2]) {
               testCases.push({
