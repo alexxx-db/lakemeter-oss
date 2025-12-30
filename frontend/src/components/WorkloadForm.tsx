@@ -1455,8 +1455,13 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 className="w-full text-sm"
                 placeholder={['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) 
                   ? 'e.g., 730 = 24/7' 
-                  : 'e.g., 10 = 10M tokens'}
+                  : 'e.g., 10'}
               />
+              {!['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) && (
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  1 = 1,000,000 tokens • 10 = 10M tokens
+                </p>
+              )}
             </div>
             
             {/* Info: Add multiple line items for complete endpoint cost */}
@@ -1614,8 +1619,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 value={form.fmapi_quantity}
                 onChange={(e) => setForm(f => ({ ...f, fmapi_quantity: parseFloat(e.target.value) || 0 }))}
                 className="w-full text-sm"
-                placeholder="e.g., 10 = 10M tokens"
+                placeholder="e.g., 10"
               />
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                1 = 1,000,000 tokens • 10 = 10M tokens
+              </p>
             </div>
             
             {/* Info: Add multiple line items for complete endpoint cost */}
