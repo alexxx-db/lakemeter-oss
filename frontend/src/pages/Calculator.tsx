@@ -444,14 +444,37 @@ export default function Calculator() {
       // Skip serverless workloads (no VM costs)
       if (item.serverless_enabled) return
       
-      // Driver pricing
+      // Handle DBSQL Classic/Pro warehouses - get instance types from warehouse config
+      if (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type !== 'SERVERLESS') {
+        const warehouseConfig = getBundleDBSQLWarehouseConfig(
+          pricingBundle,
+          formData.cloud,
+          item.dbsql_warehouse_type || 'PRO',
+          item.dbsql_warehouse_size || 'Small'
+        )
+        
+        if (warehouseConfig) {
+          // Fetch driver instance type VM cost
+          const driverTier = item.dbsql_driver_pricing_tier || item.driver_pricing_tier || 'on_demand'
+          const driverPayment = item.dbsql_driver_payment_option || item.driver_payment_option || 'NA'
+          fetchConfigs.add(`${warehouseConfig.driver_instance_type}:${driverTier}:${driverPayment}`)
+          
+          // Fetch worker instance type VM cost
+          const workerTier = item.dbsql_worker_pricing_tier || item.worker_pricing_tier || 'on_demand'
+          const workerPayment = item.dbsql_worker_payment_option || item.worker_payment_option || 'NA'
+          fetchConfigs.add(`${warehouseConfig.worker_instance_type}:${workerTier}:${workerPayment}`)
+        }
+        return // Don't process driver_node_type/worker_node_type for DBSQL
+      }
+      
+      // Driver pricing (for non-DBSQL workloads)
       if (item.driver_node_type) {
         const driverTier = item.driver_pricing_tier || 'on_demand'
         const driverPayment = item.driver_payment_option || 'NA'
         fetchConfigs.add(`${item.driver_node_type}:${driverTier}:${driverPayment}`)
       }
       
-      // Worker pricing
+      // Worker pricing (for non-DBSQL workloads)
       if (item.worker_node_type) {
         const workerTier = item.worker_pricing_tier || 'spot'
         const workerPayment = item.worker_payment_option || 'NA'
@@ -472,7 +495,7 @@ export default function Calculator() {
       Promise.all(fetchPromises)
         .finally(() => setIsLoadingVMCosts(false))
     }
-  }, [formData.cloud, formData.region, lineItems, lineItemsLoaded, fetchVMCostForInstance])
+  }, [formData.cloud, formData.region, lineItems, lineItemsLoaded, fetchVMCostForInstance, pricingBundle])
   
   // Use cached regions from store (pre-loaded for all clouds)
   // This is instant - no API call needed when switching clouds

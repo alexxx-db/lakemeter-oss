@@ -1343,9 +1343,46 @@ export default function TestCalculations() {
     
     // Pre-fetch VM prices for accurate local calculation (if not serverless)
     // This ensures vmPricingMap has the prices before local calculation runs
-    if (!config.serverless_enabled && config.driver_node_type) {
-      const vmFetchPromises: Promise<number>[] = []
+    const vmFetchPromises: Promise<number>[] = []
+    
+    // Handle DBSQL Classic/Pro warehouses - get instance types from warehouse config
+    if (workloadType === 'DBSQL' && config.dbsql_warehouse_type !== 'SERVERLESS') {
+      const warehouseConfig = getDBSQLWarehouseConfig(
+        pricingBundle,
+        environment.cloud,
+        config.dbsql_warehouse_type || 'PRO',
+        config.dbsql_warehouse_size || 'Small'
+      )
       
+      if (warehouseConfig) {
+        // Fetch driver instance type VM cost
+        const driverTier = config.dbsql_driver_pricing_tier || 'on_demand'
+        const driverPayment = config.dbsql_driver_payment_option || 'NA'
+        vmFetchPromises.push(
+          fetchVMCostForInstance(
+            environment.cloud,
+            environment.region,
+            warehouseConfig.driver_instance_type,
+            driverTier,
+            driverPayment
+          )
+        )
+        
+        // Fetch worker instance type VM cost
+        const workerTier = config.dbsql_worker_pricing_tier || 'on_demand'
+        const workerPayment = config.dbsql_worker_payment_option || 'NA'
+        vmFetchPromises.push(
+          fetchVMCostForInstance(
+            environment.cloud,
+            environment.region,
+            warehouseConfig.worker_instance_type,
+            workerTier,
+            workerPayment
+          )
+        )
+      }
+    } else if (!config.serverless_enabled && config.driver_node_type) {
+      // Regular compute workloads (Jobs, All Purpose, DLT)
       // Fetch driver VM price
       vmFetchPromises.push(
         fetchVMCostForInstance(
@@ -1369,8 +1406,10 @@ export default function TestCalculations() {
           )
         )
       }
-      
-      // Wait for VM prices to be fetched and cached
+    }
+    
+    // Wait for VM prices to be fetched and cached
+    if (vmFetchPromises.length > 0) {
       await Promise.all(vmFetchPromises)
     }
     
