@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 from typing import Optional
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings, setup_logging, log_info, log_warning, log_error
 from app.database import get_db
+from app.external_api import LakemeterAPIClient, get_user_token
 from app.routes import (
     estimates_router,
     line_items_router,
@@ -511,6 +512,35 @@ def get_instance_types_endpoint(cloud: str, region: Optional[str] = None, db: Se
 def get_instance_families():
     """Get instance family categories."""
     return ["General Purpose", "Compute Optimized", "Memory Optimized", "Storage Optimized", "GPU"]
+
+
+@app.get("/api/v1/instances/vm-costs")
+async def get_instance_vm_costs(
+    request: Request,
+    cloud: str,
+    region: str,
+    instance_type: str,
+    pricing_tier: Optional[str] = None,
+    payment_option: Optional[str] = None
+):
+    """Get VM costs for a specific instance type.
+    
+    Proxies to external Lakemeter API.
+    """
+    user_token = get_user_token(request)
+    client = LakemeterAPIClient(user_token=user_token)
+    
+    try:
+        return await client.get_vm_costs(
+            cloud=cloud,
+            region=region,
+            instance_type=instance_type,
+            pricing_tier=pricing_tier,
+            payment_option=payment_option
+        )
+    except Exception as e:
+        log_error(f"Failed to get VM costs: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
 
 @app.get("/api/v1/model-serving/gpu-types")
