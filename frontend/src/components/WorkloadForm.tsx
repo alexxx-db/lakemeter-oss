@@ -1,16 +1,12 @@
-import { useState, useEffect, useMemo } from 'react'
-import { BoltIcon, CloudIcon, CurrencyDollarIcon, ArrowTrendingUpIcon, ArrowTrendingDownIcon, InformationCircleIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { useState, useEffect } from 'react'
+import { BoltIcon, CloudIcon, InformationCircleIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { useStore } from '../store/useStore'
 import SearchableSelect from './SearchableSelect'
 import type { LineItem, WorkloadType } from '../types'
-import { calculateWorkloadCost, type CostCalculationContext } from '../utils/costCalculation'
 import { 
   getDBSQLWarehouseConfig, 
-  getInstanceDBURate as getBundleInstanceDBURate, 
-  getPhotonMultiplier as getBundlePhotonMultiplier,
-  getDBUPrice as getBundleDBUPrice,
   type PricingBundle 
 } from '../utils/pricingBundle'
 
@@ -225,9 +221,10 @@ interface Props {
   onClose: () => void
   onSave?: () => void
   inline?: boolean
+  onFormChange?: (formData: Partial<LineItem>) => void  // Callback for real-time cost preview
 }
 
-export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, inline: _inline = false }: Props) {
+export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, inline: _inline = false, onFormChange }: Props) {
   const { 
     workloadTypes, 
     instanceTypes, 
@@ -235,14 +232,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     dltEditions, 
     vmPaymentOptions,
     modelServingGPUTypes,
-    vectorSearchModes,
     fmapiDatabricksConfig,
     fmapiProprietaryConfig,
     selectedCloud,
     selectedRegion,
     selectedTier,
-    dbuRatesMap,
-    photonMultipliers,
     pricingBundle,
     isPricingBundleLoaded,
     createLineItem,
@@ -250,10 +244,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     fetchLineItems,
     clearSingleWorkloadCost,
     markItemCalculating,
-    getVMPrice,
-    getFMAPIDatabricksRate,
-    getFMAPIProprietaryRate,
-    getVectorSearchRate
+    fetchVMCostForInstance
   } = useStore()
   
   // Fallback DBSQL sizes if store hasn't loaded yet
@@ -536,9 +527,66 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     }
   }, [selectedTier, form.serverless_enabled, form.dbsql_warehouse_type, form.workload_type])
   
-  // NOTE: Removed auto-update useEffect that was calling updateLineItemLocal on every form change
-  // This was causing full cost recalculations every time a field changed.
-  // Now costs are only recalculated after the user clicks "Update Workload" which saves to DB
+  // Auto-fetch VM prices when form loads or instance types change
+  // This ensures Live Estimate has VM prices available for calculation
+  useEffect(() => {
+    if (!selectedCloud || !selectedRegion || form.serverless_enabled) return
+    
+    // Fetch driver VM price
+    if (form.driver_node_type) {
+      fetchVMCostForInstance(selectedCloud, selectedRegion, form.driver_node_type, form.driver_pricing_tier || 'on_demand', form.driver_payment_option || 'NA')
+    }
+    
+    // Fetch worker VM price
+    if (form.worker_node_type) {
+      fetchVMCostForInstance(selectedCloud, selectedRegion, form.worker_node_type, form.worker_pricing_tier || 'spot', form.worker_payment_option || 'NA')
+    }
+  }, [selectedCloud, selectedRegion, form.driver_node_type, form.worker_node_type, form.driver_pricing_tier, form.worker_pricing_tier, form.driver_payment_option, form.worker_payment_option, form.serverless_enabled, fetchVMCostForInstance])
+  
+  // Call onFormChange whenever form values change (for real-time cost preview in parent)
+  useEffect(() => {
+    if (onFormChange) {
+      // Build partial line item from form for cost calculation
+      const formAsItem: Partial<LineItem> = {
+        workload_type: form.workload_type,
+        workload_name: form.workload_name,
+        serverless_enabled: form.serverless_enabled,
+        serverless_mode: form.serverless_mode,
+        driver_node_type: form.driver_node_type || undefined,
+        worker_node_type: form.worker_node_type || undefined,
+        num_workers: form.num_workers,
+        photon_enabled: form.photon_enabled,
+        dlt_edition: form.dlt_edition,
+        dbsql_warehouse_type: form.dbsql_warehouse_type,
+        dbsql_warehouse_size: form.dbsql_warehouse_size,
+        dbsql_num_clusters: form.dbsql_num_clusters,
+        dbsql_driver_pricing_tier: form.dbsql_driver_pricing_tier,
+        dbsql_driver_payment_option: form.dbsql_driver_payment_option,
+        dbsql_worker_pricing_tier: form.dbsql_worker_pricing_tier,
+        dbsql_worker_payment_option: form.dbsql_worker_payment_option,
+        vector_search_mode: form.vector_search_mode,
+        vector_capacity_millions: form.vector_capacity_millions,
+        model_serving_gpu_type: form.model_serving_gpu_type,
+        lakebase_cu: form.lakebase_cu,
+        lakebase_ha_nodes: form.lakebase_ha_nodes,
+        fmapi_provider: form.fmapi_provider,
+        fmapi_model: form.fmapi_model,
+        fmapi_endpoint_type: form.fmapi_endpoint_type,
+        fmapi_context_length: form.fmapi_context_length,
+        fmapi_rate_type: form.fmapi_rate_type,
+        fmapi_quantity: form.fmapi_quantity,
+        runs_per_day: form.runs_per_day,
+        avg_runtime_minutes: form.avg_runtime_minutes,
+        days_per_month: form.days_per_month,
+        hours_per_month: form.hours_per_month || undefined,
+        driver_pricing_tier: form.driver_pricing_tier,
+        worker_pricing_tier: form.worker_pricing_tier,
+        driver_payment_option: form.driver_payment_option,
+        worker_payment_option: form.worker_payment_option
+      }
+      onFormChange(formAsItem)
+    }
+  }, [form, onFormChange])
   
   const selectedWorkloadType: WorkloadType | undefined = workloadTypes.find(w => w.workload_type === form.workload_type)
   
@@ -1814,67 +1862,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         onChange={(value) => setForm(f => ({ ...f, notes: value }))} 
       />
       
-      {/* Live Cost Preview */}
-      <LiveCostPreview 
-        form={form}
-        originalItem={lineItem}
-        context={{
-          cloud: selectedCloud,
-          region: selectedRegion,
-          tier: selectedTier,
-          dbuRatesMap,
-          instanceTypes,
-          dbsqlSizes,
-          photonMultipliers,
-          modelServingGPUTypes,
-          vectorSearchModes,
-          getVMPrice,
-          getFMAPIDatabricksRate,
-          // Pricing bundle lookup functions for consistency with Calculator.tsx
-          getInstanceDBURate: (instanceType: string) => {
-            if (!isPricingBundleLoaded) return null
-            return getBundleInstanceDBURate(pricingBundle, selectedCloud || 'aws', instanceType)
-          },
-          getPhotonMultiplier: (skuType: string) => {
-            if (!isPricingBundleLoaded) return null
-            return getBundlePhotonMultiplier(pricingBundle, selectedCloud || 'aws', skuType)
-          },
-          getDBUPrice: (productType: string) => {
-            if (!isPricingBundleLoaded) return null
-            return getBundleDBUPrice(pricingBundle, selectedCloud || 'aws', selectedRegion || '', selectedTier || 'PREMIUM', productType)
-          },
-          getFMAPIProprietaryRate: (provider: string, model: string, rateType: string, endpointType?: string, contextLength?: string) => {
-            // Try pricing bundle first (with full key: cloud:provider:model:endpoint:context:rate)
-            if (isPricingBundleLoaded && pricingBundle.fmapiProprietaryRates) {
-              const cloud = (selectedCloud || 'aws').toLowerCase()
-              const ep = endpointType || 'global'
-              const ctx = contextLength || 'all'
-              // Try exact match first
-              let key = `${cloud}:${provider.toLowerCase()}:${model.toLowerCase()}:${ep}:${ctx}:${rateType}`
-              let data = pricingBundle.fmapiProprietaryRates[key]
-              // If not found, try with 'all' context length (some models use 'all')
-              if (!data && ctx !== 'all') {
-                key = `${cloud}:${provider.toLowerCase()}:${model.toLowerCase()}:${ep}:all:${rateType}`
-                data = pricingBundle.fmapiProprietaryRates[key]
-              }
-              if (data) {
-                return {
-                  dbu_per_1M_tokens: data.is_hourly ? undefined : data.dbu_rate,
-                  dbu_per_hour: data.is_hourly ? data.dbu_rate : undefined
-                }
-              }
-            }
-            // Fallback to store function
-            return getFMAPIProprietaryRate(provider, model, rateType)
-          },
-          getVectorSearchRate,
-          getDBSQLWarehouseConfig: (warehouseType: string, warehouseSize: string) => {
-            if (!isPricingBundleLoaded) return null
-            return getDBSQLWarehouseConfig(pricingBundle, selectedCloud || 'aws', warehouseType, warehouseSize)
-          }
-        }}
-      />
-      
       {/* Actions */}
       <div className="flex items-center justify-end gap-2 pt-2">
         <button type="button" onClick={onClose} className="btn btn-secondary">
@@ -1889,305 +1876,5 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         </button>
       </div>
     </form>
-  )
-}
-
-// Helper to format currency
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount)
-}
-
-// Helper to format numbers - show 2 decimal places for DBUs
-function formatNumber(num: number): string {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(2) + 'M'
-  } else if (num >= 1000) {
-    return (num / 1000).toFixed(2) + 'K'
-  }
-  return num.toFixed(2)
-}
-
-// Live Cost Preview Component
-interface LiveCostPreviewProps {
-  form: {
-    workload_type: string
-    serverless_enabled: boolean
-    serverless_mode: string
-    driver_node_type: string
-    worker_node_type: string
-    num_workers: number
-    photon_enabled: boolean
-    dlt_edition: string
-    dbsql_warehouse_type: string
-    dbsql_warehouse_size: string
-    dbsql_num_clusters: number
-    // DBSQL driver/worker pricing tiers
-    dbsql_driver_pricing_tier: string
-    dbsql_driver_payment_option: string
-    dbsql_worker_pricing_tier: string
-    dbsql_worker_payment_option: string
-    vector_search_mode: string
-    vector_capacity_millions: number
-    model_serving_gpu_type: string
-    lakebase_cu: number
-    lakebase_ha_nodes: number
-    fmapi_provider: string
-    fmapi_model: string
-    fmapi_endpoint_type: string
-    fmapi_context_length: string
-    fmapi_rate_type: string
-    fmapi_quantity: number
-    runs_per_day: number
-    avg_runtime_minutes: number
-    days_per_month: number
-    hours_per_month: number
-    driver_pricing_tier: string
-    worker_pricing_tier: string
-    driver_payment_option: string
-    worker_payment_option: string
-  }
-  originalItem: LineItem | null
-  context: CostCalculationContext
-}
-
-function LiveCostPreview({ form, originalItem, context }: LiveCostPreviewProps) {
-  // Calculate current cost based on form values
-  const currentCost = useMemo(() => {
-    // Determine if this is an hours-based workload type
-    const isHoursBasedWorkload = ['LAKEBASE', 'VECTOR_SEARCH', 'MODEL_SERVING'].includes(form.workload_type) ||
-      form.vector_search_mode !== undefined && form.workload_type === 'VECTOR_SEARCH'
-    
-    // For hours-based workloads, use 730 as default if hours_per_month is 0 or undefined
-    const effectiveHoursPerMonth = isHoursBasedWorkload
-      ? (form.hours_per_month || 730)
-      : form.hours_per_month
-    
-    const formAsItem: Partial<LineItem> = {
-      workload_type: form.workload_type,
-      serverless_enabled: form.serverless_enabled,
-      serverless_mode: form.serverless_mode,
-      driver_node_type: form.driver_node_type || undefined,
-      worker_node_type: form.worker_node_type || undefined,
-      num_workers: form.num_workers,
-      photon_enabled: form.photon_enabled,
-      dlt_edition: form.dlt_edition,
-      dbsql_warehouse_type: form.dbsql_warehouse_type,
-      dbsql_warehouse_size: form.dbsql_warehouse_size,
-      dbsql_num_clusters: form.dbsql_num_clusters,
-      // DBSQL driver/worker pricing tiers
-      dbsql_driver_pricing_tier: form.dbsql_driver_pricing_tier,
-      dbsql_driver_payment_option: form.dbsql_driver_payment_option,
-      dbsql_worker_pricing_tier: form.dbsql_worker_pricing_tier,
-      dbsql_worker_payment_option: form.dbsql_worker_payment_option,
-      vector_search_mode: form.vector_search_mode,
-      vector_capacity_millions: form.vector_capacity_millions,
-      model_serving_gpu_type: form.model_serving_gpu_type,
-      lakebase_cu: form.lakebase_cu,
-      lakebase_ha_nodes: form.lakebase_ha_nodes,
-      fmapi_provider: form.fmapi_provider,
-      fmapi_model: form.fmapi_model,
-      fmapi_endpoint_type: form.fmapi_endpoint_type,
-      fmapi_context_length: form.fmapi_context_length,
-      fmapi_rate_type: form.fmapi_rate_type,
-      fmapi_quantity: form.fmapi_quantity,
-      runs_per_day: form.runs_per_day,
-      avg_runtime_minutes: form.avg_runtime_minutes,
-      days_per_month: form.days_per_month,
-      hours_per_month: effectiveHoursPerMonth || undefined,
-      driver_pricing_tier: form.driver_pricing_tier,
-      worker_pricing_tier: form.worker_pricing_tier,
-      driver_payment_option: form.driver_payment_option,
-      worker_payment_option: form.worker_payment_option
-    }
-    
-    return calculateWorkloadCost(formAsItem, context)
-  }, [form, context])
-  
-  // Calculate original cost for comparison (only for existing items)
-  const originalCost = useMemo(() => {
-    if (!originalItem) return null
-    return calculateWorkloadCost(originalItem, context)
-  }, [originalItem, context])
-  
-  // Calculate delta
-  const costDelta = originalCost ? currentCost.totalCost - originalCost.totalCost : 0
-  const hasCostChange = Math.abs(costDelta) > 0.01
-  
-  // Don't show if no region is selected
-  if (!context.region) {
-    return (
-      <div className="mt-4 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
-        <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          <CurrencyDollarIcon className="w-4 h-4" />
-          <span>Select a region to see cost estimate</span>
-        </div>
-      </div>
-    )
-  }
-  
-  return (
-    <div className="mt-4 p-3 rounded-lg bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <CurrencyDollarIcon className="w-5 h-5 text-orange-500" />
-            <span className="text-sm font-medium text-[var(--text-secondary)]">Live Estimate:</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-xl font-bold text-orange-500">{formatCurrency(currentCost.totalCost)}</span>
-            <span className="text-xs text-[var(--text-muted)]">/mo</span>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
-          <span>{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-          {/* Show units used for Vector Search */}
-          {currentCost.unitsUsed !== undefined && (
-            <span className="text-blue-500 font-medium">{currentCost.unitsUsed} unit{currentCost.unitsUsed !== 1 ? 's' : ''}</span>
-          )}
-          {currentCost.vmCost > 0 && (
-            <span>VM: {formatCurrency(currentCost.vmCost)}</span>
-          )}
-          
-          {/* Show delta for existing items */}
-          {originalItem && hasCostChange && (
-            <div className={clsx(
-              "flex items-center gap-1 px-2 py-0.5 rounded-full font-medium",
-              costDelta > 0 
-                ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                : "bg-green-500/10 text-green-600 dark:text-green-400"
-            )}>
-              {costDelta > 0 ? (
-                <ArrowTrendingUpIcon className="w-3 h-3" />
-              ) : (
-                <ArrowTrendingDownIcon className="w-3 h-3" />
-              )}
-              <span>{costDelta > 0 ? '+' : ''}{formatCurrency(costDelta)}</span>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      {/* Calculation Formula */}
-      <div className="mt-2 pt-2 border-t border-orange-500/20">
-        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
-          {(() => {
-            const hoursPerMonth = form.hours_per_month || 
-              (form.runs_per_day && form.avg_runtime_minutes 
-                ? form.runs_per_day * (form.avg_runtime_minutes / 60) * (form.days_per_month || 30)
-                : 730)
-            const dbuPriceDisplay = currentCost.dbuPrice?.toFixed(2) || '0.00'
-            
-            // Vector Search
-            if (form.workload_type === 'VECTOR_SEARCH') {
-              return (
-                <>
-                  <span className="text-blue-500">{currentCost.unitsUsed || 1} units</span>
-                  <span>×</span>
-                  <span className="text-purple-500">{currentCost.dbuPerHour?.toFixed(2) || '4.00'} DBU/hr</span>
-                  <span>×</span>
-                  <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
-                  <span>=</span>
-                  <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                  <span>×</span>
-                  <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                  <span>=</span>
-                  <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
-                </>
-              )
-            }
-            
-            // FMAPI (token-based)
-            if (form.workload_type === 'FMAPI_DATABRICKS' || form.workload_type === 'FMAPI_PROPRIETARY') {
-              const dbuPerMToken = form.fmapi_quantity > 0 ? (currentCost.monthlyDBUs / form.fmapi_quantity).toFixed(2) : '0'
-              return (
-                <>
-                  <span className="text-blue-500">{form.fmapi_quantity || 0}M tokens</span>
-                  <span>×</span>
-                  <span className="text-purple-500">{dbuPerMToken} DBU/M</span>
-                  <span>=</span>
-                  <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                  <span>×</span>
-                  <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                  <span>=</span>
-                  <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
-                </>
-              )
-            }
-            
-            // Lakebase
-            if (form.workload_type === 'LAKEBASE') {
-              return (
-                <>
-                  <span className="text-blue-500">{form.lakebase_cu || 1} CU</span>
-                  <span>×</span>
-                  <span className="text-purple-500">{form.lakebase_ha_nodes || 1} nodes</span>
-                  <span>×</span>
-                  <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
-                  <span>=</span>
-                  <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                  <span>×</span>
-                  <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                  <span>=</span>
-                  <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
-                </>
-              )
-            }
-            
-            // Model Serving
-            if (form.workload_type === 'MODEL_SERVING') {
-              return (
-                <>
-                  <span className="text-purple-500">{currentCost.dbuPerHour?.toFixed(2) || '2.00'} DBU/hr</span>
-                  <span>×</span>
-                  <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
-                  <span>=</span>
-                  <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                  <span>×</span>
-                  <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                  <span>=</span>
-                  <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
-                </>
-              )
-            }
-            
-            // Compute workloads (JOBS, ALL_PURPOSE, DLT, DBSQL)
-            const hasVMCost = currentCost.vmCost > 0
-            return (
-              <>
-                {currentCost.dbuPerHour && currentCost.dbuPerHour > 0 && (
-                  <>
-                    <span className="text-purple-500">{currentCost.dbuPerHour.toFixed(2)} DBU/hr</span>
-                    <span>×</span>
-                  </>
-                )}
-                <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
-                <span>=</span>
-                <span className="text-orange-500">{formatNumber(currentCost.monthlyDBUs)} DBUs</span>
-                <span>×</span>
-                <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                {hasVMCost ? (
-                  <>
-                    <span className="mx-1">|</span>
-                    <span className="text-blue-500">{formatCurrency(currentCost.dbuCost)}</span>
-                    <span>+</span>
-                    <span className="text-teal-500">VM: {formatCurrency(currentCost.vmCost)}</span>
-                    <span>=</span>
-                  </>
-                ) : (
-                  <span>=</span>
-                )}
-                <span className="text-orange-600 font-semibold">{formatCurrency(currentCost.totalCost)}</span>
-              </>
-            )
-          })()}
-        </div>
-      </div>
-    </div>
   )
 }

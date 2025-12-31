@@ -485,19 +485,27 @@ export function calculateWorkloadCost(
   }
   
   // ========================================
-  // Step 4: Calculate final costs
+  // Step 4: Calculate final costs with NaN guards
   // ========================================
-  const dbuCost = monthlyDBUs * dbuPrice
-  const totalCost = dbuCost + vmCost
+  const rawDbuCost = monthlyDBUs * dbuPrice
+  const rawTotalCost = rawDbuCost + vmCost
+  
+  // NaN guards - ensure we never return NaN values
+  const safeDbuCost = isNaN(rawDbuCost) ? 0 : rawDbuCost
+  const safeVmCost = isNaN(vmCost) ? 0 : vmCost
+  const safeTotalCost = isNaN(rawTotalCost) ? safeDbuCost : rawTotalCost
+  const safeMonthlyDBUs = isNaN(monthlyDBUs) ? 0 : monthlyDBUs
+  const safeDbuPerHour = isNaN(dbuPerHour) ? 0 : dbuPerHour
+  const safeDbuPrice = isNaN(dbuPrice) ? 0.15 : dbuPrice
   
   return { 
-    monthlyDBUs, 
-    dbuCost, 
-    vmCost, 
-    totalCost,
+    monthlyDBUs: safeMonthlyDBUs, 
+    dbuCost: safeDbuCost, 
+    vmCost: safeVmCost, 
+    totalCost: safeTotalCost,
     unitsUsed,  // For Vector Search
-    dbuPerHour, // For display
-    dbuPrice    // $/DBU rate for display
+    dbuPerHour: safeDbuPerHour, // For display
+    dbuPrice: safeDbuPrice    // $/DBU rate for display
   }
 }
 

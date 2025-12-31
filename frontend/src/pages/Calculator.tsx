@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -273,6 +273,9 @@ export default function Calculator() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  
+  // Pending form edits for real-time cost updates
+  const [pendingFormEdits, setPendingFormEdits] = useState<Record<string, Partial<LineItem>>>({})
   const [isLoadingEstimate, setIsLoadingEstimate] = useState(false)
   const [isLoadingLineItems, setIsLoadingLineItems] = useState(false)
   const [lineItemsLoaded, setLineItemsLoaded] = useState(false)
@@ -313,6 +316,11 @@ export default function Calculator() {
   // Bulk selection for delete
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   
+  // Auto-save for estimate metadata
+  const [isAutoSaving, setIsAutoSaving] = useState(false)
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastSavedFormRef = useRef<string>('')
+  
   // Track changes
   const markAsChanged = useCallback(() => {
     setHasUnsavedChanges(true)
@@ -329,6 +337,60 @@ export default function Calculator() {
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges])
+  
+  // Auto-save estimate metadata (debounced) - only for existing estimates
+  useEffect(() => {
+    // Only auto-save for existing estimates with valid form data
+    if (!id || !currentEstimate) return
+    if (!formData.estimate_name.trim() || !formData.region || !formData.tier) return
+    
+    // Create a hash of the current form state
+    const currentFormHash = JSON.stringify({
+      estimate_name: formData.estimate_name,
+      customer_name: formData.customer_name,
+      sfdc_account_id: formData.sfdc_account_id,
+      opportunity_id: formData.opportunity_id,
+      uco_id: formData.uco_id,
+      cloud: formData.cloud,
+      region: formData.region,
+      tier: formData.tier
+    })
+    
+    // Skip if nothing changed since last save
+    if (currentFormHash === lastSavedFormRef.current) return
+    
+    // Clear any pending auto-save
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current)
+    }
+    
+    // Debounced auto-save (1.5 seconds after last change)
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        setIsAutoSaving(true)
+        const dataToSave = {
+          ...formData,
+          cloud: formData.cloud.toUpperCase(),
+          tier: formData.tier.toUpperCase()
+        }
+        await updateEstimate(id, dataToSave)
+        lastSavedFormRef.current = currentFormHash
+        setHasUnsavedChanges(false)
+      } catch (error) {
+        console.error('Auto-save failed:', error)
+        toast.error('Auto-save failed')
+      } finally {
+        setIsAutoSaving(false)
+      }
+    }, 1500)
+    
+    // Cleanup timeout on unmount or when dependencies change
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [formData, id, currentEstimate, updateEstimate])
   
   // NOTE: fetchReferenceData() and loadPricingBundle() are now called in Layout.tsx at app startup
   // This significantly speeds up Calculator page load
@@ -548,7 +610,11 @@ export default function Calculator() {
   // Calculate cost for a single line item with full breakdown
   // Uses LOCAL calculation for instant feedback - no API dependency
   // All reference data (instanceTypes, dbuRatesMap, vectorSearchModes, etc.) is pre-fetched
-  const calculateItemCost = (item: LineItem): CostBreakdown => {
+  // Supports pending form edits for real-time cost preview during editing
+  const calculateItemCost = (item: LineItem, pendingEdits?: Partial<LineItem>): CostBreakdown => {
+    // Merge saved item with pending edits for real-time calculation
+    const effectiveItem = pendingEdits ? { ...item, ...pendingEdits } : item
+    
     // ========================================================================
     // LOCAL CALCULATION - Instant feedback using pre-fetched reference data
     // All pricing data is fetched on app load: instanceTypes, dbuRatesMap, 
@@ -560,7 +626,7 @@ export default function Calculator() {
     const region = formData.region // No default - must be set
     // Try to use dynamic DBU rates first, fall back to hardcoded
     const pricing = Object.keys(dbuRatesMap).length > 0 ? dbuRatesMap : (DBU_PRICING[cloud] || DBU_PRICING.aws)
-    const numWorkers = item.num_workers || 0
+    const numWorkers = effectiveItem.num_workers || 0
     
     // If no region selected, return zero costs
     if (!region) {
@@ -572,13 +638,13 @@ export default function Calculator() {
     // Formula: runs_per_day * (avg_runtime_minutes / 60) * days_per_month
     // ========================================
     let hoursPerMonth = 0
-    if (item.workload_type !== 'FMAPI_DATABRICKS' && item.workload_type !== 'FMAPI_PROPRIETARY') {
-      if (item.hours_per_month) {
+    if (effectiveItem.workload_type !== 'FMAPI_DATABRICKS' && effectiveItem.workload_type !== 'FMAPI_PROPRIETARY') {
+      if (effectiveItem.hours_per_month) {
         // Direct hours input
-        hoursPerMonth = item.hours_per_month
-      } else if (item.runs_per_day && item.avg_runtime_minutes) {
+        hoursPerMonth = effectiveItem.hours_per_month
+      } else if (effectiveItem.runs_per_day && effectiveItem.avg_runtime_minutes) {
         // Calculate from runs: runs_per_day * (avg_runtime_minutes / 60) * days_per_month
-        hoursPerMonth = (item.runs_per_day * (item.avg_runtime_minutes / 60)) * (item.days_per_month || 30)
+        hoursPerMonth = (effectiveItem.runs_per_day * (effectiveItem.avg_runtime_minutes / 60)) * (effectiveItem.days_per_month || 30)
       }
     }
     
@@ -587,13 +653,13 @@ export default function Calculator() {
     // Matches the SQL view's CASE logic
     // ========================================
     let productType = ''
-    const dltEdition = item.dlt_edition || 'CORE'
+    const dltEdition = effectiveItem.dlt_edition || 'CORE'
     
-    switch (item.workload_type) {
+    switch (effectiveItem.workload_type) {
       case 'JOBS':
-        if (item.serverless_enabled) {
+        if (effectiveItem.serverless_enabled) {
           productType = 'JOBS_SERVERLESS_COMPUTE'
-        } else if (item.photon_enabled) {
+        } else if (effectiveItem.photon_enabled) {
           productType = 'JOBS_COMPUTE_(PHOTON)'
         } else {
           productType = 'JOBS_COMPUTE'
@@ -601,9 +667,9 @@ export default function Calculator() {
         break
       
       case 'ALL_PURPOSE':
-        if (item.serverless_enabled) {
+        if (effectiveItem.serverless_enabled) {
           productType = 'ALL_PURPOSE_SERVERLESS_COMPUTE'
-        } else if (item.photon_enabled) {
+        } else if (effectiveItem.photon_enabled) {
           productType = 'ALL_PURPOSE_COMPUTE_(PHOTON)'
         } else {
           productType = 'ALL_PURPOSE_COMPUTE'
@@ -611,19 +677,19 @@ export default function Calculator() {
         break
       
       case 'DLT':
-        if (item.serverless_enabled) {
+        if (effectiveItem.serverless_enabled) {
           // DLT Serverless uses same rate as Jobs Serverless ($0.39)
           productType = 'JOBS_SERVERLESS_COMPUTE'
         } else {
           productType = `DLT_${dltEdition}_COMPUTE`
-          if (item.photon_enabled) {
+          if (effectiveItem.photon_enabled) {
             productType += '_(PHOTON)'
           }
         }
         break
       
       case 'DBSQL':
-        const warehouseType = item.dbsql_warehouse_type || 'SERVERLESS'
+        const warehouseType = effectiveItem.dbsql_warehouse_type || 'SERVERLESS'
         if (warehouseType === 'SERVERLESS') {
           productType = 'SERVERLESS_SQL_COMPUTE'
         } else if (warehouseType === 'PRO') {
@@ -649,7 +715,7 @@ export default function Calculator() {
       case 'FMAPI_PROPRIETARY':
         // Proprietary models use their provider-specific pricing
         // Note: Provider names must match the bundle keys (ANTHROPIC, OPENAI, GEMINI - not GOOGLE)
-        const fmapiProvider = (item.fmapi_provider || 'openai').toLowerCase()
+        const fmapiProvider = (effectiveItem.fmapi_provider || 'openai').toLowerCase()
         const providerMapping: Record<string, string> = {
           'google': 'GEMINI',  // Google uses GEMINI_MODEL_SERVING in the bundle
           'anthropic': 'ANTHROPIC',
@@ -671,7 +737,7 @@ export default function Calculator() {
     let dbuPrice = 0.20
     if (isPricingBundleLoaded && formData.tier) {
       const bundlePrice = getBundleDBUPrice(pricingBundle, cloud, region, formData.tier, productType)
-      console.log(`[DBU Price Lookup] ${item.workload_name}: cloud=${cloud}, region=${region}, tier=${formData.tier}, productType=${productType}, bundlePrice=${bundlePrice}, isPricingBundleLoaded=${isPricingBundleLoaded}`)
+      console.log(`[DBU Price Lookup] ${effectiveItem.workload_name}: cloud=${cloud}, region=${region}, tier=${formData.tier}, productType=${productType}, bundlePrice=${bundlePrice}, isPricingBundleLoaded=${isPricingBundleLoaded}`)
       if (bundlePrice > 0) {
         dbuPrice = bundlePrice
       } else {
@@ -696,21 +762,21 @@ export default function Calculator() {
     let driverDBURate = 0.5 // Fallback
     let workerDBURate = 0.5
     
-    if (isPricingBundleLoaded && item.driver_node_type) {
-      const bundleDriverRate = getBundleInstanceDBURate(pricingBundle, cloud, item.driver_node_type)
+    if (isPricingBundleLoaded && effectiveItem.driver_node_type) {
+      const bundleDriverRate = getBundleInstanceDBURate(pricingBundle, cloud, effectiveItem.driver_node_type)
       if (bundleDriverRate > 0) driverDBURate = bundleDriverRate
     }
     if (!driverDBURate || driverDBURate === 0.5) {
-      const driverInstance = instanceTypes.find(it => it.id === item.driver_node_type || it.name === item.driver_node_type)
+      const driverInstance = instanceTypes.find(it => it.id === effectiveItem.driver_node_type || it.name === effectiveItem.driver_node_type)
       if (driverInstance?.dbu_rate) driverDBURate = driverInstance.dbu_rate
     }
     
-    if (isPricingBundleLoaded && item.worker_node_type) {
-      const bundleWorkerRate = getBundleInstanceDBURate(pricingBundle, cloud, item.worker_node_type)
+    if (isPricingBundleLoaded && effectiveItem.worker_node_type) {
+      const bundleWorkerRate = getBundleInstanceDBURate(pricingBundle, cloud, effectiveItem.worker_node_type)
       if (bundleWorkerRate > 0) workerDBURate = bundleWorkerRate
     }
     if (!workerDBURate || workerDBURate === 0.5) {
-      const workerInstance = instanceTypes.find(it => it.id === item.worker_node_type || it.name === item.worker_node_type)
+      const workerInstance = instanceTypes.find(it => it.id === effectiveItem.worker_node_type || it.name === effectiveItem.worker_node_type)
       if (workerInstance?.dbu_rate) workerDBURate = workerInstance.dbu_rate
     }
     
@@ -718,17 +784,17 @@ export default function Calculator() {
     // NOTE: For serverless workloads, photon is ALWAYS enabled (built-in)
     const getPhotonMultiplierValue = (): number => {
       // For classic workloads, only apply if photon is explicitly enabled
-      if (!item.serverless_enabled && !item.photon_enabled) return 1.0
+      if (!effectiveItem.serverless_enabled && !effectiveItem.photon_enabled) return 1.0
       
       // For SERVERLESS workloads, use the corresponding CLASSIC SKU type for photon lookup
       // The photon multiplier for serverless is the same as classic (photon is built-in)
       let skuTypeForLookup: string
-      if (item.serverless_enabled) {
-        if (item.workload_type === 'JOBS') {
+      if (effectiveItem.serverless_enabled) {
+        if (effectiveItem.workload_type === 'JOBS') {
           skuTypeForLookup = 'JOBS_COMPUTE'
-        } else if (item.workload_type === 'ALL_PURPOSE') {
+        } else if (effectiveItem.workload_type === 'ALL_PURPOSE') {
           skuTypeForLookup = 'ALL_PURPOSE_COMPUTE'
-        } else if (item.workload_type === 'DLT') {
+        } else if (effectiveItem.workload_type === 'DLT') {
           // DLT serverless uses JOBS_SERVERLESS_COMPUTE for pricing, but photon from DLT_CORE_COMPUTE
           skuTypeForLookup = 'DLT_CORE_COMPUTE'
         } else {
@@ -758,22 +824,22 @@ export default function Calculator() {
     // Serverless mode multiplier (performance = 2x, standard = 1x)
     // Note: All-Purpose Serverless ONLY supports Performance mode (always 2x)
     // Jobs/DLT Serverless support both Standard (1x) and Performance (2x)
-    const serverlessMultiplier = !item.serverless_enabled ? 1 
-      : (item.workload_type === 'ALL_PURPOSE') ? 2  // All-Purpose Serverless is always Performance (2x)
-      : (item.serverless_mode === 'performance') ? 2 : 1
+    const serverlessMultiplier = !effectiveItem.serverless_enabled ? 1 
+      : (effectiveItem.workload_type === 'ALL_PURPOSE') ? 2  // All-Purpose Serverless is always Performance (2x)
+      : (effectiveItem.serverless_mode === 'performance') ? 2 : 1
     
     // DLT multiplier (varies by edition for classic DLT)
     const getDLTMultiplier = () => {
-      if (item.workload_type !== 'DLT') return 1.0
+      if (effectiveItem.workload_type !== 'DLT') return 1.0
       // DLT has edition-based pricing, the multiplier is baked into the DBU price
       return 1.0
     }
     const dltMultiplier = getDLTMultiplier()
     
-    switch (item.workload_type) {
+    switch (effectiveItem.workload_type) {
       case 'ALL_PURPOSE':
       case 'JOBS':
-        if (item.serverless_enabled) {
+        if (effectiveItem.serverless_enabled) {
           // Serverless: DBU/Hour = base_dbu_rate × photon_multiplier (always on) × serverless_multiplier
           // Photon is ALWAYS enabled in serverless (built-in)
           // serverlessMultiplier: standard=1x, performance=2x
@@ -783,16 +849,16 @@ export default function Calculator() {
           dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier
           
           // VM costs for classic compute
-          const driverPricingTier = item.driver_pricing_tier || 'on_demand'
-          const driverPaymentOption = item.driver_payment_option || 'NA'
-          const workerPricingTier = item.worker_pricing_tier || 'spot'
-          const workerPaymentOption = item.worker_payment_option || 'NA'
+          const driverPricingTier = effectiveItem.driver_pricing_tier || 'on_demand'
+          const driverPaymentOption = effectiveItem.driver_payment_option || 'NA'
+          const workerPricingTier = effectiveItem.worker_pricing_tier || 'spot'
+          const workerPaymentOption = effectiveItem.worker_payment_option || 'NA'
           
           // Driver VM cost/hour
-          const driverVMCostPerHour = getVMPrice(cloud, region, item.driver_node_type || '', driverPricingTier, driverPaymentOption)
+          const driverVMCostPerHour = getVMPrice(cloud, region, effectiveItem.driver_node_type || '', driverPricingTier, driverPaymentOption)
           
           // Worker VM cost/hour
-          const workerVMCostPerHour = getVMPrice(cloud, region, item.worker_node_type || '', workerPricingTier, workerPaymentOption)
+          const workerVMCostPerHour = getVMPrice(cloud, region, effectiveItem.worker_node_type || '', workerPricingTier, workerPaymentOption)
           
           // VM Cost/Month = VM Cost/Hour × Hours/Month
           const totalVMCostPerHour = driverVMCostPerHour + (workerVMCostPerHour * numWorkers)
@@ -803,7 +869,7 @@ export default function Calculator() {
         break
       
       case 'DLT':
-        if (item.serverless_enabled) {
+        if (effectiveItem.serverless_enabled) {
           // DLT Serverless: DBU/Hour = base_dbu_rate × photon (always on) × dlt_multiplier × serverless_multiplier
           // Photon is ALWAYS enabled in serverless (built-in)
           dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier * dltMultiplier * serverlessMultiplier
@@ -812,13 +878,13 @@ export default function Calculator() {
           dbuPerHour = (driverDBURate + (workerDBURate * numWorkers)) * photonMultiplier * dltMultiplier
           
           // VM costs for classic compute
-          const driverPricingTier = item.driver_pricing_tier || 'on_demand'
-          const driverPaymentOption = item.driver_payment_option || 'NA'
-          const workerPricingTier = item.worker_pricing_tier || 'spot'
-          const workerPaymentOption = item.worker_payment_option || 'NA'
+          const driverPricingTier = effectiveItem.driver_pricing_tier || 'on_demand'
+          const driverPaymentOption = effectiveItem.driver_payment_option || 'NA'
+          const workerPricingTier = effectiveItem.worker_pricing_tier || 'spot'
+          const workerPaymentOption = effectiveItem.worker_payment_option || 'NA'
           
-          const driverVMCostPerHour = getVMPrice(cloud, region, item.driver_node_type || '', driverPricingTier, driverPaymentOption)
-          const workerVMCostPerHour = getVMPrice(cloud, region, item.worker_node_type || '', workerPricingTier, workerPaymentOption)
+          const driverVMCostPerHour = getVMPrice(cloud, region, effectiveItem.driver_node_type || '', driverPricingTier, driverPaymentOption)
+          const workerVMCostPerHour = getVMPrice(cloud, region, effectiveItem.worker_node_type || '', workerPricingTier, workerPaymentOption)
           
           const totalVMCostPerHour = driverVMCostPerHour + (workerVMCostPerHour * numWorkers)
           vmCost = totalVMCostPerHour * hoursPerMonth
@@ -829,9 +895,9 @@ export default function Calculator() {
       case 'DBSQL':
         // DBSQL: lookup DBU per hour from warehouse size
         // Try pricing bundle first, then fetched dbsqlSizes, then hardcoded fallback
-        const dbsqlWarehouseType = item.dbsql_warehouse_type || 'SERVERLESS'
-        const warehouseSize = item.dbsql_warehouse_size || 'Small'
-        const numClusters = item.dbsql_num_clusters || 1
+        const dbsqlWarehouseType = effectiveItem.dbsql_warehouse_type || 'SERVERLESS'
+        const warehouseSize = effectiveItem.dbsql_warehouse_size || 'Small'
+        const numClusters = effectiveItem.dbsql_num_clusters || 1
         
         let warehouseDBUs = DBSQL_DBU_RATES[warehouseSize] || 12 // Default fallback
         
@@ -863,10 +929,10 @@ export default function Calculator() {
           if (warehouseConfig) {
             // Use config from bundle: driver + workers VM costs
             // DBSQL has separate driver and worker pricing tier selections
-            const dbsqlDriverPricingTier = item.dbsql_driver_pricing_tier || item.driver_pricing_tier || 'on_demand'
-            const dbsqlDriverPaymentOption = item.dbsql_driver_payment_option || item.driver_payment_option || 'NA'
-            const dbsqlWorkerPricingTier = item.dbsql_worker_pricing_tier || item.worker_pricing_tier || 'spot'
-            const dbsqlWorkerPaymentOption = item.dbsql_worker_payment_option || item.worker_payment_option || 'NA'
+            const dbsqlDriverPricingTier = effectiveItem.dbsql_driver_pricing_tier || effectiveItem.driver_pricing_tier || 'on_demand'
+            const dbsqlDriverPaymentOption = effectiveItem.dbsql_driver_payment_option || effectiveItem.driver_payment_option || 'NA'
+            const dbsqlWorkerPricingTier = effectiveItem.dbsql_worker_pricing_tier || effectiveItem.worker_pricing_tier || 'spot'
+            const dbsqlWorkerPaymentOption = effectiveItem.dbsql_worker_payment_option || effectiveItem.worker_payment_option || 'NA'
             
             const driverVMCost = getVMPrice(cloud, region, warehouseConfig.driver_instance_type, dbsqlDriverPricingTier, dbsqlDriverPaymentOption)
             const workerVMCost = getVMPrice(cloud, region, warehouseConfig.worker_instance_type, dbsqlWorkerPricingTier, dbsqlWorkerPaymentOption)
@@ -877,18 +943,18 @@ export default function Calculator() {
               (warehouseConfig.worker_count * workerVMCost)
             ) * numClusters
             vmCost = dbsqlVMCostPerHour * hoursPerMonth
-          } else if (item.driver_node_type) {
+          } else if (effectiveItem.driver_node_type) {
             // Fallback: use driver/worker node types if specified
-            const dbsqlDriverPricingTier = item.dbsql_driver_pricing_tier || item.driver_pricing_tier || 'on_demand'
-            const dbsqlDriverPaymentOption = item.dbsql_driver_payment_option || item.driver_payment_option || 'NA'
-            const dbsqlWorkerPricingTier = item.dbsql_worker_pricing_tier || item.worker_pricing_tier || 'spot'
-            const dbsqlWorkerPaymentOption = item.dbsql_worker_payment_option || item.worker_payment_option || 'NA'
+            const dbsqlDriverPricingTier = effectiveItem.dbsql_driver_pricing_tier || effectiveItem.driver_pricing_tier || 'on_demand'
+            const dbsqlDriverPaymentOption = effectiveItem.dbsql_driver_payment_option || effectiveItem.driver_payment_option || 'NA'
+            const dbsqlWorkerPricingTier = effectiveItem.dbsql_worker_pricing_tier || effectiveItem.worker_pricing_tier || 'spot'
+            const dbsqlWorkerPaymentOption = effectiveItem.dbsql_worker_payment_option || effectiveItem.worker_payment_option || 'NA'
             
-            const dbsqlDriverVMCost = getVMPrice(cloud, region, item.driver_node_type, dbsqlDriverPricingTier, dbsqlDriverPaymentOption)
-            const dbsqlWorkerVMCost = item.worker_node_type 
-              ? getVMPrice(cloud, region, item.worker_node_type, dbsqlWorkerPricingTier, dbsqlWorkerPaymentOption)
+            const dbsqlDriverVMCost = getVMPrice(cloud, region, effectiveItem.driver_node_type, dbsqlDriverPricingTier, dbsqlDriverPaymentOption)
+            const dbsqlWorkerVMCost = effectiveItem.worker_node_type 
+              ? getVMPrice(cloud, region, effectiveItem.worker_node_type, dbsqlWorkerPricingTier, dbsqlWorkerPaymentOption)
               : 0
-            const dbsqlNumWorkers = item.num_workers || 0
+            const dbsqlNumWorkers = effectiveItem.num_workers || 0
             
             const dbsqlVMCostPerHour = (dbsqlDriverVMCost + (dbsqlWorkerVMCost * dbsqlNumWorkers)) * numClusters
             vmCost = dbsqlVMCostPerHour * hoursPerMonth
@@ -901,8 +967,8 @@ export default function Calculator() {
         // Vector Search: Units = CEILING(vector_capacity / divisor)
         // Standard: 2M vectors per unit, 4.00 DBU/hour per unit
         // Storage Optimized: 64M vectors per unit, 18.29 DBU/hour per unit
-        const vectorMode = item.vector_search_mode || 'standard'
-        const vectorCapacity = item.vector_capacity_millions || 1
+        const vectorMode = effectiveItem.vector_search_mode || 'standard'
+        const vectorCapacity = effectiveItem.vector_capacity_millions || 1
         
         // Try pricing bundle first, then fetched data, then defaults
         let vectorDivisor = vectorMode === 'storage_optimized' ? 64000000 : 2000000  // Default divisors
@@ -935,7 +1001,7 @@ export default function Calculator() {
       
       case 'MODEL_SERVING':
         // Model Serving: DBU/Hour = gpu_type_dbu_rate
-        const gpuType = item.model_serving_gpu_type || 'cpu'
+        const gpuType = effectiveItem.model_serving_gpu_type || 'cpu'
         
         // Try pricing bundle first, then fetched data, then default
         let gpuDBURate = 2 // Default fallback
@@ -962,8 +1028,8 @@ export default function Calculator() {
         // LAKEBASE (Managed PostgreSQL)
         // Formula: DBU/Hour = cu_size × num_nodes
         // Total Cost = DBU/Hour × hours_per_month × dbu_price
-        const lakebaseCU = item.lakebase_cu || 1
-        const lakebaseNodes = item.lakebase_ha_nodes || 1  // 1-3 nodes for HA
+        const lakebaseCU = effectiveItem.lakebase_cu || 1
+        const lakebaseNodes = effectiveItem.lakebase_ha_nodes || 1  // 1-3 nodes for HA
         
         dbuPerHour = lakebaseCU * lakebaseNodes
         monthlyDBUs = dbuPerHour * hoursPerMonth
@@ -971,23 +1037,23 @@ export default function Calculator() {
       
       case 'FMAPI_DATABRICKS':
         // Foundation Models (Databricks) - llama, gpt-oss, gemma, bge, gte, etc.
-        const fmapiDbxQuantity = item.fmapi_quantity || 0
-        const fmapiDbxRateType = item.fmapi_rate_type || 'input_token'
+        const fmapiDbxQuantity = effectiveItem.fmapi_quantity || 0
+        const fmapiDbxRateType = effectiveItem.fmapi_rate_type || 'input_token'
         const fmapiDbxIsProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(fmapiDbxRateType)
         
         // Try pricing bundle first
         let dbxDbuRate: number | null = null
         
-        if (isPricingBundleLoaded && item.fmapi_model) {
-          const bundleDbxRate = getBundleFMAPIDatabricksRate(pricingBundle, cloud, item.fmapi_model, fmapiDbxRateType)
+        if (isPricingBundleLoaded && effectiveItem.fmapi_model) {
+          const bundleDbxRate = getBundleFMAPIDatabricksRate(pricingBundle, cloud, effectiveItem.fmapi_model, fmapiDbxRateType)
           if (bundleDbxRate) {
             dbxDbuRate = bundleDbxRate.dbu_rate
           }
         }
         
         // Fall back to store's cached rate
-        if (dbxDbuRate === null && item.fmapi_model) {
-          const dbxRateData = getFMAPIDatabricksRate(item.fmapi_model, fmapiDbxRateType)
+        if (dbxDbuRate === null && effectiveItem.fmapi_model) {
+          const dbxRateData = getFMAPIDatabricksRate(effectiveItem.fmapi_model, fmapiDbxRateType)
           if (dbxRateData) {
             if (fmapiDbxIsProvisioned) {
               dbxDbuRate = dbxRateData.dbu_per_hour || null
@@ -1011,20 +1077,20 @@ export default function Calculator() {
       
       case 'FMAPI_PROPRIETARY':
         // Foundation Models (Proprietary) - OpenAI, Anthropic, Google
-        const fmapiPropQuantity = item.fmapi_quantity || 0
-        const fmapiPropRateType = item.fmapi_rate_type || 'input_token'
+        const fmapiPropQuantity = effectiveItem.fmapi_quantity || 0
+        const fmapiPropRateType = effectiveItem.fmapi_rate_type || 'input_token'
         const fmapiPropIsProvisioned = fmapiPropRateType === 'provisioned_scaling'
         
         // Try pricing bundle first
         let propDbuRate: number | null = null
         
-        if (isPricingBundleLoaded && item.fmapi_provider && item.fmapi_model) {
+        if (isPricingBundleLoaded && effectiveItem.fmapi_provider && effectiveItem.fmapi_model) {
           // Bundle key format: "cloud:provider:model:endpoint_type:context_length:rate_type"
           // Use defaults for endpoint_type and context_length if not specified
-          const endpointType = item.fmapi_endpoint_type || 'global'
-          const contextLength = item.fmapi_context_length || 'long'
+          const endpointType = effectiveItem.fmapi_endpoint_type || 'global'
+          const contextLength = effectiveItem.fmapi_context_length || 'long'
           const bundlePropRate = getBundleFMAPIProprietaryRate(
-            pricingBundle, cloud, item.fmapi_provider, item.fmapi_model, 
+            pricingBundle, cloud, effectiveItem.fmapi_provider, effectiveItem.fmapi_model, 
             endpointType, contextLength, fmapiPropRateType
           )
           if (bundlePropRate) {
@@ -1033,8 +1099,8 @@ export default function Calculator() {
         }
         
         // Fall back to store's cached rate
-        if (propDbuRate === null && item.fmapi_provider && item.fmapi_model) {
-          const propRateData = getFMAPIProprietaryRate(item.fmapi_provider, item.fmapi_model, fmapiPropRateType)
+        if (propDbuRate === null && effectiveItem.fmapi_provider && effectiveItem.fmapi_model) {
+          const propRateData = getFMAPIProprietaryRate(effectiveItem.fmapi_provider, effectiveItem.fmapi_model, fmapiPropRateType)
           if (propRateData) {
             if (fmapiPropIsProvisioned) {
               propDbuRate = propRateData.dbu_per_hour || null
@@ -1552,17 +1618,31 @@ export default function Calculator() {
             <span className="hidden sm:inline">Excel</span>
           </button>
           
+          {/* Auto-save indicator for existing estimates */}
+          {id && isAutoSaving && (
+            <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+              <ArrowPathIcon className="w-3 h-3 animate-spin" />
+              Saving...
+            </span>
+          )}
+          {id && !isAutoSaving && !hasUnsavedChanges && (
+            <span className="text-xs text-green-500 flex items-center gap-1">
+              <CheckIcon className="w-3 h-3" />
+              Saved
+            </span>
+          )}
+          
           <button
             onClick={handleSave}
-            disabled={isSaving || !canCreateEstimate}
+            disabled={isSaving || isAutoSaving || !canCreateEstimate}
             title={!canCreateEstimate ? `Missing: ${getMissingFields().join(', ')}` : undefined}
             className={clsx(
               "btn btn-primary",
-              hasUnsavedChanges && "ring-2 ring-orange-500/50 ring-offset-2 ring-offset-[var(--bg-primary)]"
+              hasUnsavedChanges && !isAutoSaving && "ring-2 ring-orange-500/50 ring-offset-2 ring-offset-[var(--bg-primary)]"
             )}
           >
             <CheckIcon className="w-4 h-4" />
-            {isSaving ? 'Saving...' : id ? 'Save' : 'Create'}
+            {isSaving || isAutoSaving ? 'Saving...' : id ? 'Save' : 'Create'}
           </button>
         </div>
       </div>
@@ -1987,7 +2067,8 @@ export default function Calculator() {
                       </thead>
                       <tbody>
                         {lineItems.map((item) => {
-                          const costs = calculateItemCost(item)
+                          // Use pending form edits for real-time cost preview during editing
+                          const costs = calculateItemCost(item, pendingFormEdits[item.line_item_id])
                           const typeConfig = getWorkloadTypeConfig(item.workload_type)
                           const TypeIcon = typeConfig.icon
                           const isExpanded = expandedItems.has(item.line_item_id)
@@ -2067,8 +2148,30 @@ export default function Calculator() {
                                       <WorkloadForm
                                         estimateId={id}
                                         lineItem={item}
-                                        onClose={() => setExpandedItems(new Set())}
-                                        onSave={markAsChanged}
+                                        onClose={() => {
+                                          setExpandedItems(new Set())
+                                          // Clear pending edits when closing
+                                          setPendingFormEdits(prev => {
+                                            const next = { ...prev }
+                                            delete next[item.line_item_id]
+                                            return next
+                                          })
+                                        }}
+                                        onSave={() => {
+                                          markAsChanged()
+                                          // Clear pending edits after save
+                                          setPendingFormEdits(prev => {
+                                            const next = { ...prev }
+                                            delete next[item.line_item_id]
+                                            return next
+                                          })
+                                        }}
+                                        onFormChange={(formData) => {
+                                          setPendingFormEdits(prev => ({
+                                            ...prev,
+                                            [item.line_item_id]: formData
+                                          }))
+                                        }}
                                         inline
                                       />
                                     </div>
@@ -2085,7 +2188,8 @@ export default function Calculator() {
                 
                 {/* Card Views (Compact and Expanded) */}
                 {workloadsViewMode !== 'table' && lineItems.map((item, index) => {
-                  const costs = calculateItemCost(item) // Instant local calculation
+                  // Use pending form edits for real-time cost preview during editing
+                  const costs = calculateItemCost(item, pendingFormEdits[item.line_item_id])
                   const isExpanded = expandedItems.has(item.line_item_id)
                   const usageSummary = getUsageSummary(item)
                   const typeConfig = getWorkloadTypeConfig(item.workload_type)
@@ -2363,8 +2467,30 @@ export default function Calculator() {
                           <WorkloadForm
                             estimateId={id}
                             lineItem={item}
-                            onClose={() => setExpandedItems(new Set())}
-                            onSave={markAsChanged}
+                            onClose={() => {
+                              setExpandedItems(new Set())
+                              // Clear pending edits when closing
+                              setPendingFormEdits(prev => {
+                                const next = { ...prev }
+                                delete next[item.line_item_id]
+                                return next
+                              })
+                            }}
+                            onSave={() => {
+                              markAsChanged()
+                              // Clear pending edits after save
+                              setPendingFormEdits(prev => {
+                                const next = { ...prev }
+                                delete next[item.line_item_id]
+                                return next
+                              })
+                            }}
+                            onFormChange={(formData) => {
+                              setPendingFormEdits(prev => ({
+                                ...prev,
+                                [item.line_item_id]: formData
+                              }))
+                            }}
                             inline
                           />
                         </div>
