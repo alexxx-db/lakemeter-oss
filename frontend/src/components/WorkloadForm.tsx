@@ -6,7 +6,8 @@ import { useStore } from '../store/useStore'
 import SearchableSelect from './SearchableSelect'
 import type { LineItem, WorkloadType } from '../types'
 import { 
-  getDBSQLWarehouseConfig, 
+  getDBSQLWarehouseConfig,
+  getAvailableWorkloadTypesForRegion,
   type PricingBundle 
 } from '../utils/pricingBundle'
 
@@ -244,10 +245,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     fetchLineItems,
     clearSingleWorkloadCost,
     markItemCalculating,
-    fetchVMCostForInstance,
-    fetchAvailableWorkloadTypes,
-    getAvailableWorkloadTypes,
-    isLoadingRegionalAvailability
+    fetchVMCostForInstance
   } = useStore()
   
   // Fallback DBSQL sizes if store hasn't loaded yet
@@ -546,21 +544,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     }
   }, [selectedCloud, selectedRegion, form.driver_node_type, form.worker_node_type, form.driver_pricing_tier, form.worker_pricing_tier, form.driver_payment_option, form.worker_payment_option, form.serverless_enabled, fetchVMCostForInstance])
   
-  // Fetch available workload types when region/tier changes
-  // This is used to filter out workload types not available in the selected region
-  useEffect(() => {
-    if (!selectedCloud || !selectedRegion || !selectedTier) return
-    
-    // Check if we already have cached data
-    const cachedTypes = getAvailableWorkloadTypes(selectedCloud, selectedRegion, selectedTier)
-    if (!cachedTypes) {
-      // Fetch in background - don't block UI
-      fetchAvailableWorkloadTypes(selectedCloud, selectedRegion, selectedTier)
-    }
-  }, [selectedCloud, selectedRegion, selectedTier, fetchAvailableWorkloadTypes, getAvailableWorkloadTypes])
-  
-  // Get available workload types for the current region (from cache or default to all)
-  const availableWorkloadTypesForRegion = getAvailableWorkloadTypes(selectedCloud, selectedRegion, selectedTier)
+  // Get available workload types for the current region from pricing bundle
+  // This is instant - no API call needed, uses pre-loaded pricing bundle data
+  const availableWorkloadTypesForRegion = isPricingBundleLoaded 
+    ? getAvailableWorkloadTypesForRegion(pricingBundle, selectedCloud, selectedRegion, selectedTier)
+    : null
   
   // Filter workload types based on both tier restrictions AND regional availability
   const filteredWorkloadTypes = workloadTypes.filter(wt => {
@@ -884,7 +872,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         <div>
           <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
             Workload Type
-            {isLoadingRegionalAvailability && (
+            {!isPricingBundleLoaded && (
               <span className="ml-2 text-[var(--text-muted)] text-xs animate-pulse">Loading...</span>
             )}
           </label>

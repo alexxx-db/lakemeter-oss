@@ -381,3 +381,173 @@ export function getFMAPIProprietaryRate(
   return bundle.fmapiProprietaryRates[key] ?? null
 }
 
+// ============================================================================
+// Regional Workload Availability
+// ============================================================================
+
+/**
+ * Mapping of SKU product types to workload types.
+ * Used to determine which workload types are available based on SKUs in a region.
+ */
+const SKU_TO_WORKLOAD_MAP: Record<string, string> = {
+  // Jobs
+  'JOBS_COMPUTE': 'JOBS',
+  'JOBS_LIGHT_COMPUTE': 'JOBS',
+  'AUTOMATED_JOBS_COMPUTE': 'JOBS',
+  'AUTOMATED_JOBS_LIGHT_COMPUTE': 'JOBS',
+  'JOBS_COMPUTE_(PHOTON)': 'JOBS',
+  'JOBS_SERVERLESS_COMPUTE': 'JOBS',
+  
+  // All Purpose
+  'ALL_PURPOSE_COMPUTE': 'ALL_PURPOSE',
+  'ALL_PURPOSE_COMPUTE_(PHOTON)': 'ALL_PURPOSE',
+  'ALL_PURPOSE_COMPUTE_(DLT)': 'ALL_PURPOSE',
+  'ALL_PURPOSE_SERVERLESS_COMPUTE': 'ALL_PURPOSE',
+  'INTERACTIVE_SERVERLESS_COMPUTE': 'ALL_PURPOSE',
+  
+  // DLT / Lakeflow Declarative Pipelines
+  'DLT_CORE_COMPUTE': 'DLT',
+  'DLT_PRO_COMPUTE': 'DLT',
+  'DLT_ADVANCED_COMPUTE': 'DLT',
+  'DLT_CORE_COMPUTE_(PHOTON)': 'DLT',
+  'DLT_PRO_COMPUTE_(PHOTON)': 'DLT',
+  'DLT_ADVANCED_COMPUTE_(PHOTON)': 'DLT',
+  'DELTA_LIVE_TABLES_SERVERLESS': 'DLT',
+  
+  // DBSQL
+  'SQL_COMPUTE': 'DBSQL',
+  'SQL_PRO_COMPUTE': 'DBSQL',
+  'SERVERLESS_SQL_COMPUTE': 'DBSQL',
+  
+  // Vector Search
+  'VECTOR_SEARCH_ENDPOINT': 'VECTOR_SEARCH',
+  'MOSAIC_AI_VECTOR_SEARCH': 'VECTOR_SEARCH',
+  
+  // Model Serving
+  'SERVERLESS_REAL_TIME_INFERENCE': 'MODEL_SERVING',
+  'SERVERLESS_REAL_TIME_INFERENCE_LAUNCH': 'MODEL_SERVING',
+  'MODEL_SERVING_SERVERLESS': 'MODEL_SERVING',
+  'MOSAIC_AI_MODEL_SERVING': 'MODEL_SERVING',
+  
+  // Foundation Models - Databricks
+  'FOUNDATION_MODEL_TRAINING': 'FMAPI_DATABRICKS',
+  'MODEL_TRAINING': 'FMAPI_DATABRICKS',
+  'MOSAIC_AI_FOUNDATION_MODEL_SERVING': 'FMAPI_DATABRICKS',
+  'DATABRICKS_FOUNDATION_MODEL_TRAINING': 'FMAPI_DATABRICKS',
+  
+  // Foundation Models - Proprietary
+  'OPENAI_MODEL_SERVING': 'FMAPI_PROPRIETARY',
+  'ANTHROPIC_MODEL_SERVING': 'FMAPI_PROPRIETARY',
+  'GOOGLE_MODEL_SERVING': 'FMAPI_PROPRIETARY',
+  'GEMINI_MODEL_SERVING': 'FMAPI_PROPRIETARY',
+  'EXTERNAL_MODEL_SERVING': 'FMAPI_PROPRIETARY',
+  
+  // Lakebase
+  'DATABASE_SERVERLESS_COMPUTE': 'LAKEBASE',
+  'LAKEBASE_COMPUTE': 'LAKEBASE',
+}
+
+/**
+ * All possible workload types for fallback.
+ */
+const ALL_WORKLOAD_TYPES = [
+  'JOBS', 'ALL_PURPOSE', 'DLT', 'DBSQL', 
+  'VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'
+]
+
+/**
+ * Get available workload types for a specific cloud/region/tier combination from the pricing bundle.
+ * Maps SKU product types to workload types.
+ * 
+ * @param bundle - The loaded pricing bundle
+ * @param cloud - Cloud provider (aws, azure, gcp)
+ * @param region - Region code (e.g., us-east-1, eastus, us-central1)
+ * @param tier - Pricing tier (PREMIUM, ENTERPRISE)
+ * @returns Array of available workload types, or all types if region not found (graceful fallback)
+ */
+export function getAvailableWorkloadTypesForRegion(
+  bundle: PricingBundle,
+  cloud: string,
+  region: string,
+  tier: string
+): string[] {
+  if (!bundle.isLoaded || !bundle.dbuRates) {
+    // Bundle not loaded, return all types (graceful fallback)
+    return ALL_WORKLOAD_TYPES
+  }
+  
+  const key = `${cloud.toLowerCase()}:${region}:${tier.toUpperCase()}`
+  const productTypes = bundle.dbuRates[key]
+  
+  if (!productTypes || Object.keys(productTypes).length === 0) {
+    // Region not found in bundle - could be a new region or typo
+    // Return all types as fallback (don't block users)
+    return ALL_WORKLOAD_TYPES
+  }
+  
+  // Map SKU product types to workload types
+  const availableWorkloads = new Set<string>()
+  
+  for (const sku of Object.keys(productTypes)) {
+    const workloadType = SKU_TO_WORKLOAD_MAP[sku]
+    if (workloadType) {
+      availableWorkloads.add(workloadType)
+    }
+  }
+  
+  return Array.from(availableWorkloads).sort()
+}
+
+/**
+ * Get all unique regions available in the pricing bundle for a cloud.
+ * Useful for populating region dropdowns with only regions that have pricing data.
+ * 
+ * @param bundle - The loaded pricing bundle
+ * @param cloud - Cloud provider (aws, azure, gcp)
+ * @returns Array of region codes
+ */
+export function getAvailableRegionsFromBundle(
+  bundle: PricingBundle,
+  cloud: string
+): string[] {
+  if (!bundle.isLoaded || !bundle.dbuRates) {
+    return []
+  }
+  
+  const cloudPrefix = `${cloud.toLowerCase()}:`
+  const regions = new Set<string>()
+  
+  for (const key of Object.keys(bundle.dbuRates)) {
+    if (key.startsWith(cloudPrefix)) {
+      // Key format: cloud:region:tier
+      const parts = key.split(':')
+      if (parts.length >= 2) {
+        regions.add(parts[1])
+      }
+    }
+  }
+  
+  return Array.from(regions).sort()
+}
+
+/**
+ * Check if a specific workload type is available in a region.
+ * 
+ * @param bundle - The loaded pricing bundle
+ * @param cloud - Cloud provider
+ * @param region - Region code
+ * @param tier - Pricing tier
+ * @param workloadType - Workload type to check
+ * @returns true if available, false otherwise
+ */
+export function isWorkloadTypeAvailableInRegion(
+  bundle: PricingBundle,
+  cloud: string,
+  region: string,
+  tier: string,
+  workloadType: string
+): boolean {
+  const available = getAvailableWorkloadTypesForRegion(bundle, cloud, region, tier)
+  return available.includes(workloadType)
+}
+

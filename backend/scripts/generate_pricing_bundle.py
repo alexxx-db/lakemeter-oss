@@ -230,13 +230,17 @@ def generate_dbu_rates(conn, output_dir: str):
         'DATABRICKS_STORAGE'
     ]
     
-    # Query all DBU rates
+    # Tiers to exclude from the bundle (deprecated tiers)
+    EXCLUDED_TIERS = ['STANDARD']
+    
+    # Query all DBU rates (excluding deprecated tiers)
     result = conn.execute(text("""
         SELECT cloud, tier, product_type, region, pricing_type, price_per_dbu
         FROM lakemeter.sync_pricing_dbu_rates
         WHERE product_type IN :product_types
+          AND tier NOT IN :excluded_tiers
         ORDER BY cloud, region, tier, product_type, pricing_type
-    """), {"product_types": tuple(RELEVANT_PRODUCT_TYPES)})
+    """), {"product_types": tuple(RELEVANT_PRODUCT_TYPES), "excluded_tiers": tuple(EXCLUDED_TIERS)})
     
     # Build a lookup: cloud -> region -> tier -> product_type -> price
     # For each combination, prefer REGIONAL over GLOBAL

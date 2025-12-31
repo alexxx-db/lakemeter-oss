@@ -23,6 +23,7 @@ import {
   getPhotonMultiplier as getBundlePhotonMultiplier,
   getDBUPrice as getBundleDBUPrice,
   getDBSQLWarehouseConfig,
+  getAvailableWorkloadTypesForRegion,
   type PricingBundle
 } from '../utils/pricingBundle'
 import type { LineItem } from '../types'
@@ -201,13 +202,26 @@ function generateTestsForEnvironment(
   vmTypes: string[],
   config: TestConfig,
   startIdCounter: number,
-  cloud: string
+  cloud: string,
+  bundle: PricingBundle | null
 ): TestCase[] {
   const testCases: TestCase[] = []
   let idCounter = startIdCounter
   
+  // Get available workload types for this region from pricing bundle
+  // This filters out workloads not available in the region (e.g., no Vector Search in ap-southeast-3)
+  const availableWorkloads = bundle?.isLoaded 
+    ? getAvailableWorkloadTypesForRegion(bundle, env.cloud, env.region, env.tier)
+    : null
+  
+  // Helper to check if a workload type is available in this region
+  const isAvailable = (workloadType: string) => {
+    if (!availableWorkloads) return true // No data = assume available (fallback)
+    return availableWorkloads.includes(workloadType)
+  }
+  
   // Jobs tests
-  if (config.includeJobs) {
+  if (config.includeJobs && isAvailable('JOBS')) {
     for (const vm of vmTypes.slice(0, 2)) {
       testCases.push({
         id: `${++idCounter}`,
@@ -272,7 +286,7 @@ function generateTestsForEnvironment(
   }
   
   // All Purpose tests
-  if (config.includeAllPurpose) {
+  if (config.includeAllPurpose && isAvailable('ALL_PURPOSE')) {
     for (const vm of vmTypes.slice(0, 2)) {
       testCases.push({
         id: `${++idCounter}`,
@@ -311,7 +325,7 @@ function generateTestsForEnvironment(
   }
   
   // DLT tests
-  if (config.includeDLT) {
+  if (config.includeDLT && isAvailable('DLT')) {
     for (const edition of ['CORE', 'PRO', 'ADVANCED']) {
       testCases.push({
         id: `${++idCounter}`,
@@ -355,7 +369,7 @@ function generateTestsForEnvironment(
   }
   
   // DBSQL tests
-  if (config.includeDBSQL) {
+  if (config.includeDBSQL && isAvailable('DBSQL')) {
     for (const size of sampleArray(DBSQL_SIZES, 3)) {
       testCases.push({
         id: `${++idCounter}`,
@@ -408,7 +422,7 @@ function generateTestsForEnvironment(
   }
   
   // Vector Search tests
-  if (config.includeVectorSearch) {
+  if (config.includeVectorSearch && isAvailable('VECTOR_SEARCH')) {
     for (const mode of VECTOR_MODES) {
       testCases.push({
         id: `${++idCounter}`,
@@ -426,7 +440,7 @@ function generateTestsForEnvironment(
   }
   
   // Model Serving tests
-  if (config.includeModelServing) {
+  if (config.includeModelServing && isAvailable('MODEL_SERVING')) {
     const cloudGPUs = GPU_TYPES_BY_CLOUD[cloud.toLowerCase()] || GPU_TYPES
     for (const gpu of cloudGPUs) {
       testCases.push({
@@ -444,7 +458,7 @@ function generateTestsForEnvironment(
   }
   
   // FMAPI Databricks tests
-  if (config.includeFMAPIDB) {
+  if (config.includeFMAPIDB && isAvailable('FMAPI_DATABRICKS')) {
     // LLM models - support both input and output tokens
     for (const model of sampleArray(FMAPI_DATABRICKS_LLM_MODELS, 3)) {
       for (const rateType of ['input_token', 'output_token']) {
@@ -480,7 +494,7 @@ function generateTestsForEnvironment(
   }
   
   // FMAPI Proprietary tests
-  if (config.includeFMAPIProp) {
+  if (config.includeFMAPIProp && isAvailable('FMAPI_PROPRIETARY')) {
     for (const propConfig of sampleArray(FMAPI_PROPRIETARY_CONFIGS, 4)) {
       for (const context of propConfig.contexts.slice(0, 2)) {
         for (const rateType of ['input_token', 'output_token']) {
@@ -505,7 +519,7 @@ function generateTestsForEnvironment(
   }
   
   // Lakebase tests
-  if (config.includeLakebase) {
+  if (config.includeLakebase && isAvailable('LAKEBASE')) {
     for (const cuSize of [1, 2, 4]) {
       testCases.push({
         id: `${++idCounter}`,
@@ -542,7 +556,8 @@ function generateTestCases(config: TestConfig, bundle: PricingBundle | null): Te
       sampledVMs, 
       config, 
       idCounter,
-      cloud
+      cloud,
+      bundle
     )
   }
   
@@ -560,339 +575,18 @@ function generateTestCases(config: TestConfig, bundle: PricingBundle | null): Te
         : DEFAULT_ENVIRONMENTS[cloud as keyof typeof DEFAULT_ENVIRONMENTS]?.vmTypes?.slice(0, config.vmSamplesPerCloud) || ['c5.xlarge']
       
       for (const tier of tiers) {
-        const env = { cloud, region, tier }
-        
-        // Note: STANDARD tier has been deprecated and removed from tier options
-        // All tiers now support all workload types (PREMIUM and ENTERPRISE only)
-        
-        // Jobs tests
-        if (config.includeJobs) {
-          for (const vm of vmTypes.slice(0, 2)) {
-            // Classic no photon
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `Jobs Classic - ${vm}`,
-              category: 'Jobs',
-              workloadType: 'JOBS',
-              environment: env,
-              config: {
-                serverless_enabled: false,
-                photon_enabled: false,
-                driver_node_type: vm,
-                worker_node_type: vm,
-                num_workers: 2,
-                driver_pricing_tier: 'on_demand',
-                worker_pricing_tier: 'spot',
-                runs_per_day: 1,
-                avg_runtime_minutes: 30,
-                days_per_month: 22
-              }
-            })
-            
-            // Classic with photon
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `Jobs Classic Photon - ${vm}`,
-              category: 'Jobs',
-              workloadType: 'JOBS',
-              environment: env,
-              config: {
-                serverless_enabled: false,
-                photon_enabled: true,
-                driver_node_type: vm,
-                worker_node_type: vm,
-                num_workers: 4,
-                driver_pricing_tier: 'on_demand',
-                worker_pricing_tier: 'spot',
-                runs_per_day: 2,
-                avg_runtime_minutes: 45,
-                days_per_month: 22
-              }
-            })
-          }
-          
-          // Serverless modes
-          for (const mode of ['standard', 'performance']) {
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `Jobs Serverless ${mode}`,
-              category: 'Jobs',
-              workloadType: 'JOBS',
-              environment: env,
-              config: {
-                serverless_enabled: true,
-                serverless_mode: mode,
-                driver_node_type: vmTypes[0] || 'c5.xlarge',
-                worker_node_type: vmTypes[0] || 'c5.xlarge',
-                num_workers: 2,
-                runs_per_day: 3,
-                avg_runtime_minutes: 20,
-                days_per_month: 22
-              }
-            })
-          }
-        }
-        
-        // All Purpose tests
-        if (config.includeAllPurpose) {
-          for (const vm of vmTypes.slice(0, 2)) {
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `All Purpose Classic - ${vm}`,
-              category: 'All Purpose',
-              workloadType: 'ALL_PURPOSE',
-              environment: env,
-              config: {
-                serverless_enabled: false,
-                photon_enabled: false,
-                driver_node_type: vm,
-                worker_node_type: vm,
-                num_workers: 2,
-                driver_pricing_tier: 'on_demand',
-                worker_pricing_tier: 'on_demand',
-                hours_per_month: 160
-              }
-            })
-          }
-          
-          // Serverless - All-Purpose only supports Performance mode (no Standard option)
-          testCases.push({
-            id: `${++idCounter}`,
-            name: 'All Purpose Serverless',
-            category: 'All Purpose',
-            workloadType: 'ALL_PURPOSE',
-            environment: env,
-            config: {
-              serverless_enabled: true,
-              serverless_mode: 'performance',  // All-Purpose Serverless only supports Performance mode
-              driver_node_type: vmTypes[0] || 'c5.xlarge',
-              worker_node_type: vmTypes[0] || 'c5.xlarge',
-              num_workers: 2,
-              hours_per_month: 100
-            }
-          })
-        }
-        
-        // DLT tests
-        if (config.includeDLT) {
-          for (const edition of ['CORE', 'PRO', 'ADVANCED']) {
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `DLT Classic ${edition}`,
-              category: 'DLT',
-              workloadType: 'DLT',
-              environment: env,
-              config: {
-                serverless_enabled: false,
-                photon_enabled: edition !== 'CORE',
-                dlt_edition: edition,
-                driver_node_type: vmTypes[0] || 'c5.xlarge',
-                worker_node_type: vmTypes[0] || 'c5.xlarge',
-                num_workers: 2,
-                driver_pricing_tier: 'on_demand',
-                worker_pricing_tier: 'spot',
-                runs_per_day: 4,
-                avg_runtime_minutes: 30,
-                days_per_month: 30
-              }
-            })
-          }
-          
-          // DLT Serverless
-          testCases.push({
-            id: `${++idCounter}`,
-            name: 'DLT Serverless',
-            category: 'DLT',
-            workloadType: 'DLT',
-            environment: env,
-            config: {
-              serverless_enabled: true,
-              serverless_mode: 'standard',
-              driver_node_type: vmTypes[0] || 'c5.xlarge',
-              worker_node_type: vmTypes[0] || 'c5.xlarge',
-              num_workers: 2,
-              runs_per_day: 6,
-              avg_runtime_minutes: 20,
-              days_per_month: 30
-            }
-          })
-        }
-        
-        // DBSQL tests
-        if (config.includeDBSQL) {
-          // Serverless - different sizes
-          for (const size of sampleArray(DBSQL_SIZES, 3)) {
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `DBSQL Serverless ${size}`,
-              category: 'DBSQL',
-              workloadType: 'DBSQL',
-              environment: env,
-              config: {
-                dbsql_warehouse_type: 'SERVERLESS',
-                dbsql_warehouse_size: size,
-                dbsql_num_clusters: 1,
-                hours_per_month: 160
-              }
-            })
-          }
-          
-          // Pro - different sizes
-          // NOTE: API only supports single vm_pricing_tier for all VMs, so we use the same for driver/worker
-          for (const size of sampleArray(DBSQL_SIZES, 2)) {
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `DBSQL Pro ${size}`,
-              category: 'DBSQL',
-              workloadType: 'DBSQL',
-              environment: env,
-              config: {
-                dbsql_warehouse_type: 'PRO',
-                dbsql_warehouse_size: size,
-                dbsql_num_clusters: 1,
-                dbsql_driver_pricing_tier: 'on_demand',
-                dbsql_worker_pricing_tier: 'on_demand',  // Same as driver for API consistency
-                hours_per_month: 100
-              }
-            })
-          }
-          
-          // Classic
-          testCases.push({
-            id: `${++idCounter}`,
-            name: 'DBSQL Classic Medium',
-            category: 'DBSQL',
-            workloadType: 'DBSQL',
-            environment: env,
-            config: {
-              dbsql_warehouse_type: 'CLASSIC',
-              dbsql_warehouse_size: 'Medium',
-              dbsql_num_clusters: 1,
-              dbsql_driver_pricing_tier: 'on_demand',
-              dbsql_worker_pricing_tier: 'on_demand',  // Same as driver for API consistency
-              hours_per_month: 80
-            }
-          })
-        }
-        
-        // Vector Search tests
-        if (config.includeVectorSearch) {
-          for (const mode of VECTOR_MODES) {
-            for (const capacity of [1, 5, 20]) {
-              testCases.push({
-                id: `${++idCounter}`,
-                name: `Vector Search ${mode} ${capacity}M`,
-                category: 'Vector Search',
-                workloadType: 'VECTOR_SEARCH',
-                environment: env,
-                config: {
-                  vector_search_mode: mode,
-                  vector_capacity_millions: capacity,
-                  hours_per_month: 730
-                }
-              })
-            }
-          }
-        }
-        
-        // Model Serving tests - use cloud-specific GPU types
-        if (config.includeModelServing) {
-          const cloudGPUs = GPU_TYPES_BY_CLOUD[cloud.toLowerCase()] || GPU_TYPES
-          for (const gpu of cloudGPUs) {
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `Model Serving ${gpu}`,
-              category: 'Model Serving',
-              workloadType: 'MODEL_SERVING',
-              environment: env,
-              config: {
-                model_serving_gpu_type: gpu,
-                hours_per_month: 200
-              }
-            })
-          }
-        }
-        
-        // FMAPI Databricks tests
-        if (config.includeFMAPIDB) {
-          // LLM models - support both input and output tokens
-          for (const model of sampleArray(FMAPI_DATABRICKS_LLM_MODELS, 3)) {
-            for (const rateType of ['input_token', 'output_token']) {
-              testCases.push({
-                id: `${++idCounter}`,
-                name: `FMAPI DB ${model} ${rateType}`,
-                category: 'FMAPI Databricks',
-                workloadType: 'FMAPI_DATABRICKS',
-                environment: env,
-                config: {
-                  fmapi_model: model,
-                  fmapi_rate_type: rateType,
-                  fmapi_quantity: 10
-                }
-              })
-            }
-          }
-          // Embedding models - only support input tokens
-          for (const model of sampleArray(FMAPI_DATABRICKS_EMBEDDING_MODELS, 1)) {
-            testCases.push({
-              id: `${++idCounter}`,
-              name: `FMAPI DB ${model} input_token`,
-              category: 'FMAPI Databricks',
-              workloadType: 'FMAPI_DATABRICKS',
-              environment: env,
-              config: {
-                fmapi_model: model,
-                fmapi_rate_type: 'input_token',
-                fmapi_quantity: 10
-              }
-            })
-          }
-        }
-        
-        // FMAPI Proprietary tests
-        if (config.includeFMAPIProp) {
-          for (const propConfig of sampleArray(FMAPI_PROPRIETARY_CONFIGS, 4)) {
-            for (const context of propConfig.contexts.slice(0, 2)) {
-              for (const rateType of ['input_token', 'output_token']) {
-                testCases.push({
-                  id: `${++idCounter}`,
-                  name: `FMAPI ${propConfig.provider} ${propConfig.model} ${context} ${rateType}`,
-                  category: 'FMAPI Proprietary',
-                  workloadType: 'FMAPI_PROPRIETARY',
-                  environment: env,
-                  config: {
-                    fmapi_provider: propConfig.provider,
-                    fmapi_model: propConfig.model,
-                    fmapi_endpoint_type: 'global',
-                    fmapi_context_length: context,
-                    fmapi_rate_type: rateType,
-                    fmapi_quantity: 5
-                  }
-                })
-              }
-            }
-          }
-        }
-        
-        // Lakebase tests
-        if (config.includeLakebase) {
-          for (const cu of [1, 2, 4, 8]) {
-            for (const nodes of [1, 2]) {
-              testCases.push({
-                id: `${++idCounter}`,
-                name: `Lakebase ${cu}CU ${nodes}node`,
-                category: 'Lakebase',
-                workloadType: 'LAKEBASE',
-                environment: env,
-                config: {
-                  lakebase_cu: cu,
-                  lakebase_ha_nodes: nodes,
-                  hours_per_month: 730
-                }
-              })
-            }
-          }
-        }
+        // Use the shared function to generate tests for this environment
+        // This ensures regional availability is respected
+        const envTests = generateTestsForEnvironment(
+          { cloud, region, tier },
+          vmTypes,
+          config,
+          idCounter,
+          cloud,
+          bundle
+        )
+        testCases.push(...envTests)
+        idCounter += envTests.length
       }
     }
   }
