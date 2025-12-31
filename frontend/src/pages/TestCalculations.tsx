@@ -1214,6 +1214,7 @@ export default function TestCalculations() {
     isPricingBundleLoaded,
     loadPricingBundle,
     getVMPrice,
+    fetchVMCostForInstance,  // For pre-fetching VM prices before local calculation
     getFMAPIDatabricksRate,
     getFMAPIProprietaryRate,
     getVectorSearchRate
@@ -1340,7 +1341,40 @@ export default function TestCalculations() {
       workload_type: workloadType
     }
     
-    // Local calculation
+    // Pre-fetch VM prices for accurate local calculation (if not serverless)
+    // This ensures vmPricingMap has the prices before local calculation runs
+    if (!config.serverless_enabled && config.driver_node_type) {
+      const vmFetchPromises: Promise<number>[] = []
+      
+      // Fetch driver VM price
+      vmFetchPromises.push(
+        fetchVMCostForInstance(
+          environment.cloud,
+          environment.region,
+          config.driver_node_type,
+          config.driver_pricing_tier || 'on_demand',
+          config.driver_payment_option || 'NA'
+        )
+      )
+      
+      // Fetch worker VM price (if different from driver)
+      if (config.worker_node_type) {
+        vmFetchPromises.push(
+          fetchVMCostForInstance(
+            environment.cloud,
+            environment.region,
+            config.worker_node_type,
+            config.worker_pricing_tier || 'spot',
+            config.worker_payment_option || 'NA'
+          )
+        )
+      }
+      
+      // Wait for VM prices to be fetched and cached
+      await Promise.all(vmFetchPromises)
+    }
+    
+    // Local calculation (now with VM prices in cache)
     const localStart = performance.now()
     const localResult = calculateWorkloadCost(lineItem, context)
     const localTimeMs = performance.now() - localStart
