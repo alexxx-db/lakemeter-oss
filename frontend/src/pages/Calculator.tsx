@@ -50,7 +50,8 @@ import {
   getVectorSearchRate as getBundleVectorSearchRate,
   getModelServingRate as getBundleModelServingRate,
   getFMAPIDatabricksRate as getBundleFMAPIDatabricksRate,
-  getFMAPIProprietaryRate as getBundleFMAPIProprietaryRate
+  getFMAPIProprietaryRate as getBundleFMAPIProprietaryRate,
+  getAvailableRegionsFromBundle
 } from '../utils/pricingBundle'
 
 // Cloud provider visual options
@@ -498,7 +499,7 @@ export default function Calculator() {
   }, [formData.cloud, formData.region, lineItems, lineItemsLoaded, fetchVMCostForInstance, pricingBundle])
   
   // Use cached regions from store (pre-loaded for all clouds)
-  // This is instant - no API call needed when switching clouds
+  // Filter to only show regions that have actual Databricks control planes (i.e., regions in pricing bundle)
   useEffect(() => {
     if (!formData.cloud) return
     
@@ -506,8 +507,22 @@ export default function Calculator() {
     const cachedRegions = getRegionsForCloud(formData.cloud)
     
     if (cachedRegions.length > 0) {
-      // Have cached regions - use them instantly
-      setRegions(cachedRegions)
+      // Filter regions to only include those with control planes (in pricing bundle)
+      // This ensures users can only select regions where Databricks is actually available
+      const availableRegionsInBundle = isPricingBundleLoaded 
+        ? getAvailableRegionsFromBundle(pricingBundle, formData.cloud)
+        : []
+      
+      if (availableRegionsInBundle.length > 0) {
+        // Filter cached regions to only those in the pricing bundle
+        const filteredRegions = cachedRegions.filter(r => 
+          availableRegionsInBundle.includes(r.region_code)
+        )
+        setRegions(filteredRegions)
+      } else {
+        // Bundle not loaded yet or no regions - show all cached regions as fallback
+        setRegions(cachedRegions)
+      }
       setIsLoadingRegions(false)
     } else if (!isReferenceDataLoaded) {
       // Still loading reference data
@@ -517,7 +532,7 @@ export default function Calculator() {
       setRegions([])
       setIsLoadingRegions(false)
     }
-  }, [formData.cloud, regionsMap, isReferenceDataLoaded, getRegionsForCloud])
+  }, [formData.cloud, regionsMap, isReferenceDataLoaded, getRegionsForCloud, pricingBundle, isPricingBundleLoaded])
   
   useEffect(() => {
     const loadEstimateData = async () => {
