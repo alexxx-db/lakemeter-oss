@@ -4,7 +4,7 @@
  * Provides a conversational interface for the AI assistant to help users
  * create and manage estimates.
  */
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import clsx from 'clsx'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -17,7 +17,9 @@ import {
   ExclamationCircleIcon,
   ArrowPathIcon,
   DocumentPlusIcon,
-  TrashIcon
+  TrashIcon,
+  MinusIcon,
+  ChevronUpIcon
 } from '@heroicons/react/24/outline'
 // AI Chat Panel uses fetch directly - no store needed
 
@@ -103,10 +105,37 @@ export function ChatPanel({
   const [proposedWorkloads, setProposedWorkloads] = useState<ProposedWorkload[]>([])
   const [proposedEstimate, setProposedEstimate] = useState<ProposedEstimate | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isMinimized, setIsMinimized] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  
+  // Quick action chips - context-aware suggestions
+  const quickActions = useMemo(() => {
+    if (mode === 'estimates_list') {
+      return [
+        { label: 'Create AWS estimate', action: 'Create a new estimate for AWS' },
+        { label: 'Create Azure estimate', action: 'Create a new estimate for Azure' },
+        { label: 'Create GCP estimate', action: 'Create a new estimate for GCP' },
+      ]
+    }
+    // Estimate detail mode
+    const hasWorkloads = (currentWorkloads?.length || 0) > 0
+    if (!hasWorkloads) {
+      return [
+        { label: '➕ Add Jobs workload', action: 'Add a Jobs compute workload' },
+        { label: '➕ Add SQL workload', action: 'Add a Databricks SQL workload' },
+        { label: '➕ Add DLT pipeline', action: 'Add a Delta Live Tables pipeline' },
+      ]
+    }
+    return [
+      { label: '💡 Optimize costs', action: 'Suggest ways to optimize my costs' },
+      { label: '📊 Analyze workloads', action: 'Analyze my current workloads' },
+      { label: '➕ Add workload', action: 'Help me add a new workload' },
+      { label: '❓ Explain pricing', action: 'Explain how Databricks pricing works' },
+    ]
+  }, [mode, currentWorkloads])
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -565,37 +594,63 @@ export function ChatPanel({
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div 
-          initial={{ x: '100%' }}
-          animate={{ x: 0 }}
-          exit={{ x: '100%' }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="fixed inset-y-0 right-0 w-full sm:w-[420px] bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-50 flex flex-col"
-        >
+        <>
+          {/* Minimized Dock */}
+          {isMinimized ? (
+            <motion.div
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              className="fixed bottom-4 right-4 z-50"
+            >
+              <button
+                onClick={() => setIsMinimized(false)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105"
+              >
+                <SparklesIcon className="w-5 h-5" />
+                <span className="font-medium text-sm">AI Assistant</span>
+                <ChevronUpIcon className="w-4 h-4" />
+              </button>
+            </motion.div>
+          ) : (
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              className="fixed inset-y-0 right-0 w-full sm:w-[380px] bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-50 flex flex-col"
+            >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
         <div className="flex items-center gap-2">
-          <SparklesIcon className="w-5 h-5 text-orange-500" />
-          <h2 className="font-semibold text-[var(--text-primary)]">AI Assistant</h2>
+          <SparklesIcon className="w-4 h-4 text-orange-500" />
+          <h2 className="font-medium text-sm text-[var(--text-primary)]">AI Assistant</h2>
           {conversationId && (
-            <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-2 py-0.5 rounded">
+            <span className="text-[10px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded">
               Active
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={clearConversation}
             className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
             title="Clear conversation"
           >
-            <TrashIcon className="w-4 h-4" />
+            <TrashIcon className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setIsMinimized(true)}
+            className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+            title="Minimize"
+          >
+            <MinusIcon className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+            title="Close"
           >
-            <XMarkIcon className="w-5 h-5" />
+            <XMarkIcon className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -848,7 +903,24 @@ export function ChatPanel({
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+      <div className="p-3 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+        {/* Quick Action Chips */}
+        {!isLoading && messages.length <= 2 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {quickActions.map((action: { label: string; action: string }, idx: number) => (
+              <button
+                key={idx}
+                onClick={() => {
+                  setInputValue(action.action)
+                  setTimeout(() => sendMessage(), 100)
+                }}
+                className="text-xs px-2.5 py-1 rounded-full border border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:bg-orange-500/10 hover:border-orange-500/30 hover:text-orange-600 text-[var(--text-secondary)]"
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
           <textarea
             ref={inputRef}
@@ -858,26 +930,28 @@ export function ChatPanel({
             placeholder="Ask me about Databricks pricing..."
             disabled={isLoading}
             rows={1}
-            className="flex-1 resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-            style={{ minHeight: '44px', maxHeight: '120px' }}
+            className="flex-1 resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+            style={{ minHeight: '40px', maxHeight: '100px' }}
           />
           <button
             onClick={sendMessage}
             disabled={!inputValue.trim() || isLoading}
-            className="px-4 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="px-3 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             {isLoading ? (
-              <ArrowPathIcon className="w-5 h-5 animate-spin" />
+              <ArrowPathIcon className="w-4 h-4 animate-spin" />
             ) : (
-              <PaperAirplaneIcon className="w-5 h-5" />
+              <PaperAirplaneIcon className="w-4 h-4" />
             )}
           </button>
         </div>
-        <p className="text-xs text-[var(--text-muted)] mt-2 text-center">
-          Powered by Claude Sonnet 4.5 • Estimates are approximate
+        <p className="text-[10px] text-[var(--text-muted)] mt-1.5 text-center">
+          Powered by Claude Sonnet 4.5
         </p>
       </div>
-        </motion.div>
+            </motion.div>
+          )}
+        </>
       )}
     </AnimatePresence>
   )

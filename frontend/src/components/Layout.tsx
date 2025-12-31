@@ -336,8 +336,8 @@ export default function Layout() {
       {/* Main content - shifts left when chat is open */}
       <main 
         className={clsx(
-          "flex-1 transition-all duration-300 ease-out",
-          isChatOpen && isEstimateDetailPage && "mr-[420px]"
+          "flex-1",
+          isChatOpen && isEstimateDetailPage && "mr-[380px]"
         )}
       >
         <motion.div
@@ -353,8 +353,8 @@ export default function Layout() {
       {/* Footer - shifts left when chat is open */}
       <footer 
         className={clsx(
-          "border-t py-4 mt-auto transition-all duration-300 ease-out",
-          isChatOpen && isEstimateDetailPage && "mr-[420px]"
+          "border-t py-4 mt-auto",
+          isChatOpen && isEstimateDetailPage && "mr-[380px]"
         )}
         style={{ borderColor: 'var(--border-primary)' }}
       >
