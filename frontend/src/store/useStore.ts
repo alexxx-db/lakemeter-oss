@@ -997,8 +997,13 @@ export const useStore = create<Store>((set, get) => ({
       return 0
     }
     
+    // Normalize payment option: on_demand and spot don't have payment options (always NA)
+    const normalizedPaymentOption = (pricingTier === 'on_demand' || pricingTier === 'spot') 
+      ? 'NA' 
+      : (paymentOption || 'NA')
+    
     // Check if already in cache (before making API call)
-    const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
+    const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${normalizedPaymentOption}`
     const currentCache = get().vmPricingMap
     if (currentCache[exactKey] !== undefined) {
       return currentCache[exactKey]
@@ -1007,12 +1012,13 @@ export const useStore = create<Store>((set, get) => ({
     try {
       // Fetch from new API: /instances/vm-costs
       // NOTE: API expects uppercase cloud (AWS, AZURE, GCP)
+      // NOTE: payment_option is only sent for reserved_1y/reserved_3y (handled in API client)
       const vmCosts = await api.fetchInstanceVMCosts({ 
         cloud: cloud.toUpperCase(), 
         region, 
         instance_type: instanceType,
         pricing_tier: pricingTier,
-        payment_option: paymentOption
+        payment_option: normalizedPaymentOption
       })
       
       // Update cache with fetched data using functional update to avoid race conditions
@@ -1053,11 +1059,16 @@ export const useStore = create<Store>((set, get) => ({
       return 0
     }
     
+    // Normalize payment option: on_demand and spot don't have payment options (always NA)
+    const normalizedPaymentOption = (pricingTier === 'on_demand' || pricingTier === 'spot') 
+      ? 'NA' 
+      : (paymentOption || 'NA')
+    
     const { vmPricingMap } = get()
     const cloudLower = cloud.toLowerCase()
     
     // Look up in runtime-cached vmPricingMap (populated by on-demand API calls)
-    const exactKey = `${cloudLower}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
+    const exactKey = `${cloudLower}:${region}:${instanceType}:${pricingTier}:${normalizedPaymentOption}`
     if (vmPricingMap[exactKey] !== undefined) {
       return vmPricingMap[exactKey]
     }

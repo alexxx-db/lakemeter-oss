@@ -288,7 +288,29 @@ export const fetchInstanceVMCosts = async (params: {
   pricing_tier?: string
   payment_option?: string
 }): Promise<VMCost[]> => {
-  const { data } = await api.get('/instances/vm-costs', { params })
+  // For on_demand and spot pricing tiers, payment_option should be NA or omitted
+  // Only reserved_1y and reserved_3y have meaningful payment_options (no_upfront, partial_upfront, all_upfront)
+  const cleanParams: Record<string, string> = {
+    cloud: params.cloud,
+    region: params.region,
+    instance_type: params.instance_type
+  }
+  
+  if (params.pricing_tier) {
+    cleanParams.pricing_tier = params.pricing_tier
+  }
+  
+  // Only include payment_option for reserved instances, or if explicitly NA
+  const pricingTier = params.pricing_tier?.toLowerCase()
+  if (pricingTier === 'reserved_1y' || pricingTier === 'reserved_3y') {
+    // For reserved instances, include payment_option if specified
+    if (params.payment_option && params.payment_option !== 'NA') {
+      cleanParams.payment_option = params.payment_option
+    }
+  }
+  // For on_demand and spot, don't send payment_option (API expects no payment_option or NA)
+  
+  const { data } = await api.get('/instances/vm-costs', { params: cleanParams })
   // API response structure: { success: true, data: { cloud, region, instance_type, pricing_options: [...] } }
   // Extract pricing_options and enrich with top-level fields
   if (data?.success && data?.data?.pricing_options) {
