@@ -264,19 +264,16 @@ def generate_dbu_rates(conn, output_dir: str):
             tiers_per_cloud[cloud] = set()
         tiers_per_cloud[cloud].add(tier)
         
-        # Track regions from ALL rows with a valid region (not just REGIONAL pricing_type)
-        # Some regions like asia-northeast3 only have GLOBAL rates but still need to be included
-        if region:
-            if cloud not in regions_per_cloud:
-                regions_per_cloud[cloud] = set()
-            regions_per_cloud[cloud].add(region)
-        
         if pricing_type == 'GLOBAL':
             global_key = f"{cloud}:{tier}:{product_type}"
             global_rates[global_key] = price
         else:  # REGIONAL
             regional_key = f"{cloud}:{region}:{tier}:{product_type}"
             regional_rates[regional_key] = price
+            # Track regions - only REGIONAL pricing_type indicates an actual Databricks control plane
+            if cloud not in regions_per_cloud:
+                regions_per_cloud[cloud] = set()
+            regions_per_cloud[cloud].add(region)
     
     # Build output: for each cloud/region/tier, collect all product_type prices
     data = {}
