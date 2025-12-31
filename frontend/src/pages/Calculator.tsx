@@ -2058,181 +2058,181 @@ export default function Calculator() {
               </div>
             ) : (
               <>
-                {/* Table View - Clean & Functional */}
+                {/* Table View - Responsive & Mobile-Friendly */}
                 {workloadsViewMode === 'table' && lineItems.length > 0 && (
-                  <div className="card overflow-hidden">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-[var(--border-primary)] bg-[var(--bg-tertiary)]">
-                          <th className="w-8 py-2 px-3">
-                            <input
-                              type="checkbox"
-                              checked={selectedItems.size === lineItems.length && lineItems.length > 0}
-                              onChange={toggleSelectAll}
-                              className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
-                            />
-                          </th>
-                          <th className="text-left py-2 px-3 font-medium text-[var(--text-muted)] text-xs">Name</th>
-                          <th className="text-left py-2 px-3 font-medium text-[var(--text-muted)] text-xs w-32">Type</th>
-                          <th className="text-left py-2 px-3 font-medium text-[var(--text-muted)] text-xs">Key Config</th>
-                          <th className="text-right py-2 px-3 font-medium text-[var(--text-muted)] text-xs w-28">Monthly Cost</th>
-                          <th className="w-20 py-2 px-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-sm">
-                        {lineItems.map((item) => {
-                          const costs = calculateItemCost(item, pendingFormEdits[item.line_item_id])
-                          const typeConfig = getWorkloadTypeConfig(item.workload_type)
-                          const TypeIcon = typeConfig.icon
-                          const isExpanded = expandedItems.has(item.line_item_id)
-                          const isSelected = selectedItems.has(item.line_item_id)
-                          
-                          // Build key config summary based on workload type
-                          const configParts: string[] = []
-                          const wType = item.workload_type || ''
-                          
-                          // Serverless/Photon badges
-                          const isServerless = item.serverless_enabled || (wType === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')
-                          
-                          if (['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType)) {
-                            if (isServerless) {
-                              configParts.push('Serverless')
-                            } else if (item.num_workers) {
-                              configParts.push(`${item.num_workers}× ${item.worker_node_type || 'workers'}`)
-                            }
-                            if (item.photon_enabled) configParts.push('Photon')
-                          } else if (wType === 'DBSQL') {
-                            if (item.dbsql_warehouse_size) configParts.push(item.dbsql_warehouse_size)
-                            if (item.dbsql_warehouse_type) configParts.push(item.dbsql_warehouse_type)
-                          } else if (wType === 'VECTOR_SEARCH') {
-                            if (item.vector_search_mode) configParts.push(item.vector_search_mode)
-                            if (item.vector_capacity_millions) configParts.push(`${item.vector_capacity_millions}M vectors`)
-                          } else if (wType === 'MODEL_SERVING') {
-                            if (item.model_serving_gpu_type) configParts.push(item.model_serving_gpu_type)
-                          } else if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
-                            if (item.fmapi_model) configParts.push(item.fmapi_model)
-                            if (item.fmapi_rate_type) configParts.push(item.fmapi_rate_type)
-                          } else if (wType === 'LAKEBASE') {
-                            if (item.lakebase_cu) configParts.push(`CU ${item.lakebase_cu}`)
-                            if (item.lakebase_ha_nodes && item.lakebase_ha_nodes > 1) configParts.push(`${item.lakebase_ha_nodes} nodes`)
-                          }
-                          
-                          const keyConfig = configParts.join(' • ') || '—'
-                          const typeName = workloadTypes.find(w => w.workload_type === wType)?.display_name || wType
-                          
-                          return (
-                            <React.Fragment key={item.line_item_id}>
-                              <tr 
-                                className={clsx(
-                                  "border-b border-[var(--border-primary)] hover:bg-[var(--bg-hover)] cursor-pointer",
-                                  isSelected && "bg-orange-500/5",
-                                  isExpanded && "bg-[var(--bg-tertiary)]"
-                                )}
-                                onClick={() => toggleExpand(item.line_item_id)}
-                              >
-                                <td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => toggleItemSelection(item.line_item_id)}
-                                    className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
-                                  />
-                                </td>
-                                <td className="py-2.5 px-3">
-                                  <span className="font-medium text-[var(--text-primary)]">{item.workload_name}</span>
-                                </td>
-                                <td className="py-2.5 px-3">
-                                  <div className="flex items-center gap-1.5">
-                                    <div className={clsx("w-5 h-5 rounded flex items-center justify-center flex-shrink-0", typeConfig.bgColor)}>
-                                      <TypeIcon className={clsx("w-3 h-3", typeConfig.color)} />
-                                    </div>
-                                    <span className="text-[var(--text-secondary)] text-xs">{typeName}</span>
-                                  </div>
-                                </td>
-                                <td className="py-2.5 px-3">
-                                  <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-                                    {isServerless && (
-                                      <span className="px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-600 dark:text-teal-400 text-[10px] font-medium">Serverless</span>
-                                    )}
-                                    {item.photon_enabled && (
-                                      <span className="px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-medium">⚡ Photon</span>
-                                    )}
-                                    {!isServerless && !item.photon_enabled && (
-                                      <span>{keyConfig}</span>
-                                    )}
-                                    {(isServerless || item.photon_enabled) && configParts.filter(p => p !== 'Serverless' && p !== 'Photon').length > 0 && (
-                                      <span className="text-[var(--text-muted)]">• {configParts.filter(p => p !== 'Serverless' && p !== 'Photon').join(' • ')}</span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="py-2.5 px-3 text-right">
-                                  <span className="font-semibold text-orange-500">{formatCurrency(costs.totalCost)}</span>
-                                </td>
-                                <td className="py-2.5 px-2">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      onClick={(e) => handleCloneWorkload(e, item)}
-                                      className="p-1.5 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
-                                      title="Clone"
-                                    >
-                                      <DocumentDuplicateIcon className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleDeleteLineItem(item) }}
-                                      className="p-1.5 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
-                                      title="Delete"
-                                    >
-                                      <TrashIcon className="w-3.5 h-3.5" />
-                                    </button>
-                                    {isExpanded ? (
-                                      <ChevronUpIcon className="w-4 h-4 text-orange-500" />
-                                    ) : (
-                                      <ChevronDownIcon className="w-4 h-4 text-[var(--text-muted)]" />
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                              {/* Expanded Form Row */}
-                              {isExpanded && (
-                                <tr>
-                                  <td colSpan={6} className="p-0 bg-[var(--bg-secondary)] border-b-2 border-orange-500/20">
-                                    <div className="p-4">
-                                      <WorkloadForm
-                                        estimateId={id}
-                                        lineItem={item}
-                                        onClose={() => {
-                                          setExpandedItems(new Set())
-                                          setPendingFormEdits(prev => {
-                                            const next = { ...prev }
-                                            delete next[item.line_item_id]
-                                            return next
-                                          })
-                                        }}
-                                        onSave={() => {
-                                          markAsChanged()
-                                          setPendingFormEdits(prev => {
-                                            const next = { ...prev }
-                                            delete next[item.line_item_id]
-                                            return next
-                                          })
-                                        }}
-                                        onFormChange={(formData) => {
-                                          setPendingFormEdits(prev => ({
-                                            ...prev,
-                                            [item.line_item_id]: formData
-                                          }))
-                                        }}
-                                        inline
-                                      />
-                                    </div>
-                                  </td>
-                                </tr>
+                  <div className="card overflow-hidden divide-y divide-[var(--border-primary)]">
+                    {/* Header - Hidden on mobile */}
+                    <div className="hidden sm:grid sm:grid-cols-12 gap-2 py-2 px-3 bg-[var(--bg-tertiary)] text-xs font-medium text-[var(--text-muted)]">
+                      <div className="col-span-1 flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.size === lineItems.length && lineItems.length > 0}
+                          onChange={toggleSelectAll}
+                          className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                        />
+                      </div>
+                      <div className="col-span-4">Workload</div>
+                      <div className="col-span-4">Configuration</div>
+                      <div className="col-span-2 text-right">Cost</div>
+                      <div className="col-span-1"></div>
+                    </div>
+                    
+                    {/* Rows */}
+                    {lineItems.map((item) => {
+                      const costs = calculateItemCost(item, pendingFormEdits[item.line_item_id])
+                      const typeConfig = getWorkloadTypeConfig(item.workload_type)
+                      const TypeIcon = typeConfig.icon
+                      const isExpanded = expandedItems.has(item.line_item_id)
+                      const isSelected = selectedItems.has(item.line_item_id)
+                      const wType = item.workload_type || ''
+                      const isServerless = item.serverless_enabled || (wType === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')
+                      const typeName = workloadTypes.find(w => w.workload_type === wType)?.display_name || wType
+                      
+                      // Build config parts
+                      const configParts: string[] = []
+                      if (['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType)) {
+                        if (!isServerless && item.num_workers) {
+                          configParts.push(`${item.num_workers}× ${item.worker_node_type || 'workers'}`)
+                        }
+                      } else if (wType === 'DBSQL') {
+                        if (item.dbsql_warehouse_size) configParts.push(item.dbsql_warehouse_size)
+                        if (item.dbsql_warehouse_type && item.dbsql_warehouse_type !== 'SERVERLESS') configParts.push(item.dbsql_warehouse_type)
+                      } else if (wType === 'VECTOR_SEARCH') {
+                        if (item.vector_search_mode) configParts.push(item.vector_search_mode)
+                        if (item.vector_capacity_millions) configParts.push(`${item.vector_capacity_millions}M vectors`)
+                      } else if (wType === 'MODEL_SERVING') {
+                        if (item.model_serving_gpu_type) configParts.push(item.model_serving_gpu_type)
+                      } else if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
+                        if (item.fmapi_model) configParts.push(item.fmapi_model)
+                      } else if (wType === 'LAKEBASE') {
+                        if (item.lakebase_cu) configParts.push(`CU ${item.lakebase_cu}`)
+                      }
+                      
+                      return (
+                        <div key={item.line_item_id}>
+                          {/* Row */}
+                          <div 
+                            className={clsx(
+                              "grid grid-cols-12 gap-2 py-3 px-3 cursor-pointer hover:bg-[var(--bg-hover)]",
+                              isSelected && "bg-orange-500/5",
+                              isExpanded && "bg-[var(--bg-tertiary)]"
+                            )}
+                            onClick={() => toggleExpand(item.line_item_id)}
+                          >
+                            {/* Checkbox */}
+                            <div className="col-span-1 flex items-center" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleItemSelection(item.line_item_id)}
+                                className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                              />
+                            </div>
+                            
+                            {/* Workload Name & Type */}
+                            <div className="col-span-6 sm:col-span-4 flex items-center gap-3">
+                              <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", typeConfig.bgColor)}>
+                                <TypeIcon className={clsx("w-4 h-4", typeConfig.color)} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-[var(--text-primary)] text-sm truncate">{item.workload_name}</p>
+                                <p className="text-xs text-[var(--text-muted)] truncate">{typeName}</p>
+                              </div>
+                            </div>
+                            
+                            {/* Configuration - Hidden on very small screens */}
+                            <div className="hidden sm:flex col-span-4 items-center gap-1.5 flex-wrap">
+                              {isServerless && (
+                                <span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 text-[10px] font-medium">Serverless</span>
                               )}
-                            </React.Fragment>
-                          )
-                        })}
-                      </tbody>
-                    </table>
+                              {item.photon_enabled && (
+                                <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-medium">⚡ Photon</span>
+                              )}
+                              {configParts.length > 0 && (
+                                <span className="text-xs text-[var(--text-secondary)]">{configParts.join(' • ')}</span>
+                              )}
+                            </div>
+                            
+                            {/* Cost */}
+                            <div className="col-span-3 sm:col-span-2 flex flex-col items-end justify-center">
+                              <span className="font-bold text-orange-500">{formatCurrency(costs.totalCost)}</span>
+                              <span className="text-[10px] text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                            </div>
+                            
+                            {/* Actions */}
+                            <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-0.5">
+                              <button
+                                onClick={(e) => handleCloneWorkload(e, item)}
+                                className="p-1.5 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
+                                title="Clone"
+                              >
+                                <DocumentDuplicateIcon className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteLineItem(item) }}
+                                className="p-1.5 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
+                                title="Delete"
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </button>
+                              {isExpanded ? (
+                                <ChevronUpIcon className="w-4 h-4 text-orange-500" />
+                              ) : (
+                                <ChevronDownIcon className="w-4 h-4 text-[var(--text-muted)]" />
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Mobile Config Row - Show on small screens only */}
+                          {(isServerless || item.photon_enabled || configParts.length > 0) && (
+                            <div className="sm:hidden px-3 pb-2 flex items-center gap-1.5 flex-wrap pl-12">
+                              {isServerless && (
+                                <span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 text-[10px] font-medium">Serverless</span>
+                              )}
+                              {item.photon_enabled && (
+                                <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-medium">⚡ Photon</span>
+                              )}
+                              {configParts.length > 0 && (
+                                <span className="text-xs text-[var(--text-secondary)]">{configParts.join(' • ')}</span>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Expanded Form */}
+                          {isExpanded && (
+                            <div className="bg-[var(--bg-secondary)] border-b-2 border-orange-500/20 p-4">
+                              <WorkloadForm
+                                estimateId={id}
+                                lineItem={item}
+                                onClose={() => {
+                                  setExpandedItems(new Set())
+                                  setPendingFormEdits(prev => {
+                                    const next = { ...prev }
+                                    delete next[item.line_item_id]
+                                    return next
+                                  })
+                                }}
+                                onSave={() => {
+                                  markAsChanged()
+                                  setPendingFormEdits(prev => {
+                                    const next = { ...prev }
+                                    delete next[item.line_item_id]
+                                    return next
+                                  })
+                                }}
+                                onFormChange={(formData) => {
+                                  setPendingFormEdits(prev => ({
+                                    ...prev,
+                                    [item.line_item_id]: formData
+                                  }))
+                                }}
+                                inline
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
                 
@@ -2615,63 +2615,74 @@ export default function Calculator() {
         {/* Cost Summary Sidebar - Right column */}
         {!isCostSummaryCollapsed && (
           <div className="lg:col-span-1">
-            <div className="card p-4 sticky top-24">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="section-title flex items-center gap-2 mb-0">
-                  <CurrencyDollarIcon className="w-4 h-4" />
-                  <span className="text-sm">Cost Summary</span>
+            <div className="card p-5 sticky top-24">
+              {/* Header with Minimize Button */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="flex items-center gap-2">
+                  <CurrencyDollarIcon className="w-5 h-5 text-orange-500" />
+                  <span className="font-semibold text-[var(--text-primary)]">Cost Summary</span>
                   {(isLoadingLineItems && !lineItemsLoaded) && (
                     <div className="w-3 h-3 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
                   )}
                 </h3>
                 <button
                   onClick={() => setIsCostSummaryCollapsed(true)}
-                  className="p-1 rounded text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]"
-                  title="Minimize"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--text-muted)] hover:text-orange-500 hover:bg-orange-500/10 border border-transparent hover:border-orange-500/20"
+                  title="Minimize to bottom bar"
                 >
                   <ChevronDownIcon className="w-4 h-4" />
+                  <span className="hidden sm:inline">Minimize</span>
                 </button>
               </div>
               
               {!canAddWorkload ? (
-                <div className="text-center py-4">
-                  <ExclamationTriangleIcon className="w-8 h-8 mx-auto mb-2 text-orange-500" />
-                  <p className="text-xs text-[var(--text-muted)]">Select region & tier</p>
+                <div className="text-center py-8">
+                  <ExclamationTriangleIcon className="w-10 h-10 mx-auto mb-3 text-orange-500" />
+                  <p className="text-sm text-[var(--text-muted)]">Select region & tier to see estimates</p>
                 </div>
               ) : (isLoadingLineItems && !lineItemsLoaded) ? (
-                <div className="space-y-2">
-                  <div className="h-8 bg-[var(--bg-tertiary)] rounded animate-pulse" />
-                  <div className="h-4 bg-[var(--bg-tertiary)] rounded animate-pulse w-2/3 mx-auto" />
+                <div className="space-y-3 py-4">
+                  <div className="h-10 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                  <div className="h-5 bg-[var(--bg-tertiary)] rounded animate-pulse w-2/3 mx-auto" />
                 </div>
               ) : lineItems.length > 0 ? (
-                <div className="space-y-3">
-                  {/* Monthly Total */}
-                  <div className="text-center pb-3 border-b border-[var(--border-primary)]">
+                <div className="space-y-4">
+                  {/* Monthly Total - Hero */}
+                  <div className="text-center py-4 px-3 bg-gradient-to-br from-orange-500/5 to-amber-500/5 rounded-xl border border-orange-500/10">
+                    <p className="text-xs text-[var(--text-muted)] mb-1">Monthly Estimate</p>
                     <p className={clsx(
-                      "text-2xl font-bold text-orange-500",
+                      "text-3xl font-bold text-orange-500",
                       isLoadingVMCosts && "opacity-60"
                     )}>
                       {formatCurrency(totalCosts.totalCost)}
-                      <span className="text-sm font-normal text-[var(--text-muted)]">/mo</span>
                     </p>
-                    <p className="text-xs text-[var(--text-secondary)]">
+                    <p className="text-sm text-[var(--text-secondary)] mt-1">
                       {formatCurrency(totalCosts.totalCost * 12)}/year
                     </p>
                   </div>
                   
-                  {/* Cost Breakdown */}
-                  <div className="flex justify-between text-xs">
-                    <span className="text-[var(--text-muted)]">DBU: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(totalCosts.totalDBUCost)}</span></span>
-                    <span className="text-[var(--text-muted)]">VM: <span className="text-[var(--text-primary)] font-medium">{isLoadingVMCosts ? '...' : formatCurrency(totalCosts.totalVMCost)}</span></span>
-                    <span className="text-[var(--text-muted)]">{formatNumber(totalCosts.totalDBUs)} DBUs</span>
+                  {/* Cost Breakdown Grid */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center p-2 rounded-lg bg-[var(--bg-tertiary)]">
+                      <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">DBU</p>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</p>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-[var(--bg-tertiary)]">
+                      <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">VM</p>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{isLoadingVMCosts ? '...' : formatCurrency(totalCosts.totalVMCost)}</p>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-[var(--bg-tertiary)]">
+                      <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">DBUs</p>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{formatNumber(totalCosts.totalDBUs)}</p>
+                    </div>
                   </div>
                   
                   {/* Workload Breakdown */}
-                  <div className="pt-2 border-t border-[var(--border-primary)]">
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
+                  <div className="pt-3 border-t border-[var(--border-primary)]">
+                    <p className="text-xs font-medium text-[var(--text-muted)] mb-2">
                       Workloads ({lineItems.length})
                     </p>
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto">
                       {(() => {
                         const sortedItems = [...lineItems]
                           .map(item => ({ item, costs: calculateItemCost(item) }))
@@ -2684,14 +2695,14 @@ export default function Calculator() {
                           const barColor = barColors[idx % barColors.length]
                           return (
                             <div key={item.line_item_id}>
-                              <div className="flex items-center justify-between text-[11px] mb-0.5">
-                                <span className="text-[var(--text-secondary)] truncate max-w-[100px]" title={item.workload_name}>{item.workload_name}</span>
-                                <div className="flex items-center gap-1.5">
+                              <div className="flex items-center justify-between text-xs mb-0.5">
+                                <span className="text-[var(--text-secondary)] truncate max-w-[120px]" title={item.workload_name}>{item.workload_name}</span>
+                                <div className="flex items-center gap-2">
                                   <span className="text-[var(--text-muted)] text-[10px]">{percent.toFixed(0)}%</span>
                                   <span className="font-medium text-[var(--text-primary)] w-16 text-right">{formatCurrency(costs.totalCost)}</span>
                                 </div>
                               </div>
-                              <div className="h-1 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                              <div className="h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
                                 <div className={clsx("h-full rounded-full", barColor)} style={{ width: `${Math.max(percent, 1)}%` }} />
                               </div>
                             </div>
@@ -2702,13 +2713,14 @@ export default function Calculator() {
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-4">
-                  <p className="text-xs text-[var(--text-muted)]">Add workloads to see costs</p>
+                <div className="text-center py-8">
+                  <CurrencyDollarIcon className="w-10 h-10 mx-auto mb-3 text-[var(--text-muted)]" />
+                  <p className="text-sm text-[var(--text-muted)]">Add workloads to see estimates</p>
                 </div>
               )}
               
-              <p className="mt-3 text-[9px] text-[var(--text-muted)] text-center">
-                Estimates based on published pricing
+              <p className="mt-4 pt-3 border-t border-[var(--border-primary)] text-[10px] text-[var(--text-muted)] text-center">
+                Estimates based on published Databricks pricing
               </p>
             </div>
           </div>
@@ -2717,33 +2729,39 @@ export default function Calculator() {
       
       {/* Collapsed Cost Summary - Sticky Bottom Bar */}
       {isCostSummaryCollapsed && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-secondary)] border-t border-[var(--border-primary)] shadow-lg">
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-[var(--bg-secondary)] via-[var(--bg-secondary)] to-orange-500/5 border-t-2 border-orange-500/30 shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-14">
-              <div className="flex items-center gap-6">
+            <div className="flex items-center justify-between h-16">
+              {/* Left side - Expand and stats */}
+              <div className="flex items-center gap-4 sm:gap-6">
                 <button
                   onClick={() => setIsCostSummaryCollapsed(false)}
-                  className="flex items-center gap-2 text-[var(--text-secondary)] hover:text-orange-500"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 font-medium text-sm"
                 >
-                  <ChevronUpIcon className="w-4 h-4" />
-                  <span className="text-xs font-medium">Expand</span>
+                  <ChevronUpIcon className="w-5 h-5" />
+                  <span className="hidden sm:inline">Cost Summary</span>
                 </button>
-                <div className="flex items-center gap-4 text-xs">
+                <div className="hidden md:flex items-center gap-4 text-sm">
                   <span className="text-[var(--text-muted)]">
-                    <span className="font-medium text-[var(--text-primary)]">{lineItems.length}</span> workloads
+                    <span className="font-semibold text-[var(--text-primary)]">{lineItems.length}</span> workloads
                   </span>
                   <span className="text-[var(--text-muted)]">
-                    DBU: <span className="font-medium text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</span>
+                    DBU: <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</span>
                   </span>
                   <span className="text-[var(--text-muted)]">
-                    VM: <span className="font-medium text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</span>
+                    VM: <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</span>
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-[var(--text-muted)]">{formatNumber(totalCosts.totalDBUs)} DBUs</span>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-orange-500">{formatCurrency(totalCosts.totalCost)}<span className="text-xs font-normal text-[var(--text-muted)]">/mo</span></p>
+              
+              {/* Right side - Total cost */}
+              <div className="flex items-center gap-4">
+                <span className="hidden sm:inline text-sm text-[var(--text-muted)]">{formatNumber(totalCosts.totalDBUs)} DBUs</span>
+                <div className="text-right px-4 py-2 bg-orange-500/10 rounded-lg">
+                  <p className="text-xl sm:text-2xl font-bold text-orange-500">
+                    {formatCurrency(totalCosts.totalCost)}
+                    <span className="text-sm font-normal text-[var(--text-muted)]">/mo</span>
+                  </p>
                 </div>
               </div>
             </div>
