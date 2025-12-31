@@ -8,7 +8,6 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import clsx from 'clsx'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   PaperAirplaneIcon,
   XMarkIcon,
@@ -591,34 +590,24 @@ export function ChatPanel({
 
   const totalDraftCost = draftWorkloads.reduce((sum, w) => sum + (w.estimated_cost || 0), 0)
 
+  if (!isOpen) return null
+  
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Minimized Dock */}
-          {isMinimized ? (
-            <motion.div
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
-              className="fixed bottom-4 right-4 z-50"
-            >
-              <button
-                onClick={() => setIsMinimized(false)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105"
-              >
-                <SparklesIcon className="w-5 h-5" />
-                <span className="font-medium text-sm">AI Assistant</span>
-                <ChevronUpIcon className="w-4 h-4" />
-              </button>
-            </motion.div>
-          ) : (
-            <motion.div 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              className="fixed inset-y-0 right-0 w-full sm:w-[380px] bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-50 flex flex-col"
-            >
+    <>
+      {/* Minimized Dock */}
+      {isMinimized ? (
+        <div className="fixed bottom-4 right-4 z-50">
+          <button
+            onClick={() => setIsMinimized(false)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-full shadow-lg hover:shadow-xl"
+          >
+            <SparklesIcon className="w-5 h-5" />
+            <span className="font-medium text-sm">AI Assistant</span>
+            <ChevronUpIcon className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="fixed inset-y-0 right-0 w-full sm:w-[380px] bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-50 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
         <div className="flex items-center gap-2">
@@ -949,11 +938,9 @@ export function ChatPanel({
           Powered by Claude Sonnet 4.5
         </p>
       </div>
-            </motion.div>
-          )}
-        </>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   )
 }
 

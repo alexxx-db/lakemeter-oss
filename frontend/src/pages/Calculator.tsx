@@ -11,8 +11,6 @@ import {
   DocumentDuplicateIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   BoltIcon,
   CpuChipIcon,
   CurrencyDollarIcon,
@@ -319,10 +317,6 @@ export default function Calculator() {
   
   // Cost summary panel collapsed state
   const [isCostSummaryCollapsed, setIsCostSummaryCollapsed] = useState(false)
-  // Cost summary sticky (pinned) state
-  const [isCostSummaryPinned, setIsCostSummaryPinned] = useState(true)
-  // Cost summary expanded details state
-  const [showCostDetails, setShowCostDetails] = useState(false)
   
   // Workloads view mode: 'cards' (default, compact), 'expanded', 'table'
   const [workloadsViewMode, setWorkloadsViewMode] = useState<'cards' | 'expanded' | 'table'>('cards')
@@ -2064,53 +2058,67 @@ export default function Calculator() {
               </div>
             ) : (
               <>
-                {/* Table View - Simplified & Usable */}
+                {/* Table View - Clean & Functional */}
                 {workloadsViewMode === 'table' && lineItems.length > 0 && (
                   <div className="card overflow-hidden">
-                    <table className="w-full text-xs">
+                    <table className="w-full">
                       <thead>
                         <tr className="border-b border-[var(--border-primary)] bg-[var(--bg-tertiary)]">
-                          <th className="w-6 p-1.5 pl-2">
+                          <th className="w-8 py-2 px-3">
                             <input
                               type="checkbox"
                               checked={selectedItems.size === lineItems.length && lineItems.length > 0}
                               onChange={toggleSelectAll}
-                              className="w-3 h-3 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                              className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
                             />
                           </th>
-                          <th className="text-left p-1.5 font-medium text-[var(--text-muted)] uppercase text-[10px] tracking-wider">Workload</th>
-                          <th className="text-left p-1.5 font-medium text-[var(--text-muted)] uppercase text-[10px] tracking-wider">Usage</th>
-                          <th className="text-right p-1.5 font-medium text-[var(--text-muted)] uppercase text-[10px] tracking-wider pr-2">Cost/mo</th>
-                          <th className="w-16 p-1.5"></th>
+                          <th className="text-left py-2 px-3 font-medium text-[var(--text-muted)] text-xs">Name</th>
+                          <th className="text-left py-2 px-3 font-medium text-[var(--text-muted)] text-xs w-32">Type</th>
+                          <th className="text-left py-2 px-3 font-medium text-[var(--text-muted)] text-xs">Key Config</th>
+                          <th className="text-right py-2 px-3 font-medium text-[var(--text-muted)] text-xs w-28">Monthly Cost</th>
+                          <th className="w-20 py-2 px-2"></th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="text-sm">
                         {lineItems.map((item) => {
-                          // Use pending form edits for real-time cost preview during editing
                           const costs = calculateItemCost(item, pendingFormEdits[item.line_item_id])
                           const typeConfig = getWorkloadTypeConfig(item.workload_type)
                           const TypeIcon = typeConfig.icon
                           const isExpanded = expandedItems.has(item.line_item_id)
                           const isSelected = selectedItems.has(item.line_item_id)
                           
-                          // Build usage summary
-                          const usageParts: string[] = []
-                          if (item.runs_per_day && item.avg_runtime_minutes) {
-                            usageParts.push(`${item.runs_per_day}×${item.avg_runtime_minutes}m/day`)
-                          } else if (item.hours_per_month) {
-                            usageParts.push(`${item.hours_per_month}h/mo`)
-                          }
-                          if (item.num_workers) {
-                            usageParts.push(`${item.num_workers}w`)
-                          }
-                          const usageSummary = usageParts.join(' • ') || '—'
-                          
-                          // Check if VM costs loading
+                          // Build key config summary based on workload type
+                          const configParts: string[] = []
                           const wType = item.workload_type || ''
-                          const needsVMCosts = !item.serverless_enabled && 
-                            ['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType) ||
-                            (wType === 'DBSQL' && item.dbsql_warehouse_type !== 'SERVERLESS')
-                          const showVMLoading = isLoadingVMCosts && needsVMCosts && costs.vmCost === 0
+                          
+                          // Serverless/Photon badges
+                          const isServerless = item.serverless_enabled || (wType === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')
+                          
+                          if (['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType)) {
+                            if (isServerless) {
+                              configParts.push('Serverless')
+                            } else if (item.num_workers) {
+                              configParts.push(`${item.num_workers}× ${item.worker_node_type || 'workers'}`)
+                            }
+                            if (item.photon_enabled) configParts.push('Photon')
+                          } else if (wType === 'DBSQL') {
+                            if (item.dbsql_warehouse_size) configParts.push(item.dbsql_warehouse_size)
+                            if (item.dbsql_warehouse_type) configParts.push(item.dbsql_warehouse_type)
+                          } else if (wType === 'VECTOR_SEARCH') {
+                            if (item.vector_search_mode) configParts.push(item.vector_search_mode)
+                            if (item.vector_capacity_millions) configParts.push(`${item.vector_capacity_millions}M vectors`)
+                          } else if (wType === 'MODEL_SERVING') {
+                            if (item.model_serving_gpu_type) configParts.push(item.model_serving_gpu_type)
+                          } else if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
+                            if (item.fmapi_model) configParts.push(item.fmapi_model)
+                            if (item.fmapi_rate_type) configParts.push(item.fmapi_rate_type)
+                          } else if (wType === 'LAKEBASE') {
+                            if (item.lakebase_cu) configParts.push(`CU ${item.lakebase_cu}`)
+                            if (item.lakebase_ha_nodes && item.lakebase_ha_nodes > 1) configParts.push(`${item.lakebase_ha_nodes} nodes`)
+                          }
+                          
+                          const keyConfig = configParts.join(' • ') || '—'
+                          const typeName = workloadTypes.find(w => w.workload_type === wType)?.display_name || wType
                           
                           return (
                             <React.Fragment key={item.line_item_id}>
@@ -2122,69 +2130,64 @@ export default function Calculator() {
                                 )}
                                 onClick={() => toggleExpand(item.line_item_id)}
                               >
-                                <td className="p-1.5 pl-2" onClick={(e) => e.stopPropagation()}>
+                                <td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
                                     onChange={() => toggleItemSelection(item.line_item_id)}
-                                    className="w-3 h-3 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                                    className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
                                   />
                                 </td>
-                                <td className="p-1.5">
-                                  <div className="flex items-center gap-2">
-                                    <div className={clsx("w-6 h-6 rounded flex items-center justify-center flex-shrink-0", typeConfig.bgColor)}>
-                                      <TypeIcon className={clsx("w-3.5 h-3.5", typeConfig.color)} />
+                                <td className="py-2.5 px-3">
+                                  <span className="font-medium text-[var(--text-primary)]">{item.workload_name}</span>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className={clsx("w-5 h-5 rounded flex items-center justify-center flex-shrink-0", typeConfig.bgColor)}>
+                                      <TypeIcon className={clsx("w-3 h-3", typeConfig.color)} />
                                     </div>
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-1.5">
-                                        <p className="font-medium text-[var(--text-primary)] text-xs truncate max-w-[180px]">{item.workload_name}</p>
-                                        {(item.serverless_enabled || (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')) && (
-                                          <span className="text-[9px] px-1 rounded bg-teal-500/10 text-teal-600 dark:text-teal-400 flex-shrink-0">S</span>
-                                        )}
-                                        {item.photon_enabled && (
-                                          <span className="text-[9px] px-1 rounded bg-orange-500/10 text-orange-600 dark:text-orange-400 flex-shrink-0">⚡</span>
-                                        )}
-                                      </div>
-                                      <p className="text-[10px] text-[var(--text-muted)]">
-                                        {workloadTypes.find(w => w.workload_type === item.workload_type)?.display_name || item.workload_type}
-                                      </p>
-                                    </div>
+                                    <span className="text-[var(--text-secondary)] text-xs">{typeName}</span>
                                   </div>
                                 </td>
-                                <td className="p-1.5">
-                                  <span className="text-[10px] text-[var(--text-secondary)]">{usageSummary}</span>
+                                <td className="py-2.5 px-3">
+                                  <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                                    {isServerless && (
+                                      <span className="px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-600 dark:text-teal-400 text-[10px] font-medium">Serverless</span>
+                                    )}
+                                    {item.photon_enabled && (
+                                      <span className="px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-medium">⚡ Photon</span>
+                                    )}
+                                    {!isServerless && !item.photon_enabled && (
+                                      <span>{keyConfig}</span>
+                                    )}
+                                    {(isServerless || item.photon_enabled) && configParts.filter(p => p !== 'Serverless' && p !== 'Photon').length > 0 && (
+                                      <span className="text-[var(--text-muted)]">• {configParts.filter(p => p !== 'Serverless' && p !== 'Photon').join(' • ')}</span>
+                                    )}
+                                  </div>
                                 </td>
-                                <td className="p-1.5 pr-2 text-right">
-                                  <p className={clsx(
-                                    "font-bold text-sm",
-                                    showVMLoading ? "text-orange-500/60" : "text-orange-500"
-                                  )}>
-                                    {formatCurrency(costs.totalCost)}
-                                  </p>
-                                  <p className="text-[9px] text-[var(--text-muted)]">
-                                    {formatNumber(costs.monthlyDBUs)} DBUs
-                                  </p>
+                                <td className="py-2.5 px-3 text-right">
+                                  <span className="font-semibold text-orange-500">{formatCurrency(costs.totalCost)}</span>
                                 </td>
-                                <td className="p-1.5">
-                                  <div className="flex items-center justify-end gap-0.5">
+                                <td className="py-2.5 px-2">
+                                  <div className="flex items-center justify-end gap-1">
                                     <button
                                       onClick={(e) => handleCloneWorkload(e, item)}
-                                      className="p-1 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
+                                      className="p-1.5 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
                                       title="Clone"
                                     >
-                                      <DocumentDuplicateIcon className="w-3 h-3" />
+                                      <DocumentDuplicateIcon className="w-3.5 h-3.5" />
                                     </button>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleDeleteLineItem(item) }}
-                                      className="p-1 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
+                                      className="p-1.5 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
                                       title="Delete"
                                     >
-                                      <TrashIcon className="w-3 h-3" />
+                                      <TrashIcon className="w-3.5 h-3.5" />
                                     </button>
                                     {isExpanded ? (
-                                      <ChevronUpIcon className="w-3 h-3 text-orange-500" />
+                                      <ChevronUpIcon className="w-4 h-4 text-orange-500" />
                                     ) : (
-                                      <ChevronDownIcon className="w-3 h-3 text-[var(--text-muted)]" />
+                                      <ChevronDownIcon className="w-4 h-4 text-[var(--text-muted)]" />
                                     )}
                                   </div>
                                 </td>
@@ -2192,14 +2195,13 @@ export default function Calculator() {
                               {/* Expanded Form Row */}
                               {isExpanded && (
                                 <tr>
-                                  <td colSpan={5} className="p-0 bg-[var(--bg-secondary)] border-b-2 border-orange-500/20">
+                                  <td colSpan={6} className="p-0 bg-[var(--bg-secondary)] border-b-2 border-orange-500/20">
                                     <div className="p-4">
                                       <WorkloadForm
                                         estimateId={id}
                                         lineItem={item}
                                         onClose={() => {
                                           setExpandedItems(new Set())
-                                          // Clear pending edits when closing
                                           setPendingFormEdits(prev => {
                                             const next = { ...prev }
                                             delete next[item.line_item_id]
@@ -2208,7 +2210,6 @@ export default function Calculator() {
                                         }}
                                         onSave={() => {
                                           markAsChanged()
-                                          // Clear pending edits after save
                                           setPendingFormEdits(prev => {
                                             const next = { ...prev }
                                             delete next[item.line_item_id]
@@ -2611,121 +2612,41 @@ export default function Calculator() {
           </motion.div>
         </div>
         
-        {/* Cost Summary Sidebar - Right column, Collapsible */}
-        <div className={clsx(
-          "lg:col-span-1",
-          isCostSummaryCollapsed && "fixed right-0 top-24 z-40"
-        )}>
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15 }}
-            className={clsx(
-              "card",
-              isCostSummaryCollapsed ? "p-2 w-14" : "p-4",
-              isCostSummaryPinned ? "sticky top-24" : ""
-            )}
-          >
-            {/* Toggle Button */}
-            <button
-              onClick={() => setIsCostSummaryCollapsed(!isCostSummaryCollapsed)}
-              className={clsx(
-                "absolute -left-3 top-6 z-10 w-6 h-6 rounded-full border flex items-center justify-center",
-                "bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]",
-                "shadow-sm"
-              )}
-              title={isCostSummaryCollapsed ? "Expand cost summary" : "Collapse cost summary"}
-            >
-              {isCostSummaryCollapsed ? (
-                <ChevronLeftIcon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-              ) : (
-                <ChevronRightIcon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-              )}
-            </button>
-            
-            {/* Collapsed View - Just show total */}
-            {isCostSummaryCollapsed ? (
-              <div className="flex flex-col items-center gap-2 py-2">
-                <CurrencyDollarIcon className="w-5 h-5 text-orange-500" />
-                <div className="writing-mode-vertical text-center">
-                  <p className="text-xs font-bold text-orange-500 [writing-mode:vertical-rl] rotate-180">
-                    {formatCurrency(totalCosts.totalCost)}
-                  </p>
-                  <p className="text-[9px] text-[var(--text-muted)] [writing-mode:vertical-rl] rotate-180 mt-1">
-                    /month
-                  </p>
-                </div>
+        {/* Cost Summary Sidebar - Right column */}
+        {!isCostSummaryCollapsed && (
+          <div className="lg:col-span-1">
+            <div className="card p-4 sticky top-24">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="section-title flex items-center gap-2 mb-0">
+                  <CurrencyDollarIcon className="w-4 h-4" />
+                  <span className="text-sm">Cost Summary</span>
+                  {(isLoadingLineItems && !lineItemsLoaded) && (
+                    <div className="w-3 h-3 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
+                  )}
+                </h3>
+                <button
+                  onClick={() => setIsCostSummaryCollapsed(true)}
+                  className="p-1 rounded text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]"
+                  title="Minimize"
+                >
+                  <ChevronDownIcon className="w-4 h-4" />
+                </button>
               </div>
-            ) : (
-              <>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="section-title flex items-center gap-2 mb-0">
-                <CurrencyDollarIcon className="w-4 h-4" />
-                <span className="text-sm">Cost Summary</span>
-                {(isLoadingLineItems && !lineItemsLoaded) && (
-                  <div className="w-3 h-3 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
-                )}
-              </h3>
-              {/* Pin/Unpin Toggle */}
-              <button
-                onClick={() => setIsCostSummaryPinned(!isCostSummaryPinned)}
-                className={clsx(
-                  "p-1 rounded text-[10px]",
-                  isCostSummaryPinned 
-                    ? "text-orange-500 bg-orange-500/10" 
-                    : "text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]"
-                )}
-                title={isCostSummaryPinned ? "Unpin (scroll with page)" : "Pin to viewport"}
-              >
-                {isCostSummaryPinned ? "📌" : "📍"}
-              </button>
-            </div>
-            
-            {!canAddWorkload ? (
-              <div className="text-center py-6">
-                <ExclamationTriangleIcon className="w-10 h-10 mx-auto mb-2 text-orange-500" />
-                <p className="text-sm text-[var(--text-muted)]">Select a region and tier to see cost estimates</p>
-              </div>
-            ) : (isLoadingLineItems && !lineItemsLoaded) ? (
-              /* Loading line items state */
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-orange-500" />
-                    <span className="text-sm text-[var(--text-secondary)]">DBU Cost</span>
-                  </div>
-                  <div className="h-5 w-20 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+              
+              {!canAddWorkload ? (
+                <div className="text-center py-4">
+                  <ExclamationTriangleIcon className="w-8 h-8 mx-auto mb-2 text-orange-500" />
+                  <p className="text-xs text-[var(--text-muted)]">Select region & tier</p>
                 </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-orange-400" />
-                    <span className="text-sm text-[var(--text-secondary)]">VM Cost</span>
-                  </div>
-                  <div className="h-5 w-20 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+              ) : (isLoadingLineItems && !lineItemsLoaded) ? (
+                <div className="space-y-2">
+                  <div className="h-8 bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                  <div className="h-4 bg-[var(--bg-tertiary)] rounded animate-pulse w-2/3 mx-auto" />
                 </div>
-                <div className="border-t border-[var(--border-primary)] pt-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-semibold text-[var(--text-primary)]">Monthly Total</span>
-                    <div className="h-8 w-28 bg-[var(--bg-tertiary)] rounded animate-pulse" />
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-[var(--text-muted)]">Annual Total</span>
-                    <div className="h-5 w-24 bg-[var(--bg-tertiary)] rounded animate-pulse" />
-                  </div>
-                </div>
-                <div className="pt-3 border-t border-[var(--border-primary)]">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-[var(--text-muted)]">Total DBUs/month</span>
-                    <div className="h-5 w-16 bg-[var(--bg-tertiary)] rounded animate-pulse" />
-                  </div>
-                </div>
-                <p className="text-xs text-center text-[var(--text-muted)] pt-2">Loading workloads...</p>
-              </div>
-            ) : lineItems.length > 0 ? (
-              <div className="space-y-3">
-                {/* Monthly Total - Compact Hero */}
-                <div className="text-center pb-3 border-b border-[var(--border-primary)]">
-                  <div className="relative">
+              ) : lineItems.length > 0 ? (
+                <div className="space-y-3">
+                  {/* Monthly Total */}
+                  <div className="text-center pb-3 border-b border-[var(--border-primary)]">
                     <p className={clsx(
                       "text-2xl font-bold text-orange-500",
                       isLoadingVMCosts && "opacity-60"
@@ -2733,102 +2654,102 @@ export default function Calculator() {
                       {formatCurrency(totalCosts.totalCost)}
                       <span className="text-sm font-normal text-[var(--text-muted)]">/mo</span>
                     </p>
-                    {isLoadingVMCosts && (
-                      <p className="text-[10px] text-[var(--text-muted)] animate-pulse">
-                        Calculating...
-                      </p>
-                    )}
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      {formatCurrency(totalCosts.totalCost * 12)}/year
+                    </p>
                   </div>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {formatCurrency(totalCosts.totalCost * 12)}/year
-                  </p>
-                </div>
-                
-                {/* Cost Breakdown - Inline */}
-                <div className="flex justify-between text-xs">
-                  <span className="text-[var(--text-muted)]">DBU: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(totalCosts.totalDBUCost)}</span></span>
-                  <span className="text-[var(--text-muted)]">VM: <span className={clsx("font-medium", isLoadingVMCosts ? "text-[var(--text-muted)]" : "text-[var(--text-primary)]")}>{isLoadingVMCosts ? '...' : formatCurrency(totalCosts.totalVMCost)}</span></span>
-                  <span className="text-[var(--text-muted)]">{formatNumber(totalCosts.totalDBUs)} DBUs</span>
-                </div>
-                
-                {/* Workload Breakdown - Progressive Disclosure */}
-                {lineItems.length > 0 && (
+                  
+                  {/* Cost Breakdown */}
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--text-muted)]">DBU: <span className="text-[var(--text-primary)] font-medium">{formatCurrency(totalCosts.totalDBUCost)}</span></span>
+                    <span className="text-[var(--text-muted)]">VM: <span className="text-[var(--text-primary)] font-medium">{isLoadingVMCosts ? '...' : formatCurrency(totalCosts.totalVMCost)}</span></span>
+                    <span className="text-[var(--text-muted)]">{formatNumber(totalCosts.totalDBUs)} DBUs</span>
+                  </div>
+                  
+                  {/* Workload Breakdown */}
                   <div className="pt-2 border-t border-[var(--border-primary)]">
-                    {/* Show expand button for <5 workloads OR always show for >=5 */}
-                    {lineItems.length < 5 && !showCostDetails ? (
-                      <button
-                        onClick={() => setShowCostDetails(true)}
-                        className="w-full text-xs text-[var(--text-muted)] hover:text-orange-500 py-1"
-                      >
-                        Show breakdown ({lineItems.length} workloads) ▼
-                      </button>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-                            Workloads ({lineItems.length})
-                          </p>
-                          {lineItems.length < 5 && (
-                            <button
-                              onClick={() => setShowCostDetails(false)}
-                              className="text-[10px] text-[var(--text-muted)] hover:text-orange-500"
-                            >
-                              Hide ▲
-                            </button>
-                          )}
-                        </div>
-                        <div className="space-y-1 max-h-48 overflow-y-auto">
-                          {(() => {
-                            const sortedItems = [...lineItems]
-                              .map(item => ({ item, costs: calculateItemCost(item) }))
-                              .sort((a, b) => b.costs.totalCost - a.costs.totalCost)
-                            
-                            const barColors = ['bg-orange-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500', 'bg-indigo-500']
-                            
-                            return sortedItems.map(({ item, costs }, idx) => {
-                              const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
-                              const barColor = barColors[idx % barColors.length]
-                              return (
-                                <div key={item.line_item_id} className="group">
-                                  <div className="flex items-center justify-between text-[11px] mb-0.5">
-                                    <span className="text-[var(--text-secondary)] truncate max-w-[90px]" title={item.workload_name}>{item.workload_name}</span>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[var(--text-muted)] text-[10px]">{percent.toFixed(0)}%</span>
-                                      <span className="font-medium text-[var(--text-primary)] w-14 text-right">{formatCurrency(costs.totalCost)}</span>
-                                    </div>
-                                  </div>
-                                  <div className="h-1 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                                    <div 
-                                      className={clsx("h-full rounded-full", barColor)}
-                                      style={{ width: `${Math.max(percent, 1)}%` }}
-                                    />
-                                  </div>
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)] mb-1.5">
+                      Workloads ({lineItems.length})
+                    </p>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {(() => {
+                        const sortedItems = [...lineItems]
+                          .map(item => ({ item, costs: calculateItemCost(item) }))
+                          .sort((a, b) => b.costs.totalCost - a.costs.totalCost)
+                        
+                        const barColors = ['bg-orange-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500', 'bg-indigo-500']
+                        
+                        return sortedItems.map(({ item, costs }, idx) => {
+                          const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
+                          const barColor = barColors[idx % barColors.length]
+                          return (
+                            <div key={item.line_item_id}>
+                              <div className="flex items-center justify-between text-[11px] mb-0.5">
+                                <span className="text-[var(--text-secondary)] truncate max-w-[100px]" title={item.workload_name}>{item.workload_name}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[var(--text-muted)] text-[10px]">{percent.toFixed(0)}%</span>
+                                  <span className="font-medium text-[var(--text-primary)] w-16 text-right">{formatCurrency(costs.totalCost)}</span>
                                 </div>
-                              )
-                            })
-                          })()}
-                        </div>
-                      </>
-                    )}
+                              </div>
+                              <div className="h-1 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                                <div className={clsx("h-full rounded-full", barColor)} style={{ width: `${Math.max(percent, 1)}%` }} />
+                              </div>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-6">
-                <CurrencyDollarIcon className="w-10 h-10 mx-auto mb-2 text-[var(--text-muted)]" />
-                <p className="text-sm text-[var(--text-muted)]">Add workloads to see cost estimates</p>
-              </div>
-            )}
-            
-            {/* Disclaimer */}
-            <p className="mt-3 text-[10px] text-[var(--text-muted)] text-center">
-              Estimates based on published pricing
-            </p>
-              </>
-            )}
-          </motion.div>
-        </div>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-xs text-[var(--text-muted)]">Add workloads to see costs</p>
+                </div>
+              )}
+              
+              <p className="mt-3 text-[9px] text-[var(--text-muted)] text-center">
+                Estimates based on published pricing
+              </p>
+            </div>
+          </div>
+        )}
       </div>
+      
+      {/* Collapsed Cost Summary - Sticky Bottom Bar */}
+      {isCostSummaryCollapsed && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-secondary)] border-t border-[var(--border-primary)] shadow-lg">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-14">
+              <div className="flex items-center gap-6">
+                <button
+                  onClick={() => setIsCostSummaryCollapsed(false)}
+                  className="flex items-center gap-2 text-[var(--text-secondary)] hover:text-orange-500"
+                >
+                  <ChevronUpIcon className="w-4 h-4" />
+                  <span className="text-xs font-medium">Expand</span>
+                </button>
+                <div className="flex items-center gap-4 text-xs">
+                  <span className="text-[var(--text-muted)]">
+                    <span className="font-medium text-[var(--text-primary)]">{lineItems.length}</span> workloads
+                  </span>
+                  <span className="text-[var(--text-muted)]">
+                    DBU: <span className="font-medium text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</span>
+                  </span>
+                  <span className="text-[var(--text-muted)]">
+                    VM: <span className="font-medium text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</span>
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-[var(--text-muted)]">{formatNumber(totalCosts.totalDBUs)} DBUs</span>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-orange-500">{formatCurrency(totalCosts.totalCost)}<span className="text-xs font-normal text-[var(--text-muted)]">/mo</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
