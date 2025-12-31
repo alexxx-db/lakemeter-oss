@@ -281,6 +281,8 @@ export default function Calculator() {
   const [isLoadingEstimate, setIsLoadingEstimate] = useState(false)
   const [isLoadingLineItems, setIsLoadingLineItems] = useState(false)
   const [lineItemsLoaded, setLineItemsLoaded] = useState(false)
+  // Track VM cost loading to show proper loading state instead of "jumping" prices
+  const [isLoadingVMCosts, setIsLoadingVMCosts] = useState(false)
   
   // Salesforce data
   const [sfAccounts, setSfAccounts] = useState<SalesforceAccount[]>([])
@@ -464,10 +466,12 @@ export default function Calculator() {
       return fetchVMCostForInstance(formData.cloud, formData.region, instanceType, pricingTier, paymentOption)
     })
     
-    // Optional: could await Promise.all(fetchPromises) if we need to know when all complete
-    Promise.all(fetchPromises).catch(() => {
-      // Silently handle errors - individual fetches already handle their own errors
-    })
+    // Track loading state so UI can show "calculating" instead of partial costs
+    if (fetchPromises.length > 0) {
+      setIsLoadingVMCosts(true)
+      Promise.all(fetchPromises)
+        .finally(() => setIsLoadingVMCosts(false))
+    }
   }, [formData.cloud, formData.region, lineItems, lineItemsLoaded, fetchVMCostForInstance])
   
   // Use cached regions from store (pre-loaded for all clouds)
@@ -2569,7 +2573,19 @@ export default function Calculator() {
                 {/* Monthly Total - Hero Section */}
                 <div className="text-center pb-4 border-b border-[var(--border-primary)]">
                   <p className="text-xs text-[var(--text-muted)] mb-1">Monthly Total</p>
-                  <p className="text-3xl font-bold text-orange-500">{formatCurrency(totalCosts.totalCost)}</p>
+                  <div className="relative">
+                    <p className={clsx(
+                      "text-3xl font-bold text-orange-500 transition-opacity",
+                      isLoadingVMCosts && "opacity-60"
+                    )}>
+                      {formatCurrency(totalCosts.totalCost)}
+                    </p>
+                    {isLoadingVMCosts && (
+                      <p className="text-xs text-[var(--text-muted)] animate-pulse mt-0.5">
+                        Calculating VM costs...
+                      </p>
+                    )}
+                  </div>
                   <p className="text-sm text-[var(--text-secondary)] mt-1">
                     {formatCurrency(totalCosts.totalCost * 12)}/year
                   </p>
@@ -2583,7 +2599,12 @@ export default function Calculator() {
                   </div>
                   <div className="p-2 rounded-lg bg-[var(--bg-tertiary)]">
                     <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">VM</p>
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</p>
+                    <p className={clsx(
+                      "text-sm font-semibold text-[var(--text-primary)]",
+                      isLoadingVMCosts && "animate-pulse"
+                    )}>
+                      {isLoadingVMCosts ? '...' : formatCurrency(totalCosts.totalVMCost)}
+                    </p>
                   </div>
                   <div className="p-2 rounded-lg bg-[var(--bg-tertiary)]">
                     <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">DBUs</p>
