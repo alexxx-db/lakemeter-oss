@@ -11,6 +11,8 @@ import {
   DocumentDuplicateIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   BoltIcon,
   CpuChipIcon,
   CurrencyDollarIcon,
@@ -314,6 +316,9 @@ export default function Calculator() {
   
   // Configuration panel collapsed state
   const [isConfigCollapsed, setIsConfigCollapsed] = useState(false)
+  
+  // Cost summary panel collapsed state
+  const [isCostSummaryCollapsed, setIsCostSummaryCollapsed] = useState(false)
   
   // Workloads view mode: 'cards' (default, compact), 'expanded', 'table'
   const [workloadsViewMode, setWorkloadsViewMode] = useState<'cards' | 'expanded' | 'table'>('cards')
@@ -1625,9 +1630,15 @@ export default function Calculator() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content - Left 2 columns */}
-        <div className="lg:col-span-2 space-y-6">
+      <div className={clsx(
+        "grid grid-cols-1 gap-6 transition-all duration-300",
+        isCostSummaryCollapsed ? "lg:grid-cols-1" : "lg:grid-cols-3"
+      )}>
+        {/* Main Content - Expands when sidebar is collapsed */}
+        <div className={clsx(
+          "space-y-6 transition-all duration-300",
+          isCostSummaryCollapsed ? "lg:col-span-1" : "lg:col-span-2"
+        )}>
           {/* Configuration Section - Collapsible */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -2585,14 +2596,52 @@ export default function Calculator() {
           </motion.div>
         </div>
         
-        {/* Cost Summary Sidebar - Right column */}
-        <div className="lg:col-span-1">
+        {/* Cost Summary Sidebar - Right column, Collapsible */}
+        <div className={clsx(
+          "lg:col-span-1 transition-all duration-300",
+          isCostSummaryCollapsed && "fixed right-0 top-24 z-40"
+        )}>
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.15 }}
-            className="card p-5 sticky top-24"
+            className={clsx(
+              "card sticky top-24 transition-all duration-300",
+              isCostSummaryCollapsed ? "p-2 w-14" : "p-5"
+            )}
           >
+            {/* Toggle Button */}
+            <button
+              onClick={() => setIsCostSummaryCollapsed(!isCostSummaryCollapsed)}
+              className={clsx(
+                "absolute -left-3 top-6 z-10 w-6 h-6 rounded-full border flex items-center justify-center transition-all",
+                "bg-[var(--bg-secondary)] border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)] hover:scale-110",
+                "shadow-sm"
+              )}
+              title={isCostSummaryCollapsed ? "Expand cost summary" : "Collapse cost summary"}
+            >
+              {isCostSummaryCollapsed ? (
+                <ChevronLeftIcon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+              ) : (
+                <ChevronRightIcon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+              )}
+            </button>
+            
+            {/* Collapsed View - Just show total */}
+            {isCostSummaryCollapsed ? (
+              <div className="flex flex-col items-center gap-2 py-2">
+                <CurrencyDollarIcon className="w-5 h-5 text-orange-500" />
+                <div className="writing-mode-vertical text-center">
+                  <p className="text-xs font-bold text-orange-500 [writing-mode:vertical-rl] rotate-180">
+                    {formatCurrency(totalCosts.totalCost)}
+                  </p>
+                  <p className="text-[9px] text-[var(--text-muted)] [writing-mode:vertical-rl] rotate-180 mt-1">
+                    /month
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
             <h3 className="section-title flex items-center gap-2 mb-5">
               <CurrencyDollarIcon className="w-4 h-4" />
               Cost Summary
@@ -2738,6 +2787,8 @@ export default function Calculator() {
                 <span className="font-medium text-[var(--text-secondary)]">Note:</span> Estimates based on published Databricks pricing. Actual costs may vary based on usage and negotiated discounts.
               </p>
             </div>
+              </>
+            )}
           </motion.div>
         </div>
       </div>

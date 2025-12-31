@@ -6,6 +6,9 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react'
 import clsx from 'clsx'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   PaperAirplaneIcon,
   XMarkIcon,
@@ -559,10 +562,16 @@ export function ChatPanel({
 
   const totalDraftCost = draftWorkloads.reduce((sum, w) => sum + (w.estimated_cost || 0), 0)
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-y-0 right-0 w-full sm:w-[420px] bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-50 flex flex-col">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div 
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          className="fixed inset-y-0 right-0 w-full sm:w-[420px] bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-50 flex flex-col"
+        >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
         <div className="flex items-center gap-2">
@@ -789,7 +798,11 @@ export function ChatPanel({
                     <span>Thinking...</span>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap">{message.content}</div>
+                  <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-black/10 dark:prose-code:bg-white/10">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
                 )}
               </div>
 
@@ -864,7 +877,9 @@ export function ChatPanel({
           Powered by Claude Sonnet 4.5 • Estimates are approximate
         </p>
       </div>
-    </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 

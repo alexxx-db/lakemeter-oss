@@ -428,19 +428,19 @@ export default function Estimates() {
                 Select
               </button>
               
-              <button
-                onClick={handleExportAll}
-                disabled={isExporting || estimates.length === 0}
-                className="btn btn-secondary"
-              >
-                <ArrowDownTrayIcon className="w-4 h-4" />
-                Export All
-              </button>
-              
-              <Link to="/calculator" className="btn btn-primary">
-                <PlusIcon className="w-4 h-4" />
-                New Estimate
-              </Link>
+          <button
+            onClick={handleExportAll}
+            disabled={isExporting || estimates.length === 0}
+            className="btn btn-secondary"
+          >
+            <ArrowDownTrayIcon className="w-4 h-4" />
+            Export All
+          </button>
+          
+          <Link to="/calculator" className="btn btn-primary">
+            <PlusIcon className="w-4 h-4" />
+            New Estimate
+          </Link>
             </>
           ) : (
             <>
@@ -494,13 +494,13 @@ export default function Estimates() {
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name or customer..."
-            className="w-full pl-10 pr-4"
-          />
+          className="w-full pl-10 pr-4"
+        />
         </div>
         
         <SortDropdown sortBy={sortBy} setSortBy={setSortBy} />
@@ -578,10 +578,10 @@ export default function Estimates() {
             const isSelected = selectedIds.has(estimate.estimate_id)
             
             return (
-              <motion.div
-                key={estimate.estimate_id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
+            <motion.div
+              key={estimate.estimate_id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.02 }}
                 onClick={() => !isBulkMode && navigate(`/calculator/${estimate.estimate_id}`)}
                 className={clsx(
@@ -589,8 +589,8 @@ export default function Estimates() {
                   !isBulkMode && 'card-interactive',
                   isSelected && 'ring-2 ring-blue-500'
                 )}
-              >
-                <div className="flex items-center gap-4">
+            >
+              <div className="flex items-center gap-4">
                   {/* Checkbox (bulk mode) or Icon */}
                   {isBulkMode ? (
                     <button
@@ -626,16 +626,16 @@ export default function Estimates() {
                             : 'var(--text-muted)'
                         }}
                       />
-                    </div>
+                </div>
                   )}
-                  
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
+                
+                {/* Info */}
+                <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-                        {estimate.estimate_name}
-                      </h3>
-                      {estimate.cloud && cloudBadges[estimate.cloud] && (
+                      {estimate.estimate_name}
+                    </h3>
+                    {estimate.cloud && cloudBadges[estimate.cloud] && (
                         <span 
                           className="badge border text-xs"
                           style={{
@@ -644,25 +644,25 @@ export default function Estimates() {
                             borderColor: cloudBadges[estimate.cloud].border
                           }}
                         >
-                          {cloudBadges[estimate.cloud].label}
-                        </span>
-                      )}
-                    </div>
+                        {cloudBadges[estimate.cloud].label}
+                      </span>
+                    )}
+                  </div>
                     <div className="flex items-center gap-4 text-sm flex-wrap" style={{ color: 'var(--text-muted)' }}>
                       {estimate.customer_name && (
                         <span className="truncate max-w-[200px]">{estimate.customer_name}</span>
                       )}
-                      <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1">
                         <Squares2X2Icon className="w-4 h-4" />
                         {estimate.line_item_count} workload{estimate.line_item_count !== 1 ? 's' : ''}
-                      </span>
-                      <span className="flex items-center gap-1">
+                    </span>
+                    <span className="flex items-center gap-1">
                         <ClockIcon className="w-4 h-4" />
                         {formatRelativeTime(estimate.updated_at)}
-                      </span>
-                    </div>
+                    </span>
                   </div>
-                  
+                </div>
+                
                   {/* Cost Indicator & Actions */}
                   <div className="flex items-center gap-3">
                     {/* Cost hint - shown when not in bulk mode */}
@@ -680,28 +680,28 @@ export default function Estimates() {
                     
                     {/* Actions (not in bulk mode) */}
                     {!isBulkMode && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={(e) => handleDuplicate(e, estimate.estimate_id)}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={(e) => handleDuplicate(e, estimate.estimate_id)}
                           className="p-2 rounded-lg hover:bg-[var(--bg-hover)]"
                           style={{ color: 'var(--text-muted)' }}
-                          title="Duplicate"
-                        >
-                          <DocumentDuplicateIcon className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={(e) => handleDelete(e, estimate.estimate_id, estimate.estimate_name)}
+                    title="Duplicate"
+                  >
+                    <DocumentDuplicateIcon className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={(e) => handleDelete(e, estimate.estimate_id, estimate.estimate_name)}
                           className="p-2 rounded-lg hover:text-red-500 hover:bg-red-500/10"
                           style={{ color: 'var(--text-muted)' }}
-                          title="Delete"
-                        >
-                          <TrashIcon className="w-5 h-5" />
-                        </button>
+                    title="Delete"
+                  >
+                    <TrashIcon className="w-5 h-5" />
+                  </button>
                       </div>
                     )}
-                  </div>
                 </div>
-              </motion.div>
+              </div>
+            </motion.div>
             )
           })}
         </div>

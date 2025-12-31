@@ -333,8 +333,13 @@ export default function Layout() {
         </div>
       </header>
       
-      {/* Main content */}
-      <main className="flex-1">
+      {/* Main content - shifts left when chat is open */}
+      <main 
+        className={clsx(
+          "flex-1 transition-all duration-300 ease-out",
+          isChatOpen && isEstimateDetailPage && "mr-[420px]"
+        )}
+      >
         <motion.div
           key={location.pathname}
           initial={{ opacity: 0, y: 8 }}
@@ -345,8 +350,14 @@ export default function Layout() {
         </motion.div>
       </main>
       
-      {/* Footer */}
-      <footer className="border-t py-4 mt-auto" style={{ borderColor: 'var(--border-primary)' }}>
+      {/* Footer - shifts left when chat is open */}
+      <footer 
+        className={clsx(
+          "border-t py-4 mt-auto transition-all duration-300 ease-out",
+          isChatOpen && isEstimateDetailPage && "mr-[420px]"
+        )}
+        style={{ borderColor: 'var(--border-primary)' }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
             <span className="text-orange-500">Databricks</span> Pricing Calculator • Powered by Lakebase
