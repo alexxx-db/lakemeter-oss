@@ -244,7 +244,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     fetchLineItems,
     clearSingleWorkloadCost,
     markItemCalculating,
-    fetchVMCostForInstance
+    fetchVMCostForInstance,
+    fetchAvailableWorkloadTypes,
+    getAvailableWorkloadTypes,
+    isLoadingRegionalAvailability
   } = useStore()
   
   // Fallback DBSQL sizes if store hasn't loaded yet
@@ -543,6 +546,65 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     }
   }, [selectedCloud, selectedRegion, form.driver_node_type, form.worker_node_type, form.driver_pricing_tier, form.worker_pricing_tier, form.driver_payment_option, form.worker_payment_option, form.serverless_enabled, fetchVMCostForInstance])
   
+  // Fetch available workload types when region/tier changes
+  // This is used to filter out workload types not available in the selected region
+  useEffect(() => {
+    if (!selectedCloud || !selectedRegion || !selectedTier) return
+    
+    // Check if we already have cached data
+    const cachedTypes = getAvailableWorkloadTypes(selectedCloud, selectedRegion, selectedTier)
+    if (!cachedTypes) {
+      // Fetch in background - don't block UI
+      fetchAvailableWorkloadTypes(selectedCloud, selectedRegion, selectedTier)
+    }
+  }, [selectedCloud, selectedRegion, selectedTier, fetchAvailableWorkloadTypes, getAvailableWorkloadTypes])
+  
+  // Get available workload types for the current region (from cache or default to all)
+  const availableWorkloadTypesForRegion = getAvailableWorkloadTypes(selectedCloud, selectedRegion, selectedTier)
+  
+  // Filter workload types based on both tier restrictions AND regional availability
+  const filteredWorkloadTypes = workloadTypes.filter(wt => {
+    // First check tier availability
+    const tierAvailability = isWorkloadAvailableForTier(wt.workload_type, selectedTier, false)
+    if (!tierAvailability.available) return false
+    
+    // Then check regional availability (if data is loaded)
+    if (availableWorkloadTypesForRegion && availableWorkloadTypesForRegion.length > 0) {
+      return availableWorkloadTypesForRegion.includes(wt.workload_type)
+    }
+    
+    // If regional availability not loaded yet, show all tier-available types
+    return true
+  })
+  
+  // Check if some workload types are hidden due to regional restrictions
+  const hasRegionalRestrictions = availableWorkloadTypesForRegion && 
+    availableWorkloadTypesForRegion.length > 0 && 
+    workloadTypes.some(wt => {
+      const tierAvailable = isWorkloadAvailableForTier(wt.workload_type, selectedTier, false).available
+      return tierAvailable && !availableWorkloadTypesForRegion.includes(wt.workload_type)
+    })
+  
+  // Auto-switch workload type if current selection is not available in the region
+  // Only for new workloads - don't change existing workloads (they may need to be migrated)
+  useEffect(() => {
+    if (!lineItem && availableWorkloadTypesForRegion && availableWorkloadTypesForRegion.length > 0) {
+      if (!availableWorkloadTypesForRegion.includes(form.workload_type)) {
+        // Switch to first available workload type
+        const firstAvailable = filteredWorkloadTypes[0]
+        if (firstAvailable) {
+          setForm(f => ({ ...f, workload_type: firstAvailable.workload_type }))
+        }
+      }
+    }
+  }, [availableWorkloadTypesForRegion, form.workload_type, filteredWorkloadTypes, lineItem])
+  
+  // Check if this is an existing workload with a type that's not available in the current region
+  const isExistingWithUnavailableType = lineItem && 
+    availableWorkloadTypesForRegion && 
+    availableWorkloadTypesForRegion.length > 0 && 
+    !availableWorkloadTypesForRegion.includes(form.workload_type)
+  
   // Call onFormChange whenever form values change (for real-time cost preview in parent)
   useEffect(() => {
     if (onFormChange) {
@@ -820,27 +882,47 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         </div>
         
         <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>Workload Type</label>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+            Workload Type
+            {isLoadingRegionalAvailability && (
+              <span className="ml-2 text-[var(--text-muted)] text-xs animate-pulse">Loading...</span>
+            )}
+          </label>
           <select
             value={form.workload_type}
             onChange={(e) => setForm(f => ({ ...f, workload_type: e.target.value, serverless_enabled: false, photon_enabled: false }))}
-            className={clsx("w-full", isWorkloadTypeInvalid && "border-red-500")}
+            className={clsx("w-full", isWorkloadTypeInvalid && "border-red-500", isExistingWithUnavailableType && "border-yellow-500")}
           >
-            {workloadTypes.map(wt => {
-              const availability = isWorkloadAvailableForTier(wt.workload_type, selectedTier, false)
-              return (
-                <option 
-                  key={wt.workload_type} 
-                  value={wt.workload_type}
-                  disabled={!availability.available}
-                >
-                  {wt.display_name}{!availability.available ? ' (Premium+ only)' : ''}
+            {/* Show existing workload's type first if it's not in the filtered list (for editing) */}
+            {isExistingWithUnavailableType && (() => {
+              const existingType = workloadTypes.find(wt => wt.workload_type === form.workload_type)
+              return existingType ? (
+                <option key={existingType.workload_type} value={existingType.workload_type}>
+                  {existingType.display_name} (unavailable in region)
                 </option>
-              )
-            })}
+              ) : null
+            })()}
+            {filteredWorkloadTypes.map(wt => (
+              <option 
+                key={wt.workload_type} 
+                value={wt.workload_type}
+              >
+                {wt.display_name}
+              </option>
+            ))}
           </select>
           {isWorkloadTypeInvalid && (
             <p className="text-xs text-red-500 mt-1">Unknown workload type: {form.workload_type}</p>
+          )}
+          {isExistingWithUnavailableType && (
+            <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+              ⚠️ {form.workload_type.replace(/_/g, ' ')} is not available in {selectedRegion}
+            </p>
+          )}
+          {hasRegionalRestrictions && !isExistingWithUnavailableType && (
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              Some workload types are not available in {selectedRegion}
+            </p>
           )}
         </div>
       </div>

@@ -418,4 +418,25 @@ class LakemeterAPIClient:
             json_body=data,
             user_token=self.user_token
         )
+    
+    async def get_dbu_rates(
+        self,
+        cloud: str,
+        region: str,
+        tier: str
+    ) -> Dict[str, Any]:
+        """Get DBU rates for a cloud/region/tier combination.
+        
+        Returns available product types and their DBU prices.
+        Used to determine which workload types are available in a region.
+        """
+        return await call_external_api(
+            "/api/v1/pricing/dbu-rates",
+            params={
+                "cloud": cloud.upper(),
+                "region": region,
+                "tier": tier.upper()
+            },
+            user_token=self.user_token
+        )
 

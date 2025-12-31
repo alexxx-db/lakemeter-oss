@@ -165,6 +165,28 @@ async def get_fmapi_proprietary_models(request: Request, provider: Optional[str]
     )
 
 
+# ==================== Pricing (DBU Rates for Regional Availability) ====================
+
+@router.get("/dbu-rates")
+async def get_dbu_rates(
+    request: Request,
+    cloud: str,
+    region: str,
+    tier: str
+):
+    """Get DBU rates from external API.
+    
+    Used to determine which workload types are available in a specific region.
+    Returns all product types with DBU prices for the given cloud/region/tier.
+    """
+    client = LakemeterAPIClient(user_token=get_user_token(request))
+    return await call_external_api(
+        request,
+        lambda: client.get_dbu_rates(cloud, region, tier),
+        "get_dbu_rates"
+    )
+
+
 # ==================== Pricing Bundle ====================
 
 @router.post("/pricing-bundle/regenerate")

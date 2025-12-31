@@ -240,6 +240,11 @@ interface Store {
   fmapiDatabricksRates: Record<string, FMAPIDatabricksModel>  // "model:rate_type" -> rate data
   fmapiProprietaryRates: Record<string, FMAPIProprietaryModel>  // "provider:model:rate_type" -> rate data
   
+  // Regional Workload Availability (NEW)
+  // Cache of available workload types per region: "cloud:region:tier" -> available workload types
+  regionalWorkloadAvailability: Record<string, string[]>
+  isLoadingRegionalAvailability: boolean
+  
   // Static Pricing Bundle (for instant local calculations)
   pricingBundle: PricingBundle
   isPricingBundleLoaded: boolean
@@ -307,6 +312,10 @@ interface Store {
   fetchFMAPIProprietaryRate: (provider: string, model: string, cloud: string, rate_type: string) => Promise<FMAPIProprietaryModel | null>
   getFMAPIDatabricksRate: (model: string, rate_type: string) => FMAPIDatabricksModel | null
   getFMAPIProprietaryRate: (provider: string, model: string, rate_type: string) => FMAPIProprietaryModel | null
+  
+  // Actions - Regional Workload Availability (NEW)
+  fetchAvailableWorkloadTypes: (cloud: string, region: string, tier: string) => Promise<string[]>
+  getAvailableWorkloadTypes: (cloud: string, region: string, tier: string) => string[] | null
   
   // Actions - Cost Calculation (NEW)
   calculateWorkloadCost: (lineItem: LineItem, estimateCloud: string, estimateRegion: string, estimateTier: string) => Promise<CostCalculationResponse | null>
@@ -389,6 +398,10 @@ export const useStore = create<Store>((set, get) => ({
   vectorSearchModes: [],
   fmapiDatabricksRates: {},
   fmapiProprietaryRates: {},
+  
+  // Regional Workload Availability (NEW)
+  regionalWorkloadAvailability: {},
+  isLoadingRegionalAvailability: false,
   
   // Static Pricing Bundle (for instant local calculations)
   pricingBundle: createEmptyBundle(),
@@ -1226,6 +1239,46 @@ export const useStore = create<Store>((set, get) => ({
     const { fmapiProprietaryRates } = get()
     const cacheKey = `${provider}:${model}:${rate_type}`
     return fmapiProprietaryRates[cacheKey] || null
+  },
+  
+  // Regional Workload Availability Actions
+  fetchAvailableWorkloadTypes: async (cloud, region, tier) => {
+    const cacheKey = `${cloud.toUpperCase()}:${region}:${tier.toUpperCase()}`
+    const { regionalWorkloadAvailability } = get()
+    
+    // Return cached value if available
+    if (regionalWorkloadAvailability[cacheKey]) {
+      return regionalWorkloadAvailability[cacheKey]
+    }
+    
+    set({ isLoadingRegionalAvailability: true })
+    
+    try {
+      const result = await api.fetchAvailableWorkloadTypes({ cloud, region, tier })
+      
+      // Cache the result
+      set((state) => ({
+        regionalWorkloadAvailability: {
+          ...state.regionalWorkloadAvailability,
+          [cacheKey]: result.availableWorkloadTypes
+        },
+        isLoadingRegionalAvailability: false
+      }))
+      
+      return result.availableWorkloadTypes
+    } catch (error) {
+      console.warn('Failed to fetch available workload types:', error)
+      set({ isLoadingRegionalAvailability: false })
+      // Return all workload types on error (graceful fallback)
+      const allTypes = ['JOBS', 'ALL_PURPOSE', 'DLT', 'DBSQL', 'VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE']
+      return allTypes
+    }
+  },
+  
+  getAvailableWorkloadTypes: (cloud, region, tier) => {
+    const { regionalWorkloadAvailability } = get()
+    const cacheKey = `${cloud.toUpperCase()}:${region}:${tier.toUpperCase()}`
+    return regionalWorkloadAvailability[cacheKey] || null
   },
   
   // Cost Calculation

@@ -506,6 +506,150 @@ export const fetchDBURates = async (params: {
 }
 
 // ============================================================================
+// Regional Workload Availability
+// ============================================================================
+
+// Mapping of SKU product types to workload types
+// Used to determine which workload types are available based on available SKUs in a region
+const SKU_TO_WORKLOAD_MAP: Record<string, string[]> = {
+  // Jobs
+  'JOBS_COMPUTE': ['JOBS'],
+  'JOBS_LIGHT_COMPUTE': ['JOBS'],
+  'AUTOMATED_JOBS_COMPUTE': ['JOBS'],
+  'AUTOMATED_JOBS_LIGHT_COMPUTE': ['JOBS'],
+  'JOBS_COMPUTE_(PHOTON)': ['JOBS'],
+  'JOBS_SERVERLESS_COMPUTE': ['JOBS'],
+  
+  // All Purpose
+  'ALL_PURPOSE_COMPUTE': ['ALL_PURPOSE'],
+  'ALL_PURPOSE_COMPUTE_(PHOTON)': ['ALL_PURPOSE'],
+  'INTERACTIVE_SERVERLESS_COMPUTE': ['ALL_PURPOSE'],
+  
+  // DLT / Lakeflow Declarative Pipelines
+  'DLT_CORE_COMPUTE': ['DLT'],
+  'DLT_PRO_COMPUTE': ['DLT'],
+  'DLT_ADVANCED_COMPUTE': ['DLT'],
+  'DLT_CORE_COMPUTE_(PHOTON)': ['DLT'],
+  'DLT_PRO_COMPUTE_(PHOTON)': ['DLT'],
+  'DLT_ADVANCED_COMPUTE_(PHOTON)': ['DLT'],
+  'DELTA_LIVE_TABLES_SERVERLESS': ['DLT'],
+  
+  // DBSQL
+  'SQL_COMPUTE': ['DBSQL'],
+  'SQL_PRO_COMPUTE': ['DBSQL'],
+  'SERVERLESS_SQL_COMPUTE': ['DBSQL'],
+  
+  // Vector Search
+  'VECTOR_SEARCH_ENDPOINT': ['VECTOR_SEARCH'],
+  'MOSAIC_AI_VECTOR_SEARCH': ['VECTOR_SEARCH'],
+  'VECTOR_SEARCH': ['VECTOR_SEARCH'],
+  
+  // Model Serving
+  'SERVERLESS_REAL_TIME_INFERENCE': ['MODEL_SERVING'],
+  'MODEL_SERVING_SERVERLESS': ['MODEL_SERVING'],
+  'MOSAIC_AI_MODEL_SERVING': ['MODEL_SERVING'],
+  
+  // Foundation Models - Databricks
+  'FOUNDATION_MODEL_TRAINING': ['FMAPI_DATABRICKS'],
+  'MOSAIC_AI_FOUNDATION_MODEL_SERVING': ['FMAPI_DATABRICKS'],
+  'DATABRICKS_FOUNDATION_MODEL_TRAINING': ['FMAPI_DATABRICKS'],
+  
+  // Foundation Models - Proprietary
+  'OPENAI_MODEL_SERVING': ['FMAPI_PROPRIETARY'],
+  'ANTHROPIC_MODEL_SERVING': ['FMAPI_PROPRIETARY'],
+  'GOOGLE_MODEL_SERVING': ['FMAPI_PROPRIETARY'],
+  'EXTERNAL_MODEL_SERVING': ['FMAPI_PROPRIETARY'],
+  
+  // Lakebase
+  'DATABASE_SERVERLESS_COMPUTE': ['LAKEBASE'],
+  'LAKEBASE_COMPUTE': ['LAKEBASE'],
+}
+
+export interface RegionalWorkloadAvailability {
+  cloud: string
+  region: string
+  tier: string
+  availableWorkloadTypes: string[]
+  unavailableWorkloadTypes: string[]
+  productTypes: string[]
+}
+
+/**
+ * Fetch available workload types for a specific cloud/region/tier combination.
+ * Uses the external DBU rates API to determine which product types (SKUs) have pricing,
+ * then maps those to workload types.
+ */
+export const fetchAvailableWorkloadTypes = async (params: {
+  cloud: string
+  region: string
+  tier: string
+}): Promise<RegionalWorkloadAvailability> => {
+  const allWorkloadTypes = [
+    'JOBS', 'ALL_PURPOSE', 'DLT', 'DBSQL', 
+    'VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'
+  ]
+  
+  try {
+    // Fetch DBU rates from external API via our backend proxy
+    const { data } = await api.get('/reference/dbu-rates', { 
+      params: {
+        cloud: params.cloud.toUpperCase(),
+        region: params.region,
+        tier: params.tier.toUpperCase()
+      }
+    })
+    
+    // Extract product types from response
+    // Response format: { success: true, data: { rates: [{ product_type: string, ... }] } }
+    // or { success: true, data: [{ product_type: string, ... }] }
+    let productTypes: string[] = []
+    
+    if (data?.success && data?.data) {
+      if (Array.isArray(data.data)) {
+        productTypes = data.data.map((r: { product_type: string }) => r.product_type.toUpperCase())
+      } else if (data.data.rates && Array.isArray(data.data.rates)) {
+        productTypes = data.data.rates.map((r: { product_type: string }) => r.product_type.toUpperCase())
+      }
+    } else if (Array.isArray(data)) {
+      productTypes = data.map((r: { product_type: string }) => r.product_type.toUpperCase())
+    }
+    
+    // Map product types to workload types
+    const availableWorkloadTypesSet = new Set<string>()
+    
+    for (const productType of productTypes) {
+      const workloadTypes = SKU_TO_WORKLOAD_MAP[productType]
+      if (workloadTypes) {
+        workloadTypes.forEach(wt => availableWorkloadTypesSet.add(wt))
+      }
+    }
+    
+    const availableWorkloadTypes = Array.from(availableWorkloadTypesSet)
+    const unavailableWorkloadTypes = allWorkloadTypes.filter(wt => !availableWorkloadTypesSet.has(wt))
+    
+    return {
+      cloud: params.cloud.toUpperCase(),
+      region: params.region,
+      tier: params.tier.toUpperCase(),
+      availableWorkloadTypes,
+      unavailableWorkloadTypes,
+      productTypes
+    }
+  } catch (error) {
+    console.warn('Failed to fetch available workload types, assuming all are available:', error)
+    // On error, assume all workload types are available (graceful fallback)
+    return {
+      cloud: params.cloud.toUpperCase(),
+      region: params.region,
+      tier: params.tier.toUpperCase(),
+      availableWorkloadTypes: allWorkloadTypes,
+      unavailableWorkloadTypes: [],
+      productTypes: []
+    }
+  }
+}
+
+// ============================================================================
 // Model Serving (NEW API)
 // ============================================================================
 export const fetchModelServingGPUTypes = async (cloud: string): Promise<ModelServingGPUType[]> => {
