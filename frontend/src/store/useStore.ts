@@ -1006,8 +1006,9 @@ export const useStore = create<Store>((set, get) => ({
     
     try {
       // Fetch from new API: /instances/vm-costs
+      // NOTE: API expects uppercase cloud (AWS, AZURE, GCP)
       const vmCosts = await api.fetchInstanceVMCosts({ 
-        cloud, 
+        cloud: cloud.toUpperCase(), 
         region, 
         instance_type: instanceType,
         pricing_tier: pricingTier,
