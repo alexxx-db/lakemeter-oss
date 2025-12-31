@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -316,11 +316,6 @@ export default function Calculator() {
   // Bulk selection for delete
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   
-  // Auto-save for estimate metadata
-  const [isAutoSaving, setIsAutoSaving] = useState(false)
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const lastSavedFormRef = useRef<string>('')
-  
   // Track changes
   const markAsChanged = useCallback(() => {
     setHasUnsavedChanges(true)
@@ -337,60 +332,6 @@ export default function Calculator() {
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges])
-  
-  // Auto-save estimate metadata (debounced) - only for existing estimates
-  useEffect(() => {
-    // Only auto-save for existing estimates with valid form data
-    if (!id || !currentEstimate) return
-    if (!formData.estimate_name.trim() || !formData.region || !formData.tier) return
-    
-    // Create a hash of the current form state
-    const currentFormHash = JSON.stringify({
-      estimate_name: formData.estimate_name,
-      customer_name: formData.customer_name,
-      sfdc_account_id: formData.sfdc_account_id,
-      opportunity_id: formData.opportunity_id,
-      uco_id: formData.uco_id,
-      cloud: formData.cloud,
-      region: formData.region,
-      tier: formData.tier
-    })
-    
-    // Skip if nothing changed since last save
-    if (currentFormHash === lastSavedFormRef.current) return
-    
-    // Clear any pending auto-save
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current)
-    }
-    
-    // Debounced auto-save (1.5 seconds after last change)
-    autoSaveTimeoutRef.current = setTimeout(async () => {
-      try {
-        setIsAutoSaving(true)
-        const dataToSave = {
-          ...formData,
-          cloud: formData.cloud.toUpperCase(),
-          tier: formData.tier.toUpperCase()
-        }
-        await updateEstimate(id, dataToSave)
-        lastSavedFormRef.current = currentFormHash
-        setHasUnsavedChanges(false)
-      } catch (error) {
-        console.error('Auto-save failed:', error)
-        toast.error('Auto-save failed')
-      } finally {
-        setIsAutoSaving(false)
-      }
-    }, 1500)
-    
-    // Cleanup timeout on unmount or when dependencies change
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current)
-      }
-    }
-  }, [formData, id, currentEstimate, updateEstimate])
   
   // NOTE: fetchReferenceData() and loadPricingBundle() are now called in Layout.tsx at app startup
   // This significantly speeds up Calculator page load
@@ -1617,33 +1558,6 @@ export default function Calculator() {
             <ArrowDownTrayIcon className="w-4 h-4" />
             <span className="hidden sm:inline">Excel</span>
           </button>
-          
-          {/* Auto-save indicator for existing estimates */}
-          {id && isAutoSaving && (
-            <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
-              <ArrowPathIcon className="w-3 h-3 animate-spin" />
-              Saving...
-            </span>
-          )}
-          {id && !isAutoSaving && !hasUnsavedChanges && (
-            <span className="text-xs text-green-500 flex items-center gap-1">
-              <CheckIcon className="w-3 h-3" />
-              Saved
-            </span>
-          )}
-          
-          <button
-            onClick={handleSave}
-            disabled={isSaving || isAutoSaving || !canCreateEstimate}
-            title={!canCreateEstimate ? `Missing: ${getMissingFields().join(', ')}` : undefined}
-            className={clsx(
-              "btn btn-primary",
-              hasUnsavedChanges && !isAutoSaving && "ring-2 ring-orange-500/50 ring-offset-2 ring-offset-[var(--bg-primary)]"
-            )}
-          >
-            <CheckIcon className="w-4 h-4" />
-            {isSaving || isAutoSaving ? 'Saving...' : id ? 'Save' : 'Create'}
-          </button>
         </div>
       </div>
       
@@ -1932,6 +1846,34 @@ export default function Calculator() {
                   </div>
                 </div>
                 
+                {/* Save Button */}
+                <div className="border-t border-[var(--border-primary)] pt-4 flex items-center justify-between">
+                  <div className="text-xs text-[var(--text-muted)]">
+                    {hasUnsavedChanges ? (
+                      <span className="text-amber-500 flex items-center gap-1">
+                        <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                        Unsaved changes
+                      </span>
+                    ) : id ? (
+                      <span className="text-green-500 flex items-center gap-1">
+                        <CheckIcon className="w-3.5 h-3.5" />
+                        All changes saved
+                      </span>
+                    ) : null}
+                  </div>
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving || !canCreateEstimate}
+                    title={!canCreateEstimate ? `Missing: ${getMissingFields().join(', ')}` : undefined}
+                    className={clsx(
+                      "btn btn-primary",
+                      hasUnsavedChanges && "ring-2 ring-orange-500/50 ring-offset-2 ring-offset-[var(--bg-primary)]"
+                    )}
+                  >
+                    <CheckIcon className="w-4 h-4" />
+                    {isSaving ? 'Saving...' : id ? 'Save Configuration' : 'Create Estimate'}
+                  </button>
+                </div>
               </div>
             )}
           </motion.div>
