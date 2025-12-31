@@ -164,11 +164,23 @@ class LakebaseTokenManager:
         if self._sp_client_id and self._sp_client_secret:
             try:
                 _log_info("Using SP credentials from secrets...")
-                sp_client = WorkspaceClient(
+                
+                # Create Config with explicit M2M OAuth to prevent fallback to CLI auth
+                from databricks.sdk.core import Config
+                sp_config = Config(
                     host=self.databricks_host,
                     client_id=self._sp_client_id,
-                    client_secret=self._sp_client_secret
+                    client_secret=self._sp_client_secret,
+                    auth_type="oauth-m2m"  # Force M2M OAuth, prevent CLI auth fallback
                 )
+                sp_client = WorkspaceClient(config=sp_config)
+                
+                # Verify the identity before generating token
+                try:
+                    current_sp = sp_client.current_user.me()
+                    _log_info(f"SP WorkspaceClient authenticated as: {current_sp.user_name}")
+                except Exception as e:
+                    _log_warning(f"Could not verify SP identity: {e}")
                 
                 credential = sp_client.database.generate_database_credential(
                     request_id=str(uuid.uuid4()),

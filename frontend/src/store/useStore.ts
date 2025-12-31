@@ -76,21 +76,18 @@ function getCachedReferenceData(): CachedReferenceData | null {
     
     // Validate TTL
     if (Date.now() - data.timestamp > CACHE_TTL) {
-      console.log('[Cache] Reference data expired, will refresh')
       localStorage.removeItem(CACHE_KEY)
       return null
     }
     
     // Validate required fields exist
     if (!data.workloadTypes || !data.cloudProviders) {
-      console.warn('[Cache] Invalid cache structure, clearing')
       localStorage.removeItem(CACHE_KEY)
       return null
     }
     
     // Check for regionsMap (new cache format) or regions (old format)
     if (!data.regionsMap && !data.regions) {
-      console.warn('[Cache] No regions data in cache, clearing')
       localStorage.removeItem(CACHE_KEY)
       return null
     }
@@ -102,20 +99,16 @@ function getCachedReferenceData(): CachedReferenceData | null {
         (regions) => Array.isArray(regions) && regions.length > 0
       )
       if (!hasAnyRegions) {
-        console.warn('[Cache] Regions are empty in cache (fetch may have failed previously), clearing')
         localStorage.removeItem(CACHE_KEY)
         return null
       }
     } else if (data.regions && data.regions.length === 0) {
-      console.warn('[Cache] Regions array is empty, clearing')
       localStorage.removeItem(CACHE_KEY)
       return null
     }
     
-    console.log('[Cache] Using cached reference data (age:', Math.round((Date.now() - data.timestamp) / 1000 / 60), 'minutes)')
     return data
   } catch (e) {
-    console.warn('[Cache] Failed to parse cache, clearing:', e)
     localStorage.removeItem(CACHE_KEY)
     return null
   }
@@ -128,18 +121,16 @@ function setCachedReferenceData(data: Omit<CachedReferenceData, 'timestamp'>): v
       timestamp: Date.now()
     }
     localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-    console.log('[Cache] Saved reference data to localStorage')
   } catch (e) {
-    console.warn('[Cache] Failed to save to localStorage:', e)
+    // Cache save failed - non-critical
   }
 }
 
 function clearReferenceDataCache(): void {
   try {
     localStorage.removeItem(CACHE_KEY)
-    console.log('[Cache] Cleared reference data cache')
   } catch (e) {
-    console.warn('[Cache] Failed to clear cache:', e)
+    // Cache clear failed - non-critical
   }
 }
 
@@ -649,13 +640,11 @@ export const useStore = create<Store>((set, get) => ({
     // Check if already loaded or loading (prevent duplicate calls)
     const state = get()
     if (state.isLoadingReferenceData) {
-      console.log('[RefData] Already loading, skipping duplicate call')
       return
     }
     
     // Skip if already loaded from cache (unless force refresh)
     if (!forceRefresh && state.isReferenceDataLoaded) {
-      console.log('[RefData] Already loaded, skipping')
       return
     }
     
@@ -663,7 +652,6 @@ export const useStore = create<Store>((set, get) => ({
     if (!forceRefresh) {
       const cached = getCachedReferenceData()
       if (cached) {
-        console.log('[RefData] Using localStorage cache')
         // Reconstruct regionsMap from cache (support both old and new format)
         const regionsMap = cached.regionsMap || { aws: cached.regions || [] }
         set({ 
@@ -694,7 +682,6 @@ export const useStore = create<Store>((set, get) => ({
     
     // No cache or force refresh - fetch from API
     // OPTIMIZATION: All API calls run in parallel (single batch instead of 3 sequential batches)
-    console.log('[RefData] Fetching from API (forceRefresh:', forceRefresh, ') - all calls in parallel')
     set({ isLoadingReferenceData: true })
     
     const defaultCloud = 'aws'
@@ -797,10 +784,7 @@ export const useStore = create<Store>((set, get) => ({
         isLoadingReferenceData: false
       })
       
-      console.log('[RefData] Loaded all reference data in parallel:', { 
-        regions: { aws: awsRegions.length, azure: azureRegions.length, gcp: gcpRegions.length },
-        fmapi: { databricks: Object.keys(fmapiDatabricksRates).length, proprietary: Object.keys(fmapiProprietaryRates).length }
-      })
+      // Reference data loaded successfully
       
       // Save to localStorage cache (including all cloud regions)
       setCachedReferenceData({
@@ -839,21 +823,16 @@ export const useStore = create<Store>((set, get) => ({
   loadPricingBundle: async () => {
     const state = get()
     if (state.isPricingBundleLoaded) {
-      console.log('[PricingBundle] Already loaded')
       return
     }
     
     try {
       const bundle = await loadPricingBundle()
       set({ pricingBundle: bundle, isPricingBundleLoaded: bundle.isLoaded })
-      
       // NOTE: vmCosts removed from bundle to save ~50 MB - VM costs are now fetched on-demand via API
-      if (bundle.isLoaded) {
-        console.log('[PricingBundle] Loaded successfully (DBU rates, multipliers, etc.)')
-      }
     } catch (error) {
-      console.error('[PricingBundle] Failed to load:', error)
-      // Keep using API-based fallback
+      // Pricing bundle failed to load - will use API-based fallback
+      console.warn('[PricingBundle] Failed to load, using API fallback')
     }
   },
   
@@ -1011,17 +990,18 @@ export const useStore = create<Store>((set, get) => ({
   },
   
   // Fetch VM cost for a specific instance on-demand using the new API
+  // Uses functional state update to prevent race conditions when multiple fetches run in parallel
   fetchVMCostForInstance: async (cloud, region, instanceType, pricingTier = 'on_demand', paymentOption = 'NA') => {
     // Return 0 immediately if no instance type provided
     if (!instanceType || instanceType.trim() === '') {
       return 0
     }
     
-    // Check if already in cache
-    const { vmPricingMap } = get()
+    // Check if already in cache (before making API call)
     const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
-    if (vmPricingMap[exactKey] !== undefined) {
-      return vmPricingMap[exactKey]
+    const currentCache = get().vmPricingMap
+    if (currentCache[exactKey] !== undefined) {
+      return currentCache[exactKey]
     }
     
     try {
@@ -1034,14 +1014,19 @@ export const useStore = create<Store>((set, get) => ({
         payment_option: paymentOption
       })
       
-      // Update cache with fetched data
+      // Update cache with fetched data using functional update to avoid race conditions
       if (vmCosts && vmCosts.length > 0) {
-        const newVmPricingMap = { ...get().vmPricingMap }
+        // Build entries to add
+        const newEntries: Record<string, number> = {}
         vmCosts.forEach(vc => {
           const key = `${cloud.toLowerCase()}:${region}:${instanceType}:${vc.pricing_tier}:${vc.payment_option}`
-          newVmPricingMap[key] = vc.cost_per_hour
+          newEntries[key] = vc.cost_per_hour
         })
-        set({ vmPricingMap: newVmPricingMap })
+        
+        // Use functional update to safely merge with existing state (prevents race conditions)
+        set(state => ({
+          vmPricingMap: { ...state.vmPricingMap, ...newEntries }
+        }))
         
         // Return the requested pricing tier
         const matchedCost = vmCosts.find(vc => 
@@ -1053,7 +1038,10 @@ export const useStore = create<Store>((set, get) => ({
       
       return 0
     } catch (error) {
-      console.error(`Failed to fetch VM cost for ${cloud}/${region}/${instanceType}:`, error)
+      // Only log actual errors, not missing data
+      if (error instanceof Error && !error.message.includes('404')) {
+        console.error(`[VM Cost] Fetch failed for ${instanceType}:`, error.message)
+      }
       return 0
     }
   },
@@ -1065,40 +1053,36 @@ export const useStore = create<Store>((set, get) => ({
     }
     
     const { vmPricingMap } = get()
-    
-    // NOTE: vmCosts removed from bundle to save ~50 MB
-    // VM prices are now fetched on-demand via fetchVMCostForInstance() and cached in vmPricingMap
+    const cloudLower = cloud.toLowerCase()
     
     // Look up in runtime-cached vmPricingMap (populated by on-demand API calls)
-    const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
+    const exactKey = `${cloudLower}:${region}:${instanceType}:${pricingTier}:${paymentOption}`
     if (vmPricingMap[exactKey] !== undefined) {
       return vmPricingMap[exactKey]
     }
     
-    const keyNoPayment = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:NA`
+    const keyNoPayment = `${cloudLower}:${region}:${instanceType}:${pricingTier}:NA`
     if (vmPricingMap[keyNoPayment] !== undefined) {
       return vmPricingMap[keyNoPayment]
     }
     
-    // Try with different payment options
+    // Try with different payment options for same pricing tier
     for (const key of Object.keys(vmPricingMap)) {
       const parts = key.split(':')
-      if (parts[0] === cloud.toLowerCase() && parts[2] === instanceType && parts[3] === pricingTier) {
+      if (parts[0] === cloudLower && parts[2] === instanceType && parts[3] === pricingTier) {
         return vmPricingMap[key]
       }
     }
     
-    // Try matching just cloud and instance type (any pricing tier)
+    // Try matching just cloud and instance type (any pricing tier as fallback)
     for (const key of Object.keys(vmPricingMap)) {
       const parts = key.split(':')
-      if (parts[0] === cloud.toLowerCase() && parts[2] === instanceType) {
+      if (parts[0] === cloudLower && parts[2] === instanceType) {
         return vmPricingMap[key]
       }
     }
     
-    // VM price not found - this is expected during initial load or for new instance types
-    // The fetchVMCostForInstance will be triggered by the component to fetch the price
-    // Returning 0 allows the calculation to proceed; VM cost will update when data is fetched
+    // VM price not found - return 0, will be populated when fetch completes
     return 0
   },
   
@@ -1475,11 +1459,8 @@ export const useStore = create<Store>((set, get) => ({
       
       // If all workloads have cached costs, nothing to do
       if (estimateLineItems.length === 0) {
-        console.log('[Calc] All workloads have cached costs, skipping recalculation')
         return
       }
-      
-      console.log(`[Calc] Smart recalculation: ${estimateLineItems.length} workloads need calculation (${lineItems.filter(li => li.estimate_id === estimateId).length - estimateLineItems.length} cached)`)
     }
     
     // Mark only the items that need calculation

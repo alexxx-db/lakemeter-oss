@@ -243,6 +243,8 @@ export default function Calculator() {
     setSelectedRegion,
     fetchVMCostForInstance,
     getVMPrice,
+    // VM pricing map - subscribe to trigger re-render when prices are fetched
+    vmPricingMap,
     // DBU Rates
     dbuRatesMap,
     fetchDBURates,
@@ -427,23 +429,46 @@ export default function Calculator() {
   
   // Fetch VM costs for all unique instance types used in line items
   // This ensures VM pricing is available for cost calculations
+  // NOTE: Also depends on lineItemsLoaded to ensure formData is populated from currentEstimate
   useEffect(() => {
-    if (!formData.cloud || !formData.region || lineItems.length === 0) return
+    // Wait for estimate to be fully loaded (formData populated AND lineItems loaded)
+    if (!formData.cloud || !formData.region || lineItems.length === 0 || !lineItemsLoaded) {
+      return
+    }
     
-    // Collect all unique instance types from line items
-    const instanceTypesToFetch = new Set<string>()
+    // Collect all unique (instanceType, pricingTier) combinations from line items
+    const fetchConfigs = new Set<string>()
     lineItems.forEach(item => {
-      if (item.driver_node_type) instanceTypesToFetch.add(item.driver_node_type)
-      if (item.worker_node_type) instanceTypesToFetch.add(item.worker_node_type)
+      // Skip serverless workloads (no VM costs)
+      if (item.serverless_enabled) return
+      
+      // Driver pricing
+      if (item.driver_node_type) {
+        const driverTier = item.driver_pricing_tier || 'on_demand'
+        const driverPayment = item.driver_payment_option || 'NA'
+        fetchConfigs.add(`${item.driver_node_type}:${driverTier}:${driverPayment}`)
+      }
+      
+      // Worker pricing
+      if (item.worker_node_type) {
+        const workerTier = item.worker_pricing_tier || 'spot'
+        const workerPayment = item.worker_payment_option || 'NA'
+        fetchConfigs.add(`${item.worker_node_type}:${workerTier}:${workerPayment}`)
+      }
     })
     
-    // Fetch VM costs for each unique instance type (async, non-blocking)
-    instanceTypesToFetch.forEach(instanceType => {
-      // Fetch both on_demand and spot pricing for each instance
-      fetchVMCostForInstance(formData.cloud, formData.region, instanceType, 'on_demand', 'NA')
-      fetchVMCostForInstance(formData.cloud, formData.region, instanceType, 'spot', 'NA')
+    // Fetch VM costs for each unique configuration (async, non-blocking)
+    // Uses Promise.all to batch all fetches and trigger single re-render when all complete
+    const fetchPromises = Array.from(fetchConfigs).map(config => {
+      const [instanceType, pricingTier, paymentOption] = config.split(':')
+      return fetchVMCostForInstance(formData.cloud, formData.region, instanceType, pricingTier, paymentOption)
     })
-  }, [formData.cloud, formData.region, lineItems, fetchVMCostForInstance])
+    
+    // Optional: could await Promise.all(fetchPromises) if we need to know when all complete
+    Promise.all(fetchPromises).catch(() => {
+      // Silently handle errors - individual fetches already handle their own errors
+    })
+  }, [formData.cloud, formData.region, lineItems, lineItemsLoaded, fetchVMCostForInstance])
   
   // Use cached regions from store (pre-loaded for all clouds)
   // This is instant - no API call needed when switching clouds
@@ -678,16 +703,13 @@ export default function Calculator() {
     let dbuPrice = 0.20
     if (isPricingBundleLoaded && formData.tier) {
       const bundlePrice = getBundleDBUPrice(pricingBundle, cloud, region, formData.tier, productType)
-      console.log(`[DBU Price Lookup] ${effectiveItem.workload_name}: cloud=${cloud}, region=${region}, tier=${formData.tier}, productType=${productType}, bundlePrice=${bundlePrice}, isPricingBundleLoaded=${isPricingBundleLoaded}`)
       if (bundlePrice > 0) {
         dbuPrice = bundlePrice
       } else {
         dbuPrice = pricing[productType] || 0.20
-        console.log(`[DBU Price Fallback] Using fallback: ${dbuPrice}`)
       }
     } else {
       dbuPrice = pricing[productType] || 0.20
-      console.log(`[DBU Price No Bundle] Using fallback: ${dbuPrice}, isPricingBundleLoaded=${isPricingBundleLoaded}, formData.tier=${formData.tier}`)
     }
     
     // ========================================
@@ -1110,7 +1132,7 @@ export default function Calculator() {
     })
     
     return { totalDBUs, totalDBUCost, totalVMCost, totalCost }
-  }, [lineItems, formData.cloud, formData.region, formData.tier, workloadTypes, getVMPrice, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
+  }, [lineItems, formData.cloud, formData.region, formData.tier, workloadTypes, getVMPrice, vmPricingMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
   
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {

@@ -289,7 +289,25 @@ export const fetchInstanceVMCosts = async (params: {
   payment_option?: string
 }): Promise<VMCost[]> => {
   const { data } = await api.get('/instances/vm-costs', { params })
-  return data
+  // API response structure: { success: true, data: { cloud, region, instance_type, pricing_options: [...] } }
+  // Extract pricing_options and enrich with top-level fields
+  if (data?.success && data?.data?.pricing_options) {
+    const { cloud, region, instance_type } = data.data
+    return data.data.pricing_options.map((option: { pricing_tier: string; payment_option: string; cost_per_hour: number }) => ({
+      cloud,
+      region,
+      instance_type,
+      pricing_tier: option.pricing_tier,
+      payment_option: option.payment_option,
+      cost_per_hour: option.cost_per_hour,
+      currency: 'USD'
+    }))
+  }
+  // Fallback for direct array response
+  if (Array.isArray(data)) {
+    return data
+  }
+  return []
 }
 
 export const fetchVMPricingOptions = async (cloud?: string): Promise<VMPricingOption[]> => {
