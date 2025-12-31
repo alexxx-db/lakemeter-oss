@@ -2081,8 +2081,25 @@ export default function Calculator() {
                                   </div>
                                 </td>
                                 <td className="p-2 text-right font-medium text-[var(--text-primary)] whitespace-nowrap">{formatCurrency(costs.dbuCost)}</td>
-                                <td className="p-2 text-right font-medium text-[var(--text-primary)] whitespace-nowrap">{formatCurrency(costs.vmCost)}</td>
-                                <td className="p-2 text-right font-bold text-orange-500 whitespace-nowrap">{formatCurrency(costs.totalCost)}</td>
+                                {(() => {
+                                  // Workloads that need VM costs: classic compute (not serverless)
+                                  const wType = item.workload_type || ''
+                                  const needsVMCosts = !item.serverless_enabled && 
+                                    ['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType) ||
+                                    (wType === 'DBSQL' && item.dbsql_warehouse_type !== 'SERVERLESS')
+                                  const showVMLoading = isLoadingVMCosts && needsVMCosts && costs.vmCost === 0
+                                  
+                                  return (
+                                    <>
+                                      <td className={clsx("p-2 text-right font-medium whitespace-nowrap", showVMLoading ? "text-[var(--text-muted)] animate-pulse" : "text-[var(--text-primary)]")}>
+                                        {showVMLoading ? '...' : formatCurrency(costs.vmCost)}
+                                      </td>
+                                      <td className={clsx("p-2 text-right font-bold whitespace-nowrap", showVMLoading ? "text-orange-500/60" : "text-orange-500")}>
+                                        {formatCurrency(costs.totalCost)}{showVMLoading && <span className="text-xs font-normal text-[var(--text-muted)]">...</span>}
+                                      </td>
+                                    </>
+                                  )
+                                })()}
                                 <td className="p-2 text-right text-[var(--text-muted)] whitespace-nowrap">{formatNumber(costs.monthlyDBUs)}</td>
                                 <td className="p-2">
                                   <div className="flex items-center justify-end gap-0.5">
@@ -2217,11 +2234,29 @@ export default function Calculator() {
                           
                           {/* Cost - Instant local calculation */}
                           <div className="text-right min-w-[100px]">
-                            <p className={clsx(
-                              "font-bold text-orange-500",
-                              workloadsViewMode === 'cards' && !isExpanded ? "text-base" : "text-lg"
-                            )}>{formatCurrency(costs.totalCost)}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs/mo</p>
+                            {/* Check if this workload needs VM costs and we're still loading them */}
+                            {(() => {
+                              // Workloads that need VM costs: classic compute (not serverless)
+                              const wType = item.workload_type || ''
+                              const needsVMCosts = !item.serverless_enabled && 
+                                ['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType) ||
+                                (wType === 'DBSQL' && item.dbsql_warehouse_type !== 'SERVERLESS')
+                              const showVMLoading = isLoadingVMCosts && needsVMCosts && costs.vmCost === 0
+                              
+                              return (
+                                <>
+                                  <p className={clsx(
+                                    "font-bold text-orange-500 transition-opacity",
+                                    workloadsViewMode === 'cards' && !isExpanded ? "text-base" : "text-lg",
+                                    showVMLoading && "opacity-60"
+                                  )}>
+                                    {formatCurrency(costs.totalCost)}
+                                    {showVMLoading && <span className="text-xs font-normal text-[var(--text-muted)] ml-1">...</span>}
+                                  </p>
+                                  <p className="text-xs text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs/mo</p>
+                                </>
+                              )
+                            })()}
                           </div>
                           
                           {/* Actions */}
