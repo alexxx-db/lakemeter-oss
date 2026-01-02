@@ -105,10 +105,68 @@ export function ChatPanel({
   const [proposedEstimate, setProposedEstimate] = useState<ProposedEstimate | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isMinimized, setIsMinimized] = useState(false)
+  const [panelWidth, setPanelWidth] = useState(420)
+  const [isResizing, setIsResizing] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  
+  // Calculate total cost from itemCosts - memoized for real-time updates
+  const totalCost = useMemo(() => {
+    if (!itemCosts || !currentWorkloads) return 0
+    let total = 0
+    currentWorkloads.forEach(w => {
+      const itemId = w.item_id || w.line_item_id
+      const costs = itemCosts[itemId]
+      if (costs?.total) {
+        total += costs.total
+      }
+    })
+    return total
+  }, [itemCosts, currentWorkloads])
+  
+  // Handle resize drag
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+  }, [])
+  
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return
+      const newWidth = window.innerWidth - e.clientX
+      setPanelWidth(Math.min(Math.max(320, newWidth), 700))
+    }
+    
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+    
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'ew-resize'
+      document.body.style.userSelect = 'none'
+    }
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizing])
+  
+  // Auto-resize textarea as user types
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputValue(e.target.value)
+    // Auto-resize
+    const textarea = e.target
+    textarea.style.height = 'auto'
+    textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px'
+  }, [])
   
   // Quick action chips - context-aware suggestions
   const quickActions = useMemo(() => {
@@ -161,23 +219,12 @@ export function ChatPanel({
       const tier = currentEstimate.tier || 'PREMIUM'
       const workloadCount = currentWorkloads?.length || 0
       
-      // Calculate total cost from itemCosts
-      let totalCost = 0
-      if (itemCosts && currentWorkloads) {
-        currentWorkloads.forEach(w => {
-          const itemId = w.item_id || w.line_item_id
-          const costs = itemCosts[itemId]
-          if (costs?.total) {
-            totalCost += costs.total
-          }
-        })
-      }
-      
       // Build estimate context display (simplified - no workload list)
       let contextInfo = `📋 **Current Estimate:** ${estimateName}\n`
       contextInfo += `☁️ ${cloud} • ${region} • ${tier}\n`
       contextInfo += `📊 ${workloadCount} workload${workloadCount !== 1 ? 's' : ''}`
       
+      // Use the memoized totalCost for real-time sync
       if (totalCost > 0) {
         contextInfo += ` • **$${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo**`
       }
@@ -193,7 +240,7 @@ export function ChatPanel({
       // Estimate detail page without estimate (loading or new)
       return `Hi! I'm your Databricks pricing assistant. I can help you create and manage cost estimates.\n\n*Loading estimate details...*`
     }
-  }, [mode, currentEstimate, currentWorkloads, itemCosts])
+  }, [mode, currentEstimate, currentWorkloads, totalCost])
   
   // Add welcome message on first open
   useEffect(() => {
@@ -208,10 +255,10 @@ export function ChatPanel({
     }
   }, [isOpen, buildWelcomeContent])
   
-  // Update welcome message when estimate data loads (only if no conversation has started)
+  // Update welcome message when estimate data or costs change (only if no conversation has started)
   useEffect(() => {
     if (isOpen && messages.length === 1 && messages[0].id === 'welcome' && currentEstimate) {
-      // Update the welcome message with fresh data
+      // Update the welcome message with fresh data including synced costs
       setMessages([{
         id: 'welcome',
         role: 'assistant',
@@ -219,7 +266,7 @@ export function ChatPanel({
         timestamp: new Date()
       }])
     }
-  }, [isOpen, currentEstimate, currentWorkloads, itemCosts, buildWelcomeContent])
+  }, [isOpen, currentEstimate, currentWorkloads, totalCost, buildWelcomeContent])
 
   const sendMessage = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return
@@ -607,7 +654,22 @@ export function ChatPanel({
           </button>
         </div>
       ) : (
-        <div className="fixed inset-y-0 right-0 w-full sm:w-[380px] bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-50 flex flex-col">
+        <div 
+          ref={panelRef}
+          className="fixed inset-y-0 right-0 bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-50 flex flex-col"
+          style={{ width: `min(100vw, ${panelWidth}px)` }}
+        >
+          {/* Resize Handle */}
+          <div
+            onMouseDown={handleMouseDown}
+            className={clsx(
+              "absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-orange-500/30 transition-colors z-10",
+              isResizing && "bg-orange-500/50"
+            )}
+          >
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 rounded-full bg-[var(--border-secondary)] opacity-0 hover:opacity-100 transition-opacity" />
+          </div>
+          
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
         <div className="flex items-center gap-2">
@@ -809,31 +871,31 @@ export function ChatPanel({
             <div className={clsx(
               'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
               message.role === 'user' 
-                ? 'bg-blue-100 dark:bg-blue-900' 
+                ? 'bg-blue-500/20' 
                 : message.role === 'system'
-                ? 'bg-green-100 dark:bg-green-900'
-                : 'bg-orange-100 dark:bg-orange-900'
+                ? 'bg-green-500/20'
+                : 'bg-gradient-to-br from-orange-500/20 to-amber-500/20'
             )}>
               {message.role === 'user' ? (
-                <span className="text-xs font-medium text-blue-600 dark:text-blue-400">You</span>
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-400">You</span>
               ) : message.role === 'system' ? (
                 <CheckCircleIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
               ) : (
-                <SparklesIcon className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                <SparklesIcon className="w-4 h-4 text-orange-500" />
               )}
             </div>
 
             {/* Message Content */}
             <div className={clsx(
-              'flex-1 max-w-[85%]',
+              'flex-1',
               message.role === 'user' ? 'text-right' : 'text-left'
             )}>
               <div className={clsx(
-                'inline-block px-4 py-2 rounded-2xl text-sm',
+                'inline-block px-4 py-3 rounded-2xl text-sm leading-relaxed',
                 message.role === 'user'
-                  ? 'bg-blue-600 text-white rounded-tr-sm'
+                  ? 'bg-blue-600 text-white rounded-tr-sm max-w-[90%] whitespace-pre-wrap text-left'
                   : message.role === 'system'
-                  ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 rounded-tl-sm'
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded-tl-sm'
                   : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-tl-sm border border-[var(--border-primary)]'
               )}>
                 {message.isStreaming && !message.content ? (
@@ -841,8 +903,22 @@ export function ChatPanel({
                     <ArrowPathIcon className="w-4 h-4 animate-spin" />
                     <span>Thinking...</span>
                   </div>
+                ) : message.role === 'user' ? (
+                  // User messages - plain text with preserved whitespace
+                  <span className="whitespace-pre-wrap">{message.content}</span>
                 ) : (
-                  <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-black/10 dark:prose-code:bg-white/10">
+                  // AI/System messages - markdown rendered
+                  <div className="prose prose-sm dark:prose-invert max-w-none 
+                    prose-p:my-2 prose-p:leading-relaxed
+                    prose-ul:my-2 prose-ol:my-2 prose-li:my-1 
+                    prose-headings:my-3 prose-headings:font-semibold
+                    prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
+                    prose-strong:text-[var(--text-primary)] prose-strong:font-semibold
+                    prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:bg-black/10 dark:prose-code:bg-white/10 prose-code:text-xs prose-code:font-mono
+                    prose-pre:my-3 prose-pre:p-3 prose-pre:rounded-lg prose-pre:bg-black/5 dark:prose-pre:bg-white/5
+                    prose-hr:my-3 prose-hr:border-[var(--border-primary)]
+                    prose-a:text-orange-600 dark:prose-a:text-orange-400 prose-a:no-underline hover:prose-a:underline
+                    [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {message.content}
                     </ReactMarkdown>
@@ -856,7 +932,7 @@ export function ChatPanel({
                   {message.toolResults.map((tr, idx) => (
                     <div
                       key={idx}
-                      className="text-xs px-3 py-1.5 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-primary)]"
+                      className="text-xs px-3 py-1.5 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-primary)] inline-block"
                     >
                       <span className="font-medium text-orange-600 dark:text-orange-400">
                         {tr.tool.replace(/_/g, ' ')}
@@ -871,7 +947,7 @@ export function ChatPanel({
 
               {/* Timestamp */}
               <div className={clsx(
-                'text-xs text-[var(--text-muted)] mt-1',
+                'text-[10px] text-[var(--text-muted)] mt-1.5',
                 message.role === 'user' ? 'text-right' : 'text-left'
               )}>
                 {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -895,7 +971,7 @@ export function ChatPanel({
       <div className="p-3 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
         {/* Quick Action Chips */}
         {!isLoading && messages.length <= 2 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
+          <div className="flex flex-wrap gap-1.5 mb-3">
             {quickActions.map((action: { label: string; action: string }, idx: number) => (
               <button
                 key={idx}
@@ -903,38 +979,48 @@ export function ChatPanel({
                   setInputValue(action.action)
                   setTimeout(() => sendMessage(), 100)
                 }}
-                className="text-xs px-2.5 py-1 rounded-full border border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:bg-orange-500/10 hover:border-orange-500/30 hover:text-orange-600 text-[var(--text-secondary)]"
+                className="text-xs px-2.5 py-1.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:bg-orange-500/10 hover:border-orange-500/30 hover:text-orange-600 text-[var(--text-secondary)] transition-colors"
               >
                 {action.label}
               </button>
             ))}
           </div>
         )}
-        <div className="flex gap-2">
-          <textarea
-            ref={inputRef}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask me about Databricks pricing..."
-            disabled={isLoading}
-            rows={1}
-            className="flex-1 resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-            style={{ minHeight: '40px', maxHeight: '100px' }}
-          />
+        
+        {/* Text Input with Auto-expand */}
+        <div className="relative flex gap-2 items-end">
+          <div className="flex-1 relative">
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask me about Databricks pricing... (Shift+Enter for new line)"
+              disabled={isLoading}
+              rows={1}
+              className="w-full resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] px-4 py-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-50 placeholder:text-[var(--text-muted)]"
+              style={{ minHeight: '48px', maxHeight: '150px' }}
+            />
+            {inputValue.length > 100 && (
+              <span className="absolute right-3 bottom-1 text-[10px] text-[var(--text-muted)]">
+                {inputValue.length}
+              </span>
+            )}
+          </div>
           <button
             onClick={sendMessage}
             disabled={!inputValue.trim() || isLoading}
-            className="px-3 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-600 text-white rounded-xl hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-sm flex-shrink-0"
           >
             {isLoading ? (
-              <ArrowPathIcon className="w-4 h-4 animate-spin" />
+              <ArrowPathIcon className="w-5 h-5 animate-spin" />
             ) : (
-              <PaperAirplaneIcon className="w-4 h-4" />
+              <PaperAirplaneIcon className="w-5 h-5" />
             )}
           </button>
         </div>
-        <p className="text-[10px] text-[var(--text-muted)] mt-1.5 text-center">
+        
+        <p className="text-[10px] text-[var(--text-muted)] mt-2 text-center">
           Powered by Claude Sonnet 4.5
         </p>
       </div>
