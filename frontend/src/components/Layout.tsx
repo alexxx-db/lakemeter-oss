@@ -62,6 +62,7 @@ export default function Layout() {
   const { theme, setTheme } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [chatPanelWidth, setChatPanelWidth] = useState(380)
   const [showSessionExpired, setShowSessionExpired] = useState(false)
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -73,7 +74,7 @@ export default function Layout() {
     fetchCurrentUser,
     currentEstimate,
     lineItems,
-    workloadCosts,
+    localCalculatedCosts,
     createLineItem,
     calculateAllWorkloadCosts,
     setSessionExpired,
@@ -335,10 +336,8 @@ export default function Layout() {
       
       {/* Main content - shifts left when chat is open */}
       <main 
-        className={clsx(
-          "flex-1",
-          isChatOpen && isEstimateDetailPage && "mr-[380px]"
-        )}
+        className="flex-1"
+        style={isChatOpen && isEstimateDetailPage ? { marginRight: `${chatPanelWidth}px` } : undefined}
       >
         <motion.div
           key={location.pathname}
@@ -352,11 +351,11 @@ export default function Layout() {
       
       {/* Footer - shifts left when chat is open */}
       <footer 
-        className={clsx(
-          "border-t py-4 mt-auto",
-          isChatOpen && isEstimateDetailPage && "mr-[380px]"
-        )}
-        style={{ borderColor: 'var(--border-primary)' }}
+        className="border-t py-4 mt-auto"
+        style={{ 
+          borderColor: 'var(--border-primary)',
+          ...(isChatOpen && isEstimateDetailPage ? { marginRight: `${chatPanelWidth}px` } : {})
+        }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
@@ -372,16 +371,7 @@ export default function Layout() {
           onClose={() => setIsChatOpen(false)}
           currentEstimate={currentEstimate}
           currentWorkloads={lineItems}
-          itemCosts={Object.fromEntries(
-            Object.entries(workloadCosts).map(([id, response]) => [
-              id,
-              {
-                total: response?.data?.total_cost?.cost_per_month || response?.data?.cost?.total_cost || 0,
-                dbu: response?.data?.dbu_calculation?.dbu_cost_per_month || response?.data?.dbu_costs?.dbu_cost_per_month || 0,
-                vm: response?.data?.vm_costs?.vm_cost_per_month || 0
-              }
-            ])
-          )}
+          itemCosts={localCalculatedCosts}
           onWorkloadConfirmed={async (workloadConfig) => {
             if (currentEstimate?.estimate_id) {
               try {
@@ -398,6 +388,8 @@ export default function Layout() {
             }
           }}
           mode="estimate_detail"
+          onWidthChange={setChatPanelWidth}
+          panelWidth={chatPanelWidth}
         />
       )}
       

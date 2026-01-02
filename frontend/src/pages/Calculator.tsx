@@ -268,7 +268,9 @@ export default function Calculator() {
     isPricingBundleLoaded,
     // NOTE: loadPricingBundle is now called in Layout.tsx at app startup
     // State management
-    clearEstimateState
+    clearEstimateState,
+    // Local cost sync (for AI Assistant)
+    setLocalCalculatedCosts
   } = useStore()
   
   const [isSaving, setIsSaving] = useState(false)
@@ -1178,6 +1180,21 @@ export default function Calculator() {
     
     return { totalDBUs, totalDBUCost, totalVMCost, totalCost }
   }, [lineItems, formData.cloud, formData.region, formData.tier, workloadTypes, getVMPrice, vmPricingMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
+  
+  // Sync local calculated costs to the store for AI Assistant
+  useEffect(() => {
+    const costs: Record<string, { total: number; dbu: number; vm: number; dbus: number }> = {}
+    lineItems.forEach(item => {
+      const itemCosts = calculateItemCost(item, pendingFormEdits[item.line_item_id])
+      costs[item.line_item_id] = {
+        total: isNaN(itemCosts.totalCost) ? 0 : itemCosts.totalCost,
+        dbu: isNaN(itemCosts.dbuCost) ? 0 : itemCosts.dbuCost,
+        vm: isNaN(itemCosts.vmCost) ? 0 : itemCosts.vmCost,
+        dbus: isNaN(itemCosts.monthlyDBUs) ? 0 : itemCosts.monthlyDBUs
+      }
+    })
+    setLocalCalculatedCosts(costs)
+  }, [lineItems, pendingFormEdits, formData.cloud, formData.region, formData.tier, setLocalCalculatedCosts, getVMPrice, vmPricingMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
   
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {

@@ -246,7 +246,8 @@ interface Store {
   loadPricingBundle: () => Promise<void>
   
   // Cost Calculations (NEW)
-  workloadCosts: Record<string, CostCalculationResponse>  // Map of line_item_id -> cost
+  workloadCosts: Record<string, CostCalculationResponse>  // Map of line_item_id -> cost (API results)
+  localCalculatedCosts: Record<string, { total: number; dbu: number; vm: number; dbus: number }>  // Map of line_item_id -> local calculation
   isCalculatingCost: boolean
   calculatingCostIds: Set<string>  // Track which individual line items are calculating
   
@@ -315,6 +316,7 @@ interface Store {
   clearWorkloadCosts: () => void
   clearSingleWorkloadCost: (lineItemId: string) => void
   markItemCalculating: (lineItemId: string) => void
+  setLocalCalculatedCosts: (costs: Record<string, { total: number; dbu: number; vm: number; dbus: number }>) => void
   isItemCalculating: (lineItemId: string) => boolean
   
   // Actions - Clone
@@ -396,6 +398,7 @@ export const useStore = create<Store>((set, get) => ({
   
   // Cost Calculations
   workloadCosts: {},
+  localCalculatedCosts: {},
   isCalculatingCost: false,
   calculatingCostIds: new Set<string>(),
   
@@ -1546,7 +1549,9 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   
-  clearWorkloadCosts: () => set({ workloadCosts: {}, calculatingCostIds: new Set() }),
+  clearWorkloadCosts: () => set({ workloadCosts: {}, localCalculatedCosts: {}, calculatingCostIds: new Set() }),
+  
+  setLocalCalculatedCosts: (costs) => set({ localCalculatedCosts: costs }),
   
   clearSingleWorkloadCost: (lineItemId: string) => set((state) => {
     const newCosts = { ...state.workloadCosts }

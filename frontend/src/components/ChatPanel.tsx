@@ -82,6 +82,9 @@ interface ChatPanelProps {
   itemCosts?: Record<string, { total: number; dbu: number; vm: number }>
   // Mode: 'estimates_list' for home page (create only), 'estimate_detail' for full functionality
   mode?: 'estimates_list' | 'estimate_detail'
+  // Controlled panel width for push layout
+  panelWidth?: number
+  onWidthChange?: (width: number) => void
 }
 
 export function ChatPanel({
@@ -93,7 +96,9 @@ export function ChatPanel({
   currentEstimate,
   currentWorkloads,
   itemCosts,
-  mode = 'estimate_detail'
+  mode = 'estimate_detail',
+  panelWidth: controlledWidth,
+  onWidthChange
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
@@ -105,8 +110,13 @@ export function ChatPanel({
   const [proposedEstimate, setProposedEstimate] = useState<ProposedEstimate | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isMinimized, setIsMinimized] = useState(false)
-  const [panelWidth, setPanelWidth] = useState(420)
+  const [localPanelWidth, setLocalPanelWidth] = useState(380)
   const [isResizing, setIsResizing] = useState(false)
+  const [showQuickActions, setShowQuickActions] = useState(true)
+  
+  // Use controlled width if provided, otherwise use local state
+  const panelWidth = controlledWidth ?? localPanelWidth
+  const setPanelWidth = onWidthChange ?? setLocalPanelWidth
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -436,13 +446,22 @@ export function ChatPanel({
         // Ignore errors
       }
     }
-    setMessages([])
+    // Clear all state
     setConversationId(null)
     setDraftEstimate(null)
     setDraftWorkloads([])
     setProposedWorkloads([])
     setProposedEstimate(null)
     setError(null)
+    
+    // Restore welcome message with fresh context
+    const welcomeMessage: Message = {
+      id: 'welcome',
+      role: 'assistant',
+      content: buildWelcomeContent(),
+      timestamp: new Date()
+    }
+    setMessages([welcomeMessage])
   }
   
   const handleConfirmEstimate = async () => {
@@ -969,21 +988,32 @@ export function ChatPanel({
 
       {/* Input Area */}
       <div className="p-3 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
-        {/* Quick Action Chips */}
-        {!isLoading && messages.length <= 2 && (
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {quickActions.map((action: { label: string; action: string }, idx: number) => (
-              <button
-                key={idx}
-                onClick={() => {
-                  setInputValue(action.action)
-                  setTimeout(() => sendMessage(), 100)
-                }}
-                className="text-xs px-2.5 py-1.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:bg-orange-500/10 hover:border-orange-500/30 hover:text-orange-600 text-[var(--text-secondary)] transition-colors"
-              >
-                {action.label}
-              </button>
-            ))}
+        {/* Quick Action Chips - Always visible but collapsible */}
+        {!isLoading && (
+          <div className="mb-3">
+            <button
+              onClick={() => setShowQuickActions(!showQuickActions)}
+              className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] flex items-center gap-1 mb-2"
+            >
+              <ChevronUpIcon className={clsx("w-3 h-3 transition-transform", showQuickActions ? "rotate-180" : "")} />
+              {showQuickActions ? "Hide suggestions" : "Show suggestions"}
+            </button>
+            {showQuickActions && (
+              <div className="flex flex-wrap gap-1.5">
+                {quickActions.map((action: { label: string; action: string }, idx: number) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setInputValue(action.action)
+                      setTimeout(() => sendMessage(), 100)
+                    }}
+                    className="text-xs px-2.5 py-1.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:bg-orange-500/10 hover:border-orange-500/30 hover:text-orange-600 text-[var(--text-secondary)] transition-colors"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         
