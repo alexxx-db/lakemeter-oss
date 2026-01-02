@@ -115,8 +115,6 @@ def _get_workload_config_details(item) -> str:
                 'gpu_xlarge_a100_80gb_8x': 'XLarge (A100 80GB 8x)',
             }
             details.append(f"Type: {gpu_names.get(item.model_serving_gpu_type, item.model_serving_gpu_type)}")
-        if item.model_serving_num_endpoints and item.model_serving_num_endpoints > 1:
-            details.append(f"Endpoints: {item.model_serving_num_endpoints}")
     
     elif wt in ('FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY'):
         if item.fmapi_model:
