@@ -178,7 +178,7 @@ export function ChatPanel({
     textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px'
   }, [])
   
-  // Quick action chips - context-aware suggestions
+  // Quick action chips - context-aware suggestions with explicit tool-triggering prompts
   const quickActions = useMemo(() => {
     if (mode === 'estimates_list') {
       return [
@@ -191,16 +191,17 @@ export function ChatPanel({
     const hasWorkloads = (currentWorkloads?.length || 0) > 0
     if (!hasWorkloads) {
       return [
-        { label: '➕ Add Jobs workload', action: 'Add a Jobs compute workload' },
-        { label: '➕ Add SQL workload', action: 'Add a Databricks SQL workload' },
-        { label: '➕ Add DLT pipeline', action: 'Add a Delta Live Tables pipeline' },
+        { label: '➕ Add Jobs', action: 'Propose a Jobs compute workload for my estimate. Use reasonable defaults for a daily ETL job.' },
+        { label: '➕ Add SQL', action: 'Propose a Databricks SQL workload for my estimate. Suggest a medium serverless warehouse.' },
+        { label: '➕ Add DLT', action: 'Propose a DLT pipeline workload for my estimate. Suggest serverless with Core edition.' },
+        { label: '➕ Add Model Serving', action: 'Propose a Model Serving workload for my estimate.' },
       ]
     }
     return [
-      { label: '💡 Optimize costs', action: 'Suggest ways to optimize my costs' },
-      { label: '📊 Analyze workloads', action: 'Analyze my current workloads' },
-      { label: '➕ Add workload', action: 'Help me add a new workload' },
-      { label: '❓ Explain pricing', action: 'Explain how Databricks pricing works' },
+      { label: '💡 Optimize', action: 'Analyze my workloads and suggest specific optimizations to reduce costs.' },
+      { label: '📊 Summary', action: 'Give me a summary of my current estimate with cost breakdown by workload type.' },
+      { label: '➕ Add workload', action: 'Propose a new workload for my existing estimate. Ask me what type I need.' },
+      { label: '❓ Pricing', action: 'Explain how Databricks pricing works for the workload types I have.' },
     ]
   }, [mode, currentWorkloads])
 
@@ -1086,9 +1087,28 @@ export function ChatPanel({
 
         {/* Error Message */}
         {error && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
-            <ExclamationCircleIcon className="w-5 h-5 flex-shrink-0" />
-            <span>{error}</span>
+          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+            <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300">
+              <ExclamationCircleIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">{error.includes('400') ? 'Request failed' : 'Error'}</p>
+                <p className="text-xs mt-1 opacity-80">
+                  {error.includes('400') 
+                    ? 'The conversation may be too long. Try clearing the chat and starting fresh.'
+                    : error.includes('429')
+                    ? 'Rate limited. Please wait a moment and try again.'
+                    : error}
+                </p>
+                {error.includes('400') && (
+                  <button
+                    onClick={clearConversation}
+                    className="mt-2 text-xs px-3 py-1.5 bg-red-100 dark:bg-red-800/50 rounded-lg hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors font-medium"
+                  >
+                    Clear & restart
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
