@@ -667,6 +667,27 @@ class EstimateAgent:
         self.proposed_workloads = []
         self.proposed_estimate = None
     
+    def _trim_conversation_history(self, max_messages: int = 20):
+        """
+        Trim conversation history to prevent it from growing too long.
+        Keeps the most recent messages while preserving tool call/result pairs.
+        """
+        if len(self.conversation_history) <= max_messages:
+            return
+        
+        # Keep only the most recent messages
+        # But be careful not to break tool call/result pairs
+        trimmed = self.conversation_history[-max_messages:]
+        
+        # If the first message is a tool result, we need to remove it
+        # as it would reference a tool call that's no longer in history
+        while trimmed and isinstance(trimmed[0].get("content"), list):
+            # This is likely a tool result - remove it
+            trimmed = trimmed[1:]
+        
+        self.conversation_history = trimmed
+        log_info(f"Trimmed conversation history to {len(self.conversation_history)} messages")
+    
     def set_mode(self, mode: str):
         """Set the agent mode (affects available tools and system prompt)."""
         self.mode = mode
@@ -828,6 +849,9 @@ class EstimateAgent:
         tool_calls = []
         current_tool = None
         tool_input_json = ""
+        
+        # Trim conversation history to prevent 400 errors from too-long requests
+        self._trim_conversation_history()
         
         async for chunk in self.client.chat_stream(
             messages=self.conversation_history,

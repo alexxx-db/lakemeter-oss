@@ -334,8 +334,22 @@ class ClaudeAIClient:
             ) as response:
                 if response.status_code != 200:
                     error_text = await response.aread()
-                    log_error(f"Claude streaming error: {response.status_code} - {error_text.decode()}")
-                    yield {"type": "error", "content": f"AI service error: {response.status_code}"}
+                    error_decoded = error_text.decode()
+                    log_error(f"Claude streaming error: {response.status_code} - {error_decoded}")
+                    
+                    # Try to extract meaningful error message
+                    try:
+                        error_json = json.loads(error_decoded)
+                        error_msg = error_json.get("error", {}).get("message", "") or error_json.get("message", "") or error_decoded[:200]
+                    except:
+                        error_msg = error_decoded[:200] if len(error_decoded) > 200 else error_decoded
+                    
+                    if response.status_code == 400:
+                        yield {"type": "error", "content": f"Request error: {error_msg}. Try clearing the conversation."}
+                    elif response.status_code == 429:
+                        yield {"type": "error", "content": "Rate limited. Please wait a moment and try again."}
+                    else:
+                        yield {"type": "error", "content": f"AI service error ({response.status_code}): {error_msg}"}
                     return
                 
                 output_tokens = 0
