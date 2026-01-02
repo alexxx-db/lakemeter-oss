@@ -388,18 +388,24 @@ export function ChatPanel({
                   setProposedEstimate(chunk.estimate)
                 }
               } else if (chunk.type === 'done') {
-                // Update draft state from final response
-                if (chunk.estimate) {
-                  setDraftEstimate(chunk.estimate)
-                }
-                if (chunk.workloads) {
-                  setDraftWorkloads(chunk.workloads)
-                }
-                if (chunk.proposed_workloads) {
-                  setProposedWorkloads(chunk.proposed_workloads)
-                }
-                if (chunk.proposed_estimate) {
-                  setProposedEstimate(chunk.proposed_estimate)
+                // Only update proposals if there wasn't an error in the content
+                // (Don't show stale proposals when AI service errors occur)
+                const hasError = fullContent.includes('Error getting response') || fullContent.includes('AI service error')
+                
+                if (!hasError) {
+                  // Update draft state from final response
+                  if (chunk.estimate) {
+                    setDraftEstimate(chunk.estimate)
+                  }
+                  if (chunk.workloads) {
+                    setDraftWorkloads(chunk.workloads)
+                  }
+                  if (chunk.proposed_workloads && chunk.proposed_workloads.length > 0) {
+                    setProposedWorkloads(chunk.proposed_workloads)
+                  }
+                  if (chunk.proposed_estimate) {
+                    setProposedEstimate(chunk.proposed_estimate)
+                  }
                 }
               } else if (chunk.type === 'error') {
                 throw new Error(chunk.content)

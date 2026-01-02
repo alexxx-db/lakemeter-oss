@@ -1001,11 +1001,20 @@ class EstimateAgent:
                     elif chunk_type == "done":
                         break
                 
-                # If no follow-up content, provide a default message
+                # If no follow-up content, provide a context-appropriate message
                 if not follow_up_content.strip():
-                    default_msg = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
-                    yield {"type": "content", "content": default_msg}
-                    full_content += default_msg
+                    # Only mention proposed workloads if there actually are some
+                    if self.proposed_workloads:
+                        default_msg = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
+                    elif self.proposed_estimate:
+                        default_msg = "\n\nI've proposed an estimate above. Please review and confirm or reject it."
+                    else:
+                        # Generic message when no proposals
+                        default_msg = ""  # Don't add unnecessary text
+                    
+                    if default_msg:
+                        yield {"type": "content", "content": default_msg}
+                        full_content += default_msg
             except Exception as e:
                 log_error(f"Follow-up response error: {e}")
                 error_msg = f"\n\n*Error: {str(e)}*"
