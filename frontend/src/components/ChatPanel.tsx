@@ -90,7 +90,7 @@ interface ChatPanelProps {
 export function ChatPanel({
   isOpen,
   onClose,
-  onEstimateCreated,
+  onEstimateCreated: _onEstimateCreated, // Reserved for future use
   onEstimateConfirmed,
   onWorkloadConfirmed,
   currentEstimate,
@@ -616,47 +616,6 @@ export function ChatPanel({
     }
   }
 
-  const applyEstimate = async () => {
-    if (!conversationId || !draftEstimate) return
-
-    setIsLoading(true)
-    try {
-      const response = await fetch(`/api/v1/chat/${conversationId}/apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to apply estimate')
-      }
-
-      const result = await response.json()
-      
-      // Add success message
-      setMessages(prev => [...prev, {
-        id: `system-${Date.now()}`,
-        role: 'system',
-        content: `✅ ${result.message}`,
-        timestamp: new Date()
-      }])
-
-      // Clear draft state
-      setDraftEstimate(null)
-      setDraftWorkloads([])
-
-      // Notify parent
-      if (onEstimateCreated) {
-        onEstimateCreated(result.estimate_id)
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to apply estimate')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const totalDraftCost = draftWorkloads.reduce((sum, w) => sum + (w.estimated_cost || 0), 0)
-
   if (!isOpen) return null
   
   return (
@@ -824,42 +783,6 @@ export function ChatPanel({
               </div>
             </div>
           </div>
-        </div>
-      )}
-      
-      {/* Draft Estimate Preview */}
-      {draftEstimate && (
-        <div className="px-4 py-3 bg-teal-50 dark:bg-teal-900/20 border-b border-teal-200 dark:border-teal-800">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <DocumentPlusIcon className="w-4 h-4 text-teal-600" />
-              <span className="text-sm font-medium text-teal-700 dark:text-teal-300">
-                Draft Estimate
-              </span>
-            </div>
-            <button
-              onClick={applyEstimate}
-              disabled={isLoading || draftWorkloads.length === 0}
-              className="text-xs px-3 py-1 bg-teal-600 text-white rounded-full hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <CheckCircleIcon className="w-3 h-3" />
-              Save Estimate
-            </button>
-          </div>
-          <div className="text-sm text-teal-800 dark:text-teal-200">
-            <span className="font-medium">{draftEstimate.name}</span>
-            <span className="text-teal-600 dark:text-teal-400"> • {draftEstimate.cloud.toUpperCase()} {draftEstimate.region}</span>
-          </div>
-          {draftWorkloads.length > 0 && (
-            <div className="mt-2 flex items-center justify-between text-xs">
-              <span className="text-teal-600 dark:text-teal-400">
-                {draftWorkloads.length} workload{draftWorkloads.length !== 1 ? 's' : ''}
-              </span>
-              <span className="font-medium text-teal-700 dark:text-teal-300">
-                ~${totalDraftCost.toLocaleString()}/month
-              </span>
-            </div>
-          )}
         </div>
       )}
       
