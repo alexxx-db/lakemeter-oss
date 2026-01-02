@@ -1,4 +1,5 @@
 """Estimates API routes."""
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Body
@@ -273,6 +274,7 @@ def update_estimate(
     
     estimate.version += 1
     estimate.updated_by = current_user.user_id
+    estimate.updated_at = datetime.utcnow()  # Explicitly update timestamp
     db.commit()
     db.refresh(estimate)
     return estimate

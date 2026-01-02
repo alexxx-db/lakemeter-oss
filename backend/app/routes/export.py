@@ -83,6 +83,78 @@ def _get_workload_display_name(workload_type: str) -> str:
     return names.get(workload_type, workload_type)
 
 
+def _get_workload_config_details(item) -> str:
+    """Get workload-specific configuration details for display."""
+    wt = item.workload_type or ''
+    details = []
+    
+    if wt == 'DBSQL':
+        if item.dbsql_warehouse_type:
+            details.append(f"Type: {item.dbsql_warehouse_type}")
+        if item.dbsql_warehouse_size:
+            details.append(f"Size: {item.dbsql_warehouse_size}")
+        if item.dbsql_num_clusters and item.dbsql_num_clusters > 1:
+            details.append(f"Clusters: {item.dbsql_num_clusters}")
+    
+    elif wt == 'VECTOR_SEARCH':
+        mode = item.vector_search_mode or 'standard'
+        mode_display = 'Storage Optimized' if mode == 'storage_optimized' else 'Standard'
+        details.append(f"Mode: {mode_display}")
+        if item.vector_capacity_millions:
+            details.append(f"Capacity: {item.vector_capacity_millions}M vectors")
+    
+    elif wt == 'MODEL_SERVING':
+        if item.model_serving_gpu_type:
+            gpu_names = {
+                'cpu': 'CPU',
+                'gpu_small_t4': 'Small (T4)',
+                'gpu_medium_a10g_1x': 'Medium (A10G 1x)',
+                'gpu_large_a10g_4x': 'Large (A10G 4x)',
+                'gpu_medium_a100_1x': 'Medium (A100 1x)',
+                'gpu_large_a100_2x': 'Large (A100 2x)',
+                'gpu_xlarge_a100_80gb_8x': 'XLarge (A100 80GB 8x)',
+            }
+            details.append(f"Type: {gpu_names.get(item.model_serving_gpu_type, item.model_serving_gpu_type)}")
+        if item.model_serving_num_endpoints and item.model_serving_num_endpoints > 1:
+            details.append(f"Endpoints: {item.model_serving_num_endpoints}")
+    
+    elif wt in ('FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY'):
+        if item.fmapi_model:
+            details.append(f"Model: {item.fmapi_model}")
+        if item.fmapi_rate_type:
+            rate_type_display = {
+                'input_token': 'Input Tokens',
+                'output_token': 'Output Tokens',
+                'provisioned_scaling': 'Provisioned Scaling',
+                'provisioned_entry': 'Provisioned Entry',
+            }
+            details.append(f"Rate: {rate_type_display.get(item.fmapi_rate_type, item.fmapi_rate_type)}")
+        if item.fmapi_quantity:
+            # Format quantity based on rate type
+            if item.fmapi_rate_type in ('input_token', 'output_token'):
+                qty = float(item.fmapi_quantity)
+                if qty >= 1_000_000:
+                    details.append(f"Tokens: {qty/1_000_000:.1f}M")
+                elif qty >= 1_000:
+                    details.append(f"Tokens: {qty/1_000:.1f}K")
+                else:
+                    details.append(f"Tokens: {int(qty)}")
+            else:
+                details.append(f"Hours: {item.fmapi_quantity}")
+    
+    elif wt == 'LAKEBASE':
+        if item.lakebase_cu:
+            details.append(f"CU: {item.lakebase_cu}")
+        if item.lakebase_ha_nodes:
+            details.append(f"Nodes: {item.lakebase_ha_nodes}")
+    
+    elif wt == 'DLT':
+        if item.dlt_edition:
+            details.append(f"Edition: {item.dlt_edition.upper()}")
+    
+    return ' | '.join(details) if details else '-'
+
+
 def _get_sku_type(item) -> str:
     """Determine the SKU/product type for a line item."""
     wt = item.workload_type or ''
@@ -354,14 +426,14 @@ def export_estimate_to_excel(
     sheet = workbook.add_worksheet('Databricks Estimate')
     
     # Set column widths (A=0, B=1, etc.)
-    # Columns: #, Name, Type, Mode, Driver Node, Worker Node, #Workers, Driver Tier, Worker Tier,
+    # Columns: #, Name, Type, Mode, Config, Driver Node, Worker Node, #Workers, Driver Tier, Worker Tier,
     #          Hours/Mo, DBU/Hr, DBUs/Mo, DBU Rate, DBU Cost, Driver VM $/Hr, Worker VM $/Hr, Driver VM Cost, Worker VM Cost, Total VM Cost, Total Cost, Notes
-    widths = [4, 22, 18, 12, 18, 18, 8, 12, 12, 10, 10, 12, 10, 12, 12, 12, 12, 12, 12, 14, 25]
+    widths = [4, 22, 18, 12, 30, 18, 18, 8, 12, 12, 10, 10, 12, 10, 12, 12, 12, 12, 12, 12, 14, 25]
     for i, w in enumerate(widths):
         sheet.set_column(i, i, w)
     
     row = 0
-    max_col = 20  # Total columns (0-indexed: 21 columns)
+    max_col = 21  # Total columns (0-indexed: 22 columns)
     
     # ========== HEADER SECTION ==========
     estimate_name = get_val(estimate, 'estimate_name', 'Untitled Estimate')
@@ -417,7 +489,7 @@ def export_estimate_to_excel(
     row += 1
     
     # Table headers - organized by category
-    # Basic Info (Orange): #, Name, Type, Mode
+    # Basic Info (Orange): #, Name, Type, Mode, Configuration
     # VM Config (Green): Driver Node, Worker Node, #Workers, Driver Tier, Worker Tier
     # DBU Costs (Blue): Hours/Mo, DBU/Hr, DBUs/Mo, DBU Rate, DBU Cost
     # VM Costs (Green): Driver VM $/Hr, Worker VM $/Hr, Driver VM Cost, Worker VM Cost, Total VM Cost
@@ -429,6 +501,7 @@ def export_estimate_to_excel(
         ('Workload Name', header_main_format),
         ('Type', header_main_format),
         ('Mode', header_main_format),
+        ('Configuration', header_main_format),
         ('Driver Node', header_vm_format),
         ('Worker Node', header_vm_format),
         ('Workers', header_vm_format),
@@ -503,46 +576,50 @@ def export_estimate_to_excel(
         else:
             sheet.write(row, 3, "Classic", cell_center)
         
-        # VM Config columns (4-8)
+        # Configuration column (4) - workload-specific details
+        config_details = _get_workload_config_details(item)
+        sheet.write(row, 4, config_details, cell_format)
+        
+        # VM Config columns (5-9)
         if is_serverless:
-            sheet.write(row, 4, '-', serverless_format)  # Driver
-            sheet.write(row, 5, '-', serverless_format)  # Worker
-            sheet.write(row, 6, '-', serverless_format)  # #Workers
-            sheet.write(row, 7, '-', serverless_format)  # Driver Tier
-            sheet.write(row, 8, '-', serverless_format)  # Worker Tier
+            sheet.write(row, 5, '-', serverless_format)  # Driver
+            sheet.write(row, 6, '-', serverless_format)  # Worker
+            sheet.write(row, 7, '-', serverless_format)  # #Workers
+            sheet.write(row, 8, '-', serverless_format)  # Driver Tier
+            sheet.write(row, 9, '-', serverless_format)  # Worker Tier
         else:
-            sheet.write(row, 4, get_val(item, 'driver_node_type', '-') or '-', cell_mono)  # Driver
-            sheet.write(row, 5, get_val(item, 'worker_node_type', '-') or '-', cell_mono)  # Worker
-            sheet.write(row, 6, item.num_workers or 1, number_format)  # #Workers
-            sheet.write(row, 7, _get_pricing_tier_display(item.driver_pricing_tier), cell_center)  # Driver Tier
-            sheet.write(row, 8, _get_pricing_tier_display(item.worker_pricing_tier), cell_center)  # Worker Tier
+            sheet.write(row, 5, get_val(item, 'driver_node_type', '-') or '-', cell_mono)  # Driver
+            sheet.write(row, 6, get_val(item, 'worker_node_type', '-') or '-', cell_mono)  # Worker
+            sheet.write(row, 7, item.num_workers or 1, number_format)  # #Workers
+            sheet.write(row, 8, _get_pricing_tier_display(item.driver_pricing_tier), cell_center)  # Driver Tier
+            sheet.write(row, 9, _get_pricing_tier_display(item.worker_pricing_tier), cell_center)  # Worker Tier
         
-        # DBU columns (9-13)
-        sheet.write(row, 9, hours_per_month, decimal_format)  # Hours/Mo
-        sheet.write(row, 10, dbu_per_hour, decimal_format)  # DBU/Hr
-        sheet.write_formula(row, 11, f'=J{row+1}*K{row+1}', number_format)  # DBUs/Mo
-        sheet.write(row, 12, dbu_rate, currency_format)  # DBU Rate
-        sheet.write_formula(row, 13, f'=L{row+1}*M{row+1}', dbu_currency_format)  # DBU Cost
+        # DBU columns (10-14)
+        sheet.write(row, 10, hours_per_month, decimal_format)  # Hours/Mo
+        sheet.write(row, 11, dbu_per_hour, decimal_format)  # DBU/Hr
+        sheet.write_formula(row, 12, f'=K{row+1}*L{row+1}', number_format)  # DBUs/Mo
+        sheet.write(row, 13, dbu_rate, currency_format)  # DBU Rate
+        sheet.write_formula(row, 14, f'=M{row+1}*N{row+1}', dbu_currency_format)  # DBU Cost
         
-        # VM columns (14-18): Driver VM $/Hr, Worker VM $/Hr, Driver VM Cost, Worker VM Cost, Total VM Cost
+        # VM columns (15-19): Driver VM $/Hr, Worker VM $/Hr, Driver VM Cost, Worker VM Cost, Total VM Cost
         if is_serverless:
-            sheet.write(row, 14, 0, vm_currency_format)  # Driver VM $/Hr
-            sheet.write(row, 15, 0, vm_currency_format)  # Worker VM $/Hr
-            sheet.write(row, 16, 0, vm_currency_format)  # Driver VM Cost
-            sheet.write(row, 17, 0, vm_currency_format)  # Worker VM Cost
-            sheet.write(row, 18, 0, vm_currency_format)  # Total VM Cost
+            sheet.write(row, 15, 0, vm_currency_format)  # Driver VM $/Hr
+            sheet.write(row, 16, 0, vm_currency_format)  # Worker VM $/Hr
+            sheet.write(row, 17, 0, vm_currency_format)  # Driver VM Cost
+            sheet.write(row, 18, 0, vm_currency_format)  # Worker VM Cost
+            sheet.write(row, 19, 0, vm_currency_format)  # Total VM Cost
         else:
-            sheet.write(row, 14, driver_vm_cost_per_hour, currency_format)  # Driver VM $/Hr
-            sheet.write(row, 15, worker_vm_cost_per_hour, currency_format)  # Worker VM $/Hr (per worker)
-            sheet.write_formula(row, 16, f'=J{row+1}*O{row+1}', vm_currency_format)  # Driver VM Cost = Hours * Driver $/Hr
-            sheet.write_formula(row, 17, f'=J{row+1}*P{row+1}*G{row+1}', vm_currency_format)  # Worker VM Cost = Hours * Worker $/Hr * #Workers
-            sheet.write_formula(row, 18, f'=Q{row+1}+R{row+1}', vm_currency_format)  # Total VM Cost
+            sheet.write(row, 15, driver_vm_cost_per_hour, currency_format)  # Driver VM $/Hr
+            sheet.write(row, 16, worker_vm_cost_per_hour, currency_format)  # Worker VM $/Hr (per worker)
+            sheet.write_formula(row, 17, f'=K{row+1}*P{row+1}', vm_currency_format)  # Driver VM Cost = Hours * Driver $/Hr
+            sheet.write_formula(row, 18, f'=K{row+1}*Q{row+1}*H{row+1}', vm_currency_format)  # Worker VM Cost = Hours * Worker $/Hr * #Workers
+            sheet.write_formula(row, 19, f'=R{row+1}+S{row+1}', vm_currency_format)  # Total VM Cost
         
-        # Total Cost (19)
-        sheet.write_formula(row, 19, f'=N{row+1}+S{row+1}', total_currency_format)  # Total = DBU Cost + Total VM Cost
+        # Total Cost (20)
+        sheet.write_formula(row, 20, f'=O{row+1}+T{row+1}', total_currency_format)  # Total = DBU Cost + Total VM Cost
         
-        # Notes (20)
-        sheet.write(row, 20, get_val(item, 'notes', ''), cell_format)
+        # Notes (21)
+        sheet.write(row, 21, get_val(item, 'notes', ''), cell_format)
         
         row += 1
     
@@ -550,27 +627,27 @@ def export_estimate_to_excel(
     
     # ========== TOTALS ROW ==========
     row += 1
-    sheet.write(row, 12, 'TOTALS:', total_label_format)
-    sheet.merge_range(row, 0, row, 12, 'TOTALS:', total_label_format)
+    sheet.write(row, 13, 'TOTALS:', total_label_format)
+    sheet.merge_range(row, 0, row, 13, 'TOTALS:', total_label_format)
     
     if data_end_row >= data_start_row:
-        sheet.write_formula(row, 13, f'=SUM(N{data_start_row+1}:N{data_end_row+1})', total_dbu_value)  # DBU Cost Total
-        sheet.write(row, 14, '', total_label_format)  # Driver VM $/Hr (empty for totals)
-        sheet.write(row, 15, '', total_label_format)  # Worker VM $/Hr (empty for totals)
-        sheet.write_formula(row, 16, f'=SUM(Q{data_start_row+1}:Q{data_end_row+1})', total_vm_value)  # Driver VM Cost Total
-        sheet.write_formula(row, 17, f'=SUM(R{data_start_row+1}:R{data_end_row+1})', total_vm_value)  # Worker VM Cost Total
-        sheet.write_formula(row, 18, f'=SUM(S{data_start_row+1}:S{data_end_row+1})', total_vm_value)  # Total VM Cost
-        sheet.write_formula(row, 19, f'=SUM(T{data_start_row+1}:T{data_end_row+1})', total_grand_value)  # Grand Total
-        sheet.write(row, 20, '', total_label_format)  # Notes (empty for totals)
+        sheet.write_formula(row, 14, f'=SUM(O{data_start_row+1}:O{data_end_row+1})', total_dbu_value)  # DBU Cost Total
+        sheet.write(row, 15, '', total_label_format)  # Driver VM $/Hr (empty for totals)
+        sheet.write(row, 16, '', total_label_format)  # Worker VM $/Hr (empty for totals)
+        sheet.write_formula(row, 17, f'=SUM(R{data_start_row+1}:R{data_end_row+1})', total_vm_value)  # Driver VM Cost Total
+        sheet.write_formula(row, 18, f'=SUM(S{data_start_row+1}:S{data_end_row+1})', total_vm_value)  # Worker VM Cost Total
+        sheet.write_formula(row, 19, f'=SUM(T{data_start_row+1}:T{data_end_row+1})', total_vm_value)  # Total VM Cost
+        sheet.write_formula(row, 20, f'=SUM(U{data_start_row+1}:U{data_end_row+1})', total_grand_value)  # Grand Total
+        sheet.write(row, 21, '', total_label_format)  # Notes (empty for totals)
     else:
-        sheet.write(row, 13, 0, total_dbu_value)
-        sheet.write(row, 14, '', total_label_format)
+        sheet.write(row, 14, 0, total_dbu_value)
         sheet.write(row, 15, '', total_label_format)
-        sheet.write(row, 16, 0, total_vm_value)
+        sheet.write(row, 16, '', total_label_format)
         sheet.write(row, 17, 0, total_vm_value)
         sheet.write(row, 18, 0, total_vm_value)
-        sheet.write(row, 19, 0, total_grand_value)
-        sheet.write(row, 20, '', total_label_format)
+        sheet.write(row, 19, 0, total_vm_value)
+        sheet.write(row, 20, 0, total_grand_value)
+        sheet.write(row, 21, '', total_label_format)
     
     totals_row = row
     row += 2
@@ -594,13 +671,13 @@ def export_estimate_to_excel(
         sheet.write(row, col, h, fmt)
     row += 1
     
-    # Monthly row - N=DBU Cost, Q=Driver VM Cost, R=Worker VM Cost, S=Total VM Cost, T=Total Cost
+    # Monthly row - O=DBU Cost, R=Driver VM Cost, S=Worker VM Cost, T=Total VM Cost, U=Total Cost
     sheet.write(row, 0, 'Monthly', cell_format)
-    sheet.write_formula(row, 1, f'=N{totals_row+1}', dbu_currency_format)  # DBU Cost
-    sheet.write_formula(row, 2, f'=Q{totals_row+1}', vm_currency_format)   # Driver VM Cost
-    sheet.write_formula(row, 3, f'=R{totals_row+1}', vm_currency_format)   # Worker VM Cost
-    sheet.write_formula(row, 4, f'=S{totals_row+1}', vm_currency_format)   # Total VM Cost
-    sheet.write_formula(row, 5, f'=T{totals_row+1}', total_currency_format)  # Total Cost
+    sheet.write_formula(row, 1, f'=O{totals_row+1}', dbu_currency_format)  # DBU Cost
+    sheet.write_formula(row, 2, f'=R{totals_row+1}', vm_currency_format)   # Driver VM Cost
+    sheet.write_formula(row, 3, f'=S{totals_row+1}', vm_currency_format)   # Worker VM Cost
+    sheet.write_formula(row, 4, f'=T{totals_row+1}', vm_currency_format)   # Total VM Cost
+    sheet.write_formula(row, 5, f'=U{totals_row+1}', total_currency_format)  # Total Cost
     monthly_row = row
     row += 1
     
@@ -617,7 +694,7 @@ def export_estimate_to_excel(
     sheet.write(row, 0, 'Total DBUs/Month:', label_format)
     sheet.merge_range(row, 0, row, 1, 'Total DBUs/Month:', label_format)
     if data_end_row >= data_start_row:
-        sheet.write_formula(row, 2, f'=SUM(L{data_start_row+1}:L{data_end_row+1})', total_dbu_num)
+        sheet.write_formula(row, 2, f'=SUM(M{data_start_row+1}:M{data_end_row+1})', total_dbu_num)
     else:
         sheet.write(row, 2, 0, total_dbu_num)
     row += 2
