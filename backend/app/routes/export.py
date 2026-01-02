@@ -70,9 +70,9 @@ VM_HOURLY_COSTS = {
 def _get_workload_display_name(workload_type: str) -> str:
     """Get friendly display name for workload type."""
     names = {
-        'JOBS': 'Job Compute',
+        'JOBS': 'Lakeflow Job Compute',
         'ALL_PURPOSE': 'All-Purpose Compute',
-        'DLT': 'Delta Live Tables',
+        'DLT': 'Lakeflow Spark Declarative Pipelines',
         'DBSQL': 'Databricks SQL',
         'VECTOR_SEARCH': 'Vector Search',
         'MODEL_SERVING': 'Model Serving',
@@ -87,6 +87,11 @@ def _get_workload_config_details(item) -> str:
     """Get workload-specific configuration details for display."""
     wt = item.workload_type or ''
     details = []
+    
+    # For serverless Jobs, All Purpose, and DLT - add serverless mode to config
+    if wt in ('JOBS', 'ALL_PURPOSE', 'DLT') and item.serverless_enabled:
+        serverless_mode = (item.serverless_mode or 'standard').capitalize()
+        details.append(f"Mode: {serverless_mode}")
     
     if wt == 'DBSQL':
         if item.dbsql_warehouse_type:
@@ -128,16 +133,13 @@ def _get_workload_config_details(item) -> str:
             }
             details.append(f"Rate: {rate_type_display.get(item.fmapi_rate_type, item.fmapi_rate_type)}")
         if item.fmapi_quantity:
-            # Format quantity based on rate type
+            # User input is in millions (1 = 1,000,000 tokens)
             if item.fmapi_rate_type in ('input_token', 'output_token'):
-                qty = float(item.fmapi_quantity)
-                if qty >= 1_000_000:
-                    details.append(f"Tokens: {qty/1_000_000:.1f}M")
-                elif qty >= 1_000:
-                    details.append(f"Tokens: {qty/1_000:.1f}K")
-                else:
-                    details.append(f"Tokens: {int(qty)}")
+                qty_millions = float(item.fmapi_quantity)
+                # Display as millions since that's what user entered
+                details.append(f"Tokens: {qty_millions:.1f}M")
             else:
+                # Provisioned hours
                 details.append(f"Hours: {item.fmapi_quantity}")
     
     elif wt == 'LAKEBASE':
@@ -149,6 +151,8 @@ def _get_workload_config_details(item) -> str:
     elif wt == 'DLT':
         if item.dlt_edition:
             details.append(f"Edition: {item.dlt_edition.upper()}")
+        if item.photon_enabled:
+            details.append("Photon")
     
     return ' | '.join(details) if details else '-'
 
@@ -564,13 +568,9 @@ def export_estimate_to_excel(
         sheet.write(row, 1, get_val(item, 'workload_name', f'Workload {idx + 1}'), cell_format)  # Name
         sheet.write(row, 2, _get_workload_display_name(wt), cell_format)  # Type
         
-        # Mode (Serverless/Classic/etc)
+        # Mode (Serverless/Classic) - serverless mode details now in Configuration column
         if is_serverless:
-            if wt in ('JOBS', 'ALL_PURPOSE', 'DLT'):
-                mode = f"Serverless ({(item.serverless_mode or 'standard').capitalize()})"
-            else:
-                mode = "Serverless"
-            sheet.write(row, 3, mode, serverless_format)
+            sheet.write(row, 3, "Serverless", serverless_format)
         else:
             sheet.write(row, 3, "Classic", cell_center)
         
