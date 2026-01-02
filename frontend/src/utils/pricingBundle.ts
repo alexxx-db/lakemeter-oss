@@ -459,6 +459,9 @@ const ALL_WORKLOAD_TYPES = [
  * Get available workload types for a specific cloud/region/tier combination from the pricing bundle.
  * Maps SKU product types to workload types.
  * 
+ * Also checks serverless workloads (Vector Search, Model Serving, FMAPI, Lakebase) which are 
+ * stored in separate bundle files and are typically available globally across regions.
+ * 
  * @param bundle - The loaded pricing bundle
  * @param cloud - Cloud provider (aws, azure, gcp)
  * @param region - Region code (e.g., us-east-1, eastus, us-central1)
@@ -476,7 +479,8 @@ export function getAvailableWorkloadTypesForRegion(
     return ALL_WORKLOAD_TYPES
   }
   
-  const key = `${cloud.toLowerCase()}:${region}:${tier.toUpperCase()}`
+  const cloudLower = cloud.toLowerCase()
+  const key = `${cloudLower}:${region}:${tier.toUpperCase()}`
   const productTypes = bundle.dbuRates[key]
   
   if (!productTypes || Object.keys(productTypes).length === 0) {
@@ -485,7 +489,7 @@ export function getAvailableWorkloadTypesForRegion(
     return ALL_WORKLOAD_TYPES
   }
   
-  // Map SKU product types to workload types
+  // Map SKU product types to workload types from dbuRates
   const availableWorkloads = new Set<string>()
   
   for (const sku of Object.keys(productTypes)) {
@@ -494,6 +498,45 @@ export function getAvailableWorkloadTypesForRegion(
       availableWorkloads.add(workloadType)
     }
   }
+  
+  // Check serverless workloads which are in separate bundle files
+  // These are typically globally available and keyed by cloud (not region)
+  
+  // Vector Search: check if cloud has vector search rates
+  if (bundle.vectorSearchRates) {
+    const vsStandardKey = `${cloudLower}:standard`
+    const vsOptimizedKey = `${cloudLower}:storage_optimized`
+    if (bundle.vectorSearchRates[vsStandardKey] || bundle.vectorSearchRates[vsOptimizedKey]) {
+      availableWorkloads.add('VECTOR_SEARCH')
+    }
+  }
+  
+  // Model Serving: check if cloud has model serving rates
+  if (bundle.modelServingRates) {
+    const hasMSRates = Object.keys(bundle.modelServingRates).some(k => k.startsWith(`${cloudLower}:`))
+    if (hasMSRates) {
+      availableWorkloads.add('MODEL_SERVING')
+    }
+  }
+  
+  // FMAPI Databricks: check if cloud has FMAPI Databricks rates
+  if (bundle.fmapiDatabricksRates) {
+    const hasFMAPIDB = Object.keys(bundle.fmapiDatabricksRates).some(k => k.startsWith(`${cloudLower}:`))
+    if (hasFMAPIDB) {
+      availableWorkloads.add('FMAPI_DATABRICKS')
+    }
+  }
+  
+  // FMAPI Proprietary: check if cloud has FMAPI Proprietary rates
+  if (bundle.fmapiProprietaryRates) {
+    const hasFMAPIProp = Object.keys(bundle.fmapiProprietaryRates).some(k => k.startsWith(`${cloudLower}:`))
+    if (hasFMAPIProp) {
+      availableWorkloads.add('FMAPI_PROPRIETARY')
+    }
+  }
+  
+  // Lakebase: check if DATABASE_SERVERLESS_COMPUTE exists in dbuRates for this region
+  // (already handled by SKU_TO_WORKLOAD_MAP above, but ensure it's covered)
   
   return Array.from(availableWorkloads).sort()
 }
