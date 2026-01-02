@@ -690,40 +690,86 @@ export function ChatPanel({
           </div>
           
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
-        <div className="flex items-center gap-2">
-          <SparklesIcon className="w-4 h-4 text-orange-500" />
-          <h2 className="font-medium text-sm text-[var(--text-primary)]">AI Assistant</h2>
-          {conversationId && (
-            <span className="text-[10px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded">
-              Active
-            </span>
-          )}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] bg-gradient-to-r from-[var(--bg-secondary)] to-[var(--bg-primary)]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-sm">
+            <SparklesIcon className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-sm text-[var(--text-primary)]">AI Assistant</h2>
+            {conversationId ? (
+              <span className="text-[10px] text-green-600 dark:text-green-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                Active session
+              </span>
+            ) : (
+              <span className="text-[10px] text-[var(--text-muted)]">Ready to help</span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
           <button
             onClick={clearConversation}
-            className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+            className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-[var(--text-secondary)] hover:text-red-600 dark:hover:text-red-400 transition-colors"
             title="Clear conversation"
           >
-            <TrashIcon className="w-3.5 h-3.5" />
+            <TrashIcon className="w-4 h-4" />
           </button>
           <button
             onClick={() => setIsMinimized(true)}
-            className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+            className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] transition-colors"
             title="Minimize"
           >
-            <MinusIcon className="w-3.5 h-3.5" />
+            <MinusIcon className="w-4 h-4" />
           </button>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]"
+            className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] transition-colors"
             title="Close"
           >
             <XMarkIcon className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {/* Current Estimate Context - Shows the estimate being worked on */}
+      {mode === 'estimate_detail' && currentEstimate && (
+        <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-900/50 border-b border-[var(--border-primary)]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <DocumentPlusIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <div className="font-medium text-sm text-[var(--text-primary)] truncate max-w-[150px]">
+                  {currentEstimate.estimate_name || currentEstimate.name || 'Estimate'}
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
+                  <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
+                    {(currentEstimate.cloud || 'AWS').toUpperCase()}
+                  </span>
+                  <span>{currentEstimate.region || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-[var(--text-muted)] mb-0.5">
+                {currentWorkloads?.length || 0} workload{(currentWorkloads?.length || 0) !== 1 ? 's' : ''}
+              </div>
+              <div className="font-bold text-base text-[var(--text-primary)]">
+                {totalCost > 0 ? (
+                  <span className="text-green-600 dark:text-green-400">
+                    ${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                ) : (
+                  <span className="text-[var(--text-muted)]">—</span>
+                )}
+                <span className="text-[10px] font-normal text-[var(--text-muted)]">/mo</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Proposed Estimate - Awaiting Confirmation */}
       {proposedEstimate && (
@@ -877,7 +923,7 @@ export function ChatPanel({
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -888,77 +934,140 @@ export function ChatPanel({
           >
             {/* Avatar */}
             <div className={clsx(
-              'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
+              'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5',
               message.role === 'user' 
-                ? 'bg-blue-500/20' 
+                ? 'bg-gradient-to-br from-blue-500 to-blue-600' 
                 : message.role === 'system'
-                ? 'bg-green-500/20'
-                : 'bg-gradient-to-br from-orange-500/20 to-amber-500/20'
+                ? 'bg-gradient-to-br from-green-500 to-emerald-600'
+                : 'bg-gradient-to-br from-orange-500 to-amber-500'
             )}>
               {message.role === 'user' ? (
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-400">You</span>
+                <span className="text-[10px] font-bold text-white">You</span>
               ) : message.role === 'system' ? (
-                <CheckCircleIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <CheckCircleIcon className="w-4 h-4 text-white" />
               ) : (
-                <SparklesIcon className="w-4 h-4 text-orange-500" />
+                <SparklesIcon className="w-4 h-4 text-white" />
               )}
             </div>
 
             {/* Message Content */}
             <div className={clsx(
-              'flex-1',
+              'flex-1 min-w-0',
               message.role === 'user' ? 'text-right' : 'text-left'
             )}>
+              {/* Role Label */}
               <div className={clsx(
-                'inline-block px-4 py-3 rounded-2xl text-sm leading-relaxed',
-                message.role === 'user'
-                  ? 'bg-blue-600 text-white rounded-tr-sm max-w-[90%] whitespace-pre-wrap text-left'
+                'text-[11px] font-medium mb-1.5',
+                message.role === 'user' 
+                  ? 'text-blue-600 dark:text-blue-400' 
                   : message.role === 'system'
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded-tl-sm'
-                  : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-tl-sm border border-[var(--border-primary)]'
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-orange-600 dark:text-orange-400'
+              )}>
+                {message.role === 'user' ? 'You' : message.role === 'system' ? 'System' : 'AI Assistant'}
+              </div>
+              
+              <div className={clsx(
+                'inline-block text-[13px] leading-[1.7]',
+                message.role === 'user'
+                  ? 'bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-md max-w-[85%] whitespace-pre-wrap text-left shadow-sm'
+                  : message.role === 'system'
+                  ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-4 py-2.5 rounded-xl border border-green-200 dark:border-green-800'
+                  : 'text-[var(--text-primary)] max-w-full'
               )}>
                 {message.isStreaming && !message.content ? (
-                  <div className="flex items-center gap-2">
-                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
-                    <span>Thinking...</span>
+                  <div className="flex items-center gap-2 px-1 py-1">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span className="text-[var(--text-secondary)]">Thinking...</span>
                   </div>
                 ) : message.role === 'user' ? (
                   // User messages - plain text with preserved whitespace
                   <span className="whitespace-pre-wrap">{message.content}</span>
                 ) : (
-                  // AI/System messages - markdown rendered
-                  <div className="prose prose-sm dark:prose-invert max-w-none 
-                    prose-p:my-2 prose-p:leading-relaxed
-                    prose-ul:my-2 prose-ol:my-2 prose-li:my-1 
-                    prose-headings:my-3 prose-headings:font-semibold
-                    prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
-                    prose-strong:text-[var(--text-primary)] prose-strong:font-semibold
-                    prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:bg-black/10 dark:prose-code:bg-white/10 prose-code:text-xs prose-code:font-mono
-                    prose-pre:my-3 prose-pre:p-3 prose-pre:rounded-lg prose-pre:bg-black/5 dark:prose-pre:bg-white/5
-                    prose-hr:my-3 prose-hr:border-[var(--border-primary)]
-                    prose-a:text-orange-600 dark:prose-a:text-orange-400 prose-a:no-underline hover:prose-a:underline
-                    [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  // AI/System messages - enhanced markdown rendering
+                  <div className="ai-message-content">
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        // Enhanced heading styles
+                        h1: ({children}) => <h1 className="text-base font-bold text-[var(--text-primary)] mt-4 mb-2 pb-1 border-b border-[var(--border-primary)]">{children}</h1>,
+                        h2: ({children}) => <h2 className="text-[14px] font-bold text-[var(--text-primary)] mt-4 mb-2">{children}</h2>,
+                        h3: ({children}) => <h3 className="text-[13px] font-semibold text-[var(--text-primary)] mt-3 mb-1.5">{children}</h3>,
+                        // Paragraphs with proper spacing
+                        p: ({children}) => <p className="my-2.5 text-[var(--text-primary)] leading-[1.7]">{children}</p>,
+                        // Enhanced list styles
+                        ul: ({children}) => <ul className="my-2.5 ml-0 space-y-1.5">{children}</ul>,
+                        ol: ({children}) => <ol className="my-2.5 ml-0 space-y-1.5 list-decimal list-inside">{children}</ol>,
+                        li: ({children}) => (
+                          <li className="flex gap-2 text-[var(--text-primary)]">
+                            <span className="text-orange-500 flex-shrink-0 mt-[2px]">•</span>
+                            <span className="flex-1">{children}</span>
+                          </li>
+                        ),
+                        // Bold text
+                        strong: ({children}) => <strong className="font-semibold text-[var(--text-primary)]">{children}</strong>,
+                        // Italic
+                        em: ({children}) => <em className="text-[var(--text-secondary)] italic">{children}</em>,
+                        // Inline code
+                        code: ({className, children}) => {
+                          const isBlock = className?.includes('language-')
+                          if (isBlock) {
+                            return (
+                              <code className="block bg-slate-900 dark:bg-slate-950 text-slate-100 p-3 rounded-lg text-xs font-mono overflow-x-auto my-3 border border-slate-700">
+                                {children}
+                              </code>
+                            )
+                          }
+                          return (
+                            <code className="px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded text-[12px] font-mono">
+                              {children}
+                            </code>
+                          )
+                        },
+                        // Code blocks
+                        pre: ({children}) => <pre className="my-3 overflow-hidden rounded-lg">{children}</pre>,
+                        // Blockquotes
+                        blockquote: ({children}) => (
+                          <blockquote className="my-3 pl-3 border-l-3 border-orange-400 bg-orange-50 dark:bg-orange-900/10 py-2 pr-3 rounded-r-lg text-[var(--text-secondary)] italic">
+                            {children}
+                          </blockquote>
+                        ),
+                        // Horizontal rule
+                        hr: () => <hr className="my-4 border-[var(--border-primary)]" />,
+                        // Links
+                        a: ({href, children}) => (
+                          <a href={href} className="text-orange-600 dark:text-orange-400 hover:underline font-medium" target="_blank" rel="noopener noreferrer">
+                            {children}
+                          </a>
+                        ),
+                      }}
+                    >
                       {message.content}
                     </ReactMarkdown>
                   </div>
                 )}
               </div>
 
-              {/* Tool Results */}
+              {/* Tool Results - More prominent styling */}
               {message.toolResults && message.toolResults.length > 0 && (
-                <div className="mt-2 space-y-1">
+                <div className="mt-2.5 flex flex-wrap gap-2">
                   {message.toolResults.map((tr, idx) => (
                     <div
                       key={idx}
-                      className="text-xs px-3 py-1.5 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-primary)] inline-block"
+                      className="text-[11px] px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center gap-1.5"
                     >
-                      <span className="font-medium text-orange-600 dark:text-orange-400">
+                      {tr.result?.success ? (
+                        <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
+                      ) : (
+                        <ArrowPathIcon className="w-3.5 h-3.5 text-orange-500" />
+                      )}
+                      <span className="font-medium text-slate-600 dark:text-slate-300">
                         {tr.tool.replace(/_/g, ' ')}
                       </span>
-                      {tr.result?.success && (
-                        <span className="ml-2 text-green-600 dark:text-green-400">✓</span>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -966,7 +1075,7 @@ export function ChatPanel({
 
               {/* Timestamp */}
               <div className={clsx(
-                'text-[10px] text-[var(--text-muted)] mt-1.5',
+                'text-[10px] text-[var(--text-muted)] mt-2',
                 message.role === 'user' ? 'text-right' : 'text-left'
               )}>
                 {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -987,19 +1096,19 @@ export function ChatPanel({
       </div>
 
       {/* Input Area */}
-      <div className="p-3 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+      <div className="p-4 border-t border-[var(--border-primary)] bg-gradient-to-t from-[var(--bg-secondary)] to-[var(--bg-primary)]">
         {/* Quick Action Chips - Always visible but collapsible */}
         {!isLoading && (
           <div className="mb-3">
             <button
               onClick={() => setShowQuickActions(!showQuickActions)}
-              className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] flex items-center gap-1 mb-2"
+              className="text-[10px] text-[var(--text-muted)] hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1 mb-2 transition-colors"
             >
-              <ChevronUpIcon className={clsx("w-3 h-3 transition-transform", showQuickActions ? "rotate-180" : "")} />
+              <ChevronUpIcon className={clsx("w-3 h-3 transition-transform duration-200", showQuickActions ? "rotate-180" : "")} />
               {showQuickActions ? "Hide suggestions" : "Show suggestions"}
             </button>
             {showQuickActions && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {quickActions.map((action: { label: string; action: string }, idx: number) => (
                   <button
                     key={idx}
@@ -1007,7 +1116,7 @@ export function ChatPanel({
                       setInputValue(action.action)
                       setTimeout(() => sendMessage(), 100)
                     }}
-                    className="text-xs px-2.5 py-1.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-tertiary)] hover:bg-orange-500/10 hover:border-orange-500/30 hover:text-orange-600 text-[var(--text-secondary)] transition-colors"
+                    className="text-[11px] px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-700 dark:hover:text-orange-300 text-[var(--text-secondary)] transition-all duration-150 shadow-sm hover:shadow"
                   >
                     {action.label}
                   </button>
@@ -1025,14 +1134,14 @@ export function ChatPanel({
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask me about Databricks pricing... (Shift+Enter for new line)"
+              placeholder="Ask about pricing, workloads, or optimization..."
               disabled={isLoading}
               rows={1}
-              className="w-full resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] px-4 py-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-50 placeholder:text-[var(--text-muted)]"
+              className="w-full resize-none rounded-xl border-2 border-[var(--border-primary)] bg-[var(--bg-primary)] px-4 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-orange-400 dark:focus:border-orange-500 disabled:opacity-50 placeholder:text-[var(--text-muted)] shadow-sm transition-colors"
               style={{ minHeight: '48px', maxHeight: '150px' }}
             />
-            {inputValue.length > 100 && (
-              <span className="absolute right-3 bottom-1 text-[10px] text-[var(--text-muted)]">
+            {inputValue.length > 50 && (
+              <span className="absolute right-3 bottom-2 text-[9px] text-[var(--text-muted)] bg-[var(--bg-secondary)] px-1 rounded">
                 {inputValue.length}
               </span>
             )}
@@ -1040,7 +1149,7 @@ export function ChatPanel({
           <button
             onClick={sendMessage}
             disabled={!inputValue.trim() || isLoading}
-            className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-600 text-white rounded-xl hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-sm flex-shrink-0"
+            className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-500 text-white rounded-xl hover:from-orange-600 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-150 flex-shrink-0"
           >
             {isLoading ? (
               <ArrowPathIcon className="w-5 h-5 animate-spin" />
@@ -1050,9 +1159,10 @@ export function ChatPanel({
           </button>
         </div>
         
-        <p className="text-[10px] text-[var(--text-muted)] mt-2 text-center">
-          Powered by Claude Sonnet 4.5
-        </p>
+        <div className="flex items-center justify-between mt-2.5 text-[9px] text-[var(--text-muted)]">
+          <span>Shift+Enter for new line</span>
+          <span>Powered by Claude Sonnet 4.5</span>
+        </div>
       </div>
         </div>
       )}
