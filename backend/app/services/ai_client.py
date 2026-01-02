@@ -165,16 +165,19 @@ class ClaudeAIClient:
                 # This is a tool result in Anthropic format, convert to OpenAI
                 for item in msg["content"]:
                     if item.get("type") == "tool_result":
+                        # Ensure tool result content is non-empty
+                        tool_content = item.get("content", "")
+                        if not tool_content:
+                            tool_content = "{}"
                         formatted_messages.append({
                             "role": "tool",
                             "tool_call_id": item.get("tool_use_id", ""),
-                            "content": item.get("content", "")
+                            "content": tool_content
                         })
             elif msg.get("tool_calls"):
-                # Assistant message with tool calls
-                formatted_messages.append({
+                # Assistant message with tool calls - content can be omitted if empty
+                assistant_msg = {
                     "role": "assistant",
-                    "content": msg.get("content", ""),
                     "tool_calls": [
                         {
                             "id": tc.get("id", f"call_{i}"),
@@ -186,11 +189,20 @@ class ClaudeAIClient:
                         }
                         for i, tc in enumerate(msg["tool_calls"])
                     ]
-                })
+                }
+                # Only include content if it's non-empty
+                content = msg.get("content", "")
+                if content:
+                    assistant_msg["content"] = content
+                formatted_messages.append(assistant_msg)
             else:
+                # For regular messages, ensure content is non-empty
+                content = msg.get("content", "")
+                if not content and msg.get("role") == "assistant":
+                    content = "I'll help you with that."
                 formatted_messages.append({
                     "role": msg["role"],
-                    "content": msg.get("content", "")
+                    "content": content
                 })
         
         # Build request payload (OpenAI chat completions format)
@@ -279,15 +291,19 @@ class ClaudeAIClient:
             if msg.get("role") == "user" and isinstance(msg.get("content"), list):
                 for item in msg["content"]:
                     if item.get("type") == "tool_result":
+                        # Ensure tool result content is non-empty
+                        tool_content = item.get("content", "")
+                        if not tool_content:
+                            tool_content = "{}"
                         formatted_messages.append({
                             "role": "tool",
                             "tool_call_id": item.get("tool_use_id", ""),
-                            "content": item.get("content", "")
+                            "content": tool_content
                         })
             elif msg.get("tool_calls"):
-                formatted_messages.append({
+                # For assistant messages with tool calls, content can be omitted if empty
+                assistant_msg = {
                     "role": "assistant",
-                    "content": msg.get("content", ""),
                     "tool_calls": [
                         {
                             "id": tc.get("id", f"call_{i}"),
@@ -299,11 +315,20 @@ class ClaudeAIClient:
                         }
                         for i, tc in enumerate(msg["tool_calls"])
                     ]
-                })
+                }
+                # Only include content if it's non-empty
+                content = msg.get("content", "")
+                if content:
+                    assistant_msg["content"] = content
+                formatted_messages.append(assistant_msg)
             else:
+                # For regular messages, ensure content is non-empty
+                content = msg.get("content", "")
+                if not content and msg.get("role") == "assistant":
+                    content = "I'll help you with that."
                 formatted_messages.append({
                     "role": msg["role"],
-                    "content": msg.get("content", "")
+                    "content": content
                 })
         
         # Build request payload with streaming
