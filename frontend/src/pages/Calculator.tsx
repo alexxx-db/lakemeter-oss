@@ -2673,10 +2673,10 @@ export default function Calculator() {
                 <button
                   onClick={() => setIsCostSummaryCollapsed(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--text-muted)] hover:text-orange-500 hover:bg-orange-500/10 border border-transparent hover:border-orange-500/20"
-                  title="Minimize to bottom bar"
+                  title="Dock to bottom bar"
                 >
                   <ChevronDownIcon className="w-4 h-4" />
-                  <span className="hidden sm:inline">Minimize</span>
+                  <span className="hidden sm:inline">Dock to Bottom</span>
                 </button>
               </div>
               
@@ -2851,14 +2851,14 @@ export default function Calculator() {
                 {/* Left side - Open sidebar panel button */}
                 <button
                   onClick={() => setIsCostSummaryCollapsed(false)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] text-sm transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-orange-500 hover:bg-orange-500/10 text-sm transition-colors"
                   title="Open Cost Summary panel"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h4v14H4z" />
                   </svg>
-                  <span className="hidden sm:inline">Panel</span>
+                  <span className="hidden sm:inline">Open Panel</span>
                 </button>
                 
                 {/* Center - Stats with colored labels */}
