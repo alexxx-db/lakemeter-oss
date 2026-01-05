@@ -2776,38 +2776,41 @@ export default function Calculator() {
       
       {/* Collapsed Cost Summary - Sticky Bottom Bar */}
       {isCostSummaryCollapsed && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-r from-[var(--bg-secondary)] via-[var(--bg-secondary)] to-orange-500/5 border-t-2 border-orange-500/30 shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-primary)] border-t border-[var(--border-primary)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              {/* Left side - Expand and stats */}
-              <div className="flex items-center gap-4 sm:gap-6">
-                <button
-                  onClick={() => setIsCostSummaryCollapsed(false)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 font-medium text-sm"
-                >
-                  <ChevronUpIcon className="w-5 h-5" />
-                  <span className="hidden sm:inline">Cost Summary</span>
-                </button>
-                <div className="hidden md:flex items-center gap-4 text-sm">
-                  <span className="text-[var(--text-muted)]">
-                    <span className="font-semibold text-[var(--text-primary)]">{lineItems.length}</span> workloads
-                  </span>
-                  <span className="text-[var(--text-muted)]">
-                    DBU: <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</span>
-                  </span>
-                  <span className="text-[var(--text-muted)]">
-                    VM: <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</span>
-                  </span>
+            <div className="flex items-center justify-between h-14">
+              {/* Left side - Expand button */}
+              <button
+                onClick={() => setIsCostSummaryCollapsed(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 font-medium text-sm transition-colors"
+              >
+                <ChevronUpIcon className="w-4 h-4" />
+                <span>Cost Summary</span>
+              </button>
+              
+              {/* Center - Stats */}
+              <div className="hidden md:flex items-center gap-6 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[var(--text-muted)]">{lineItems.length}</span>
+                  <span className="text-[var(--text-muted)]">workloads</span>
+                </div>
+                <div className="h-4 w-px bg-[var(--border-primary)]" />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[var(--text-muted)]">DBU:</span>
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(totalCosts.totalDBUCost)}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[var(--text-muted)]">VM:</span>
+                  <span className="font-semibold text-purple-600 dark:text-purple-400">{formatCurrency(totalCosts.totalVMCost)}</span>
                 </div>
               </div>
               
               {/* Right side - Total cost */}
-              <div className="flex items-center gap-4">
-                <span className="hidden sm:inline text-sm text-[var(--text-muted)]">{formatNumber(totalCosts.totalDBUs)} DBUs</span>
-                <div className="text-right px-4 py-2 bg-orange-500/10 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="text-right">
                   <p className="text-xl sm:text-2xl font-bold text-orange-500">
                     {formatCurrency(totalCosts.totalCost)}
-                    <span className="text-sm font-normal text-[var(--text-muted)]">/mo</span>
+                    <span className="text-xs font-normal text-[var(--text-muted)] ml-1">/mo</span>
                   </p>
                 </div>
               </div>
