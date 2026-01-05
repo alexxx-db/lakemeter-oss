@@ -319,6 +319,8 @@ export default function Calculator() {
   
   // Cost summary panel collapsed state
   const [isCostSummaryCollapsed, setIsCostSummaryCollapsed] = useState(false)
+  // Show workload breakdown in collapsed view
+  const [showCollapsedBreakdown, setShowCollapsedBreakdown] = useState(false)
   
   // Workloads view mode: 'cards' (default, compact), 'expanded', 'table'
   const [workloadsViewMode, setWorkloadsViewMode] = useState<'cards' | 'expanded' | 'table'>('cards')
@@ -2776,41 +2778,100 @@ export default function Calculator() {
       
       {/* Collapsed Cost Summary - Sticky Bottom Bar */}
       {isCostSummaryCollapsed && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-primary)] border-t border-[var(--border-primary)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-primary)] border-t border-[var(--border-primary)] shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
+          {/* Expandable Workload Breakdown */}
+          {showCollapsedBreakdown && lineItems.length > 0 && (
+            <div className="border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium text-[var(--text-muted)]">Top Workloads by Cost</p>
+                  <button
+                    onClick={() => setShowCollapsedBreakdown(false)}
+                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  >
+                    Hide
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  {(() => {
+                    const sortedItems = [...lineItems]
+                      .map(item => ({ item, costs: calculateItemCost(item) }))
+                      .sort((a, b) => b.costs.totalCost - a.costs.totalCost)
+                      .slice(0, 5)
+                    
+                    return sortedItems.map(({ item, costs }) => {
+                      const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
+                      return (
+                        <button
+                          key={item.line_item_id}
+                          onClick={() => {
+                            setShowCollapsedBreakdown(false)
+                            scrollToWorkload(item.line_item_id)
+                          }}
+                          className="text-left p-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-orange-500/50 hover:bg-orange-500/5 transition-colors"
+                        >
+                          <p className="text-xs font-medium text-[var(--text-primary)] truncate" title={item.workload_name}>
+                            {item.workload_name}
+                          </p>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-[10px] text-[var(--text-muted)]">{percent.toFixed(0)}%</span>
+                            <span className="text-xs font-semibold text-orange-500">{formatCurrency(costs.totalCost)}</span>
+                          </div>
+                        </button>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Main Bar */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-14">
-              {/* Left side - Expand button */}
+              {/* Left side - Expand to sidebar button */}
               <button
                 onClick={() => setIsCostSummaryCollapsed(false)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 font-medium text-sm transition-colors"
               >
                 <ChevronUpIcon className="w-4 h-4" />
-                <span>Cost Summary</span>
+                <span className="hidden sm:inline">Expand</span>
               </button>
               
-              {/* Center - Stats */}
-              <div className="hidden md:flex items-center gap-6 text-sm">
+              {/* Center - Stats with colored labels */}
+              <div className="flex items-center gap-3 sm:gap-5 text-sm">
+                {/* Workload count - clickable to show breakdown */}
+                <button
+                  onClick={() => setShowCollapsedBreakdown(!showCollapsedBreakdown)}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-[var(--bg-tertiary)] transition-colors"
+                  title="Click to view workload breakdown"
+                >
+                  <span className="font-semibold text-[var(--text-primary)]">{lineItems.length}</span>
+                  <span className="text-[var(--text-muted)] hidden sm:inline">workloads</span>
+                  <ChevronUpIcon className={clsx("w-3 h-3 text-[var(--text-muted)] transition-transform", showCollapsedBreakdown && "rotate-180")} />
+                </button>
+                
+                <div className="h-4 w-px bg-[var(--border-primary)] hidden sm:block" />
+                
+                {/* DBU Cost - blue label */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[var(--text-muted)]">{lineItems.length}</span>
-                  <span className="text-[var(--text-muted)]">workloads</span>
+                  <span className="text-blue-600 dark:text-blue-400 font-medium text-xs">DBU:</span>
+                  <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</span>
                 </div>
-                <div className="h-4 w-px bg-[var(--border-primary)]" />
+                
+                {/* VM Cost - purple label */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[var(--text-muted)]">DBU:</span>
-                  <span className="font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(totalCosts.totalDBUCost)}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[var(--text-muted)]">VM:</span>
-                  <span className="font-semibold text-purple-600 dark:text-purple-400">{formatCurrency(totalCosts.totalVMCost)}</span>
+                  <span className="text-purple-600 dark:text-purple-400 font-medium text-xs">VM:</span>
+                  <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</span>
                 </div>
               </div>
               
               {/* Right side - Total cost */}
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-xl sm:text-2xl font-bold text-orange-500">
+              <div className="flex items-center">
+                <div className="text-right px-3 py-1.5 bg-gradient-to-r from-orange-500/10 to-amber-500/10 rounded-lg border border-orange-500/20">
+                  <p className="text-lg sm:text-xl font-bold text-orange-500">
                     {formatCurrency(totalCosts.totalCost)}
-                    <span className="text-xs font-normal text-[var(--text-muted)] ml-1">/mo</span>
+                    <span className="text-[10px] font-normal text-[var(--text-muted)] ml-1">/mo</span>
                   </p>
                 </div>
               </div>
