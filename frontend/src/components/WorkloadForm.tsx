@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BoltIcon, CloudIcon, InformationCircleIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -247,6 +247,22 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     markItemCalculating,
     fetchVMCostForInstance
   } = useStore()
+  
+  // Track mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+  
+  // Store onFormChange in a ref to avoid dependency issues
+  // This prevents infinite loops when onFormChange is defined inline in parent
+  const onFormChangeRef = useRef(onFormChange)
+  useEffect(() => {
+    onFormChangeRef.current = onFormChange
+  }, [onFormChange])
   
   // Fallback DBSQL sizes if store hasn't loaded yet
   const defaultDbsqlSizes = [
@@ -594,49 +610,51 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     !availableWorkloadTypesForRegion.includes(form.workload_type)
   
   // Call onFormChange whenever form values change (for real-time cost preview in parent)
+  // Guard against calling after unmount to prevent state updates on unmounted component
+  // IMPORTANT: Use ref for callback to avoid infinite loop - inline callbacks get new refs on each render
   useEffect(() => {
-    if (onFormChange) {
-      // Build partial line item from form for cost calculation
-      const formAsItem: Partial<LineItem> = {
-        workload_type: form.workload_type,
-        workload_name: form.workload_name,
-        serverless_enabled: form.serverless_enabled,
-        serverless_mode: form.serverless_mode,
-        driver_node_type: form.driver_node_type || undefined,
-        worker_node_type: form.worker_node_type || undefined,
-        num_workers: form.num_workers,
-        photon_enabled: form.photon_enabled,
-        dlt_edition: form.dlt_edition,
-        dbsql_warehouse_type: form.dbsql_warehouse_type,
-        dbsql_warehouse_size: form.dbsql_warehouse_size,
-        dbsql_num_clusters: form.dbsql_num_clusters,
-        dbsql_driver_pricing_tier: form.dbsql_driver_pricing_tier,
-        dbsql_driver_payment_option: form.dbsql_driver_payment_option,
-        dbsql_worker_pricing_tier: form.dbsql_worker_pricing_tier,
-        dbsql_worker_payment_option: form.dbsql_worker_payment_option,
-        vector_search_mode: form.vector_search_mode,
-        vector_capacity_millions: form.vector_capacity_millions,
-        model_serving_gpu_type: form.model_serving_gpu_type,
-        lakebase_cu: form.lakebase_cu,
-        lakebase_ha_nodes: form.lakebase_ha_nodes,
-        fmapi_provider: form.fmapi_provider,
-        fmapi_model: form.fmapi_model,
-        fmapi_endpoint_type: form.fmapi_endpoint_type,
-        fmapi_context_length: form.fmapi_context_length,
-        fmapi_rate_type: form.fmapi_rate_type,
-        fmapi_quantity: form.fmapi_quantity,
-        runs_per_day: form.runs_per_day,
-        avg_runtime_minutes: form.avg_runtime_minutes,
-        days_per_month: form.days_per_month,
-        hours_per_month: form.hours_per_month || undefined,
-        driver_pricing_tier: form.driver_pricing_tier,
-        worker_pricing_tier: form.worker_pricing_tier,
-        driver_payment_option: form.driver_payment_option,
-        worker_payment_option: form.worker_payment_option
-      }
-      onFormChange(formAsItem)
+    if (!isMountedRef.current || !onFormChangeRef.current) return
+    
+    // Build partial line item from form for cost calculation
+    const formAsItem: Partial<LineItem> = {
+      workload_type: form.workload_type,
+      workload_name: form.workload_name,
+      serverless_enabled: form.serverless_enabled,
+      serverless_mode: form.serverless_mode,
+      driver_node_type: form.driver_node_type || undefined,
+      worker_node_type: form.worker_node_type || undefined,
+      num_workers: form.num_workers,
+      photon_enabled: form.photon_enabled,
+      dlt_edition: form.dlt_edition,
+      dbsql_warehouse_type: form.dbsql_warehouse_type,
+      dbsql_warehouse_size: form.dbsql_warehouse_size,
+      dbsql_num_clusters: form.dbsql_num_clusters,
+      dbsql_driver_pricing_tier: form.dbsql_driver_pricing_tier,
+      dbsql_driver_payment_option: form.dbsql_driver_payment_option,
+      dbsql_worker_pricing_tier: form.dbsql_worker_pricing_tier,
+      dbsql_worker_payment_option: form.dbsql_worker_payment_option,
+      vector_search_mode: form.vector_search_mode,
+      vector_capacity_millions: form.vector_capacity_millions,
+      model_serving_gpu_type: form.model_serving_gpu_type,
+      lakebase_cu: form.lakebase_cu,
+      lakebase_ha_nodes: form.lakebase_ha_nodes,
+      fmapi_provider: form.fmapi_provider,
+      fmapi_model: form.fmapi_model,
+      fmapi_endpoint_type: form.fmapi_endpoint_type,
+      fmapi_context_length: form.fmapi_context_length,
+      fmapi_rate_type: form.fmapi_rate_type,
+      fmapi_quantity: form.fmapi_quantity,
+      runs_per_day: form.runs_per_day,
+      avg_runtime_minutes: form.avg_runtime_minutes,
+      days_per_month: form.days_per_month,
+      hours_per_month: form.hours_per_month || undefined,
+      driver_pricing_tier: form.driver_pricing_tier,
+      worker_pricing_tier: form.worker_pricing_tier,
+      driver_payment_option: form.driver_payment_option,
+      worker_payment_option: form.worker_payment_option
     }
-  }, [form, onFormChange])
+    onFormChangeRef.current(formAsItem)
+  }, [form]) // Remove onFormChange from deps - use ref instead to prevent infinite loops
   
   const selectedWorkloadType: WorkloadType | undefined = workloadTypes.find(w => w.workload_type === form.workload_type)
   

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useMemo, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -25,7 +25,8 @@ import {
   ServerIcon,
   TableCellsIcon,
   Squares2X2Icon,
-  ListBulletIcon
+  ListBulletIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -53,6 +54,50 @@ import {
   getFMAPIProprietaryRate as getBundleFMAPIProprietaryRate,
   getAvailableRegionsFromBundle
 } from '../utils/pricingBundle'
+
+// Error Boundary for catching render errors
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+
+class WorkloadErrorBoundary extends Component<{ children: ReactNode; onReset?: () => void }, ErrorBoundaryState> {
+  constructor(props: { children: ReactNode; onReset?: () => void }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Workload render error:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 rounded-lg border border-red-500/30 bg-red-500/10">
+          <p className="text-sm text-red-600 dark:text-red-400 mb-2">
+            Something went wrong rendering this workload.
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null })
+              this.props.onReset?.()
+            }}
+            className="text-xs text-red-500 underline hover:no-underline"
+          >
+            Try again
+          </button>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
 
 // Cloud provider visual options
 const CLOUD_PROVIDERS = [
@@ -322,11 +367,12 @@ export default function Calculator() {
   // Show workload breakdown in collapsed view
   const [showCollapsedBreakdown, setShowCollapsedBreakdown] = useState(false)
   
-  // Workloads view mode: 'cards' (default, compact), 'expanded', 'table'
-  const [workloadsViewMode, setWorkloadsViewMode] = useState<'cards' | 'expanded' | 'table'>('cards')
+  // Workloads view mode: 'table' (default), 'cards' (compact), 'expanded'
+  const [workloadsViewMode, setWorkloadsViewMode] = useState<'cards' | 'expanded' | 'table'>('table')
   
   // Bulk selection for delete
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
+  const [isBulkSelectMode, setIsBulkSelectMode] = useState(false)
   
   // Refs for workload cards - to enable click-to-scroll from Cost Summary
   const workloadRefs = useRef<Record<string, HTMLElement | null>>({})
@@ -1343,6 +1389,12 @@ export default function Calculator() {
     }
   }
   
+  // Exit bulk select mode
+  const exitBulkSelectMode = () => {
+    setIsBulkSelectMode(false)
+    setSelectedItems(new Set())
+  }
+  
   const handleCloneWorkload = async (e: React.MouseEvent, item: LineItem) => {
     e.stopPropagation()
     try {
@@ -2006,57 +2058,97 @@ export default function Calculator() {
               </h2>
               
               <div className="flex items-center gap-2">
-                {/* Bulk Delete Button */}
-                {selectedItems.size > 0 && (
-                  <button
-                    onClick={handleBulkDelete}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors"
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                    Delete ({selectedItems.size})
-                  </button>
+                {/* Bulk Select Mode Controls */}
+                {lineItems.length > 0 && (
+                  <>
+                    {!isBulkSelectMode ? (
+                      <button
+                        onClick={() => setIsBulkSelectMode(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors"
+                      >
+                        Select
+                      </button>
+                    ) : (
+                      <>
+                        <span className="text-xs text-[var(--text-muted)]">
+                          {selectedItems.size} selected
+                        </span>
+                        <button
+                          onClick={handleBulkDelete}
+                          disabled={selectedItems.size === 0}
+                          className={clsx(
+                            "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                            selectedItems.size > 0
+                              ? "text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                              : "text-[var(--text-muted)] bg-[var(--bg-tertiary)] cursor-not-allowed"
+                          )}
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                          Delete
+                        </button>
+                        <button
+                          onClick={exitBulkSelectMode}
+                          className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                          title="Cancel selection"
+                        >
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </>
                 )}
                 
-                {/* View Mode Toggle */}
-                {lineItems.length > 0 && (
-                  <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-lg p-0.5">
-                    <button
-                      onClick={() => setWorkloadsViewMode('cards')}
-                      className={clsx(
-                        "p-1.5 rounded-md transition-colors",
-                        workloadsViewMode === 'cards'
-                          ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
-                          : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                      )}
-                      title="Compact cards (default)"
-                    >
-                      <Squares2X2Icon className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setWorkloadsViewMode('expanded')}
-                      className={clsx(
-                        "p-1.5 rounded-md transition-colors",
-                        workloadsViewMode === 'expanded'
-                          ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
-                          : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                      )}
-                      title="Expanded cards with details"
-                    >
-                      <ListBulletIcon className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setWorkloadsViewMode('table')}
-                      className={clsx(
-                        "p-1.5 rounded-md transition-colors",
-                        workloadsViewMode === 'table'
-                          ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
-                          : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                      )}
-                      title="Table view for comparison"
-                    >
-                      <TableCellsIcon className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {/* View Mode Toggle: Table (default) → Compact Cards → Expanded Cards */}
+                  {lineItems.length > 0 && (
+                    <div className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-lg p-0.5">
+                      <button
+                        onClick={() => setWorkloadsViewMode('table')}
+                        className={clsx(
+                          "p-1.5 rounded-md transition-colors",
+                          workloadsViewMode === 'table'
+                            ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        )}
+                        title="Table view (default)"
+                      >
+                        <TableCellsIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setWorkloadsViewMode('cards')}
+                        className={clsx(
+                          "p-1.5 rounded-md transition-colors",
+                          workloadsViewMode === 'cards'
+                            ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        )}
+                        title="Compact cards"
+                      >
+                        <Squares2X2Icon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setWorkloadsViewMode('expanded')}
+                        className={clsx(
+                          "p-1.5 rounded-md transition-colors",
+                          workloadsViewMode === 'expanded'
+                            ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        )}
+                        title="Expanded cards with details"
+                      >
+                        <ListBulletIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                
+                {/* Add Workload Button - Top CTA */}
+                {canAddWorkload && id && (
+                  <button
+                    onClick={() => setShowAddForm(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors shadow-sm"
+                  >
+                    <PlusIcon className="w-4 h-4" />
+                    Add
+                  </button>
                 )}
               </div>
             </div>
@@ -2101,15 +2193,17 @@ export default function Calculator() {
                   <div className="card overflow-hidden divide-y divide-[var(--border-primary)]">
                     {/* Header - Hidden on mobile */}
                     <div className="hidden sm:grid sm:grid-cols-12 gap-2 py-2 px-3 bg-[var(--bg-tertiary)] text-xs font-medium text-[var(--text-muted)]">
-                      <div className="col-span-1 flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.size === lineItems.length && lineItems.length > 0}
-                          onChange={toggleSelectAll}
-                          className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
-                        />
-                      </div>
-                      <div className="col-span-4">Workload</div>
+                      {isBulkSelectMode && (
+                        <div className="col-span-1 flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedItems.size === lineItems.length && lineItems.length > 0}
+                            onChange={toggleSelectAll}
+                            className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                          />
+                        </div>
+                      )}
+                      <div className={clsx(isBulkSelectMode ? "col-span-4" : "col-span-5")}>Workload</div>
                       <div className="col-span-4">Configuration</div>
                       <div className="col-span-2 text-right">Cost</div>
                       <div className="col-span-1"></div>
@@ -2125,26 +2219,92 @@ export default function Calculator() {
                       const wType = item.workload_type || ''
                       const isServerless = item.serverless_enabled || (wType === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')
                       const typeName = workloadTypes.find(w => w.workload_type === wType)?.display_name || wType
+                      const usageSummary = getUsageSummary(item)
                       
-                      // Build config parts
-                      const configParts: string[] = []
-                      if (['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType)) {
-                        if (!isServerless && item.num_workers) {
-                          configParts.push(`${item.num_workers}× ${item.worker_node_type || 'workers'}`)
+                      // Build structured config for better display
+                      // Simplified color scheme: orange accent for key features, neutral for rest
+                      const getStructuredConfig = () => {
+                        const config: {
+                          driver?: string
+                          workers?: { count: number; type: string }
+                          badges: { text: string; accent?: boolean }[]
+                          details: string[]
+                        } = { badges: [], details: [] }
+                        
+                        // Key feature badges (accent color)
+                        if (isServerless) {
+                          config.badges.push({ text: 'Serverless', accent: true })
                         }
-                      } else if (wType === 'DBSQL') {
-                        if (item.dbsql_warehouse_size) configParts.push(item.dbsql_warehouse_size)
-                        if (item.dbsql_warehouse_type && item.dbsql_warehouse_type !== 'SERVERLESS') configParts.push(item.dbsql_warehouse_type)
-                      } else if (wType === 'VECTOR_SEARCH') {
-                        if (item.vector_search_mode) configParts.push(item.vector_search_mode)
-                        if (item.vector_capacity_millions) configParts.push(`${item.vector_capacity_millions}M vectors`)
-                      } else if (wType === 'MODEL_SERVING') {
-                        if (item.model_serving_gpu_type) configParts.push(item.model_serving_gpu_type)
-                      } else if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
-                        if (item.fmapi_model) configParts.push(item.fmapi_model)
-                      } else if (wType === 'LAKEBASE') {
-                        if (item.lakebase_cu) configParts.push(`CU ${item.lakebase_cu}`)
+                        if (item.photon_enabled) {
+                          config.badges.push({ text: '⚡ Photon', accent: true })
+                        }
+                        
+                        // Workload-specific configuration
+                        if (['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType)) {
+                          // Classic compute workloads - show driver and worker config
+                          if (!isServerless) {
+                            if (item.driver_node_type) {
+                              config.driver = item.driver_node_type
+                            }
+                            if (item.num_workers && item.worker_node_type) {
+                              config.workers = { count: item.num_workers, type: item.worker_node_type }
+                            }
+                          }
+                          // DLT Edition as neutral badge
+                          if (wType === 'DLT' && item.dlt_edition) {
+                            config.badges.push({ text: item.dlt_edition })
+                          }
+                        } else if (wType === 'DBSQL') {
+                          // DBSQL - warehouse type as badge, size as detail
+                          if (item.dbsql_warehouse_type && item.dbsql_warehouse_type !== 'SERVERLESS') {
+                            config.badges.push({ text: item.dbsql_warehouse_type })
+                          }
+                          if (item.dbsql_warehouse_size) {
+                            config.details.push(item.dbsql_warehouse_size)
+                          }
+                          if (item.dbsql_num_clusters && item.dbsql_num_clusters > 1) {
+                            config.details.push(`${item.dbsql_num_clusters} clusters`)
+                          }
+                        } else if (wType === 'VECTOR_SEARCH') {
+                          // Vector Search - mode as badge
+                          if (item.vector_search_mode) {
+                            const modeLabel = item.vector_search_mode === 'storage_optimized' ? 'Storage Opt.' : 'Standard'
+                            config.badges.push({ text: modeLabel })
+                          }
+                          if (item.vector_capacity_millions) {
+                            config.details.push(`${item.vector_capacity_millions}M vectors`)
+                          }
+                        } else if (wType === 'MODEL_SERVING') {
+                          // Model Serving - GPU type
+                          if (item.model_serving_gpu_type) {
+                            config.details.push(item.model_serving_gpu_type)
+                          }
+                        } else if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
+                          // Foundation Model API - check rate_type for provisioned vs token
+                          if (item.fmapi_rate_type) {
+                            const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(item.fmapi_rate_type)
+                            config.badges.push({ text: isProvisioned ? 'Provisioned' : 'Token' })
+                          }
+                          if (item.fmapi_provider && wType === 'FMAPI_PROPRIETARY') {
+                            config.details.push(item.fmapi_provider)
+                          }
+                          if (item.fmapi_model) {
+                            config.details.push(item.fmapi_model)
+                          }
+                        } else if (wType === 'LAKEBASE') {
+                          // Lakebase
+                          if (item.lakebase_cu) {
+                            config.details.push(`CU ${item.lakebase_cu}`)
+                          }
+                          if (item.lakebase_ha_nodes && item.lakebase_ha_nodes > 0) {
+                            config.badges.push({ text: `HA ×${item.lakebase_ha_nodes}` })
+                          }
+                        }
+                        
+                        return config
                       }
+                      
+                      const structuredConfig = getStructuredConfig()
                       
                       return (
                         <div 
@@ -2155,23 +2315,28 @@ export default function Calculator() {
                           <div 
                             className={clsx(
                               "grid grid-cols-12 gap-2 py-3 px-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-all",
-                              isSelected && "bg-orange-500/5",
+                              isSelected && isBulkSelectMode && "bg-orange-500/5",
                               isExpanded && "bg-[var(--bg-tertiary)]"
                             )}
                             onClick={() => toggleExpand(item.line_item_id)}
                           >
-                            {/* Checkbox */}
-                            <div className="col-span-1 flex items-center" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleItemSelection(item.line_item_id)}
-                                className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
-                              />
-                            </div>
+                            {/* Checkbox - Only in bulk select mode */}
+                            {isBulkSelectMode && (
+                              <div className="col-span-1 flex items-center" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleItemSelection(item.line_item_id)}
+                                  className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                                />
+                              </div>
+                            )}
                             
                             {/* Workload Name & Type */}
-                            <div className="col-span-6 sm:col-span-4 flex items-center gap-3">
+                            <div className={clsx(
+                              "flex items-center gap-3",
+                              isBulkSelectMode ? "col-span-5 sm:col-span-4" : "col-span-6 sm:col-span-5"
+                            )}>
                               <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", typeConfig.bgColor)}>
                                 <TypeIcon className={clsx("w-4 h-4", typeConfig.color)} />
                               </div>
@@ -2181,16 +2346,57 @@ export default function Calculator() {
                               </div>
                             </div>
                             
-                            {/* Configuration - Hidden on very small screens */}
-                            <div className="hidden sm:flex col-span-4 items-center gap-1.5 flex-wrap">
-                              {isServerless && (
-                                <span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 text-[10px] font-medium">Serverless</span>
+                            {/* Configuration - Clean, minimal design */}
+                            <div className="hidden sm:flex col-span-4 items-center gap-2 min-w-0">
+                              {/* Badges - only 2 colors: orange accent for key features, gray for rest */}
+                              {structuredConfig.badges.length > 0 && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {structuredConfig.badges.map((badge, idx) => (
+                                    <span 
+                                      key={idx} 
+                                      className={clsx(
+                                        "px-1.5 py-0.5 rounded text-[10px] font-medium",
+                                        badge.accent 
+                                          ? "bg-orange-500/10 text-orange-600 dark:text-orange-400" 
+                                          : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+                                      )}
+                                    >
+                                      {badge.text}
+                                    </span>
+                                  ))}
+                                </div>
                               )}
-                              {item.photon_enabled && (
-                                <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-medium">⚡ Photon</span>
+                              
+                              {/* Compute config - monochrome, handle different driver/worker types */}
+                              {(structuredConfig.driver || structuredConfig.workers) && (
+                                <span className="text-[11px] text-[var(--text-secondary)] font-mono truncate" title={`Driver: ${structuredConfig.driver || 'N/A'}, Workers: ${structuredConfig.workers?.count || 0}× ${structuredConfig.workers?.type || 'N/A'}`}>
+                                  {(() => {
+                                    const d = structuredConfig.driver
+                                    const w = structuredConfig.workers
+                                    if (d && w) {
+                                      // Both driver and workers
+                                      if (d === w.type) {
+                                        // Same type: show combined count (workers + 1 driver)
+                                        return `${w.count + 1}× ${w.type}`
+                                      } else {
+                                        // Different types: show both
+                                        return `${d} + ${w.count}× ${w.type}`
+                                      }
+                                    } else if (w) {
+                                      return `${w.count}× ${w.type}`
+                                    } else if (d) {
+                                      return d
+                                    }
+                                    return ''
+                                  })()}
+                                </span>
                               )}
-                              {configParts.length > 0 && (
-                                <span className="text-xs text-[var(--text-secondary)]">{configParts.join(' • ')}</span>
+                              
+                              {/* Other details - simple text */}
+                              {structuredConfig.details.length > 0 && (
+                                <span className="text-[11px] text-[var(--text-secondary)] truncate">
+                                  {structuredConfig.details.join(' · ')}
+                                </span>
                               )}
                             </div>
                             
@@ -2225,50 +2431,274 @@ export default function Calculator() {
                           </div>
                           
                           {/* Mobile Config Row - Show on small screens only */}
-                          {(isServerless || item.photon_enabled || configParts.length > 0) && (
-                            <div className="sm:hidden px-3 pb-2 flex items-center gap-1.5 flex-wrap pl-12">
-                              {isServerless && (
-                                <span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 text-[10px] font-medium">Serverless</span>
+                          {!isExpanded && (structuredConfig.badges.length > 0 || structuredConfig.driver || structuredConfig.workers || structuredConfig.details.length > 0) && (
+                            <div className="sm:hidden px-3 pb-2 flex items-center gap-2 pl-12 flex-wrap">
+                              {/* Badges */}
+                              {structuredConfig.badges.map((badge, idx) => (
+                                <span 
+                                  key={idx} 
+                                  className={clsx(
+                                    "px-1.5 py-0.5 rounded text-[10px] font-medium",
+                                    badge.accent 
+                                      ? "bg-orange-500/10 text-orange-600 dark:text-orange-400" 
+                                      : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+                                  )}
+                                >
+                                  {badge.text}
+                                </span>
+                              ))}
+                              {/* Compute config - handle different driver/worker types */}
+                              {(structuredConfig.driver || structuredConfig.workers) && (
+                                <span className="text-[11px] text-[var(--text-secondary)] font-mono">
+                                  {(() => {
+                                    const d = structuredConfig.driver
+                                    const w = structuredConfig.workers
+                                    if (d && w) {
+                                      if (d === w.type) {
+                                        return `${w.count + 1}× ${w.type}`
+                                      } else {
+                                        return `${d} + ${w.count}× ${w.type}`
+                                      }
+                                    } else if (w) {
+                                      return `${w.count}× ${w.type}`
+                                    } else if (d) {
+                                      return d
+                                    }
+                                    return ''
+                                  })()}
+                                </span>
                               )}
-                              {item.photon_enabled && (
-                                <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-medium">⚡ Photon</span>
+                              {/* Details */}
+                              {structuredConfig.details.length > 0 && (
+                                <span className="text-[11px] text-[var(--text-secondary)]">
+                                  {structuredConfig.details.join(' · ')}
+                                </span>
                               )}
-                              {configParts.length > 0 && (
-                                <span className="text-xs text-[var(--text-secondary)]">{configParts.join(' • ')}</span>
-                              )}
+                            </div>
+                          )}
+                          
+                          {/* Expanded Details Row - Cost breakdown & config (like card view) */}
+                          {isExpanded && (
+                            <div className="bg-[var(--bg-secondary)] px-4 pt-3 pb-2 border-b border-[var(--border-primary)]">
+                              {/* Cost breakdown grid */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
+                                <div>
+                                  <span className="text-[var(--text-muted)]">DBU Cost</span>
+                                  <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
+                                </div>
+                                {/* Hide VM Cost for serverless workloads */}
+                                {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'].includes(wType) && (
+                                  <div>
+                                    <span className="text-[var(--text-muted)]">VM Cost</span>
+                                    <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
+                                  </div>
+                                )}
+                                
+                                {/* Vector Search: Units Used */}
+                                {wType === 'VECTOR_SEARCH' && costs.unitsUsed !== undefined && (
+                                  <div>
+                                    <span className="text-[var(--text-muted)]">Units Used</span>
+                                    <p className="font-semibold text-blue-600 dark:text-blue-400">{costs.unitsUsed} unit{costs.unitsUsed !== 1 ? 's' : ''}</p>
+                                  </div>
+                                )}
+                                
+                                {/* Compute workloads: show driver/worker nodes */}
+                                {['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType) && (
+                                  <>
+                                    {item.driver_node_type && (
+                                      <div>
+                                        <span className="text-[var(--text-muted)]">Driver</span>
+                                        <p className="font-mono text-[var(--text-primary)] text-[10px]">{item.driver_node_type}</p>
+                                      </div>
+                                    )}
+                                    {item.worker_node_type && (
+                                      <div>
+                                        <span className="text-[var(--text-muted)]">Workers</span>
+                                        <p className="text-[var(--text-primary)]">{item.num_workers}× <span className="font-mono text-[10px]">{item.worker_node_type}</span></p>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                                
+                                {/* Workload-specific details */}
+                                {getWorkloadSummaryDetails(item).map((detail, idx) => (
+                                  <div key={idx} className="min-w-0">
+                                    <span className="text-[var(--text-muted)]">{detail.label}</span>
+                                    <p className="text-[var(--text-primary)] break-words">{detail.value}</p>
+                                  </div>
+                                ))}
+                                
+                                {/* Usage summary */}
+                                {usageSummary && (
+                                  <div>
+                                    <span className="text-[var(--text-muted)]">Usage</span>
+                                    <p className="text-[var(--text-primary)]">{usageSummary}</p>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Formula display */}
+                              <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
+                                <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                  <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
+                                  {(() => {
+                                    const hoursPerMonth = item.hours_per_month || 
+                                      (item.runs_per_day && item.avg_runtime_minutes 
+                                        ? item.runs_per_day * (item.avg_runtime_minutes / 60) * (item.days_per_month || 30)
+                                        : 730)
+                                    const dbuPriceDisplay = costs.dbuPrice?.toFixed(2) || '0.00'
+                                    
+                                    // Vector Search
+                                    if (wType === 'VECTOR_SEARCH') {
+                                      return (
+                                        <>
+                                          <span className="text-blue-500">{costs.unitsUsed || 1} units</span>
+                                          <span>×</span>
+                                          <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '4.00'} DBU/hr</span>
+                                          <span>×</span>
+                                          <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                          <span>=</span>
+                                          <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        </>
+                                      )
+                                    }
+                                    
+                                    // FMAPI (token-based)
+                                    if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
+                                      return (
+                                        <>
+                                          <span className="text-blue-500">{item.fmapi_quantity || 0}M tokens</span>
+                                          <span>×</span>
+                                          <span className="text-purple-500">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
+                                          <span>=</span>
+                                          <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        </>
+                                      )
+                                    }
+                                    
+                                    // Lakebase
+                                    if (wType === 'LAKEBASE') {
+                                      return (
+                                        <>
+                                          <span className="text-blue-500">{item.lakebase_cu || 1} CU</span>
+                                          <span>×</span>
+                                          <span className="text-purple-500">{item.lakebase_ha_nodes || 1} nodes</span>
+                                          <span>×</span>
+                                          <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                          <span>=</span>
+                                          <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        </>
+                                      )
+                                    }
+                                    
+                                    // Model Serving
+                                    if (wType === 'MODEL_SERVING') {
+                                      return (
+                                        <>
+                                          <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '2.00'} DBU/hr</span>
+                                          <span>×</span>
+                                          <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                          <span>=</span>
+                                          <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        </>
+                                      )
+                                    }
+                                    
+                                    // Compute workloads (JOBS, ALL_PURPOSE, DLT, DBSQL)
+                                    const hasVMCost = costs.vmCost > 0
+                                    return (
+                                      <>
+                                        {costs.dbuPerHour && costs.dbuPerHour > 0 && (
+                                          <>
+                                            <span className="text-purple-500">{costs.dbuPerHour.toFixed(2)} DBU/hr</span>
+                                            <span>×</span>
+                                          </>
+                                        )}
+                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                        <span>=</span>
+                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span>×</span>
+                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                        {hasVMCost ? (
+                                          <>
+                                            <span className="mx-1">|</span>
+                                            <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                            <span>+</span>
+                                            <span className="text-teal-500">VM: {formatCurrency(costs.vmCost)}</span>
+                                            <span>=</span>
+                                          </>
+                                        ) : (
+                                          <span>=</span>
+                                        )}
+                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                      </>
+                                    )
+                                  })()}
+                                </div>
+                              </div>
                             </div>
                           )}
                           
                           {/* Expanded Form */}
                           {isExpanded && (
                             <div className="bg-[var(--bg-secondary)] border-b-2 border-orange-500/20 p-4">
-                              <WorkloadForm
-                                estimateId={id}
-                                lineItem={item}
-                                onClose={() => {
-                                  setExpandedItems(new Set())
-                                  setPendingFormEdits(prev => {
-                                    const next = { ...prev }
-                                    delete next[item.line_item_id]
+                              <WorkloadErrorBoundary
+                                onReset={() => {
+                                  setExpandedItems(prev => {
+                                    const next = new Set(prev)
+                                    next.delete(item.line_item_id)
                                     return next
                                   })
                                 }}
-                                onSave={() => {
-                                  markAsChanged()
-                                  setPendingFormEdits(prev => {
-                                    const next = { ...prev }
-                                    delete next[item.line_item_id]
-                                    return next
-                                  })
-                                }}
-                                onFormChange={(formData) => {
-                                  setPendingFormEdits(prev => ({
-                                    ...prev,
-                                    [item.line_item_id]: formData
-                                  }))
-                                }}
-                                inline
-                              />
+                              >
+                                <WorkloadForm
+                                  estimateId={id}
+                                  lineItem={item}
+                                  onClose={() => {
+                                    setExpandedItems(prev => {
+                                      const next = new Set(prev)
+                                      next.delete(item.line_item_id)
+                                      return next
+                                    })
+                                    setPendingFormEdits(prev => {
+                                      const next = { ...prev }
+                                      delete next[item.line_item_id]
+                                      return next
+                                    })
+                                  }}
+                                  onSave={() => {
+                                    markAsChanged()
+                                    setPendingFormEdits(prev => {
+                                      const next = { ...prev }
+                                      delete next[item.line_item_id]
+                                      return next
+                                    })
+                                  }}
+                                  onFormChange={(formData) => {
+                                    setPendingFormEdits(prev => ({
+                                      ...prev,
+                                      [item.line_item_id]: formData
+                                    }))
+                                  }}
+                                  inline
+                                />
+                              </WorkloadErrorBoundary>
                             </div>
                           )}
                         </div>
@@ -2439,9 +2869,9 @@ export default function Calculator() {
                               
                               {/* Workload-specific details */}
                               {getWorkloadSummaryDetails(item).map((detail, idx) => (
-                                <div key={idx}>
+                                <div key={idx} className="min-w-0">
                                   <span className="text-[var(--text-muted)]">{detail.label}</span>
-                                  <p className="text-[var(--text-primary)]">{detail.value}</p>
+                                  <p className="text-[var(--text-primary)] break-words">{detail.value}</p>
                                 </div>
                               ))}
                               
@@ -2576,35 +3006,49 @@ export default function Calculator() {
                       {/* Expanded: Edit Form */}
                       {isExpanded && (
                         <div className="border-t border-[var(--border-primary)] p-4 bg-[var(--bg-tertiary)]">
-                          <WorkloadForm
-                            estimateId={id}
-                            lineItem={item}
-                            onClose={() => {
-                              setExpandedItems(new Set())
-                              // Clear pending edits when closing
-                              setPendingFormEdits(prev => {
-                                const next = { ...prev }
-                                delete next[item.line_item_id]
+                          <WorkloadErrorBoundary
+                            onReset={() => {
+                              setExpandedItems(prev => {
+                                const next = new Set(prev)
+                                next.delete(item.line_item_id)
                                 return next
                               })
                             }}
-                            onSave={() => {
-                              markAsChanged()
-                              // Clear pending edits after save
-                              setPendingFormEdits(prev => {
-                                const next = { ...prev }
-                                delete next[item.line_item_id]
-                                return next
-                              })
-                            }}
-                            onFormChange={(formData) => {
-                              setPendingFormEdits(prev => ({
-                                ...prev,
-                                [item.line_item_id]: formData
-                              }))
-                            }}
-                            inline
-                          />
+                          >
+                            <WorkloadForm
+                              estimateId={id}
+                              lineItem={item}
+                              onClose={() => {
+                                setExpandedItems(prev => {
+                                  const next = new Set(prev)
+                                  next.delete(item.line_item_id)
+                                  return next
+                                })
+                                // Clear pending edits when closing
+                                setPendingFormEdits(prev => {
+                                  const next = { ...prev }
+                                  delete next[item.line_item_id]
+                                  return next
+                                })
+                              }}
+                              onSave={() => {
+                                markAsChanged()
+                                // Clear pending edits after save
+                                setPendingFormEdits(prev => {
+                                  const next = { ...prev }
+                                  delete next[item.line_item_id]
+                                  return next
+                                })
+                              }}
+                              onFormChange={(formData) => {
+                                setPendingFormEdits(prev => ({
+                                  ...prev,
+                                  [item.line_item_id]: formData
+                                }))
+                              }}
+                              inline
+                            />
+                          </WorkloadErrorBoundary>
                         </div>
                       )}
                     </motion.div>
@@ -2672,11 +3116,11 @@ export default function Calculator() {
                 </h3>
                 <button
                   onClick={() => setIsCostSummaryCollapsed(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--text-muted)] hover:text-orange-500 hover:bg-orange-500/10 border border-transparent hover:border-orange-500/20"
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[var(--text-muted)] hover:text-orange-500 hover:bg-orange-500/10 border border-transparent hover:border-orange-500/20"
                   title="Dock to bottom bar"
                 >
-                  <ChevronDownIcon className="w-4 h-4" />
-                  <span className="hidden sm:inline">Dock to Bottom</span>
+                  <ChevronDownIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Dock</span>
                 </button>
               </div>
               
@@ -2848,17 +3292,17 @@ export default function Calculator() {
           <div className="bg-[var(--bg-primary)] border-t border-[var(--border-primary)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-14">
-                {/* Left side - Open sidebar panel button */}
+                {/* Left side - Expand to sidebar panel button */}
                 <button
                   onClick={() => setIsCostSummaryCollapsed(false)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-orange-500 hover:bg-orange-500/10 text-sm transition-colors"
-                  title="Open Cost Summary panel"
+                  title="Expand Cost Summary panel"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h4v14H4z" />
                   </svg>
-                  <span className="hidden sm:inline">Open Panel</span>
+                  <span className="hidden sm:inline">Expand</span>
                 </button>
                 
                 {/* Center - Stats with colored labels */}
@@ -2881,16 +3325,16 @@ export default function Calculator() {
                   
                   <div className="h-4 w-px bg-[var(--border-primary)] hidden sm:block" />
                   
-                  {/* DBU Cost - blue label */}
+                  {/* DBU Cost - blue label, larger text */}
                   <div className="flex items-center gap-1.5">
-                    <span className="text-blue-600 dark:text-blue-400 font-medium text-xs">DBU:</span>
-                    <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</span>
+                    <span className="text-blue-600 dark:text-blue-400 font-semibold text-sm">DBU:</span>
+                    <span className="font-bold text-[var(--text-primary)] text-base">{formatCurrency(totalCosts.totalDBUCost)}</span>
                   </div>
                   
-                  {/* VM Cost - purple label */}
+                  {/* VM Cost - purple label, larger text */}
                   <div className="flex items-center gap-1.5">
-                    <span className="text-purple-600 dark:text-purple-400 font-medium text-xs">VM:</span>
-                    <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</span>
+                    <span className="text-purple-600 dark:text-purple-400 font-semibold text-sm">VM:</span>
+                    <span className="font-bold text-[var(--text-primary)] text-base">{formatCurrency(totalCosts.totalVMCost)}</span>
                   </div>
                 </div>
                 

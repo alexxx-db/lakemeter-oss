@@ -433,7 +433,7 @@ export const useStore = create<Store>((set, get) => ({
   fetchEstimates: async (forceRefresh = false) => {
     const currentEstimates = get().estimates
     const lastFetchTime = (get() as any)._estimatesLastFetch || 0
-    const STALE_TIME = 30 * 1000 // 30 seconds before considering stale
+    const STALE_TIME = 5 * 1000 // 5 seconds before considering stale (faster refresh for "Modified" timestamps)
     
     // If we have cached data and not forcing refresh, show it immediately
     // and fetch in background if stale

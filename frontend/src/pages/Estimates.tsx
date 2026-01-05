@@ -32,6 +32,12 @@ const cloudBadges: Record<string, { label: string; bg: string; text: string; bor
   gcp: { label: 'GCP', bg: 'rgba(244, 63, 94, 0.15)', text: '#f43f5e', border: 'rgba(244, 63, 94, 0.25)' }
 }
 
+const tierBadges: Record<string, { label: string; bg: string; text: string }> = {
+  premium: { label: 'Premium', bg: 'rgba(139, 92, 246, 0.15)', text: '#8b5cf6' },
+  enterprise: { label: 'Enterprise', bg: 'rgba(59, 130, 246, 0.15)', text: '#3b82f6' },
+  standard: { label: 'Standard', bg: 'rgba(107, 114, 128, 0.15)', text: '#6b7280' }
+}
+
 type SortOption = 'updated' | 'name' | 'workloads'
 type CloudFilter = 'all' | 'aws' | 'azure' | 'gcp'
 
@@ -75,9 +81,7 @@ interface FilterTabsProps {
 
 function FilterTabs({ cloudFilter, setCloudFilter, cloudCounts }: FilterTabsProps) {
   return (
-    <div className="flex flex-col sm:flex-row gap-4 mb-6">
-      {/* Cloud Filter */}
-      <div className="flex items-center gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+    <div className="flex items-center gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
         <button
           onClick={() => setCloudFilter('all')}
           className={clsx(
@@ -113,7 +117,6 @@ function FilterTabs({ cloudFilter, setCloudFilter, cloudCounts }: FilterTabsProp
             <span className="ml-1.5 text-xs opacity-60">{cloudCounts[cloud]}</span>
           </button>
         ))}
-      </div>
     </div>
   )
 }
@@ -689,9 +692,10 @@ export default function Estimates() {
                 </button>
               </div>
             )}
-            <div className={clsx(isBulkMode ? "col-span-4" : "col-span-5")}>Estimate</div>
-            <div className="col-span-3">Account</div>
+            <div className={clsx(isBulkMode ? "col-span-3" : "col-span-4")}>Estimate</div>
+            <div className="col-span-2">Account</div>
             <div className="col-span-1 text-center">Cloud</div>
+            <div className="col-span-2">Region / Tier</div>
             <div className="col-span-1 text-center">Workloads</div>
             <div className="col-span-1">Modified</div>
             <div className="col-span-1"></div>
@@ -737,20 +741,20 @@ export default function Estimates() {
                   )}
                   
                   {/* Estimate Name */}
-                  <div className={clsx("flex items-center gap-3", isBulkMode ? "col-span-4" : "col-span-5")}>
+                  <div className={clsx("flex items-center gap-3", isBulkMode ? "col-span-3" : "col-span-4")}>
                     <div 
                       className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
                       style={{ 
-                        backgroundColor: estimate.cloud && cloudBadges[estimate.cloud] 
-                          ? cloudBadges[estimate.cloud].bg 
+                        backgroundColor: estimate.cloud && cloudBadges[estimate.cloud.toLowerCase()] 
+                          ? cloudBadges[estimate.cloud.toLowerCase()].bg 
                           : 'var(--bg-tertiary)'
                       }}
                     >
                       <CloudIcon 
                         className="w-4 h-4" 
                         style={{ 
-                          color: estimate.cloud && cloudBadges[estimate.cloud] 
-                            ? cloudBadges[estimate.cloud].text 
+                          color: estimate.cloud && cloudBadges[estimate.cloud.toLowerCase()] 
+                            ? cloudBadges[estimate.cloud.toLowerCase()].text 
                             : 'var(--text-muted)'
                         }}
                       />
@@ -767,7 +771,7 @@ export default function Estimates() {
                   </div>
                   
                   {/* Account Name */}
-                  <div className="hidden sm:block col-span-3">
+                  <div className="hidden sm:block col-span-2">
                     <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
                       {estimate.customer_name || '—'}
                     </p>
@@ -775,16 +779,42 @@ export default function Estimates() {
                   
                   {/* Cloud Badge */}
                   <div className="hidden sm:flex col-span-1 justify-center">
-                    {estimate.cloud && cloudBadges[estimate.cloud] ? (
+                    {estimate.cloud && cloudBadges[estimate.cloud.toLowerCase()] ? (
                       <span 
                         className="px-2 py-0.5 rounded text-xs font-medium"
                         style={{
-                          backgroundColor: cloudBadges[estimate.cloud].bg,
-                          color: cloudBadges[estimate.cloud].text
+                          backgroundColor: cloudBadges[estimate.cloud.toLowerCase()].bg,
+                          color: cloudBadges[estimate.cloud.toLowerCase()].text
                         }}
                       >
-                        {cloudBadges[estimate.cloud].label}
+                        {cloudBadges[estimate.cloud.toLowerCase()].label}
                       </span>
+                    ) : (
+                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>—</span>
+                    )}
+                  </div>
+                  
+                  {/* Region / Tier */}
+                  <div className="hidden sm:block col-span-2">
+                    {estimate.region || estimate.tier ? (
+                      <div className="flex flex-col gap-0.5">
+                        {estimate.region && (
+                          <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }} title={estimate.region}>
+                            {estimate.region}
+                          </p>
+                        )}
+                        {estimate.tier && tierBadges[estimate.tier.toLowerCase()] && (
+                          <span 
+                            className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium w-fit"
+                            style={{
+                              backgroundColor: tierBadges[estimate.tier.toLowerCase()].bg,
+                              color: tierBadges[estimate.tier.toLowerCase()].text
+                            }}
+                          >
+                            {tierBadges[estimate.tier.toLowerCase()].label}
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-xs" style={{ color: 'var(--text-muted)' }}>—</span>
                     )}
