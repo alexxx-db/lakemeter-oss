@@ -327,7 +327,7 @@ export default function Calculator() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   
   // Refs for workload cards - to enable click-to-scroll from Cost Summary
-  const workloadRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const workloadRefs = useRef<Record<string, HTMLElement | null>>({})
   
   // Scroll to a specific workload
   const scrollToWorkload = useCallback((lineItemId: string) => {
@@ -337,7 +337,10 @@ export default function Calculator() {
       // Brief highlight effect
       ref.classList.add('ring-2', 'ring-orange-500', 'ring-offset-2')
       setTimeout(() => {
-        ref.classList.remove('ring-2', 'ring-orange-500', 'ring-offset-2')
+        // Check ref still exists before removing classes
+        if (workloadRefs.current[lineItemId]) {
+          workloadRefs.current[lineItemId]?.classList.remove('ring-2', 'ring-orange-500', 'ring-offset-2')
+        }
       }, 1500)
     }
   }, [])
@@ -2284,9 +2287,11 @@ export default function Calculator() {
                   const showDetailsRow = workloadsViewMode === 'expanded' || isExpanded
                   
                   return (
-                    <motion.div
+                    <div
                       key={item.line_item_id}
                       ref={(el) => { workloadRefs.current[item.line_item_id] = el }}
+                    >
+                    <motion.div
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.02 }}
@@ -2601,6 +2606,7 @@ export default function Calculator() {
                         </div>
                       )}
                     </motion.div>
+                    </div>
                   )
                 })}
                 
