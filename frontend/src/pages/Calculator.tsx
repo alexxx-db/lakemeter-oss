@@ -2211,17 +2211,23 @@ export default function Calculator() {
                     
                     {/* Rows */}
                     {lineItems.map((item) => {
-                      const costs = calculateItemCost(item, pendingFormEdits[item.line_item_id])
-                      const typeConfig = getWorkloadTypeConfig(item.workload_type)
+                      // Create effective item that merges saved data with pending edits for real-time preview
+                      const pendingEdits = pendingFormEdits[item.line_item_id]
+                      const effectiveItem: LineItem = pendingEdits 
+                        ? { ...item, ...pendingEdits } as LineItem
+                        : item
+                      
+                      const costs = calculateItemCost(item, pendingEdits)
+                      const typeConfig = getWorkloadTypeConfig(effectiveItem.workload_type)
                       const TypeIcon = typeConfig.icon
                       const isExpanded = expandedItems.has(item.line_item_id)
                       const isSelected = selectedItems.has(item.line_item_id)
-                      const wType = item.workload_type || ''
-                      const isServerless = item.serverless_enabled || (wType === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')
+                      const wType = effectiveItem.workload_type || ''
+                      const isServerless = effectiveItem.serverless_enabled || (wType === 'DBSQL' && effectiveItem.dbsql_warehouse_type === 'SERVERLESS')
                       const typeName = workloadTypes.find(w => w.workload_type === wType)?.display_name || wType
-                      const usageSummary = getUsageSummary(item)
+                      const usageSummary = getUsageSummary(effectiveItem)
                       
-                      // Build structured config for better display
+                      // Build structured config for better display - uses effectiveItem for real-time sync
                       // Simplified color scheme: orange accent for key features, neutral for rest
                       const getStructuredConfig = () => {
                         const config: {
@@ -2235,7 +2241,7 @@ export default function Calculator() {
                         if (isServerless) {
                           config.badges.push({ text: 'Serverless', accent: true })
                         }
-                        if (item.photon_enabled) {
+                        if (effectiveItem.photon_enabled) {
                           config.badges.push({ text: '⚡ Photon', accent: true })
                         }
                         
@@ -2243,61 +2249,61 @@ export default function Calculator() {
                         if (['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType)) {
                           // Classic compute workloads - show driver and worker config
                           if (!isServerless) {
-                            if (item.driver_node_type) {
-                              config.driver = item.driver_node_type
+                            if (effectiveItem.driver_node_type) {
+                              config.driver = effectiveItem.driver_node_type
                             }
-                            if (item.num_workers && item.worker_node_type) {
-                              config.workers = { count: item.num_workers, type: item.worker_node_type }
+                            if (effectiveItem.num_workers && effectiveItem.worker_node_type) {
+                              config.workers = { count: effectiveItem.num_workers, type: effectiveItem.worker_node_type }
                             }
                           }
                           // DLT Edition as neutral badge
-                          if (wType === 'DLT' && item.dlt_edition) {
-                            config.badges.push({ text: item.dlt_edition })
+                          if (wType === 'DLT' && effectiveItem.dlt_edition) {
+                            config.badges.push({ text: effectiveItem.dlt_edition })
                           }
                         } else if (wType === 'DBSQL') {
                           // DBSQL - warehouse type as badge, size as detail
-                          if (item.dbsql_warehouse_type && item.dbsql_warehouse_type !== 'SERVERLESS') {
-                            config.badges.push({ text: item.dbsql_warehouse_type })
+                          if (effectiveItem.dbsql_warehouse_type && effectiveItem.dbsql_warehouse_type !== 'SERVERLESS') {
+                            config.badges.push({ text: effectiveItem.dbsql_warehouse_type })
                           }
-                          if (item.dbsql_warehouse_size) {
-                            config.details.push(item.dbsql_warehouse_size)
+                          if (effectiveItem.dbsql_warehouse_size) {
+                            config.details.push(effectiveItem.dbsql_warehouse_size)
                           }
-                          if (item.dbsql_num_clusters && item.dbsql_num_clusters > 1) {
-                            config.details.push(`${item.dbsql_num_clusters} clusters`)
+                          if (effectiveItem.dbsql_num_clusters && effectiveItem.dbsql_num_clusters > 1) {
+                            config.details.push(`${effectiveItem.dbsql_num_clusters} clusters`)
                           }
                         } else if (wType === 'VECTOR_SEARCH') {
                           // Vector Search - mode as badge
-                          if (item.vector_search_mode) {
-                            const modeLabel = item.vector_search_mode === 'storage_optimized' ? 'Storage Opt.' : 'Standard'
+                          if (effectiveItem.vector_search_mode) {
+                            const modeLabel = effectiveItem.vector_search_mode === 'storage_optimized' ? 'Storage Opt.' : 'Standard'
                             config.badges.push({ text: modeLabel })
                           }
-                          if (item.vector_capacity_millions) {
-                            config.details.push(`${item.vector_capacity_millions}M vectors`)
+                          if (effectiveItem.vector_capacity_millions) {
+                            config.details.push(`${effectiveItem.vector_capacity_millions}M vectors`)
                           }
                         } else if (wType === 'MODEL_SERVING') {
                           // Model Serving - GPU type
-                          if (item.model_serving_gpu_type) {
-                            config.details.push(item.model_serving_gpu_type)
+                          if (effectiveItem.model_serving_gpu_type) {
+                            config.details.push(effectiveItem.model_serving_gpu_type)
                           }
                         } else if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
                           // Foundation Model API - check rate_type for provisioned vs token
-                          if (item.fmapi_rate_type) {
-                            const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(item.fmapi_rate_type)
+                          if (effectiveItem.fmapi_rate_type) {
+                            const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(effectiveItem.fmapi_rate_type)
                             config.badges.push({ text: isProvisioned ? 'Provisioned' : 'Token' })
                           }
-                          if (item.fmapi_provider && wType === 'FMAPI_PROPRIETARY') {
-                            config.details.push(item.fmapi_provider)
+                          if (effectiveItem.fmapi_provider && wType === 'FMAPI_PROPRIETARY') {
+                            config.details.push(effectiveItem.fmapi_provider)
                           }
-                          if (item.fmapi_model) {
-                            config.details.push(item.fmapi_model)
+                          if (effectiveItem.fmapi_model) {
+                            config.details.push(effectiveItem.fmapi_model)
                           }
                         } else if (wType === 'LAKEBASE') {
                           // Lakebase
-                          if (item.lakebase_cu) {
-                            config.details.push(`CU ${item.lakebase_cu}`)
+                          if (effectiveItem.lakebase_cu) {
+                            config.details.push(`CU ${effectiveItem.lakebase_cu}`)
                           }
-                          if (item.lakebase_ha_nodes && item.lakebase_ha_nodes > 0) {
-                            config.badges.push({ text: `HA ×${item.lakebase_ha_nodes}` })
+                          if (effectiveItem.lakebase_ha_nodes && effectiveItem.lakebase_ha_nodes > 0) {
+                            config.badges.push({ text: `HA ×${effectiveItem.lakebase_ha_nodes}` })
                           }
                         }
                         
@@ -2422,11 +2428,17 @@ export default function Calculator() {
                               >
                                 <TrashIcon className="w-4 h-4" />
                               </button>
-                              {isExpanded ? (
-                                <ChevronUpIcon className="w-4 h-4 text-orange-500" />
-                              ) : (
-                                <ChevronDownIcon className="w-4 h-4 text-[var(--text-muted)]" />
-                              )}
+                              {/* Expand indicator - larger and more visible */}
+                              <div className={clsx(
+                                "p-1 rounded transition-colors",
+                                isExpanded ? "bg-orange-500/10" : "hover:bg-[var(--bg-tertiary)]"
+                              )}>
+                                {isExpanded ? (
+                                  <ChevronUpIcon className="w-5 h-5 text-orange-500" />
+                                ) : (
+                                  <ChevronDownIcon className="w-5 h-5 text-[var(--text-muted)]" />
+                                )}
+                              </div>
                             </div>
                           </div>
                           
@@ -2502,26 +2514,26 @@ export default function Calculator() {
                                   </div>
                                 )}
                                 
-                                {/* Compute workloads: show driver/worker nodes */}
-                                {['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType) && (
+                                {/* Compute workloads: show driver/worker nodes - uses effectiveItem for real-time sync */}
+                                {['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType) && !isServerless && (
                                   <>
-                                    {item.driver_node_type && (
+                                    {effectiveItem.driver_node_type && (
                                       <div>
                                         <span className="text-[var(--text-muted)]">Driver</span>
-                                        <p className="font-mono text-[var(--text-primary)] text-[10px]">{item.driver_node_type}</p>
+                                        <p className="font-mono text-[var(--text-primary)] text-[10px]">{effectiveItem.driver_node_type}</p>
                                       </div>
                                     )}
-                                    {item.worker_node_type && (
+                                    {effectiveItem.worker_node_type && (
                                       <div>
                                         <span className="text-[var(--text-muted)]">Workers</span>
-                                        <p className="text-[var(--text-primary)]">{item.num_workers}× <span className="font-mono text-[10px]">{item.worker_node_type}</span></p>
+                                        <p className="text-[var(--text-primary)]">{effectiveItem.num_workers}× <span className="font-mono text-[10px]">{effectiveItem.worker_node_type}</span></p>
                                       </div>
                                     )}
                                   </>
                                 )}
                                 
-                                {/* Workload-specific details */}
-                                {getWorkloadSummaryDetails(item).map((detail, idx) => (
+                                {/* Workload-specific details - uses effectiveItem for real-time sync */}
+                                {getWorkloadSummaryDetails(effectiveItem).map((detail, idx) => (
                                   <div key={idx} className="min-w-0">
                                     <span className="text-[var(--text-muted)]">{detail.label}</span>
                                     <p className="text-[var(--text-primary)] break-words">{detail.value}</p>
@@ -2537,24 +2549,30 @@ export default function Calculator() {
                                 )}
                               </div>
                               
-                              {/* Formula display */}
+                              {/* Formula display - uses effectiveItem for real-time sync */}
                               <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
                                 <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
                                   <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
                                   {(() => {
-                                    const hoursPerMonth = item.hours_per_month || 
-                                      (item.runs_per_day && item.avg_runtime_minutes 
-                                        ? item.runs_per_day * (item.avg_runtime_minutes / 60) * (item.days_per_month || 30)
+                                    // Calculate hours from effectiveItem
+                                    const hoursPerMonth = effectiveItem.hours_per_month || 
+                                      (effectiveItem.runs_per_day && effectiveItem.avg_runtime_minutes 
+                                        ? effectiveItem.runs_per_day * (effectiveItem.avg_runtime_minutes / 60) * (effectiveItem.days_per_month || 30)
                                         : 730)
                                     const dbuPriceDisplay = costs.dbuPrice?.toFixed(2) || '0.00'
                                     
-                                    // Vector Search
+                                    // Vector Search: Units × DBU/hr × Hours
                                     if (wType === 'VECTOR_SEARCH') {
+                                      const capacity = effectiveItem.vector_capacity_millions || 1
+                                      const mode = effectiveItem.vector_search_mode || 'standard'
+                                      const divisor = mode === 'storage_optimized' ? 64 : 2
+                                      const unitsUsed = Math.ceil(capacity / divisor)
+                                      const dbuPerUnit = costs.dbuPerHour ? costs.dbuPerHour / unitsUsed : (mode === 'storage_optimized' ? 18.29 : 4)
                                       return (
                                         <>
-                                          <span className="text-blue-500">{costs.unitsUsed || 1} units</span>
+                                          <span className="text-blue-500">⌈{capacity}M/{divisor}M⌉ = {unitsUsed} unit{unitsUsed !== 1 ? 's' : ''}</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '4.00'} DBU/hr</span>
+                                          <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/hr</span>
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
@@ -2567,30 +2585,62 @@ export default function Calculator() {
                                       )
                                     }
                                     
-                                    // FMAPI (token-based)
+                                    // FMAPI - distinguish between token and provisioned
                                     if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
-                                      return (
-                                        <>
-                                          <span className="text-blue-500">{item.fmapi_quantity || 0}M tokens</span>
-                                          <span>×</span>
-                                          <span className="text-purple-500">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
-                                          <span>=</span>
-                                          <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                          <span>×</span>
-                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                                          <span>=</span>
-                                          <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
-                                        </>
-                                      )
+                                      const quantity = effectiveItem.fmapi_quantity || 1
+                                      const rateType = effectiveItem.fmapi_rate_type || 'input_token'
+                                      const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(rateType)
+                                      const dbuPerUnit = costs.monthlyDBUs / quantity
+                                      
+                                      if (isProvisioned) {
+                                        // Provisioned: Hours × DBU/hr
+                                        return (
+                                          <>
+                                            <span className="text-blue-500">{quantity}h/mo</span>
+                                            <span>×</span>
+                                            <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/hr</span>
+                                            <span>=</span>
+                                            <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                            <span>×</span>
+                                            <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                            <span>=</span>
+                                            <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                          </>
+                                        )
+                                      } else {
+                                        // Token-based: Quantity × DBU/M
+                                        return (
+                                          <>
+                                            <span className="text-blue-500">{quantity}M tokens</span>
+                                            <span>×</span>
+                                            <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/M</span>
+                                            <span>=</span>
+                                            <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                            <span>×</span>
+                                            <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                            <span>=</span>
+                                            <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                          </>
+                                        )
+                                      }
                                     }
                                     
-                                    // Lakebase
+                                    // Lakebase: CU × DBU/CU × Hours (HA multiplier if applicable)
                                     if (wType === 'LAKEBASE') {
+                                      const cu = effectiveItem.lakebase_cu || 1
+                                      const haNodes = effectiveItem.lakebase_ha_nodes || 0
+                                      const dbuPerCU = costs.dbuPerHour ? costs.dbuPerHour / cu : 2
                                       return (
                                         <>
-                                          <span className="text-blue-500">{item.lakebase_cu || 1} CU</span>
+                                          <span className="text-blue-500">{cu} CU</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{item.lakebase_ha_nodes || 1} nodes</span>
+                                          <span className="text-purple-500">{dbuPerCU.toFixed(2)} DBU/hr</span>
+                                          {haNodes > 0 && (
+                                            <>
+                                              <span>×</span>
+                                              <span className="text-teal-500">(1 + {haNodes} HA)</span>
+                                            </>
+                                          )}
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
@@ -2603,11 +2653,16 @@ export default function Calculator() {
                                       )
                                     }
                                     
-                                    // Model Serving
+                                    // Model Serving: Endpoints × DBU/hr × Hours
                                     if (wType === 'MODEL_SERVING') {
+                                      const endpoints = effectiveItem.num_workers || 1
+                                      const gpuType = effectiveItem.model_serving_gpu_type || 'cpu'
+                                      const dbuPerEndpoint = costs.dbuPerHour ? costs.dbuPerHour / endpoints : 2
                                       return (
                                         <>
-                                          <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '2.00'} DBU/hr</span>
+                                          <span className="text-blue-500">{endpoints} endpoint{endpoints !== 1 ? 's' : ''}</span>
+                                          <span>×</span>
+                                          <span className="text-purple-500">{dbuPerEndpoint.toFixed(2)} DBU/hr ({gpuType})</span>
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
@@ -2620,13 +2675,16 @@ export default function Calculator() {
                                       )
                                     }
                                     
-                                    // Compute workloads (JOBS, ALL_PURPOSE, DLT, DBSQL)
+                                    // Compute workloads (JOBS, ALL_PURPOSE, DLT, DBSQL) - show multipliers
                                     const hasVMCost = costs.vmCost > 0
+                                    const photonEnabled = effectiveItem.photon_enabled
+                                    
                                     return (
                                       <>
                                         {costs.dbuPerHour && costs.dbuPerHour > 0 && (
                                           <>
                                             <span className="text-purple-500">{costs.dbuPerHour.toFixed(2)} DBU/hr</span>
+                                            {photonEnabled && <span className="text-orange-400 text-[9px]">(incl. Photon)</span>}
                                             <span>×</span>
                                           </>
                                         )}
@@ -2709,11 +2767,16 @@ export default function Calculator() {
                 
                 {/* Card Views (Compact and Expanded) */}
                 {workloadsViewMode !== 'table' && lineItems.map((item, index) => {
-                  // Use pending form edits for real-time cost preview during editing
-                  const costs = calculateItemCost(item, pendingFormEdits[item.line_item_id])
+                  // Create effective item that merges saved data with pending edits for real-time preview
+                  const pendingEdits = pendingFormEdits[item.line_item_id]
+                  const effectiveItem: LineItem = pendingEdits 
+                    ? { ...item, ...pendingEdits } as LineItem
+                    : item
+                  
+                  const costs = calculateItemCost(item, pendingEdits)
                   const isExpanded = expandedItems.has(item.line_item_id)
-                  const usageSummary = getUsageSummary(item)
-                  const typeConfig = getWorkloadTypeConfig(item.workload_type)
+                  const usageSummary = getUsageSummary(effectiveItem)
+                  const typeConfig = getWorkloadTypeConfig(effectiveItem.workload_type)
                   const TypeIcon = typeConfig.icon
                   // Show details row only in 'expanded' mode OR when the item is expanded for editing
                   const showDetailsRow = workloadsViewMode === 'expanded' || isExpanded
