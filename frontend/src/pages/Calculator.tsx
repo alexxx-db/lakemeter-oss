@@ -2549,166 +2549,315 @@ export default function Calculator() {
                                 )}
                               </div>
                               
-                              {/* Formula display - uses effectiveItem for real-time sync */}
+                              {/* Formula display - verbose with DBU/VM separation */}
                               <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
-                                <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
-                                  <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
-                                  {(() => {
-                                    // Calculate hours from effectiveItem
-                                    const hoursPerMonth = effectiveItem.hours_per_month || 
-                                      (effectiveItem.runs_per_day && effectiveItem.avg_runtime_minutes 
-                                        ? effectiveItem.runs_per_day * (effectiveItem.avg_runtime_minutes / 60) * (effectiveItem.days_per_month || 30)
-                                        : 730)
-                                    const dbuPriceDisplay = costs.dbuPrice?.toFixed(2) || '0.00'
-                                    
-                                    // Vector Search: Units × DBU/hr × Hours
-                                    if (wType === 'VECTOR_SEARCH') {
-                                      const capacity = effectiveItem.vector_capacity_millions || 1
-                                      const mode = effectiveItem.vector_search_mode || 'standard'
-                                      const divisor = mode === 'storage_optimized' ? 64 : 2
-                                      const unitsUsed = Math.ceil(capacity / divisor)
-                                      const dbuPerUnit = costs.dbuPerHour ? costs.dbuPerHour / unitsUsed : (mode === 'storage_optimized' ? 18.29 : 4)
-                                      return (
-                                        <>
-                                          <span className="text-blue-500">⌈{capacity}M/{divisor}M⌉ = {unitsUsed} unit{unitsUsed !== 1 ? 's' : ''}</span>
+                                {(() => {
+                                  // Determine if using run-based or direct hours
+                                  const isRunBased = effectiveItem.runs_per_day && effectiveItem.avg_runtime_minutes && !effectiveItem.hours_per_month
+                                  const runsPerDay = effectiveItem.runs_per_day || 0
+                                  const avgRuntimeMin = effectiveItem.avg_runtime_minutes || 30
+                                  const daysPerMonth = effectiveItem.days_per_month || 30
+                                  const directHours = effectiveItem.hours_per_month || 730
+                                  
+                                  // Calculate hours - prefer run-based calculation when available
+                                  const hoursPerMonth = isRunBased 
+                                    ? runsPerDay * (avgRuntimeMin / 60) * daysPerMonth
+                                    : directHours
+                                  
+                                  const dbuPrice = costs.dbuPrice || 0
+                                  const dbuPriceDisplay = dbuPrice.toFixed(2)
+                                  
+                                  // Vector Search formula
+                                  if (wType === 'VECTOR_SEARCH') {
+                                    const capacity = effectiveItem.vector_capacity_millions || 1
+                                    const mode = effectiveItem.vector_search_mode || 'standard'
+                                    const divisor = mode === 'storage_optimized' ? 64 : 2
+                                    const unitsUsed = Math.ceil(capacity / divisor)
+                                    const dbuPerUnit = mode === 'storage_optimized' ? 18.29 : 4
+                                    return (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                          <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
+                                          <span className="text-blue-500">⌈{capacity}M vectors ÷ {divisor}M⌉</span>
+                                          <span>=</span>
+                                          <span className="text-blue-600 font-semibold">{unitsUsed} unit{unitsUsed !== 1 ? 's' : ''}</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/hr</span>
+                                          <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/hr/unit</span>
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
-                                          <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-orange-500 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
-                                        </>
-                                      )
-                                    }
+                                          <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+                                  
+                                  // FMAPI formula
+                                  if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
+                                    const quantity = effectiveItem.fmapi_quantity || 1
+                                    const rateType = effectiveItem.fmapi_rate_type || 'input_token'
+                                    const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(rateType)
+                                    const dbuPerUnit = quantity > 0 ? costs.monthlyDBUs / quantity : 0
+                                    const model = effectiveItem.fmapi_model || 'model'
+                                    const provider = effectiveItem.fmapi_provider || ''
                                     
-                                    // FMAPI - distinguish between token and provisioned
-                                    if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
-                                      const quantity = effectiveItem.fmapi_quantity || 1
-                                      const rateType = effectiveItem.fmapi_rate_type || 'input_token'
-                                      const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(rateType)
-                                      const dbuPerUnit = costs.monthlyDBUs / quantity
-                                      
-                                      if (isProvisioned) {
-                                        // Provisioned: Hours × DBU/hr
-                                        return (
-                                          <>
-                                            <span className="text-blue-500">{quantity}h/mo</span>
-                                            <span>×</span>
-                                            <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/hr</span>
-                                            <span>=</span>
-                                            <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                            <span>×</span>
-                                            <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                                            <span>=</span>
-                                            <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
-                                          </>
-                                        )
-                                      } else {
-                                        // Token-based: Quantity × DBU/M
-                                        return (
-                                          <>
-                                            <span className="text-blue-500">{quantity}M tokens</span>
-                                            <span>×</span>
-                                            <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/M</span>
-                                            <span>=</span>
-                                            <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                            <span>×</span>
-                                            <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                                            <span>=</span>
-                                            <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
-                                          </>
-                                        )
-                                      }
-                                    }
-                                    
-                                    // Lakebase: CU × DBU/CU × Hours (HA multiplier if applicable)
-                                    if (wType === 'LAKEBASE') {
-                                      const cu = effectiveItem.lakebase_cu || 1
-                                      const haNodes = effectiveItem.lakebase_ha_nodes || 0
-                                      const dbuPerCU = costs.dbuPerHour ? costs.dbuPerHour / cu : 2
-                                      return (
-                                        <>
+                                    return (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                          <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
+                                          {isProvisioned ? (
+                                            <>
+                                              <span className="text-blue-500">{quantity} hours/mo</span>
+                                              <span>×</span>
+                                              <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/hr</span>
+                                              <span className="text-gray-400">({model})</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span className="text-blue-500">{quantity}M tokens</span>
+                                              <span>×</span>
+                                              <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/M</span>
+                                              <span className="text-gray-400">({provider ? `${provider}/` : ''}{model})</span>
+                                            </>
+                                          )}
+                                          <span>=</span>
+                                          <span className="text-orange-500 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+                                  
+                                  // Lakebase formula
+                                  if (wType === 'LAKEBASE') {
+                                    const cu = effectiveItem.lakebase_cu || 1
+                                    const haNodes = effectiveItem.lakebase_ha_nodes || 0
+                                    const baseDBUPerCU = 2 // Base rate per CU
+                                    const totalMultiplier = 1 + haNodes
+                                    return (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                          <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
                                           <span className="text-blue-500">{cu} CU</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{dbuPerCU.toFixed(2)} DBU/hr</span>
+                                          <span className="text-purple-500">{baseDBUPerCU.toFixed(2)} DBU/hr/CU</span>
                                           {haNodes > 0 && (
                                             <>
                                               <span>×</span>
-                                              <span className="text-teal-500">(1 + {haNodes} HA)</span>
+                                              <span className="text-teal-500">(1 + {haNodes} HA nodes)</span>
+                                              <span>=</span>
+                                              <span className="text-teal-600">×{totalMultiplier}</span>
                                             </>
                                           )}
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
-                                          <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-orange-500 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
-                                        </>
-                                      )
-                                    }
-                                    
-                                    // Model Serving: Endpoints × DBU/hr × Hours
-                                    if (wType === 'MODEL_SERVING') {
-                                      const endpoints = effectiveItem.num_workers || 1
-                                      const gpuType = effectiveItem.model_serving_gpu_type || 'cpu'
-                                      const dbuPerEndpoint = costs.dbuPerHour ? costs.dbuPerHour / endpoints : 2
-                                      return (
-                                        <>
+                                          <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+                                  
+                                  // Model Serving formula
+                                  if (wType === 'MODEL_SERVING') {
+                                    const endpoints = effectiveItem.num_workers || 1
+                                    const gpuType = effectiveItem.model_serving_gpu_type || 'cpu'
+                                    const dbuPerEndpoint = costs.dbuPerHour ? costs.dbuPerHour / endpoints : 2
+                                    return (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                          <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
                                           <span className="text-blue-500">{endpoints} endpoint{endpoints !== 1 ? 's' : ''}</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{dbuPerEndpoint.toFixed(2)} DBU/hr ({gpuType})</span>
+                                          <span className="text-purple-500">{dbuPerEndpoint.toFixed(2)} DBU/hr</span>
+                                          <span className="text-gray-400">({gpuType})</span>
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
+                                          <span className="text-orange-500 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+                                  
+                                  // DBSQL formula
+                                  if (wType === 'DBSQL') {
+                                    const warehouseSize = effectiveItem.dbsql_warehouse_size || 'Small'
+                                    const numClusters = effectiveItem.dbsql_num_clusters || 1
+                                    const warehouseType = effectiveItem.dbsql_warehouse_type || 'SERVERLESS'
+                                    const dbuPerWarehouse = costs.dbuPerHour ? costs.dbuPerHour / numClusters : 12
+                                    const hasVMCost = costs.vmCost > 0
+                                    
+                                    return (
+                                      <div className="space-y-1.5">
+                                        {/* DBU Cost Line */}
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                          <span className="text-blue-500 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded">DBU:</span>
+                                          <span className="text-blue-500">{warehouseSize}</span>
+                                          <span className="text-gray-400">({dbuPerWarehouse.toFixed(1)} DBU/hr)</span>
+                                          {numClusters > 1 && (
+                                            <>
+                                              <span>×</span>
+                                              <span className="text-purple-500">{numClusters} clusters</span>
+                                            </>
+                                          )}
+                                          <span>×</span>
+                                          {isRunBased ? (
+                                            <span className="text-green-500" title={`${runsPerDay} runs × ${avgRuntimeMin}min ÷ 60 × ${daysPerMonth} days`}>
+                                              {hoursPerMonth.toFixed(1)}h
+                                            </span>
+                                          ) : (
+                                            <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                          )}
+                                          <span>=</span>
                                           <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
-                                        </>
-                                      )
-                                    }
-                                    
-                                    // Compute workloads (JOBS, ALL_PURPOSE, DLT, DBSQL) - show multipliers
-                                    const hasVMCost = costs.vmCost > 0
-                                    const photonEnabled = effectiveItem.photon_enabled
-                                    
-                                    return (
-                                      <>
-                                        {costs.dbuPerHour && costs.dbuPerHour > 0 && (
-                                          <>
-                                            <span className="text-purple-500">{costs.dbuPerHour.toFixed(2)} DBU/hr</span>
-                                            {photonEnabled && <span className="text-orange-400 text-[9px]">(incl. Photon)</span>}
+                                          <span className="text-blue-600 font-bold">{formatCurrency(costs.dbuCost)}</span>
+                                        </div>
+                                        
+                                        {/* VM Cost Line (only for PRO/Classic) */}
+                                        {hasVMCost && (
+                                          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                            <span className="text-teal-500 font-semibold bg-teal-500/10 px-1.5 py-0.5 rounded">VM:</span>
+                                            <span className="text-teal-500">{warehouseType} warehouse VM costs</span>
                                             <span>×</span>
+                                            <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                            <span>=</span>
+                                            <span className="text-teal-600 font-bold">{formatCurrency(costs.vmCost)}</span>
+                                          </div>
+                                        )}
+                                        
+                                        {/* Total Line */}
+                                        <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
+                                          <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
+                                          <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                          {hasVMCost && (
+                                            <>
+                                              <span>+</span>
+                                              <span className="text-teal-500">{formatCurrency(costs.vmCost)}</span>
+                                            </>
+                                          )}
+                                          <span>=</span>
+                                          <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+                                  
+                                  // Compute workloads (JOBS, ALL_PURPOSE, DLT) - verbose formula
+                                  const numWorkers = effectiveItem.num_workers || 0
+                                  const driverNode = effectiveItem.driver_node_type || ''
+                                  const workerNode = effectiveItem.worker_node_type || ''
+                                  const photonEnabled = effectiveItem.photon_enabled
+                                  const hasVMCost = costs.vmCost > 0 && !isServerless
+                                  
+                                  // Estimate individual rates (these are computed in calculateItemCost but not returned)
+                                  const dbuPerHour = costs.dbuPerHour || 0
+                                  
+                                  return (
+                                    <div className="space-y-1.5">
+                                      {/* Hours calculation (if run-based) */}
+                                      {isRunBased && (
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                          <span className="text-gray-500 font-semibold">Hours:</span>
+                                          <span className="text-green-500">{runsPerDay} runs/day</span>
+                                          <span>×</span>
+                                          <span className="text-green-500">{avgRuntimeMin}min ÷ 60</span>
+                                          <span>×</span>
+                                          <span className="text-green-500">{daysPerMonth} days/mo</span>
+                                          <span>=</span>
+                                          <span className="text-green-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
+                                        </div>
+                                      )}
+                                      
+                                      {/* DBU Cost Line */}
+                                      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                        <span className="text-blue-500 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded">DBU:</span>
+                                        {isServerless ? (
+                                          <>
+                                            <span className="text-purple-500">{dbuPerHour.toFixed(2)} DBU/hr</span>
+                                            <span className="text-orange-400 text-[9px]">(Serverless{photonEnabled ? ' + Photon' : ''})</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span className="text-gray-400">(</span>
+                                            <span className="text-blue-500" title={driverNode}>driver</span>
+                                            <span>+</span>
+                                            <span className="text-blue-500" title={workerNode}>worker</span>
+                                            <span>×</span>
+                                            <span className="text-purple-500">{numWorkers}</span>
+                                            <span className="text-gray-400">)</span>
+                                            {photonEnabled && (
+                                              <>
+                                                <span>×</span>
+                                                <span className="text-orange-400">Photon</span>
+                                              </>
+                                            )}
+                                            <span>=</span>
+                                            <span className="text-purple-600">{dbuPerHour.toFixed(2)} DBU/hr</span>
                                           </>
                                         )}
-                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                        <span>×</span>
+                                        <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                         <span>=</span>
                                         <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                                        {hasVMCost ? (
-                                          <>
-                                            <span className="mx-1">|</span>
-                                            <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
-                                            <span>+</span>
-                                            <span className="text-teal-500">VM: {formatCurrency(costs.vmCost)}</span>
-                                            <span>=</span>
-                                          </>
-                                        ) : (
+                                        <span>=</span>
+                                        <span className="text-blue-600 font-bold">{formatCurrency(costs.dbuCost)}</span>
+                                      </div>
+                                      
+                                      {/* VM Cost Line (only for classic compute) */}
+                                      {hasVMCost && (
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                          <span className="text-teal-500 font-semibold bg-teal-500/10 px-1.5 py-0.5 rounded">VM:</span>
+                                          <span className="text-gray-400">(</span>
+                                          <span className="text-teal-500" title={driverNode}>driver_vm</span>
+                                          <span>+</span>
+                                          <span className="text-teal-500" title={workerNode}>worker_vm</span>
+                                          <span>×</span>
+                                          <span className="text-purple-500">{numWorkers}</span>
+                                          <span className="text-gray-400">)</span>
+                                          <span>×</span>
+                                          <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
+                                          <span className="text-teal-600 font-bold">{formatCurrency(costs.vmCost)}</span>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Total Line */}
+                                      <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
+                                        <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
+                                        <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                        {hasVMCost && (
+                                          <>
+                                            <span>+</span>
+                                            <span className="text-teal-500">{formatCurrency(costs.vmCost)}</span>
+                                          </>
                                         )}
-                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
-                                      </>
-                                    )
-                                  })()}
-                                </div>
+                                        <span>=</span>
+                                        <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                      </div>
+                                    </div>
+                                  )
+                                })()}
                               </div>
                             </div>
                           )}
