@@ -2778,101 +2778,130 @@ export default function Calculator() {
       
       {/* Collapsed Cost Summary - Sticky Bottom Bar */}
       {isCostSummaryCollapsed && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-primary)] border-t border-[var(--border-primary)] shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
-          {/* Expandable Workload Breakdown */}
+        <div className="fixed bottom-0 left-0 right-0 z-40">
+          {/* Expandable Workload Breakdown - Dropdown style */}
           {showCollapsedBreakdown && lineItems.length > 0 && (
-            <div className="border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-[var(--text-muted)]">Top Workloads by Cost</p>
-                  <button
-                    onClick={() => setShowCollapsedBreakdown(false)}
-                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                  >
-                    Hide
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                  {(() => {
-                    const sortedItems = [...lineItems]
-                      .map(item => ({ item, costs: calculateItemCost(item) }))
-                      .sort((a, b) => b.costs.totalCost - a.costs.totalCost)
-                      .slice(0, 5)
-                    
-                    return sortedItems.map(({ item, costs }) => {
-                      const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
-                      return (
-                        <button
-                          key={item.line_item_id}
-                          onClick={() => {
-                            setShowCollapsedBreakdown(false)
-                            scrollToWorkload(item.line_item_id)
-                          }}
-                          className="text-left p-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-orange-500/50 hover:bg-orange-500/5 transition-colors"
-                        >
-                          <p className="text-xs font-medium text-[var(--text-primary)] truncate" title={item.workload_name}>
-                            {item.workload_name}
-                          </p>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="text-[10px] text-[var(--text-muted)]">{percent.toFixed(0)}%</span>
-                            <span className="text-xs font-semibold text-orange-500">{formatCurrency(costs.totalCost)}</span>
-                          </div>
-                        </button>
-                      )
-                    })
-                  })()}
+            <>
+              {/* Backdrop to close on click outside */}
+              <div 
+                className="fixed inset-0 bg-black/20 z-[-1]" 
+                onClick={() => setShowCollapsedBreakdown(false)}
+              />
+              <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-t-xl shadow-[0_-8px_30px_rgba(0,0,0,0.2)] mx-4 sm:mx-8">
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-[var(--text-primary)]">
+                      All Workloads ({lineItems.length})
+                    </h4>
+                    <button
+                      onClick={() => setShowCollapsedBreakdown(false)}
+                      className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-2 py-1 rounded hover:bg-[var(--bg-tertiary)]"
+                    >
+                      Close ✕
+                    </button>
+                  </div>
+                  {/* Scrollable list of ALL workloads */}
+                  <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                    {(() => {
+                      const sortedItems = [...lineItems]
+                        .map(item => ({ item, costs: calculateItemCost(item) }))
+                        .sort((a, b) => b.costs.totalCost - a.costs.totalCost)
+                      
+                      const barColors = ['bg-orange-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500', 'bg-indigo-500']
+                      
+                      return sortedItems.map(({ item, costs }, idx) => {
+                        const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
+                        const barColor = barColors[idx % barColors.length]
+                        return (
+                          <button
+                            key={item.line_item_id}
+                            onClick={() => {
+                              setShowCollapsedBreakdown(false)
+                              scrollToWorkload(item.line_item_id)
+                            }}
+                            className="w-full text-left p-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors group"
+                          >
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="font-medium text-[var(--text-primary)] truncate max-w-[200px] group-hover:text-orange-500" title={item.workload_name}>
+                                {item.workload_name}
+                              </span>
+                              <div className="flex items-center gap-3 flex-shrink-0">
+                                <span className="text-[var(--text-muted)] tabular-nums">{percent.toFixed(0)}%</span>
+                                <span className="font-semibold text-[var(--text-primary)] tabular-nums w-20 text-right">{formatCurrency(costs.totalCost)}</span>
+                              </div>
+                            </div>
+                            <div className="h-1 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                              <div className={clsx("h-full rounded-full", barColor)} style={{ width: `${Math.max(percent, 1)}%` }} />
+                            </div>
+                          </button>
+                        )
+                      })
+                    })()}
+                  </div>
+                  <p className="text-[10px] text-[var(--text-muted)] mt-2 text-center">Click any workload to scroll to it</p>
                 </div>
               </div>
-            </div>
+            </>
           )}
           
           {/* Main Bar */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-14">
-              {/* Left side - Expand to sidebar button */}
-              <button
-                onClick={() => setIsCostSummaryCollapsed(false)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 font-medium text-sm transition-colors"
-              >
-                <ChevronUpIcon className="w-4 h-4" />
-                <span className="hidden sm:inline">Expand</span>
-              </button>
-              
-              {/* Center - Stats with colored labels */}
-              <div className="flex items-center gap-3 sm:gap-5 text-sm">
-                {/* Workload count - clickable to show breakdown */}
+          <div className="bg-[var(--bg-primary)] border-t border-[var(--border-primary)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex items-center justify-between h-14">
+                {/* Left side - Open sidebar panel button */}
                 <button
-                  onClick={() => setShowCollapsedBreakdown(!showCollapsedBreakdown)}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-[var(--bg-tertiary)] transition-colors"
-                  title="Click to view workload breakdown"
+                  onClick={() => setIsCostSummaryCollapsed(false)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] text-sm transition-colors"
+                  title="Open Cost Summary panel"
                 >
-                  <span className="font-semibold text-[var(--text-primary)]">{lineItems.length}</span>
-                  <span className="text-[var(--text-muted)] hidden sm:inline">workloads</span>
-                  <ChevronUpIcon className={clsx("w-3 h-3 text-[var(--text-muted)] transition-transform", showCollapsedBreakdown && "rotate-180")} />
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h4v14H4z" />
+                  </svg>
+                  <span className="hidden sm:inline">Panel</span>
                 </button>
                 
-                <div className="h-4 w-px bg-[var(--border-primary)] hidden sm:block" />
-                
-                {/* DBU Cost - blue label */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-blue-600 dark:text-blue-400 font-medium text-xs">DBU:</span>
-                  <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</span>
+                {/* Center - Stats with colored labels */}
+                <div className="flex items-center gap-3 sm:gap-5 text-sm">
+                  {/* Workload count - clearly styled as expandable */}
+                  <button
+                    onClick={() => setShowCollapsedBreakdown(!showCollapsedBreakdown)}
+                    className={clsx(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all",
+                      showCollapsedBreakdown 
+                        ? "bg-orange-500/10 border-orange-500/30 text-orange-500" 
+                        : "border-[var(--border-primary)] hover:border-orange-500/30 hover:bg-orange-500/5"
+                    )}
+                  >
+                    <ListBulletIcon className="w-4 h-4" />
+                    <span className="font-semibold">{lineItems.length}</span>
+                    <span className="text-[var(--text-muted)] hidden sm:inline">workloads</span>
+                    <ChevronUpIcon className={clsx("w-3 h-3 transition-transform", showCollapsedBreakdown ? "rotate-180" : "")} />
+                  </button>
+                  
+                  <div className="h-4 w-px bg-[var(--border-primary)] hidden sm:block" />
+                  
+                  {/* DBU Cost - blue label */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-blue-600 dark:text-blue-400 font-medium text-xs">DBU:</span>
+                    <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</span>
+                  </div>
+                  
+                  {/* VM Cost - purple label */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-purple-600 dark:text-purple-400 font-medium text-xs">VM:</span>
+                    <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</span>
+                  </div>
                 </div>
                 
-                {/* VM Cost - purple label */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-purple-600 dark:text-purple-400 font-medium text-xs">VM:</span>
-                  <span className="font-semibold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalVMCost)}</span>
-                </div>
-              </div>
-              
-              {/* Right side - Total cost */}
-              <div className="flex items-center">
-                <div className="text-right px-3 py-1.5 bg-gradient-to-r from-orange-500/10 to-amber-500/10 rounded-lg border border-orange-500/20">
-                  <p className="text-lg sm:text-xl font-bold text-orange-500">
-                    {formatCurrency(totalCosts.totalCost)}
-                    <span className="text-[10px] font-normal text-[var(--text-muted)] ml-1">/mo</span>
-                  </p>
+                {/* Right side - Total cost */}
+                <div className="flex items-center">
+                  <div className="text-right px-3 py-1.5 bg-gradient-to-r from-orange-500/10 to-amber-500/10 rounded-lg border border-orange-500/20">
+                    <p className="text-lg sm:text-xl font-bold text-orange-500">
+                      {formatCurrency(totalCosts.totalCost)}
+                      <span className="text-[10px] font-normal text-[var(--text-muted)] ml-1">/mo</span>
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
