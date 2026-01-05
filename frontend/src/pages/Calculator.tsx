@@ -1335,7 +1335,7 @@ export default function Calculator() {
       try {
         await deleteLineItem(item.line_item_id)
         toast.success('Workload removed')
-        markAsChanged()
+        // Note: Workload deletions are immediately persisted to DB - no need to mark config as changed
       } catch {
         toast.error('Failed to delete')
       }
@@ -1360,7 +1360,7 @@ export default function Calculator() {
         }
         toast.success(`${deletedCount} workload(s) deleted`)
         setSelectedItems(new Set())
-        markAsChanged()
+        // Note: Workload deletions are immediately persisted to DB - no need to mark config as changed
       } catch {
         toast.error('Failed to delete some workloads')
       }
@@ -1401,7 +1401,7 @@ export default function Calculator() {
       const cloned = await cloneLineItem(item.line_item_id)
       if (cloned) {
         toast.success(`Workload "${item.workload_name}" cloned`)
-        markAsChanged()
+        // Note: Cloned workload is immediately persisted to DB - no need to mark config as changed
       }
     } catch {
       toast.error('Failed to clone workload')
@@ -2683,7 +2683,7 @@ export default function Calculator() {
                                     })
                                   }}
                                   onSave={() => {
-                                    markAsChanged()
+                                    // Workload is already saved to DB by WorkloadForm - just clear pending edits
                                     setPendingFormEdits(prev => {
                                       const next = { ...prev }
                                       delete next[item.line_item_id]
@@ -3032,8 +3032,7 @@ export default function Calculator() {
                                 })
                               }}
                               onSave={() => {
-                                markAsChanged()
-                                // Clear pending edits after save
+                                // Workload is already saved to DB by WorkloadForm - just clear pending edits
                                 setPendingFormEdits(prev => {
                                   const next = { ...prev }
                                   delete next[item.line_item_id]
@@ -3083,7 +3082,9 @@ export default function Calculator() {
                       estimateId={id}
                       lineItem={null}
                       onClose={() => setShowAddForm(false)}
-                      onSave={markAsChanged}
+                      onSave={() => {
+                        // Workload is already saved to DB by WorkloadForm - nothing extra needed
+                      }}
                       inline
                     />
                   </motion.div>
