@@ -2205,7 +2205,7 @@ export default function Calculator() {
                       )}
                       <div className={clsx(isBulkSelectMode ? "col-span-3" : "col-span-4")}>Workload</div>
                       <div className={clsx(isBulkSelectMode ? "col-span-4" : "col-span-4")}>Configuration</div>
-                      <div className="col-span-4 text-right">Cost</div>
+                      <div className="col-span-4"></div>
                     </div>
                     
                     {/* Rows */}
