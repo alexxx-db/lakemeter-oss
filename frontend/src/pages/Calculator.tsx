@@ -2205,8 +2205,7 @@ export default function Calculator() {
                       )}
                       <div className={clsx(isBulkSelectMode ? "col-span-3" : "col-span-4")}>Workload</div>
                       <div className={clsx(isBulkSelectMode ? "col-span-4" : "col-span-4")}>Configuration</div>
-                      <div className="col-span-2 text-right pr-6">Cost</div>
-                      <div className={clsx(isBulkSelectMode ? "col-span-2" : "col-span-2")}></div>
+                      <div className="col-span-4 text-right">Cost</div>
                     </div>
                     
                     {/* Rows */}
@@ -2406,38 +2405,41 @@ export default function Calculator() {
                               )}
                             </div>
                             
-                            {/* Cost */}
-                            <div className="col-span-4 sm:col-span-2 flex flex-col items-end justify-center">
-                              <span className="font-bold text-orange-500">{formatCurrency(costs.totalCost)}</span>
-                              <span className="text-[10px] text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                            </div>
-                            
-                            {/* Actions - fixed width for buttons */}
-                            <div className="col-span-3 sm:col-span-2 flex items-center justify-end gap-1 pl-2">
-                              <button
-                                onClick={(e) => handleCloneWorkload(e, item)}
-                                className="p-1.5 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
-                                title="Clone"
-                              >
-                                <DocumentDuplicateIcon className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDeleteLineItem(item) }}
-                                className="p-1.5 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
-                                title="Delete"
-                              >
-                                <TrashIcon className="w-4 h-4" />
-                              </button>
-                              {/* Expand indicator - larger and more visible */}
-                              <div className={clsx(
-                                "p-1 rounded transition-colors",
-                                isExpanded ? "bg-orange-500/10" : "hover:bg-[var(--bg-tertiary)]"
-                              )}>
-                                {isExpanded ? (
-                                  <ChevronUpIcon className="w-5 h-5 text-orange-500" />
-                                ) : (
-                                  <ChevronDownIcon className="w-5 h-5 text-[var(--text-muted)]" />
-                                )}
+                            {/* Cost + Actions - Combined for tighter spacing */}
+                            <div className="col-span-7 sm:col-span-4 flex items-center justify-end gap-3">
+                              {/* Cost */}
+                              <div className="flex flex-col items-end justify-center">
+                                <span className="font-bold text-orange-500">{formatCurrency(costs.totalCost)}</span>
+                                <span className="text-[10px] text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                              </div>
+                              
+                              {/* Actions */}
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  onClick={(e) => handleCloneWorkload(e, item)}
+                                  className="p-1.5 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
+                                  title="Clone"
+                                >
+                                  <DocumentDuplicateIcon className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteLineItem(item) }}
+                                  className="p-1.5 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
+                                  title="Delete"
+                                >
+                                  <TrashIcon className="w-4 h-4" />
+                                </button>
+                                {/* Expand indicator */}
+                                <div className={clsx(
+                                  "p-1 rounded transition-colors",
+                                  isExpanded ? "bg-orange-500/10" : "hover:bg-[var(--bg-tertiary)]"
+                                )}>
+                                  {isExpanded ? (
+                                    <ChevronUpIcon className="w-5 h-5 text-orange-500" />
+                                  ) : (
+                                    <ChevronDownIcon className="w-5 h-5 text-[var(--text-muted)]" />
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
