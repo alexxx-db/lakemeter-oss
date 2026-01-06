@@ -1121,18 +1121,18 @@ Summary (be concise):"""
                 "tool_calls": response["tool_calls"]
             })
             
-            # Add tool results to history
+            # Add ALL tool results in a SINGLE user message (Claude API requirement)
+            all_tool_results = []
             for i, tool_call in enumerate(response["tool_calls"]):
-                self.conversation_history.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_call["id"],
-                            "content": json.dumps(tool_results[i]["output"])
-                        }
-                    ]
+                all_tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_call["id"],
+                    "content": json.dumps(tool_results[i]["output"])
                 })
+            self.conversation_history.append({
+                "role": "user",
+                "content": all_tool_results
+            })
             
             # Get follow-up response after tool execution
             follow_up = await self.client.chat(
@@ -1299,32 +1299,31 @@ Summary (be concise):"""
                 "tool_calls": clean_tool_calls
             })
             
-            # Execute tools and add results to history
+            # Execute ALL tools first and collect results
+            # IMPORTANT: Claude API requires all tool_results in a SINGLE user message
+            all_tool_results = []
+            
             for tool_call in tool_calls:
                 tool_id = tool_call.get("id")
                 
                 # Check if already executed during streaming (has cached result)
                 if tool_id in executed_tool_ids and "_result" in tool_call:
-                    # Use cached result, just add to history
                     result = tool_call["_result"]
-                    self.conversation_history.append({
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": tool_call["id"],
-                                "content": json.dumps(result)
-                            }
-                        ]
-                    })
-                    continue
+                else:
+                    # Execute tool
+                    result = await self._execute_tool(
+                        tool_call["name"],
+                        tool_call["arguments"]
+                    )
                 
-                # Execute tool (for Claude format streaming that doesn't hit tool_call_complete)
-                result = await self._execute_tool(
-                    tool_call["name"],
-                    tool_call["arguments"]
-                )
+                # Collect tool result for later
+                all_tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_call["id"],
+                    "content": json.dumps(result)
+                })
                 
+                # Yield tool result to client
                 yield {
                     "type": "tool_result",
                     "tool": tool_call["name"],
@@ -1374,17 +1373,12 @@ Summary (be concise):"""
                         "type": "estimate_proposal",
                         "estimate": result.get("proposed_estimate")
                     }
-                
-                self.conversation_history.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_call["id"],
-                            "content": json.dumps(result)
-                        }
-                    ]
-                })
+            
+            # Add ALL tool results in a SINGLE user message (Claude API requirement)
+            self.conversation_history.append({
+                "role": "user",
+                "content": all_tool_results
+            })
             
             # Get follow-up response
             yield {"type": "content", "content": "\n\n"}
