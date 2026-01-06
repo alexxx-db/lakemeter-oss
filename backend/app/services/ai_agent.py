@@ -1185,7 +1185,6 @@ Summary (be concise):"""
         # Stream response
         full_content = ""
         tool_calls = []
-        executed_tool_ids = set()  # Track tools that have already been executed
         current_tool = None
         tool_input_json = ""
         
@@ -1224,6 +1223,7 @@ Summary (be concise):"""
             
             elif chunk_type == "tool_call_complete":
                 # Handle complete tool call from OpenAI format
+                # Just accumulate the tool call - execution happens AFTER streaming completes
                 tool_id = chunk.get("id")
                 current_tool = {
                     "id": tool_id,
@@ -1231,49 +1231,7 @@ Summary (be concise):"""
                     "arguments": chunk.get("arguments", {})
                 }
                 tool_calls.append(current_tool)
-                
-                # Execute tool and mark as executed
-                result = await self._execute_tool(
-                    current_tool["name"],
-                    current_tool["arguments"]
-                )
-                executed_tool_ids.add(tool_id)
-                
-                # Store result with tool for later history update
-                current_tool["_result"] = result
-                
-                yield {
-                    "type": "tool_result",
-                    "tool": current_tool["name"],
-                    "result": result
-                }
-                
-                # If it's a workload proposal, yield that separately
-                if current_tool["name"] == "propose_workload" and result.get("success"):
-                    yield {
-                        "type": "proposal",
-                        "workload": result.get("proposed_workload")
-                    }
-                
-                # If it's a GenAI architecture proposal, yield each workload separately
-                if current_tool["name"] == "propose_genai_architecture" and result.get("success"):
-                    for w in result.get("workloads", []):
-                        # Find the full workload from proposed_workloads
-                        for proposed in self.proposed_workloads:
-                            if proposed.get("proposal_id") == w.get("proposal_id"):
-                                yield {
-                                    "type": "proposal",
-                                    "workload": proposed
-                                }
-                                break
-                
-                # If it's an estimate proposal, yield that separately
-                if current_tool["name"] in ["propose_estimate", "create_estimate"] and result.get("success"):
-                    yield {
-                        "type": "estimate_proposal",
-                        "estimate": result.get("proposed_estimate")
-                    }
-                
+                yield {"type": "tool_start", "tool": current_tool["name"]}
                 current_tool = None
             
             elif chunk_type == "message_delta":
@@ -1299,22 +1257,16 @@ Summary (be concise):"""
                 "tool_calls": clean_tool_calls
             })
             
-            # Execute ALL tools first and collect results
+            # Execute ALL tools and collect results
             # IMPORTANT: Claude API requires all tool_results in a SINGLE user message
             all_tool_results = []
             
             for tool_call in tool_calls:
-                tool_id = tool_call.get("id")
-                
-                # Check if already executed during streaming (has cached result)
-                if tool_id in executed_tool_ids and "_result" in tool_call:
-                    result = tool_call["_result"]
-                else:
-                    # Execute tool
-                    result = await self._execute_tool(
-                        tool_call["name"],
-                        tool_call["arguments"]
-                    )
+                # Execute tool
+                result = await self._execute_tool(
+                    tool_call["name"],
+                    tool_call["arguments"]
+                )
                 
                 # Collect tool result for later
                 all_tool_results.append({
