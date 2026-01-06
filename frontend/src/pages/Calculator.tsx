@@ -2809,32 +2809,22 @@ export default function Calculator() {
                                   const photonEnabled = effectiveItem.photon_enabled
                                   const hasVMCost = costs.vmCost > 0 && !isServerless
                                   
-                                  // Look up actual DBU rates and VM costs from instanceTypes
+                                  // Look up actual DBU rates from instanceTypes
                                   const driverInstance = instanceTypes.find(it => it.id === driverNode || it.name === driverNode)
                                   const workerInstance = instanceTypes.find(it => it.id === workerNode || it.name === workerNode)
                                   
                                   const driverDBURate = driverInstance?.dbu_rate || 0
                                   const workerDBURate = workerInstance?.dbu_rate || 0
                                   
-                                  // Get VM costs based on pricing tier
-                                  const getVMCostFromInstance = (instance: typeof driverInstance, tier: string, paymentOpt: string) => {
-                                    if (!instance?.vm_pricing) return null
-                                    const t = tier.toLowerCase()
-                                    if (t === 'on_demand') return instance.vm_pricing.on_demand?.cost_per_hour
-                                    if (t === 'spot') return instance.vm_pricing.spot?.cost_per_hour
-                                    if (t === 'reserved_1y') {
-                                      const r = instance.vm_pricing.reserved_1y?.find(x => x.payment_option === paymentOpt) || instance.vm_pricing.reserved_1y?.[0]
-                                      return r?.cost_per_hour
-                                    }
-                                    if (t === 'reserved_3y') {
-                                      const r = instance.vm_pricing.reserved_3y?.find(x => x.payment_option === paymentOpt) || instance.vm_pricing.reserved_3y?.[0]
-                                      return r?.cost_per_hour
-                                    }
-                                    return instance.vm_pricing.on_demand?.cost_per_hour
-                                  }
-                                  
-                                  const driverVMCost = getVMCostFromInstance(driverInstance, effectiveItem.driver_pricing_tier || 'on_demand', effectiveItem.driver_payment_option || 'no_upfront')
-                                  const workerVMCost = getVMCostFromInstance(workerInstance, effectiveItem.worker_pricing_tier || 'spot', effectiveItem.worker_payment_option || 'NA')
+                                  // Get VM costs using getVMPrice (same as cost calculation) - this properly fetches from VM pricing cache
+                                  const cloud = formData.cloud || 'aws'
+                                  const region = formData.region || ''
+                                  const driverVMCost = region && driverNode 
+                                    ? getVMPrice(cloud, region, driverNode, effectiveItem.driver_pricing_tier || 'on_demand', effectiveItem.driver_payment_option || 'no_upfront')
+                                    : null
+                                  const workerVMCost = region && workerNode 
+                                    ? getVMPrice(cloud, region, workerNode, effectiveItem.worker_pricing_tier || 'spot', effectiveItem.worker_payment_option || 'NA')
+                                    : null
                                   
                                   const dbuPerHour = costs.dbuPerHour || 0
                                   
