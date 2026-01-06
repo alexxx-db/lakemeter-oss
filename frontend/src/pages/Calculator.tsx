@@ -325,6 +325,7 @@ export default function Calculator() {
   const [isExporting, setIsExporting] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
+  const [formulaVisibleItems, setFormulaVisibleItems] = useState<Set<string>>(new Set())
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   
   // Pending form edits for real-time cost updates
@@ -1429,6 +1430,16 @@ export default function Calculator() {
       newExpanded.add(itemId)
     }
     setExpandedItems(newExpanded)
+  }
+  
+  const toggleFormula = (itemId: string) => {
+    const newVisible = new Set(formulaVisibleItems)
+    if (newVisible.has(itemId)) {
+      newVisible.delete(itemId)
+    } else {
+      newVisible.add(itemId)
+    }
+    setFormulaVisibleItems(newVisible)
   }
   
   const formatCurrency = (amount: number) => {
@@ -2554,9 +2565,26 @@ export default function Calculator() {
                                 )}
                               </div>
                               
-                              {/* Formula display - verbose with DBU/VM separation */}
+                              {/* Formula display - collapsible, hidden by default */}
                               <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
-                                {(() => {
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id) }}
+                                  className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] hover:text-orange-500 transition-colors group"
+                                >
+                                  <svg 
+                                    className={`w-3 h-3 transition-transform ${formulaVisibleItems.has(item.line_item_id) ? 'rotate-90' : ''}`} 
+                                    fill="none" 
+                                    viewBox="0 0 24 24" 
+                                    stroke="currentColor"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                  <span className="font-medium group-hover:underline">
+                                    {formulaVisibleItems.has(item.line_item_id) ? 'Hide formula' : 'Show formula'}
+                                  </span>
+                                </button>
+                                
+                                {formulaVisibleItems.has(item.line_item_id) && (() => {
                                   // Determine if using run-based or direct hours
                                   const isRunBased = effectiveItem.runs_per_day && effectiveItem.avg_runtime_minutes && !effectiveItem.hours_per_month
                                   const runsPerDay = effectiveItem.runs_per_day || 0
