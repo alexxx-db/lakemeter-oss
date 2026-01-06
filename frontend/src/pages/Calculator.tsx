@@ -2204,9 +2204,9 @@ export default function Calculator() {
                         </div>
                       )}
                       <div className={clsx(isBulkSelectMode ? "col-span-4" : "col-span-5")}>Workload</div>
-                      <div className="col-span-4">Configuration</div>
-                      <div className="col-span-2 text-right">Cost</div>
-                      <div className="col-span-1"></div>
+                      <div className="col-span-3">Configuration</div>
+                      <div className="col-span-2 text-right pr-2">Cost</div>
+                      <div className="col-span-2"></div>
                     </div>
                     
                     {/* Rows */}
@@ -2353,7 +2353,7 @@ export default function Calculator() {
                             </div>
                             
                             {/* Configuration - Clean, minimal design */}
-                            <div className="hidden sm:flex col-span-4 items-center gap-2 min-w-0">
+                            <div className="hidden sm:flex col-span-3 items-center gap-2 min-w-0">
                               {/* Badges - only 2 colors: orange accent for key features, gray for rest */}
                               {structuredConfig.badges.length > 0 && (
                                 <div className="flex items-center gap-1 shrink-0">
@@ -2407,13 +2407,13 @@ export default function Calculator() {
                             </div>
                             
                             {/* Cost */}
-                            <div className="col-span-3 sm:col-span-2 flex flex-col items-end justify-center">
-                              <span className="font-bold text-orange-500">{formatCurrency(costs.totalCost)}</span>
-                              <span className="text-[10px] text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                            <div className="col-span-2 flex flex-col items-end justify-center pr-2">
+                              <span className="font-bold text-orange-500 whitespace-nowrap">{formatCurrency(costs.totalCost)}</span>
+                              <span className="text-[10px] text-[var(--text-muted)] whitespace-nowrap">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                             </div>
                             
                             {/* Actions */}
-                            <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-0.5">
+                            <div className="col-span-2 flex items-center justify-end gap-0.5">
                               <button
                                 onClick={(e) => handleCloneWorkload(e, item)}
                                 className="p-1.5 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
