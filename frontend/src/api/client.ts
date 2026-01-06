@@ -325,10 +325,11 @@ export const fetchInstanceVMCosts = async (params: {
   // For on_demand and spot, don't send payment_option (API expects no payment_option or NA)
   
   const { data } = await api.get('/instances/vm-costs', { params: cleanParams })
-  // API response structure: { success: true, data: { cloud, region, instance_type, pricing_options: [...] } }
-  // Extract pricing_options and enrich with top-level fields
+  // API response structure: { success: true, data: { cloud, region, instance_type, instance_specs: { dbu_rate, ... }, pricing_options: [...] } }
+  // Extract pricing_options and enrich with top-level fields, including dbu_rate from instance_specs
   if (data?.success && data?.data?.pricing_options) {
-    const { cloud, region, instance_type } = data.data
+    const { cloud, region, instance_type, instance_specs } = data.data
+    const dbuRate = instance_specs?.dbu_rate
     return data.data.pricing_options.map((option: { pricing_tier: string; payment_option: string; cost_per_hour: number }) => ({
       cloud,
       region,
@@ -336,7 +337,8 @@ export const fetchInstanceVMCosts = async (params: {
       pricing_tier: option.pricing_tier,
       payment_option: option.payment_option,
       cost_per_hour: option.cost_per_hour,
-      currency: 'USD'
+      currency: 'USD',
+      dbu_rate: dbuRate  // Include DBU rate from instance_specs
     }))
   }
   // Fallback for direct array response

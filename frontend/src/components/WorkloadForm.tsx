@@ -216,54 +216,15 @@ function CollapsibleNotes({ notes, onChange }: { notes: string; onChange: (value
   )
 }
 
-// Helper to format instance type options with pricing info
+// Helper to format instance type options - simple display
 import type { InstanceType } from '../types'
 
-function formatInstanceOption(it: InstanceType, pricingTier?: string, paymentOption?: string) {
+function formatInstanceOption(it: InstanceType) {
   // Use id as fallback for name (they should be the same - the instance_type)
   const instanceName = it.name || it.id || 'Unknown'
-  const baseLabel = it.vcpus && it.memory_gb 
+  return it.vcpus && it.memory_gb 
     ? `${instanceName} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
     : instanceName
-  
-  // Add DBU rate and VM cost if available
-  const parts: string[] = [baseLabel]
-  
-  if (it.dbu_rate) {
-    parts.push(`${it.dbu_rate.toFixed(2)} DBU/hr`)
-  }
-  
-  if (it.vm_pricing) {
-    // Get VM cost based on pricing tier
-    let vmCost: number | undefined
-    const tier = pricingTier?.toLowerCase() || 'on_demand'
-    
-    if (tier === 'on_demand' && it.vm_pricing.on_demand) {
-      vmCost = it.vm_pricing.on_demand.cost_per_hour
-    } else if (tier === 'spot' && it.vm_pricing.spot) {
-      vmCost = it.vm_pricing.spot.cost_per_hour
-    } else if (tier === 'reserved_1y' && it.vm_pricing.reserved_1y) {
-      const reserved = it.vm_pricing.reserved_1y.find(r => 
-        r.payment_option === (paymentOption || 'no_upfront')
-      ) || it.vm_pricing.reserved_1y[0]
-      vmCost = reserved?.cost_per_hour
-    } else if (tier === 'reserved_3y' && it.vm_pricing.reserved_3y) {
-      const reserved = it.vm_pricing.reserved_3y.find(r => 
-        r.payment_option === (paymentOption || 'no_upfront')
-      ) || it.vm_pricing.reserved_3y[0]
-      vmCost = reserved?.cost_per_hour
-    } else if (it.vm_pricing.on_demand) {
-      // Default to on_demand
-      vmCost = it.vm_pricing.on_demand.cost_per_hour
-    }
-    
-    if (vmCost !== undefined) {
-      parts.push(`$${vmCost.toFixed(4)}/hr`)
-    }
-  }
-  
-  // Format: "c8g.medium (1vCPU, 2GB) · 0.27 DBU/hr · $0.0458/hr"
-  return parts.length > 1 ? parts.join(' · ') : baseLabel
 }
 
 interface Props {
@@ -1160,7 +1121,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                   <SearchableSelect
                     options={instanceTypes.map(it => ({
                       value: it.id,
-                      label: formatInstanceOption(it, form.driver_pricing_tier, form.driver_payment_option),
+                      label: formatInstanceOption(it),
                       group: it.instance_family || 'General Purpose'
                     }))}
                     value={form.driver_node_type}
@@ -1256,7 +1217,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                     <SearchableSelect
                       options={instanceTypes.map(it => ({
                         value: it.id,
-                        label: formatInstanceOption(it, form.worker_pricing_tier, form.worker_payment_option),
+                        label: formatInstanceOption(it),
                         group: it.instance_family || 'General Purpose'
                       }))}
                       value={form.worker_node_type}

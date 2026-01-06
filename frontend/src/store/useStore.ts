@@ -228,6 +228,7 @@ interface Store {
   vmPricingTiers: VMPricingTier[]
   vmPaymentOptions: VMPaymentOption[]
   vmPricingMap: Record<string, number>
+  instanceDbuRateMap: Record<string, number>  // Map of "cloud:instance_type" -> dbu_rate
   
   // DBU Rates & Pricing (NEW)
   dbuRates: DBURate[]
@@ -294,6 +295,7 @@ interface Store {
   fetchVMPricing: (cloud: string, region?: string) => Promise<void>
   fetchVMCostForInstance: (cloud: string, region: string, instanceType: string, pricingTier?: string, paymentOption?: string) => Promise<number>
   getVMPrice: (cloud: string, region: string, instanceType: string, pricingTier?: string, paymentOption?: string) => number
+  getInstanceDbuRate: (cloud: string, instanceType: string) => number
   
   // Actions - DBU Rates & Pricing (NEW)
   fetchDBURates: (cloud: string, region: string, tier: string) => Promise<void>
@@ -380,6 +382,7 @@ export const useStore = create<Store>((set, get) => ({
   vmPricingTiers: STATIC_VM_PRICING_TIERS,
   vmPaymentOptions: STATIC_VM_PAYMENT_OPTIONS,
   vmPricingMap: {},
+  instanceDbuRateMap: {},
   
   // DBU Rates & Pricing
   dbuRates: [],
@@ -1028,14 +1031,23 @@ export const useStore = create<Store>((set, get) => ({
       if (vmCosts && vmCosts.length > 0) {
         // Build entries to add
         const newEntries: Record<string, number> = {}
-        vmCosts.forEach(vc => {
+        let dbuRate: number | undefined
+        vmCosts.forEach((vc: any) => {
           const key = `${cloud.toLowerCase()}:${region}:${instanceType}:${vc.pricing_tier}:${vc.payment_option}`
           newEntries[key] = vc.cost_per_hour
+          // Capture DBU rate from first entry (same for all pricing tiers)
+          if (vc.dbu_rate !== undefined && dbuRate === undefined) {
+            dbuRate = vc.dbu_rate
+          }
         })
         
         // Use functional update to safely merge with existing state (prevents race conditions)
         set(state => ({
-          vmPricingMap: { ...state.vmPricingMap, ...newEntries }
+          vmPricingMap: { ...state.vmPricingMap, ...newEntries },
+          // Also cache DBU rate if available
+          instanceDbuRateMap: dbuRate !== undefined 
+            ? { ...state.instanceDbuRateMap, [`${cloud.toLowerCase()}:${instanceType}`]: dbuRate }
+            : state.instanceDbuRateMap
         }))
         
         // Return the requested pricing tier
@@ -1099,6 +1111,15 @@ export const useStore = create<Store>((set, get) => ({
     
     // VM price not found - return 0, will be populated when fetch completes
     return 0
+  },
+  
+  getInstanceDbuRate: (cloud, instanceType) => {
+    if (!instanceType || instanceType.trim() === '') {
+      return 0
+    }
+    const { instanceDbuRateMap } = get()
+    const key = `${cloud.toLowerCase()}:${instanceType}`
+    return instanceDbuRateMap[key] || 0
   },
   
   // DBU Rates & Pricing

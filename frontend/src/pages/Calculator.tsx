@@ -289,8 +289,11 @@ export default function Calculator() {
     setSelectedRegion,
     fetchVMCostForInstance,
     getVMPrice,
+    getInstanceDbuRate,
     // VM pricing map - subscribe to trigger re-render when prices are fetched
     vmPricingMap,
+    // Instance DBU Rate map - subscribe to trigger re-render when DBU rates are fetched
+    instanceDbuRateMap,
     // DBU Rates
     dbuRatesMap,
     fetchDBURates,
@@ -1246,7 +1249,7 @@ export default function Calculator() {
     })
     
     return { totalDBUs, totalDBUCost, totalVMCost, totalCost }
-  }, [lineItems, formData.cloud, formData.region, formData.tier, workloadTypes, getVMPrice, vmPricingMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
+  }, [lineItems, formData.cloud, formData.region, formData.tier, workloadTypes, getVMPrice, vmPricingMap, getInstanceDbuRate, instanceDbuRateMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
   
   // Sync local calculated costs to the store for AI Assistant
   useEffect(() => {
@@ -1261,7 +1264,7 @@ export default function Calculator() {
       }
     })
     setLocalCalculatedCosts(costs)
-  }, [lineItems, pendingFormEdits, formData.cloud, formData.region, formData.tier, setLocalCalculatedCosts, getVMPrice, vmPricingMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
+  }, [lineItems, pendingFormEdits, formData.cloud, formData.region, formData.tier, setLocalCalculatedCosts, getVMPrice, vmPricingMap, getInstanceDbuRate, instanceDbuRateMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
   
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {
@@ -2809,16 +2812,17 @@ export default function Calculator() {
                                   const photonEnabled = effectiveItem.photon_enabled
                                   const hasVMCost = costs.vmCost > 0 && !isServerless
                                   
-                                  // Look up actual DBU rates from instanceTypes
+                                  // Look up actual DBU rates - prefer cached API data, fallback to instanceTypes
+                                  const cloud = formData.cloud || 'aws'
+                                  const region = formData.region || ''
                                   const driverInstance = instanceTypes.find(it => it.id === driverNode || it.name === driverNode)
                                   const workerInstance = instanceTypes.find(it => it.id === workerNode || it.name === workerNode)
                                   
-                                  const driverDBURate = driverInstance?.dbu_rate || 0
-                                  const workerDBURate = workerInstance?.dbu_rate || 0
+                                  // Use getInstanceDbuRate (from dynamic API) with fallback to instanceTypes
+                                  const driverDBURate = getInstanceDbuRate(cloud, driverNode) || driverInstance?.dbu_rate || 0
+                                  const workerDBURate = getInstanceDbuRate(cloud, workerNode) || workerInstance?.dbu_rate || 0
                                   
                                   // Get VM costs using getVMPrice (same as cost calculation) - this properly fetches from VM pricing cache
-                                  const cloud = formData.cloud || 'aws'
-                                  const region = formData.region || ''
                                   const driverVMCost = region && driverNode 
                                     ? getVMPrice(cloud, region, driverNode, effectiveItem.driver_pricing_tier || 'on_demand', effectiveItem.driver_payment_option || 'no_upfront')
                                     : null
