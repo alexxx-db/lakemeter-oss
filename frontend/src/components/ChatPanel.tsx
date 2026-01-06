@@ -378,9 +378,14 @@ export function ChatPanel({
                   result: chunk.result
                 })
               } else if (chunk.type === 'proposal') {
-                // AI proposed a workload - add to pending proposals
-                if (chunk.workload) {
-                  setProposedWorkloads(prev => [...prev, chunk.workload])
+                // AI proposed a workload - add to pending proposals (deduplicate by proposal_id)
+                if (chunk.workload && chunk.workload.proposal_id) {
+                  setProposedWorkloads(prev => {
+                    // Check if this proposal already exists
+                    const exists = prev.some(p => p.proposal_id === chunk.workload.proposal_id)
+                    if (exists) return prev
+                    return [...prev, chunk.workload]
+                  })
                 }
               } else if (chunk.type === 'estimate_proposal') {
                 // AI proposed an estimate - set pending proposal

@@ -2580,7 +2580,7 @@ export default function Calculator() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                   </svg>
                                   <span className="font-medium group-hover:underline">
-                                    {formulaVisibleItems.has(item.line_item_id) ? 'Hide formula' : 'Show formula'}
+                                    {formulaVisibleItems.has(item.line_item_id) ? 'Hide calculations' : 'Show calculations'}
                                   </span>
                                 </button>
                                 

@@ -856,23 +856,60 @@ class EstimateAgent:
     def _trim_conversation_history(self, max_messages: int = 20):
         """
         Trim conversation history to prevent it from growing too long.
-        Keeps the most recent messages while preserving tool call/result pairs.
+        Properly handles tool_use/tool_result pairs to avoid API errors.
+        
+        Strategy:
+        1. Find pairs of messages (assistant with tool_use + user with tool_result)
+        2. Keep complete pairs, remove orphaned messages
+        3. Keep at most max_messages but never break a pair
         """
         if len(self.conversation_history) <= max_messages:
             return
         
-        # Keep only the most recent messages
-        # But be careful not to break tool call/result pairs
-        trimmed = self.conversation_history[-max_messages:]
+        # Find indices of messages that must stay together (tool_use and its tool_result)
+        # A tool_use in assistant message must be followed by tool_result in next user message
+        tool_use_indices = set()
         
-        # If the first message is a tool result, we need to remove it
-        # as it would reference a tool call that's no longer in history
-        while trimmed and isinstance(trimmed[0].get("content"), list):
-            # This is likely a tool result - remove it
-            trimmed = trimmed[1:]
+        for i, msg in enumerate(self.conversation_history):
+            # Check if this is an assistant message with tool_calls
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                tool_use_indices.add(i)
+                # The next message should be the tool_result
+                if i + 1 < len(self.conversation_history):
+                    next_msg = self.conversation_history[i + 1]
+                    if next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list):
+                        # This is a tool_result message - mark it as paired
+                        tool_use_indices.add(i + 1)
         
-        self.conversation_history = trimmed
-        log_info(f"Trimmed conversation history to {len(self.conversation_history)} messages")
+        # Start from the end and find a safe cut point
+        # We want at most max_messages, but we can't cut in the middle of a tool pair
+        start_idx = len(self.conversation_history) - max_messages
+        
+        # Ensure we don't start in the middle of a tool pair
+        # If start_idx lands on a tool_result (i.e., start_idx-1 is a tool_use), move forward
+        while start_idx > 0 and start_idx < len(self.conversation_history):
+            if start_idx in tool_use_indices:
+                # Check if this is a tool_result that needs its tool_use before it
+                prev_idx = start_idx - 1
+                if prev_idx in tool_use_indices:
+                    # We're cutting between tool_use and tool_result - bad!
+                    # Move start forward to skip this broken pair
+                    start_idx += 1
+                    continue
+            
+            # Also check if start_idx-1 is a tool_use without its result being included
+            if start_idx - 1 in tool_use_indices and start_idx not in tool_use_indices:
+                # The message before is a tool_use but we're not including its result
+                # Move forward to skip the orphaned tool_use
+                start_idx += 1
+                continue
+            
+            break
+        
+        # Apply the trim
+        if start_idx > 0:
+            self.conversation_history = self.conversation_history[start_idx:]
+            log_info(f"Trimmed conversation history to {len(self.conversation_history)} messages (from {start_idx})")
     
     def set_mode(self, mode: str):
         """Set the agent mode (affects available tools and system prompt)."""
@@ -1033,6 +1070,7 @@ class EstimateAgent:
         # Stream response
         full_content = ""
         tool_calls = []
+        executed_tool_ids = set()  # Track tools that have already been executed
         current_tool = None
         tool_input_json = ""
         
@@ -1067,18 +1105,23 @@ class EstimateAgent:
             
             elif chunk_type == "tool_call_complete":
                 # Handle complete tool call from OpenAI format
+                tool_id = chunk.get("id")
                 current_tool = {
-                    "id": chunk.get("id"),
+                    "id": tool_id,
                     "name": chunk.get("name"),
                     "arguments": chunk.get("arguments", {})
                 }
                 tool_calls.append(current_tool)
                 
-                # Execute tool
+                # Execute tool and mark as executed
                 result = await self._execute_tool(
                     current_tool["name"],
                     current_tool["arguments"]
                 )
+                executed_tool_ids.add(tool_id)
+                
+                # Store result with tool for later history update
+                current_tool["_result"] = result
                 
                 yield {
                     "type": "tool_result",
@@ -1129,15 +1172,35 @@ class EstimateAgent:
         
         # Process any tool calls that were accumulated
         if tool_calls:
-            # Add assistant response to history
+            # Add assistant response to history (clean tool_calls without _result)
+            clean_tool_calls = [{k: v for k, v in tc.items() if k != "_result"} for tc in tool_calls]
             self.conversation_history.append({
                 "role": "assistant",
                 "content": full_content,
-                "tool_calls": tool_calls
+                "tool_calls": clean_tool_calls
             })
             
             # Execute tools and add results to history
             for tool_call in tool_calls:
+                tool_id = tool_call.get("id")
+                
+                # Check if already executed during streaming (has cached result)
+                if tool_id in executed_tool_ids and "_result" in tool_call:
+                    # Use cached result, just add to history
+                    result = tool_call["_result"]
+                    self.conversation_history.append({
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": tool_call["id"],
+                                "content": json.dumps(result)
+                            }
+                        ]
+                    })
+                    continue
+                
+                # Execute tool (for Claude format streaming that doesn't hit tool_call_complete)
                 result = await self._execute_tool(
                     tool_call["name"],
                     tool_call["arguments"]
