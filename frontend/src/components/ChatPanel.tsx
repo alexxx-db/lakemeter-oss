@@ -80,8 +80,6 @@ interface ChatPanelProps {
   currentWorkloads?: any[]
   // Calculated costs for each workload (keyed by item_id)
   itemCosts?: Record<string, { total: number; dbu: number; vm: number }>
-  // Mode: 'estimates_list' for home page (create only), 'estimate_detail' for full functionality
-  mode?: 'estimates_list' | 'estimate_detail'
   // Controlled panel width for push layout
   panelWidth?: number
   onWidthChange?: (width: number) => void
@@ -96,7 +94,6 @@ export function ChatPanel({
   currentEstimate,
   currentWorkloads,
   itemCosts,
-  mode = 'estimate_detail',
   panelWidth: controlledWidth,
   onWidthChange
 }: ChatPanelProps) {
@@ -180,21 +177,13 @@ export function ChatPanel({
   
   // Quick action chips - context-aware suggestions with explicit tool-triggering prompts
   const quickActions = useMemo(() => {
-    if (mode === 'estimates_list') {
-      return [
-        { label: 'Create AWS estimate', action: 'Create a new estimate for AWS' },
-        { label: 'Create Azure estimate', action: 'Create a new estimate for Azure' },
-        { label: 'Create GCP estimate', action: 'Create a new estimate for GCP' },
-      ]
-    }
-    // Estimate detail mode
     const hasWorkloads = (currentWorkloads?.length || 0) > 0
     if (!hasWorkloads) {
       return [
-        { label: '➕ Add Jobs', action: 'Propose a Jobs compute workload for my estimate. Use reasonable defaults for a daily ETL job.' },
-        { label: '➕ Add SQL', action: 'Propose a Databricks SQL workload for my estimate. Suggest a medium serverless warehouse.' },
-        { label: '➕ Add DLT', action: 'Propose a DLT pipeline workload for my estimate. Suggest serverless with Core edition.' },
-        { label: '➕ Add Model Serving', action: 'Propose a Model Serving workload for my estimate.' },
+        { label: '💡 Optimize', action: 'Analyze my workloads and suggest specific optimizations to reduce costs.' },
+        { label: '📊 Summary', action: 'Give me a summary of my current estimate with cost breakdown by workload type.' },
+        { label: '➕ Add workload', action: 'Propose a new workload for my existing estimate. Ask me what type I need.' },
+        { label: '❓ Pricing', action: 'Explain how Databricks pricing works for the workload types I have.' },
       ]
     }
     return [
@@ -203,7 +192,7 @@ export function ChatPanel({
       { label: '➕ Add workload', action: 'Propose a new workload for my existing estimate. Ask me what type I need.' },
       { label: '❓ Pricing', action: 'Explain how Databricks pricing works for the workload types I have.' },
     ]
-  }, [mode, currentWorkloads])
+  }, [currentWorkloads])
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -219,10 +208,7 @@ export function ChatPanel({
 
   // Build welcome message content based on context
   const buildWelcomeContent = useCallback(() => {
-    if (mode === 'estimates_list') {
-      // Estimates list page - create only mode
-      return `Hi! I'm your Databricks pricing assistant. I can help you **create new estimates**.\n\nTell me about your project and I'll set up an estimate for you. For example:\n- "Create an estimate for a data lakehouse on AWS"\n- "I need to plan costs for our Azure ML platform"\n- "Set up a GCP estimate for our analytics team"\n\n💡 *Once created, you can click on the estimate to add workloads and get detailed recommendations.*`
-    } else if (currentEstimate) {
+    if (currentEstimate) {
       // Estimate detail page with existing estimate
       const estimateName = currentEstimate.estimate_name || currentEstimate.name || 'Unnamed'
       const cloud = (currentEstimate.cloud || 'AWS').toUpperCase()
@@ -251,7 +237,7 @@ export function ChatPanel({
       // Estimate detail page without estimate (loading or new)
       return `Hi! I'm your Databricks pricing assistant. I can help you create and manage cost estimates.\n\n*Loading estimate details...*`
     }
-  }, [mode, currentEstimate, currentWorkloads, totalCost])
+  }, [currentEstimate, currentWorkloads, totalCost])
   
   // Add welcome message on first open
   useEffect(() => {
@@ -329,8 +315,7 @@ export function ChatPanel({
           conversation_id: conversationId,
           estimate_context: currentEstimate || draftEstimate,
           workloads_context: enrichedWorkloads,
-          stream: true,
-          mode: mode
+          stream: true
         }),
         signal: abortControllerRef.current.signal
       })
@@ -441,7 +426,7 @@ export function ChatPanel({
       setIsLoading(false)
       abortControllerRef.current = null
     }
-  }, [inputValue, isLoading, conversationId, currentEstimate, currentWorkloads, draftEstimate, draftWorkloads, itemCosts, mode])
+  }, [inputValue, isLoading, conversationId, currentEstimate, currentWorkloads, draftEstimate, draftWorkloads, itemCosts])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -704,7 +689,7 @@ export function ChatPanel({
       </div>
 
       {/* Current Estimate Context - Shows the estimate being worked on */}
-      {mode === 'estimate_detail' && currentEstimate && (
+      {currentEstimate && (
         <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-900/50 border-b border-[var(--border-primary)]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">

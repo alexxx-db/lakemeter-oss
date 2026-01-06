@@ -4,10 +4,13 @@ AI Agent Service for Lakemeter
 Orchestrates conversations with Claude to help users create and analyze estimates.
 Implements tool calling for estimate management operations.
 
-NOTE: This agent does NOT perform cost calculations. It:
-1. Proposes workload configurations based on user requirements
-2. Analyzes existing estimates using costs provided in context
-3. Creates drafts that are then saved via the regular API flow
+The agent operates within the Estimate Detail page context, helping users:
+1. Propose workload configurations based on requirements
+2. Analyze existing estimates using calculated costs from context
+3. Provide optimization recommendations and best practices
+
+NOTE: This agent does NOT perform cost calculations - it uses costs provided by
+the Lakemeter pricing engine after configurations are saved.
 """
 import json
 import uuid
@@ -262,41 +265,7 @@ Query Selectivity Categories (% of table returned as results):
 - Ask clarifying questions before proposing configurations - don't assume!
 - ALWAYS use the estimate's cloud provider when suggesting instance types"""
 
-# System prompt for Estimates List page (create new estimates only)
-SYSTEM_PROMPT_ESTIMATES_LIST = SYSTEM_PROMPT_BASE + """
-
-## Your Role (Estimates List Page)
-You are on the main estimates page. Here you can ONLY help users CREATE NEW ESTIMATES.
-You cannot view, edit, or analyze existing estimates from this page.
-
-## Your Capabilities Here
-1. **Ask Questions**: Understand what the user wants to estimate
-2. **Create New Estimates**: Propose new pricing estimates for confirmation
-
-## CRITICAL: Ask Before You Create
-NEVER create an estimate without asking at least these questions:
-1. "What project or use case is this estimate for?" (for naming)
-2. "Which cloud provider? (AWS, Azure, or GCP)"
-3. "Any specific region requirements?" (for compliance/latency)
-
-## Conversation Flow
-1. **Greet**: "Hi! I can help you create a new Databricks pricing estimate."
-2. **Ask Questions**: Get project name, cloud, and region
-3. **Propose**: Use propose_estimate with the gathered info
-4. **Guide Next Steps**: After confirmation, tell them to click the estimate to add workloads
-
-## Example Conversation
-User: "I need to estimate costs for a data pipeline"
-You: "I'd be happy to help! A few quick questions:
-1. What would you like to name this estimate? (e.g., 'Q1 Data Pipeline')
-2. Which cloud provider are you using - AWS, Azure, or GCP?
-3. Any preferred region for compliance or latency reasons?"
-
-User: "Call it 'Marketing ETL', we use AWS in us-east-1"
-You: [Use propose_estimate tool with those details]"""
-
-# System prompt for Estimate Detail page (full functionality)
-SYSTEM_PROMPT_ESTIMATE_DETAIL = SYSTEM_PROMPT_BASE + """
+SYSTEM_PROMPT = SYSTEM_PROMPT_BASE + """
 
 ## Your Role (Estimate Detail Page)
 You are viewing a specific estimate with its workloads and calculated costs.
@@ -472,47 +441,9 @@ Note: All three types support Unity Catalog, auto-scaling, scale to zero, and pa
 
 **When in doubt:** If user mentions filtering by date ranges, user IDs, specific categories, or "drill-down" queries, assume moderate selectivity (5%) and recommend Pro/Serverless for datasets >10GB."""
 
-# For backwards compatibility
-SYSTEM_PROMPT = SYSTEM_PROMPT_ESTIMATE_DETAIL
 
-
-# Tool definitions for Estimates List page (create only)
-TOOLS_ESTIMATES_LIST = [
-    {
-        "name": "propose_estimate",
-        "description": "Propose a new estimate configuration for user confirmation. The user will review and confirm before the estimate is created.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Name for the estimate (e.g., 'Q1 Data Pipeline', 'ML Platform Costs')"
-                },
-                "cloud": {
-                    "type": "string",
-                    "enum": ["aws", "azure", "gcp"],
-                    "description": "Cloud provider"
-                },
-                "region": {
-                    "type": "string",
-                    "description": "Cloud region (e.g., 'us-east-1', 'eastus', 'us-central1')"
-                },
-                "description": {
-                    "type": "string",
-                    "description": "Optional description of the estimate purpose"
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "Brief explanation of why this configuration is recommended"
-                }
-            },
-            "required": ["name", "cloud", "region"]
-        }
-    }
-]
-
-# Tool definitions for Estimate Detail page (full functionality)
-TOOLS_ESTIMATE_DETAIL = [
+# Tool definitions for the AI Assistant
+TOOLS = [
     {
         "name": "propose_workload",
         "description": """Propose a new workload configuration for user confirmation. 
@@ -820,30 +751,27 @@ This will propose all necessary workloads (data prep, vector search, foundation 
     }
 ]
 
-# For backwards compatibility
-ESTIMATE_TOOLS = TOOLS_ESTIMATE_DETAIL
-
 
 class EstimateAgent:
     """
-    AI Agent that helps users create and manage estimates.
+    AI Agent that helps users create and manage Databricks pricing estimates.
     
-    Maintains conversation state and handles tool execution.
-    Does NOT perform cost calculations - uses costs from context.
+    Operates within the Estimate Detail page context:
+    - Proposes workload configurations based on user requirements
+    - Analyzes estimates using actual calculated costs from context
+    - Provides optimization recommendations and best practices
     
-    Modes:
-    - 'estimates_list': For main estimates page, only create new estimates
-    - 'estimate_detail': For individual estimate view, full functionality
+    Does NOT perform cost calculations - uses costs from the pricing engine.
     """
     
-    def __init__(self, claude_client: ClaudeAIClient, mode: str = "estimate_detail"):
+    def __init__(self, claude_client: ClaudeAIClient):
         self.client = claude_client
-        self.mode = mode
         self.conversation_history: List[Dict[str, Any]] = []
         self.current_estimate: Optional[Dict[str, Any]] = None
         self.current_workloads: List[Dict[str, Any]] = []  # Actual workloads with costs
         self.proposed_workloads: List[Dict[str, Any]] = []  # Pending workload confirmations
         self.proposed_estimate: Optional[Dict[str, Any]] = None  # Pending estimate confirmation
+        self._conversation_summary: str = ""  # Summary of old conversation for context
     
     def reset(self):
         """Reset the agent state for a new conversation."""
@@ -852,6 +780,7 @@ class EstimateAgent:
         self.current_workloads = []
         self.proposed_workloads = []
         self.proposed_estimate = None
+        self._conversation_summary = ""
     
     def _trim_conversation_history(self, max_messages: int = 20):
         """
@@ -911,21 +840,123 @@ class EstimateAgent:
             self.conversation_history = self.conversation_history[start_idx:]
             log_info(f"Trimmed conversation history to {len(self.conversation_history)} messages (from {start_idx})")
     
-    def set_mode(self, mode: str):
-        """Set the agent mode (affects available tools and system prompt)."""
-        self.mode = mode
+    async def _summarize_conversation(self, messages_to_summarize: List[Dict[str, Any]]) -> str:
+        """
+        Summarize old conversation messages to preserve context while reducing tokens.
+        
+        Args:
+            messages_to_summarize: List of messages to summarize
+            
+        Returns:
+            A concise summary of the conversation
+        """
+        if not messages_to_summarize:
+            return ""
+        
+        # Build a simple text representation of messages to summarize
+        conversation_text = []
+        for msg in messages_to_summarize:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            
+            # Skip tool result messages (they're technical)
+            if isinstance(content, list):
+                continue
+                
+            if role == "user":
+                conversation_text.append(f"User: {content}")
+            elif role == "assistant":
+                # Truncate long assistant responses
+                if len(content) > 500:
+                    content = content[:500] + "..."
+                conversation_text.append(f"Assistant: {content}")
+        
+        if not conversation_text:
+            return ""
+        
+        # Use Claude to summarize
+        summary_prompt = f"""Summarize this conversation in 2-3 sentences, focusing on:
+1. What the user asked for
+2. What workloads were discussed or proposed
+3. Any key decisions made
+
+Conversation:
+{chr(10).join(conversation_text)}
+
+Summary (be concise):"""
+        
+        try:
+            response = await self.client.chat(
+                messages=[{"role": "user", "content": summary_prompt}],
+                tools=[],
+                system="You are a helpful assistant that summarizes conversations concisely.",
+                max_tokens=200,
+                temperature=0.3
+            )
+            return response.get("content", "").strip()
+        except Exception as e:
+            log_warning(f"Failed to summarize conversation: {e}")
+            return ""
+    
+    async def _manage_conversation_history(self, max_recent: int = 10, summarize_threshold: int = 15):
+        """
+        Manage conversation history by summarizing old messages.
+        
+        Strategy:
+        - If history > summarize_threshold messages, summarize older messages
+        - Keep the last max_recent messages intact for context
+        - Add summary as a system context note
+        
+        Args:
+            max_recent: Number of recent messages to keep intact
+            summarize_threshold: Trigger summarization when history exceeds this
+        """
+        if len(self.conversation_history) <= summarize_threshold:
+            return
+        
+        # Separate messages to summarize vs keep
+        messages_to_summarize = self.conversation_history[:-max_recent]
+        messages_to_keep = self.conversation_history[-max_recent:]
+        
+        # Ensure we don't break tool_use/tool_result pairs in messages_to_keep
+        # If the first message to keep is a tool_result, include its tool_use
+        while messages_to_keep:
+            first_msg = messages_to_keep[0]
+            if (first_msg.get("role") == "user" and 
+                isinstance(first_msg.get("content"), list)):
+                # This is a tool_result - need the previous message (tool_use)
+                if messages_to_summarize:
+                    messages_to_keep.insert(0, messages_to_summarize.pop())
+                else:
+                    # No more messages to pull from - remove orphaned tool_result
+                    messages_to_keep.pop(0)
+            else:
+                break
+        
+        # Summarize old messages
+        summary = await self._summarize_conversation(messages_to_summarize)
+        
+        if summary:
+            # Add summary as context for the agent (will be included in system prompt)
+            self._conversation_summary = summary
+            log_info(f"Summarized {len(messages_to_summarize)} messages, keeping {len(messages_to_keep)} recent")
+        
+        # Update history with just the recent messages
+        self.conversation_history = messages_to_keep
     
     def _get_system_prompt(self) -> str:
-        """Get the appropriate system prompt based on mode."""
-        if self.mode == "estimates_list":
-            return SYSTEM_PROMPT_ESTIMATES_LIST
-        return SYSTEM_PROMPT_ESTIMATE_DETAIL
+        """Get the system prompt, including any conversation summary."""
+        prompt = SYSTEM_PROMPT
+        
+        # Add conversation summary if available
+        if hasattr(self, '_conversation_summary') and self._conversation_summary:
+            prompt += f"\n\n## Previous Conversation Summary\n{self._conversation_summary}"
+        
+        return prompt
     
     def _get_tools(self) -> List[Dict[str, Any]]:
-        """Get the appropriate tools based on mode."""
-        if self.mode == "estimates_list":
-            return TOOLS_ESTIMATES_LIST
-        return TOOLS_ESTIMATE_DETAIL
+        """Get the available tools."""
+        return TOOLS
     
     def set_context(self, estimate: Dict[str, Any], workloads: List[Dict[str, Any]] = None):
         """
@@ -1074,8 +1105,9 @@ class EstimateAgent:
         current_tool = None
         tool_input_json = ""
         
-        # Trim conversation history to prevent 400 errors from too-long requests
-        self._trim_conversation_history()
+        # Manage conversation history - summarize if too long, then trim if still needed
+        await self._manage_conversation_history()
+        self._trim_conversation_history()  # Fallback safety trim
         
         async for chunk in self.client.chat_stream(
             messages=self.conversation_history,
@@ -2575,7 +2607,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
         }
 
 
-def create_agent(token: str, mode: str = "estimate_detail") -> EstimateAgent:
-    """Create a new agent instance with the given token and mode."""
+def create_agent(token: str) -> EstimateAgent:
+    """Create a new agent instance with the given token."""
     client = get_claude_client(token)
-    return EstimateAgent(client, mode=mode)
+    return EstimateAgent(client)

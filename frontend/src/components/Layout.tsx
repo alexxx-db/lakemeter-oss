@@ -387,7 +387,6 @@ export default function Layout() {
               }
             }
           }}
-          mode="estimate_detail"
           onWidthChange={setChatPanelWidth}
           panelWidth={chatPanelWidth}
         />

@@ -35,8 +35,6 @@ class ChatRequest(BaseModel):
     estimate_context: Optional[Dict[str, Any]] = None
     workloads_context: Optional[List[Dict[str, Any]]] = None
     stream: bool = True
-    # Context mode: 'estimates_list' for home page, 'estimate_detail' for editing existing estimate
-    mode: str = "estimate_detail"
 
 
 class ChatResponse(BaseModel):
@@ -59,14 +57,13 @@ class ConfirmWorkloadRequest(BaseModel):
 _conversation_agents: Dict[str, EstimateAgent] = {}
 
 
-def _get_or_create_agent(conversation_id: str, token: str, mode: str = "estimate_detail") -> EstimateAgent:
+def _get_or_create_agent(conversation_id: str, token: str) -> EstimateAgent:
     """Get existing agent or create new one for a conversation."""
     if conversation_id not in _conversation_agents:
-        _conversation_agents[conversation_id] = create_agent(token, mode=mode)
+        _conversation_agents[conversation_id] = create_agent(token)
     else:
-        # Update token and mode for existing agent
+        # Update token for existing agent
         _conversation_agents[conversation_id].client.set_token(token)
-        _conversation_agents[conversation_id].set_mode(mode)
     return _conversation_agents[conversation_id]
 
 
@@ -105,7 +102,7 @@ async def chat(
     conversation_id = chat_request.conversation_id or str(uuid.uuid4())
     
     _cleanup_old_conversations()
-    agent = _get_or_create_agent(conversation_id, token, mode=chat_request.mode)
+    agent = _get_or_create_agent(conversation_id, token)
     
     # Set estimate context if provided (now includes workloads with their costs)
     if chat_request.estimate_context or chat_request.workloads_context:
@@ -167,7 +164,7 @@ async def chat_stream(
     conversation_id = chat_request.conversation_id or str(uuid.uuid4())
     
     _cleanup_old_conversations()
-    agent = _get_or_create_agent(conversation_id, token, mode=chat_request.mode)
+    agent = _get_or_create_agent(conversation_id, token)
     
     # Set estimate context if provided (now includes workloads with their costs)
     if chat_request.estimate_context or chat_request.workloads_context:
