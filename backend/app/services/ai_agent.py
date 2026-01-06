@@ -365,6 +365,31 @@ Once you answer these, I'll propose each workload with the right configuration!
 - For spot workers: Only for fault-tolerant batch jobs that can handle interruptions
 - ALWAYS use instance types appropriate for the estimate's cloud provider!
 
+## IMPORTANT: Detailed Rationale for Workloads
+When calling propose_workload, you MUST include a comprehensive `detailed_rationale` field that explains:
+
+**Format your detailed_rationale like this:**
+```
+**Configuration:**
+• Type: [workload type and purpose]
+• Schedule: [frequency, days per month]
+• Runtime: [hours/minutes per run]
+• Cluster: [workers + driver, instance types]
+• Key features: [Photon, serverless, etc.]
+• Pricing: [on-demand/spot/reserved and why]
+
+**Why this setup:**
+• [Explain each key configuration decision]
+• [Why this instance type/size]
+• [Why this pricing tier]
+• [Any trade-offs considered]
+
+**Cost optimization notes:**
+• [Tips for future optimization like reserved instances]
+```
+
+This detailed rationale will be saved as the workload notes for the user's reference.
+
 ## DBSQL Sizing Guidelines
 
 ### Concurrent Users to Queries Per Minute Calculation
@@ -642,17 +667,23 @@ The user will review and confirm before it's added to the estimate.""",
                 # === Notes (DETAILED) ===
                 "reason": {
                     "type": "string",
-                    "description": "Brief one-line summary of why this configuration was chosen"
+                    "description": "Brief one-line summary of the use case (e.g., 'Daily batch ETL processing 100GB data')"
+                },
+                "detailed_rationale": {
+                    "type": "string",
+                    "description": """REQUIRED: Full detailed explanation of WHY this configuration was chosen. Include:
+1. **Configuration summary** - Type, schedule, runtime, cluster setup
+2. **Why this setup** - Bullet points explaining each key decision (serverless vs classic, worker count, Photon, pricing tier)
+3. **Cost optimization notes** - Any tips for future optimization (e.g., reserved instances)
+
+Format with markdown bullets (•) for readability. This will be saved as the workload notes."""
                 },
                 "notes": {
                     "type": "string",
-                    "description": """OPTIONAL: You can leave this empty - comprehensive notes will be auto-generated.
-If you want to add custom notes, they will be REPLACED by auto-generated detailed notes covering:
-- Configuration rationale, sizing assumptions, cost considerations, usage assumptions, and trade-offs.
-Recommendation: Leave empty and let the system generate comprehensive notes automatically."""
+                    "description": "DEPRECATED: Use detailed_rationale instead. Will be ignored if detailed_rationale is provided."
                 }
             },
-            "required": ["workload_type", "workload_name", "reason"]
+            "required": ["workload_type", "workload_name", "reason", "detailed_rationale"]
         }
     },
     {
@@ -1867,6 +1898,9 @@ Each workload needs to be confirmed individually. Review the configurations and 
                     }
         
         # Build workload configuration with defaults
+        # Use detailed_rationale as the primary notes source
+        detailed_rationale = kwargs.pop("detailed_rationale", None)
+        
         workload = {
             "proposal_id": str(uuid.uuid4()),
             "workload_type": workload_type,
@@ -1876,6 +1910,11 @@ Each workload needs to be confirmed individually. Review the configurations and 
             "status": "pending_confirmation",
             **kwargs
         }
+        
+        # If detailed_rationale provided by AI, use it as the notes (preferred)
+        if detailed_rationale:
+            # Format as clean notes with header
+            workload["notes"] = f"AI Assistant Recommendation:\n{detailed_rationale}"
         
         # Apply sensible defaults based on workload type
         workload = self._apply_defaults(workload)
@@ -2524,8 +2563,17 @@ Each workload needs to be confirmed individually. Review the configurations and 
         else:
             generated_notes = ""
         
-        # Only use our comprehensive generated notes, not the LLM's brief summary
-        if generated_notes:
+        # Check if AI provided detailed_rationale (indicated by "AI Assistant Recommendation:" prefix)
+        existing_notes = workload.get("notes", "")
+        has_ai_rationale = existing_notes.startswith("AI Assistant Recommendation:")
+        
+        if has_ai_rationale:
+            # Preserve AI's detailed rationale - don't overwrite with auto-generated notes
+            # Just append technical details if needed
+            if generated_notes:
+                workload["notes"] = f"{existing_notes}\n\n---\n**Technical Details:**\n{generated_notes}"
+        elif generated_notes:
+            # No AI rationale provided - use auto-generated notes
             workload["notes"] = generated_notes
         else:
             # Fallback only if no notes were generated at all
