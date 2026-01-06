@@ -360,7 +360,7 @@ Once you answer these, I'll propose each workload with the right configuration!
 ## Configuration Tips
 - For JOBS/DLT: Ask about runs_per_day + avg_runtime_minutes for batch, OR hours_per_month for continuous
 - For DBSQL: Ask about total users, concurrency %, data volume, and query selectivity to size warehouse
-- For serverless: No VM types needed, but ask about workload intensity for cost estimates
+- For serverless: STILL include VM types (for DBU rate calculation), but note VMs are managed by Databricks
 - For reserved pricing: Only recommend for predictable, long-running workloads
 - For spot workers: Only for fault-tolerant batch jobs that can handle interruptions
 - ALWAYS use instance types appropriate for the estimate's cloud provider!
@@ -840,6 +840,50 @@ class EstimateAgent:
             self.conversation_history = self.conversation_history[start_idx:]
             log_info(f"Trimmed conversation history to {len(self.conversation_history)} messages (from {start_idx})")
     
+    def _validate_conversation_history(self):
+        """
+        Validate and fix conversation history to ensure tool_use/tool_result pairs are complete.
+        Removes orphaned tool_use messages that don't have corresponding tool_result responses.
+        """
+        if not self.conversation_history:
+            return
+        
+        # Collect tool_use IDs from assistant messages
+        tool_use_ids = set()
+        tool_result_ids = set()
+        
+        for msg in self.conversation_history:
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                for tc in msg.get("tool_calls", []):
+                    if tc.get("id"):
+                        tool_use_ids.add(tc["id"])
+            
+            if msg.get("role") == "user" and isinstance(msg.get("content"), list):
+                for item in msg.get("content", []):
+                    if item.get("type") == "tool_result" and item.get("tool_use_id"):
+                        tool_result_ids.add(item["tool_use_id"])
+        
+        # Find orphaned tool_use IDs (those without tool_results)
+        orphaned_ids = tool_use_ids - tool_result_ids
+        
+        if orphaned_ids:
+            log_warning(f"Found {len(orphaned_ids)} orphaned tool_use messages, cleaning up...")
+            
+            # Remove assistant messages with orphaned tool_use
+            cleaned_history = []
+            for msg in self.conversation_history:
+                if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                    # Check if any tool_call in this message is orphaned
+                    msg_tool_ids = {tc.get("id") for tc in msg.get("tool_calls", [])}
+                    if msg_tool_ids & orphaned_ids:
+                        # Skip this message entirely - it has orphaned tool calls
+                        log_info(f"Removing assistant message with orphaned tool_use")
+                        continue
+                cleaned_history.append(msg)
+            
+            self.conversation_history = cleaned_history
+            log_info(f"Cleaned conversation history: {len(self.conversation_history)} messages remaining")
+    
     async def _summarize_conversation(self, messages_to_summarize: List[Dict[str, Any]]) -> str:
         """
         Summarize old conversation messages to preserve context while reducing tokens.
@@ -1104,6 +1148,9 @@ Summary (be concise):"""
         executed_tool_ids = set()  # Track tools that have already been executed
         current_tool = None
         tool_input_json = ""
+        
+        # Validate and clean up conversation history before making API call
+        self._validate_conversation_history()
         
         # Manage conversation history - summarize if too long, then trim if still needed
         await self._manage_conversation_history()
@@ -1973,12 +2020,19 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("• **Spot best practices**: Enable retries, set max spot price limit")
                 
             else:  # Serverless
+                # IMPORTANT: Still set VM specs for DBU rate calculation (even though VMs are managed)
+                workload.setdefault("num_workers", 4)
+                workload.setdefault("driver_node_type", default_instance)
+                workload.setdefault("worker_node_type", default_instance)
+                workload.setdefault("worker_pricing_tier", "on_demand")  # Serverless uses on-demand equivalent pricing
+                workload.setdefault("driver_pricing_tier", "on_demand")
+                
                 notes_parts.append("=" * 60)
                 notes_parts.append("**DATABRICKS JOBS (SERVERLESS MODE) CONFIGURATION**")
                 notes_parts.append("=" * 60)
                 notes_parts.append("")
                 notes_parts.append("**🚀 Serverless Compute**:")
-                notes_parts.append("• **Zero infrastructure management**: No instance types, cluster sizing")
+                notes_parts.append("• **Zero infrastructure management**: VMs managed by Databricks")
                 notes_parts.append("• **Instant startup**: <1 minute (vs 5-7 min for classic clusters)")
                 notes_parts.append("• **Auto-scaling**: Automatic based on Spark task parallelism")
                 notes_parts.append("• **Pay-per-use**: Billed only for actual compute seconds used")
@@ -1986,6 +2040,11 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("• **Use cases**: Ad-hoc jobs, inconsistent schedules, rapid development")
                 notes_parts.append("• **Cost**: ~30% premium vs classic, but often cheaper due to instant termination")
                 notes_parts.append("• **Limitations**: Limited Spark config customization, no cluster pools")
+                notes_parts.append("")
+                notes_parts.append(f"**📦 VM Specs (for DBU calculation - managed by Databricks):**")
+                notes_parts.append(f"• Reference instance: {default_instance}")
+                notes_parts.append("• Actual VMs are auto-provisioned and managed by Databricks")
+                notes_parts.append("• No VM costs billed - DBU rate includes compute")
         
         if wtype == "DLT":
             edition = workload.setdefault("dlt_edition", "PRO")

@@ -29,6 +29,7 @@ interface Message {
   timestamp: Date
   toolResults?: ToolResult[]
   isStreaming?: boolean
+  isThinking?: boolean
 }
 
 interface ToolResult {
@@ -280,14 +281,15 @@ export function ChatPanel({
     setIsLoading(true)
     setError(null)
 
-    // Create placeholder for assistant response
+    // Create placeholder for assistant response with thinking indicator
     const assistantMessageId = `assistant-${Date.now()}`
     setMessages(prev => [...prev, {
       id: assistantMessageId,
       role: 'assistant',
       content: '',
       timestamp: new Date(),
-      isStreaming: true
+      isStreaming: true,
+      isThinking: true  // Show thinking indicator until content starts
     }])
 
     try {
@@ -354,7 +356,7 @@ export function ChatPanel({
                 fullContent += chunk.content
                 setMessages(prev => prev.map(m => 
                   m.id === assistantMessageId 
-                    ? { ...m, content: fullContent }
+                    ? { ...m, content: fullContent, isThinking: false }
                     : m
                 ))
               } else if (chunk.type === 'tool_result') {
@@ -895,14 +897,16 @@ export function ChatPanel({
                   ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-4 py-2.5 rounded-xl border border-green-200 dark:border-green-800'
                   : 'text-[var(--text-primary)] max-w-full'
               )}>
-                {message.isStreaming && !message.content ? (
-                  <div className="flex items-center gap-2 px-1 py-1">
+                {(message.isStreaming || message.isThinking) && !message.content ? (
+                  <div className="flex items-center gap-3 px-2 py-2">
                     <div className="flex gap-1">
                       <span className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                       <span className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                       <span className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <span className="text-[var(--text-secondary)]">Thinking...</span>
+                    <span className="text-sm text-[var(--text-secondary)] italic">
+                      {message.isThinking ? 'AI is thinking...' : 'Generating response...'}
+                    </span>
                   </div>
                 ) : message.role === 'user' ? (
                   // User messages - plain text with preserved whitespace
