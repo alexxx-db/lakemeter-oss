@@ -176,6 +176,26 @@ export interface Region {
   cloud: string
 }
 
+export interface VMPricingCost {
+  cost_per_hour: number
+  monthly_cost: number
+  savings_percent?: number
+}
+
+export interface VMPricingReserved {
+  payment_option: string
+  cost_per_hour: number
+  monthly_cost: number
+  savings_percent?: number
+}
+
+export interface VMPricing {
+  on_demand?: VMPricingCost
+  spot?: VMPricingCost
+  reserved_1y?: VMPricingReserved[]
+  reserved_3y?: VMPricingReserved[]
+}
+
 export interface InstanceType {
   id: string
   name: string
@@ -184,6 +204,7 @@ export interface InstanceType {
   dbu_rate: number
   gpu?: boolean
   instance_family?: string
+  vm_pricing?: VMPricing
 }
 
 export interface DBSQLSize {

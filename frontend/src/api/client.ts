@@ -272,13 +272,22 @@ export const fetchInstanceTypes = async (cloud: string, region?: string, filters
   limit?: number
   offset?: number
 }): Promise<InstanceType[]> => {
-  const params: Record<string, string | number | undefined> = { cloud }
+  const params: Record<string, string | number | undefined> = { cloud, limit: 1000 }
   if (region) params.region = region
   if (filters) {
     Object.assign(params, filters)
   }
   const { data } = await api.get('/instances/types', { params })
-  return data
+  // Transform API response to frontend format
+  return data.map((item: any) => ({
+    id: item.instance_type,
+    name: item.instance_type,
+    vcpus: item.vcpus,
+    memory_gb: item.memory_gb,
+    dbu_rate: item.dbu_rate,
+    instance_family: item.instance_family,
+    vm_pricing: item.vm_pricing
+  }))
 }
 
 export const fetchInstanceVMCosts = async (params: {

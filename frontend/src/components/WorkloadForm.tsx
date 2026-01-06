@@ -216,6 +216,54 @@ function CollapsibleNotes({ notes, onChange }: { notes: string; onChange: (value
   )
 }
 
+// Helper to format instance type options with pricing info
+import type { InstanceType } from '../types'
+
+function formatInstanceOption(it: InstanceType, pricingTier?: string, paymentOption?: string) {
+  const baseLabel = it.vcpus && it.memory_gb 
+    ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
+    : it.name
+  
+  // Add DBU rate and VM cost if available
+  const parts: string[] = [baseLabel]
+  
+  if (it.dbu_rate) {
+    parts.push(`${it.dbu_rate.toFixed(2)} DBU/hr`)
+  }
+  
+  if (it.vm_pricing) {
+    // Get VM cost based on pricing tier
+    let vmCost: number | undefined
+    const tier = pricingTier?.toLowerCase() || 'on_demand'
+    
+    if (tier === 'on_demand' && it.vm_pricing.on_demand) {
+      vmCost = it.vm_pricing.on_demand.cost_per_hour
+    } else if (tier === 'spot' && it.vm_pricing.spot) {
+      vmCost = it.vm_pricing.spot.cost_per_hour
+    } else if (tier === 'reserved_1y' && it.vm_pricing.reserved_1y) {
+      const reserved = it.vm_pricing.reserved_1y.find(r => 
+        r.payment_option === (paymentOption || 'no_upfront')
+      ) || it.vm_pricing.reserved_1y[0]
+      vmCost = reserved?.cost_per_hour
+    } else if (tier === 'reserved_3y' && it.vm_pricing.reserved_3y) {
+      const reserved = it.vm_pricing.reserved_3y.find(r => 
+        r.payment_option === (paymentOption || 'no_upfront')
+      ) || it.vm_pricing.reserved_3y[0]
+      vmCost = reserved?.cost_per_hour
+    } else if (it.vm_pricing.on_demand) {
+      // Default to on_demand
+      vmCost = it.vm_pricing.on_demand.cost_per_hour
+    }
+    
+    if (vmCost !== undefined) {
+      parts.push(`$${vmCost.toFixed(4)}/hr`)
+    }
+  }
+  
+  // Format: "c8g.medium (1vCPU, 2GB) · 0.27 DBU/hr · $0.0458/hr"
+  return parts.length > 1 ? parts.join(' · ') : baseLabel
+}
+
 interface Props {
   estimateId: string
   lineItem: LineItem | null
@@ -1110,9 +1158,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                   <SearchableSelect
                     options={instanceTypes.map(it => ({
                       value: it.id,
-                      label: it.vcpus && it.memory_gb 
-                        ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
-                        : it.name,
+                      label: formatInstanceOption(it, form.driver_pricing_tier, form.driver_payment_option),
                       group: it.instance_family || 'General Purpose'
                     }))}
                     value={form.driver_node_type}
@@ -1208,9 +1254,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                     <SearchableSelect
                       options={instanceTypes.map(it => ({
                         value: it.id,
-                        label: it.vcpus && it.memory_gb 
-                          ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
-                          : it.name,
+                        label: formatInstanceOption(it, form.worker_pricing_tier, form.worker_payment_option),
                         group: it.instance_family || 'General Purpose'
                       }))}
                       value={form.worker_node_type}
@@ -1418,11 +1462,39 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 ? getDBSQLWarehouseConfig(pricingBundle, selectedCloud || 'aws', form.dbsql_warehouse_type, form.dbsql_warehouse_size)
                 : null
               
+              // Find instance type details for driver and worker
+              const driverInstanceInfo = warehouseConfig?.driver_instance_type 
+                ? instanceTypes.find(it => it.id === warehouseConfig.driver_instance_type)
+                : null
+              const workerInstanceInfo = warehouseConfig?.worker_instance_type 
+                ? instanceTypes.find(it => it.id === warehouseConfig.worker_instance_type)
+                : null
+              
+              // Helper to get VM cost based on pricing tier
+              const getVMCost = (instance: typeof driverInstanceInfo, tier: string, paymentOpt: string) => {
+                if (!instance?.vm_pricing) return null
+                const t = tier.toLowerCase()
+                if (t === 'on_demand') return instance.vm_pricing.on_demand?.cost_per_hour
+                if (t === 'spot') return instance.vm_pricing.spot?.cost_per_hour
+                if (t === 'reserved_1y') {
+                  const r = instance.vm_pricing.reserved_1y?.find(x => x.payment_option === paymentOpt) || instance.vm_pricing.reserved_1y?.[0]
+                  return r?.cost_per_hour
+                }
+                if (t === 'reserved_3y') {
+                  const r = instance.vm_pricing.reserved_3y?.find(x => x.payment_option === paymentOpt) || instance.vm_pricing.reserved_3y?.[0]
+                  return r?.cost_per_hour
+                }
+                return instance.vm_pricing.on_demand?.cost_per_hour
+              }
+              
+              const driverVMCost = getVMCost(driverInstanceInfo, form.dbsql_driver_pricing_tier, form.dbsql_driver_payment_option)
+              const workerVMCost = getVMCost(workerInstanceInfo, form.dbsql_worker_pricing_tier, form.dbsql_worker_payment_option)
+              
               return (
                 <div className="col-span-2 grid grid-cols-2 gap-3">
                   {/* Driver Node - Compact */}
                   <div className="p-2.5 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
                         <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Driver</span>
@@ -1431,6 +1503,18 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                         {warehouseConfig?.driver_instance_type || '—'}
                       </span>
                     </div>
+                    {/* DBU rate and VM cost details */}
+                    {driverInstanceInfo && (
+                      <div className="flex items-center gap-2 mb-2 text-[10px] text-gray-500 dark:text-gray-400">
+                        <span>{driverInstanceInfo.dbu_rate?.toFixed(2)} DBU/hr</span>
+                        {driverVMCost !== undefined && driverVMCost !== null && (
+                          <>
+                            <span>·</span>
+                            <span>${driverVMCost.toFixed(4)}/hr</span>
+                          </>
+                        )}
+                      </div>
+                    )}
                     <select
                       value={form.dbsql_driver_pricing_tier}
                       onChange={(e) => setForm(f => ({ ...f, dbsql_driver_pricing_tier: e.target.value }))}
@@ -1455,7 +1539,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                   
                   {/* Worker Nodes - Compact */}
                   <div className="p-2.5 rounded-lg border bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                         <span className="text-xs font-semibold text-green-700 dark:text-green-300">
@@ -1466,6 +1550,18 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                         {warehouseConfig?.worker_instance_type || '—'}
                       </span>
                     </div>
+                    {/* DBU rate and VM cost details */}
+                    {workerInstanceInfo && (
+                      <div className="flex items-center gap-2 mb-2 text-[10px] text-gray-500 dark:text-gray-400">
+                        <span>{workerInstanceInfo.dbu_rate?.toFixed(2)} DBU/hr</span>
+                        {workerVMCost !== undefined && workerVMCost !== null && (
+                          <>
+                            <span>·</span>
+                            <span>${workerVMCost.toFixed(4)}/hr</span>
+                          </>
+                        )}
+                      </div>
+                    )}
                     <select
                       value={form.dbsql_worker_pricing_tier}
                       onChange={(e) => setForm(f => ({ ...f, dbsql_worker_pricing_tier: e.target.value }))}
