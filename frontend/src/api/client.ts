@@ -279,15 +279,20 @@ export const fetchInstanceTypes = async (cloud: string, region?: string, filters
   }
   const { data } = await api.get('/instances/types', { params })
   // Transform API response to frontend format
-  return data.map((item: any) => ({
-    id: item.instance_type,
-    name: item.instance_type,
-    vcpus: item.vcpus,
-    memory_gb: item.memory_gb,
-    dbu_rate: item.dbu_rate,
-    instance_family: item.instance_family,
-    vm_pricing: item.vm_pricing
-  }))
+  // API returns instance_type field, we map to both id and name
+  const items = Array.isArray(data) ? data : (data?.items || data?.data || [])
+  return items.map((item: any) => {
+    const instanceType = item.instance_type || item.id || item.name || ''
+    return {
+      id: instanceType,
+      name: instanceType,
+      vcpus: item.vcpus,
+      memory_gb: item.memory_gb,
+      dbu_rate: item.dbu_rate,
+      instance_family: item.instance_family,
+      vm_pricing: item.vm_pricing
+    }
+  })
 }
 
 export const fetchInstanceVMCosts = async (params: {

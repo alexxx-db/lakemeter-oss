@@ -220,9 +220,11 @@ function CollapsibleNotes({ notes, onChange }: { notes: string; onChange: (value
 import type { InstanceType } from '../types'
 
 function formatInstanceOption(it: InstanceType, pricingTier?: string, paymentOption?: string) {
+  // Use id as fallback for name (they should be the same - the instance_type)
+  const instanceName = it.name || it.id || 'Unknown'
   const baseLabel = it.vcpus && it.memory_gb 
-    ? `${it.name} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
-    : it.name
+    ? `${instanceName} (${it.vcpus}vCPU, ${it.memory_gb}GB)` 
+    : instanceName
   
   // Add DBU rate and VM cost if available
   const parts: string[] = [baseLabel]
