@@ -1089,6 +1089,9 @@ Summary (be concise):"""
         tool_results = []
         proposed_workload = None
         
+        # Capture AI's explanation text (comes before tool calls)
+        ai_explanation_text = response.get("content", "")
+        
         if response.get("tool_calls"):
             for tool_call in response["tool_calls"]:
                 result = await self._execute_tool(
@@ -1104,6 +1107,12 @@ Summary (be concise):"""
                 # Check if this is a workload proposal
                 if tool_call["name"] == "propose_workload" and result.get("success"):
                     proposed_workload = result.get("proposed_workload")
+                    # Attach AI's explanation text to the workload notes
+                    if ai_explanation_text and proposed_workload:
+                        self._update_proposal_notes_with_explanation(
+                            proposed_workload.get("proposal_id"),
+                            ai_explanation_text
+                        )
             
             # Add assistant message with tool use to history
             self.conversation_history.append({
@@ -1322,11 +1331,23 @@ Summary (be concise):"""
                     "result": result
                 }
                 
-                # If it's a workload proposal, yield that separately
+                # If it's a workload proposal, update notes with AI explanation and yield
                 if tool_call["name"] == "propose_workload" and result.get("success"):
+                    proposed_workload = result.get("proposed_workload")
+                    # Attach AI's explanation text (full_content) to the workload notes
+                    if full_content and proposed_workload:
+                        self._update_proposal_notes_with_explanation(
+                            proposed_workload.get("proposal_id"),
+                            full_content
+                        )
+                        # Re-fetch the updated proposal from proposed_workloads
+                        for p in self.proposed_workloads:
+                            if p.get("proposal_id") == proposed_workload.get("proposal_id"):
+                                proposed_workload = p
+                                break
                     yield {
                         "type": "proposal",
-                        "workload": result.get("proposed_workload")
+                        "workload": proposed_workload
                     }
                 
                 # If it's a GenAI architecture proposal, yield each workload separately
@@ -1335,6 +1356,12 @@ Summary (be concise):"""
                         # Find the full workload from proposed_workloads
                         for proposed in self.proposed_workloads:
                             if proposed.get("proposal_id") == w.get("proposal_id"):
+                                # Attach AI's explanation text to the workload notes
+                                if full_content:
+                                    self._update_proposal_notes_with_explanation(
+                                        proposed.get("proposal_id"),
+                                        full_content
+                                    )
                                 yield {
                                     "type": "proposal",
                                     "workload": proposed
@@ -1929,6 +1956,24 @@ Each workload needs to be confirmed individually. Review the configurations and 
             "action_required": "User must confirm this configuration before it's added to the estimate.",
             "note": "Costs will be calculated after the workload is confirmed and saved."
         }
+    
+    def _update_proposal_notes_with_explanation(self, proposal_id: str, explanation_text: str) -> None:
+        """
+        Update a proposed workload's notes with the AI's explanation text.
+        This captures the conversational explanation that appears before tool calls.
+        """
+        if not proposal_id or not explanation_text:
+            return
+        
+        # Find the proposal
+        for proposal in self.proposed_workloads:
+            if proposal.get("proposal_id") == proposal_id:
+                # Only update if notes don't already have AI recommendation
+                current_notes = proposal.get("notes", "")
+                if not current_notes.startswith("AI Assistant Recommendation:"):
+                    # Use the AI's explanation as the notes
+                    proposal["notes"] = f"AI Assistant Recommendation:\n\n{explanation_text}"
+                break
     
     def _apply_defaults(self, workload: Dict[str, Any]) -> Dict[str, Any]:
         """Apply sensible defaults based on workload type and generate explanatory notes."""
