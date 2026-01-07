@@ -1403,6 +1403,13 @@ Summary (be concise):"""
                         "type": "estimate_proposal",
                         "estimate": result.get("proposed_estimate")
                     }
+                
+                # If it's clarifying questions, yield the questions as content
+                if tool_call["name"] == "ask_clarifying_questions" and result.get("success"):
+                    questions_message = result.get("message", "")
+                    if questions_message:
+                        yield {"type": "content", "content": f"\n\n{questions_message}"}
+                        full_content += f"\n\n{questions_message}"
             
             # Add ALL tool results in a SINGLE user message (Claude API requirement)
             self.conversation_history.append({
@@ -1410,25 +1417,33 @@ Summary (be concise):"""
                 "content": all_tool_results
             })
             
-            # Generate follow-up message ourselves instead of making another API call
-            # This avoids potential tool_use/tool_result mismatch issues with the follow-up
+            # Generate follow-up message based on what tools were executed
             follow_up_content = ""
-            if self.proposed_workloads:
+            has_questions = any(tc["name"] == "ask_clarifying_questions" for tc in tool_calls)
+            has_proposals = any(tc["name"] == "propose_workload" for tc in tool_calls)
+            has_genai = any(tc["name"] == "propose_genai_architecture" for tc in tool_calls)
+            has_estimate = any(tc["name"] in ["propose_estimate", "create_estimate"] for tc in tool_calls)
+            
+            if has_questions:
+                # Questions were already yielded above, just add a note
+                follow_up_content = "Please answer these questions so I can create an accurate configuration for you."
+            elif has_proposals or has_genai:
                 follow_up_content = "I've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
-            elif self.proposed_estimate:
+            elif has_estimate:
                 follow_up_content = "I've proposed an estimate above. Please review and confirm or reject it."
             else:
-                follow_up_content = "I've processed your request."
+                follow_up_content = "I've processed your request. Let me know if you need anything else."
             
             # IMPORTANT: Add follow-up as assistant message to maintain valid conversation structure
             # (user message with tool_results must be followed by assistant message)
             self.conversation_history.append({
                 "role": "assistant",
-                "content": follow_up_content
+                "content": full_content + f"\n\n{follow_up_content}" if has_questions else follow_up_content
             })
             
-            yield {"type": "content", "content": f"\n\n{follow_up_content}"}
-            full_content += f"\n\n{follow_up_content}"
+            if not has_questions:  # Only yield if we haven't already yielded the questions
+                yield {"type": "content", "content": f"\n\n{follow_up_content}"}
+                full_content += f"\n\n{follow_up_content}"
         
         # Add final response to history
         self.conversation_history.append({
