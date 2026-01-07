@@ -874,12 +874,12 @@ class EstimateAgent:
     def _validate_conversation_history(self):
         """
         Validate and fix conversation history to ensure tool_use/tool_result pairs are complete.
-        Removes orphaned tool_use messages that don't have corresponding tool_result responses.
+        Removes orphaned tool_use messages AND orphaned tool_result messages.
         """
         if not self.conversation_history:
             return
         
-        # Collect tool_use IDs from assistant messages
+        # First pass: Collect all tool_use IDs and tool_result IDs
         tool_use_ids = set()
         tool_result_ids = set()
         
@@ -895,25 +895,83 @@ class EstimateAgent:
                         tool_result_ids.add(item["tool_use_id"])
         
         # Find orphaned tool_use IDs (those without tool_results)
-        orphaned_ids = tool_use_ids - tool_result_ids
+        orphaned_use_ids = tool_use_ids - tool_result_ids
+        # Find orphaned tool_result IDs (those without tool_use)
+        orphaned_result_ids = tool_result_ids - tool_use_ids
         
-        if orphaned_ids:
-            log_warning(f"Found {len(orphaned_ids)} orphaned tool_use messages, cleaning up...")
+        if orphaned_use_ids or orphaned_result_ids:
+            log_warning(f"Found {len(orphaned_use_ids)} orphaned tool_use, {len(orphaned_result_ids)} orphaned tool_results")
             
-            # Remove assistant messages with orphaned tool_use
+            # Build cleaned history
             cleaned_history = []
             for msg in self.conversation_history:
                 if msg.get("role") == "assistant" and msg.get("tool_calls"):
                     # Check if any tool_call in this message is orphaned
                     msg_tool_ids = {tc.get("id") for tc in msg.get("tool_calls", [])}
-                    if msg_tool_ids & orphaned_ids:
-                        # Skip this message entirely - it has orphaned tool calls
-                        log_info(f"Removing assistant message with orphaned tool_use")
+                    if msg_tool_ids & orphaned_use_ids:
+                        log_info(f"Removing assistant message with orphaned tool_use: {msg_tool_ids & orphaned_use_ids}")
                         continue
-                cleaned_history.append(msg)
+                    cleaned_history.append(msg)
+                elif msg.get("role") == "user" and isinstance(msg.get("content"), list):
+                    # Filter out orphaned tool_results
+                    filtered_content = []
+                    has_orphaned = False
+                    for item in msg.get("content", []):
+                        if item.get("type") == "tool_result":
+                            if item.get("tool_use_id") in orphaned_result_ids:
+                                has_orphaned = True
+                                log_info(f"Removing orphaned tool_result: {item.get('tool_use_id')}")
+                                continue
+                        filtered_content.append(item)
+                    
+                    if filtered_content:
+                        msg_copy = msg.copy()
+                        msg_copy["content"] = filtered_content
+                        cleaned_history.append(msg_copy)
+                    elif not has_orphaned:
+                        # Keep empty user messages that weren't tool results
+                        cleaned_history.append(msg)
+                else:
+                    cleaned_history.append(msg)
             
             self.conversation_history = cleaned_history
             log_info(f"Cleaned conversation history: {len(self.conversation_history)} messages remaining")
+        
+        # Second pass: Ensure tool_use and tool_result are properly paired in sequence
+        # An assistant message with tool_calls MUST be followed immediately by tool_results
+        i = 0
+        while i < len(self.conversation_history):
+            msg = self.conversation_history[i]
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                tool_ids = {tc.get("id") for tc in msg.get("tool_calls", [])}
+                
+                # Check if next message is a user message with ALL the tool_results
+                if i + 1 < len(self.conversation_history):
+                    next_msg = self.conversation_history[i + 1]
+                    if next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list):
+                        result_ids = {
+                            item.get("tool_use_id") 
+                            for item in next_msg.get("content", []) 
+                            if item.get("type") == "tool_result"
+                        }
+                        if tool_ids == result_ids:
+                            i += 1  # All good, skip to after the tool results
+                        else:
+                            # Mismatch - remove the assistant message
+                            log_warning(f"Tool ID mismatch at index {i}: use={tool_ids}, results={result_ids}")
+                            self.conversation_history.pop(i)
+                            continue
+                    else:
+                        # Next message is not tool results - remove the assistant message
+                        log_warning(f"Assistant tool_calls at index {i} not followed by tool_results")
+                        self.conversation_history.pop(i)
+                        continue
+                else:
+                    # No next message - remove the assistant message
+                    log_warning(f"Assistant tool_calls at index {i} is last message, removing")
+                    self.conversation_history.pop(i)
+                    continue
+            i += 1
     
     async def _summarize_conversation(self, messages_to_summarize: List[Dict[str, Any]]) -> str:
         """
