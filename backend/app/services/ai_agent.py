@@ -1332,6 +1332,25 @@ Summary (be concise):"""
                 "content": all_tool_results
             })
             
+            # Validate conversation history before follow-up call
+            self._validate_conversation_history()
+            
+            # Log conversation history structure for debugging
+            log_info(f"Conversation history before follow-up ({len(self.conversation_history)} messages):")
+            for i, msg in enumerate(self.conversation_history):
+                role = msg.get("role", "?")
+                has_tool_calls = bool(msg.get("tool_calls"))
+                content_type = type(msg.get("content")).__name__
+                if has_tool_calls:
+                    tool_ids = [tc.get("id", "?")[:20] for tc in msg.get("tool_calls", [])]
+                    log_info(f"  [{i}] {role} (tool_calls: {tool_ids})")
+                elif isinstance(msg.get("content"), list):
+                    tool_result_ids = [item.get("tool_use_id", "?")[:20] for item in msg.get("content", []) if item.get("type") == "tool_result"]
+                    log_info(f"  [{i}] {role} (tool_results: {tool_result_ids})")
+                else:
+                    content_preview = str(msg.get("content", ""))[:50]
+                    log_info(f"  [{i}] {role}: {content_preview}...")
+            
             # Get follow-up response
             yield {"type": "content", "content": "\n\n"}
             

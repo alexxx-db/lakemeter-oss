@@ -221,6 +221,18 @@ class ClaudeAIClient:
         log_info(f"Sending request to Claude: {CLAUDE_ENDPOINT}")
         log_info(f"Payload keys: {list(payload.keys())}, messages count: {len(formatted_messages)}")
         
+        # Log message structure for debugging tool_use/tool_result issues
+        for i, msg in enumerate(formatted_messages):
+            role = msg.get("role", "?")
+            if role == "tool":
+                log_info(f"  Formatted [{i}] tool: call_id={msg.get('tool_call_id', '?')[:30]}")
+            elif msg.get("tool_calls"):
+                tool_ids = [tc.get("id", "?")[:30] for tc in msg.get("tool_calls", [])]
+                log_info(f"  Formatted [{i}] {role}: tool_calls={tool_ids}")
+            else:
+                content_preview = str(msg.get("content", ""))[:40]
+                log_info(f"  Formatted [{i}] {role}: {content_preview}...")
+        
         try:
             response = await client.post(
                 CLAUDE_ENDPOINT,
@@ -346,6 +358,19 @@ class ClaudeAIClient:
         client = await self._get_http_client()
         
         log_info(f"Sending streaming request to Claude: {CLAUDE_ENDPOINT}")
+        
+        # Log message structure for debugging tool_use/tool_result issues (streaming)
+        log_info(f"Streaming request - {len(formatted_messages)} formatted messages:")
+        for i, msg in enumerate(formatted_messages):
+            role = msg.get("role", "?")
+            if role == "tool":
+                log_info(f"  Fmt [{i}] tool: call_id={msg.get('tool_call_id', '?')[:30]}")
+            elif msg.get("tool_calls"):
+                tool_ids = [tc.get("id", "?")[:30] for tc in msg.get("tool_calls", [])]
+                log_info(f"  Fmt [{i}] {role}: tool_calls={tool_ids}")
+            else:
+                content_preview = str(msg.get("content", ""))[:40]
+                log_info(f"  Fmt [{i}] {role}: {content_preview}...")
         
         try:
             async with client.stream(
