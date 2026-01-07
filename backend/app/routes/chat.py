@@ -380,7 +380,7 @@ async def confirm_workload(
                 "dbsql_num_clusters": workload.get("dbsql_num_clusters"),
                 "lakebase_cu": workload.get("lakebase_cu"),
                 "lakebase_ha_nodes": workload.get("lakebase_ha_nodes"),
-                "notes": f"Created by AI Assistant: {workload.get('reason', '')}"
+                "notes": workload.get("notes") or f"Created by AI Assistant: {workload.get('reason', '')}"
             },
             "message": f"Workload '{workload['workload_name']}' confirmed. Use the returned config to create via /api/v1/estimates/{{estimate_id}}/line-items"
         }
