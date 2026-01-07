@@ -1414,13 +1414,21 @@ Summary (be concise):"""
             # This avoids potential tool_use/tool_result mismatch issues with the follow-up
             follow_up_content = ""
             if self.proposed_workloads:
-                follow_up_content = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
+                follow_up_content = "I've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
             elif self.proposed_estimate:
-                follow_up_content = "\n\nI've proposed an estimate above. Please review and confirm or reject it."
+                follow_up_content = "I've proposed an estimate above. Please review and confirm or reject it."
+            else:
+                follow_up_content = "I've processed your request."
             
-            if follow_up_content:
-                yield {"type": "content", "content": follow_up_content}
-                full_content += follow_up_content
+            # IMPORTANT: Add follow-up as assistant message to maintain valid conversation structure
+            # (user message with tool_results must be followed by assistant message)
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": follow_up_content
+            })
+            
+            yield {"type": "content", "content": f"\n\n{follow_up_content}"}
+            full_content += f"\n\n{follow_up_content}"
         
         # Add final response to history
         self.conversation_history.append({
