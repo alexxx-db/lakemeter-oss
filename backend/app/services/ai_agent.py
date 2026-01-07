@@ -1390,69 +1390,17 @@ Summary (be concise):"""
                 "content": all_tool_results
             })
             
-            # Validate conversation history before follow-up call
-            self._validate_conversation_history()
-            
-            # Log conversation history structure for debugging
-            log_info(f"Conversation history before follow-up ({len(self.conversation_history)} messages):")
-            for i, msg in enumerate(self.conversation_history):
-                role = msg.get("role", "?")
-                has_tool_calls = bool(msg.get("tool_calls"))
-                content_type = type(msg.get("content")).__name__
-                if has_tool_calls:
-                    tool_ids = [tc.get("id", "?")[:20] for tc in msg.get("tool_calls", [])]
-                    log_info(f"  [{i}] {role} (tool_calls: {tool_ids})")
-                elif isinstance(msg.get("content"), list):
-                    tool_result_ids = [item.get("tool_use_id", "?")[:20] for item in msg.get("content", []) if item.get("type") == "tool_result"]
-                    log_info(f"  [{i}] {role} (tool_results: {tool_result_ids})")
-                else:
-                    content_preview = str(msg.get("content", ""))[:50]
-                    log_info(f"  [{i}] {role}: {content_preview}...")
-            
-            # Get follow-up response
-            yield {"type": "content", "content": "\n\n"}
-            
+            # Generate follow-up message ourselves instead of making another API call
+            # This avoids potential tool_use/tool_result mismatch issues with the follow-up
             follow_up_content = ""
-            try:
-                async for chunk in self.client.chat_stream(
-                    messages=self.conversation_history,
-                    tools=tools,
-                    system=system,
-                    max_tokens=4096,
-                    temperature=0.7
-                ):
-                    chunk_type = chunk.get("type")
-                    if chunk_type == "content_delta":
-                        content = chunk.get("content", "")
-                        follow_up_content += content
-                        full_content += content
-                        yield {"type": "content", "content": content}
-                    elif chunk_type == "error":
-                        log_error(f"Follow-up stream error: {chunk.get('content')}")
-                        yield {"type": "content", "content": f"\n\n*Error getting response: {chunk.get('content')}*"}
-                        break
-                    elif chunk_type == "done":
-                        break
-                
-                # If no follow-up content, provide a context-appropriate message
-                if not follow_up_content.strip():
-                    # Only mention proposed workloads if there actually are some
-                    if self.proposed_workloads:
-                        default_msg = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
-                    elif self.proposed_estimate:
-                        default_msg = "\n\nI've proposed an estimate above. Please review and confirm or reject it."
-                    else:
-                        # Generic message when no proposals
-                        default_msg = ""  # Don't add unnecessary text
-                    
-                    if default_msg:
-                        yield {"type": "content", "content": default_msg}
-                        full_content += default_msg
-            except Exception as e:
-                log_error(f"Follow-up response error: {e}")
-                error_msg = f"\n\n*Error: {str(e)}*"
-                yield {"type": "content", "content": error_msg}
-                full_content += error_msg
+            if self.proposed_workloads:
+                follow_up_content = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
+            elif self.proposed_estimate:
+                follow_up_content = "\n\nI've proposed an estimate above. Please review and confirm or reject it."
+            
+            if follow_up_content:
+                yield {"type": "content", "content": follow_up_content}
+                full_content += follow_up_content
         
         # Add final response to history
         self.conversation_history.append({
