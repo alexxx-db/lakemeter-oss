@@ -207,8 +207,8 @@ function CollapsibleNotes({ notes, onChange }: { notes: string; onChange: (value
             value={notes}
             onChange={(e) => onChange(e.target.value)}
             placeholder="Configuration rationale and assumptions...&#10;• Why this configuration was chosen&#10;• Sizing assumptions (data volume, users, etc.)&#10;• Cost optimization choices"
-            className="w-full text-sm min-h-[60px] resize-y border-0 bg-transparent p-0 focus:ring-0"
-            rows={2}
+            className="w-full text-sm min-h-[120px] resize-y border-0 bg-transparent p-0 focus:ring-0 whitespace-pre-wrap"
+            rows={6}
           />
         </div>
       )}

@@ -365,30 +365,46 @@ Once you answer these, I'll propose each workload with the right configuration!
 - For spot workers: Only for fault-tolerant batch jobs that can handle interruptions
 - ALWAYS use instance types appropriate for the estimate's cloud provider!
 
-## IMPORTANT: Detailed Rationale for Workloads
-When calling propose_workload, you MUST include a comprehensive `detailed_rationale` field that explains:
+## IMPORTANT: Per-Workload Notes (detailed_rationale)
+When calling propose_workload, you MUST include a `detailed_rationale` field with a CONCISE summary specific to THAT workload only.
 
-**Format your detailed_rationale like this:**
+**CRITICAL**: When proposing multiple workloads, each workload's `detailed_rationale` should ONLY describe that specific workload, NOT all workloads combined.
+
+**Format (keep it brief - 5-8 bullet points max):**
 ```
-**Configuration:**
-• Type: [workload type and purpose]
-• Schedule: [frequency, days per month]
-• Runtime: [hours/minutes per run]
-• Cluster: [workers + driver, instance types]
-• Key features: [Photon, serverless, etc.]
-• Pricing: [on-demand/spot/reserved and why]
+**Configuration:** [workload type], [key specs like size/workers/hours]
 
 **Why this setup:**
-• [Explain each key configuration decision]
-• [Why this instance type/size]
-• [Why this pricing tier]
-• [Any trade-offs considered]
+• [Key decision 1 - e.g., why serverless vs classic]
+• [Key decision 2 - e.g., why this size/instance]
+• [Key decision 3 - e.g., why this pricing tier]
 
-**Cost optimization notes:**
-• [Tips for future optimization like reserved instances]
+**Cost tip:** [One actionable optimization suggestion]
 ```
 
-This detailed rationale will be saved as the workload notes for the user's reference.
+**Example for DBSQL:**
+```
+**Configuration:** Serverless Small warehouse, 1 cluster, 198 hrs/mo (business hours)
+
+**Why this setup:**
+• Serverless for instant startup and scale-to-zero (ad-hoc analytics)
+• Small size handles 10 users at 10GB data with ~2s query times
+• Business hours only = pay only for actual usage
+
+**Cost tip:** If usage exceeds 500 hrs/mo consistently, consider Pro with reserved capacity.
+```
+
+**Example for Jobs:**
+```
+**Configuration:** Classic cluster with Photon, 4 workers × i3.xlarge, spot pricing
+
+**Why this setup:**
+• Photon enabled for 2x faster complex transformations
+• 4 workers sized for 100GB daily batch processing
+• Spot workers (60-90% savings) - job can retry on interruption
+
+**Cost tip:** For 12+ month predictable usage, consider reserved instances for ~30% savings.
+```
 
 ## DBSQL Sizing Guidelines
 
@@ -671,12 +687,16 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 "detailed_rationale": {
                     "type": "string",
-                    "description": """REQUIRED: Full detailed explanation of WHY this configuration was chosen. Include:
-1. **Configuration summary** - Type, schedule, runtime, cluster setup
-2. **Why this setup** - Bullet points explaining each key decision (serverless vs classic, worker count, Photon, pricing tier)
-3. **Cost optimization notes** - Any tips for future optimization (e.g., reserved instances)
+                    "description": """REQUIRED: CONCISE explanation for THIS SPECIFIC workload only (5-8 bullet points max).
+Format:
+**Configuration:** [type], [key specs]
+**Why this setup:**
+• [Key decision 1]
+• [Key decision 2]
+• [Key decision 3]
+**Cost tip:** [One actionable suggestion]
 
-Format with markdown bullets (•) for readability. This will be saved as the workload notes."""
+IMPORTANT: When proposing multiple workloads, each one must have its OWN detailed_rationale - do NOT combine explanations for all workloads."""
                 },
                 "notes": {
                     "type": "string",
@@ -1931,19 +1951,23 @@ Each workload needs to be confirmed individually. Review the configurations and 
     def _update_proposal_notes_with_explanation(self, proposal_id: str, explanation_text: str) -> None:
         """
         Update a proposed workload's notes with the AI's explanation text.
-        This captures the conversational explanation that appears before tool calls.
+        Only used as fallback if detailed_rationale wasn't provided in the tool call.
         """
-        if not proposal_id or not explanation_text:
+        if not proposal_id:
             return
         
         # Find the proposal
         for proposal in self.proposed_workloads:
             if proposal.get("proposal_id") == proposal_id:
-                # Only update if notes don't already have AI recommendation
                 current_notes = proposal.get("notes", "")
+                # Only update if notes don't already have AI recommendation
+                # (detailed_rationale would have set this in _propose_workload)
                 if not current_notes.startswith("AI Assistant Recommendation:"):
-                    # Use the AI's explanation as the notes
-                    proposal["notes"] = f"AI Assistant Recommendation:\n\n{explanation_text}"
+                    # No detailed_rationale was provided - don't use full_content
+                    # as it may contain explanations for multiple workloads
+                    # Just leave the auto-generated notes or set a brief fallback
+                    if not current_notes or current_notes == "Configuration proposal - details to be added.":
+                        proposal["notes"] = f"Created by AI Assistant: {proposal.get('reason', 'Workload configuration')}"
                 break
     
     def _apply_defaults(self, workload: Dict[str, Any]) -> Dict[str, Any]:
@@ -2584,10 +2608,8 @@ Each workload needs to be confirmed individually. Review the configurations and 
         has_ai_rationale = existing_notes.startswith("AI Assistant Recommendation:")
         
         if has_ai_rationale:
-            # Preserve AI's detailed rationale - don't overwrite with auto-generated notes
-            # Just append technical details if needed
-            if generated_notes:
-                workload["notes"] = f"{existing_notes}\n\n---\n**Technical Details:**\n{generated_notes}"
+            # AI rationale is already set - keep it as is (don't append verbose technical details)
+            pass
         elif generated_notes:
             # No AI rationale provided - use auto-generated notes
             workload["notes"] = generated_notes
