@@ -1456,6 +1456,13 @@ Summary (2-3 sentences):"""
                 }
                 tool_input_json = ""
                 yield {"type": "tool_start", "tool": chunk.get("name")}
+                
+                # Add user-friendly status message for certain tools
+                tool_name = chunk.get("name")
+                if tool_name == "propose_workload":
+                    yield {"type": "content", "content": "\n\n*Generating workload configuration...*\n"}
+                elif tool_name == "propose_genai_architecture":
+                    yield {"type": "content", "content": "\n\n*Generating GenAI architecture proposal...*\n"}
             
             elif chunk_type == "tool_input_delta":
                 tool_input_json += chunk.get("partial_json", "")
@@ -1754,15 +1761,16 @@ The following fields MUST be set before workloads can be added:
         Format clarifying questions to ask the user.
         This is a "soft" tool - it just formats questions for the AI to present naturally.
         """
-        formatted_questions = "\n".join([f"• {q}" for q in questions])
+        # Number the questions for clarity
+        formatted_questions = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions)])
         
         return {
             "success": True,
             "action": "ask_questions",
             "questions": questions,
             "context": context,
-            "message": f"I need a bit more information to create the right configuration:\n\n{formatted_questions}",
-            "note": "Please answer these questions so I can propose an accurate workload configuration."
+            "message": f"I need a bit more information:\n\n{formatted_questions}",
+            "note": ""
         }
     
     def _propose_genai_architecture(
@@ -2138,7 +2146,8 @@ Each workload needs to be confirmed individually. Review the configurations and 
         workload.setdefault("hours_per_month", 730)
         workload.setdefault("days_per_month", 22)
         
-        notes_parts = []
+        # Flag to indicate notes should be generated
+        generate_notes = True
         
         if wtype in ["JOBS", "ALL_PURPOSE", "DLT"]:
             # Set serverless default - prefer serverless for simplicity
@@ -2150,75 +2159,12 @@ Each workload needs to be confirmed individually. Review the configurations and 
             if not is_serverless:
                 # Non-serverless: set instance types and worker pricing
                 workload.setdefault("num_workers", 4)
-                workload.setdefault("driver_node_type", default_driver)  # Driver doesn't need to be big
+                workload.setdefault("driver_node_type", default_driver)
                 workload.setdefault("worker_node_type", default_instance)
                 
                 # DEFAULT TO SPOT WORKERS for cost savings
                 workload.setdefault("worker_pricing_tier", "spot")
                 workload.setdefault("driver_pricing_tier", "on_demand")
-                
-                # Comprehensive Job Configuration Notes
-                notes_parts.append("=" * 60)
-                notes_parts.append("**DATABRICKS JOBS (CLASSIC COMPUTE) CONFIGURATION**")
-                notes_parts.append("=" * 60)
-                notes_parts.append("")
-                
-                # Instance Selection - Based on TPC-DI ETL Benchmarks
-                notes_parts.append(f"**📦 Worker Instance Type: {default_instance}** (TPC-DI Benchmark):")
-                if cloud == "aws":
-                    notes_parts.append("• **m6id.2xlarge**: 8 vCPUs, 32 GB RAM, 474 GB NVMe SSD")
-                    notes_parts.append("• **Why chosen**: TPC-DI benchmark-proven for ETL workloads")
-                    notes_parts.append("• **NVMe SSD**: Optimal for Spark shuffle and intermediate data")
-                    notes_parts.append("• **Alternative**: m6i.xlarge for smaller workloads, r5.xlarge for memory-intensive")
-                elif cloud == "azure":
-                    notes_parts.append("• **Standard_D8ds_v5**: 8 vCPUs, 32 GB RAM, 300 GB NVMe SSD")
-                    notes_parts.append("• **Why chosen**: TPC-DI benchmark-proven for ETL workloads")
-                    notes_parts.append("• **Availability**: D-series widely available across ALL Azure regions")
-                    notes_parts.append("• **Alternative**: Standard_D4ds_v5 for smaller workloads, E-series for memory-optimized")
-                else:  # GCP
-                    notes_parts.append("• **n1-standard-8**: 8 vCPUs, 30 GB RAM")
-                    notes_parts.append("• **Why chosen**: Balanced compute for ETL workloads")
-                    notes_parts.append("• **Alternative**: n1-highmem-8 for memory-intensive jobs")
-                
-                notes_parts.append("")
-                notes_parts.append("**📊 TPC-DI ETL Benchmark Reference (MEDIUM Complexity Baseline):**")
-                notes_parts.append("(Same performance for Classic Jobs, Serverless Jobs, DLT all editions)")
-                notes_parts.append("")
-                if cloud == "aws":
-                    notes_parts.append("| Data Scale | Driver         | Worker         | Workers | Runtime |")
-                    notes_parts.append("|------------|----------------|----------------|---------|---------|")
-                    notes_parts.append("| ~100 GB    | m6i.xlarge     | m6id.2xlarge   | 1       | ~10 min |")
-                    notes_parts.append("| ~1 TB      | m6i.xlarge     | m6id.2xlarge   | 2-4     | ~20 min |")
-                    notes_parts.append("| ~5 TB      | m6i.xlarge     | m6id.2xlarge   | 8-12    | ~20 min |")
-                    notes_parts.append("| ~10 TB     | m6i.2xlarge    | m6id.2xlarge   | 20      | ~25 min |")
-                elif cloud == "azure":
-                    notes_parts.append("| Data Scale | Driver              | Worker              | Workers | Runtime |")
-                    notes_parts.append("|------------|---------------------|---------------------|---------|---------|")
-                    notes_parts.append("| ~100 GB    | Standard_D4ds_v5    | Standard_D8ds_v5    | 1       | ~10 min |")
-                    notes_parts.append("| ~1 TB      | Standard_D4ds_v5    | Standard_D8ds_v5    | 2-4     | ~20 min |")
-                    notes_parts.append("| ~5 TB      | Standard_D4ds_v5    | Standard_D8ds_v5    | 8-12    | ~20 min |")
-                    notes_parts.append("| ~10 TB     | Standard_D8ds_v5    | Standard_D8ds_v5    | 20      | ~25 min |")
-                else:  # GCP
-                    notes_parts.append("| Data Scale | Driver         | Worker         | Workers | Runtime |")
-                    notes_parts.append("|------------|----------------|----------------|---------|---------|")
-                    notes_parts.append("| ~100 GB    | n1-standard-4  | n1-standard-8  | 1       | ~10 min |")
-                    notes_parts.append("| ~1 TB      | n1-standard-4  | n1-standard-8  | 2-4     | ~20 min |")
-                    notes_parts.append("| ~5 TB      | n1-standard-4  | n1-standard-8  | 8-12    | ~20 min |")
-                    notes_parts.append("| ~10 TB     | n1-standard-8  | n1-standard-8  | 20      | ~25 min |")
-                notes_parts.append("")
-                notes_parts.append("**⚡ Job Complexity Multipliers:**")
-                notes_parts.append("Benchmark above is for MEDIUM complexity. Adjust based on job type:")
-                notes_parts.append("")
-                notes_parts.append("• **SIMPLE** (2x faster → half the workers or runtime):")
-                notes_parts.append("  - Basic transformations: SELECT, filter, simple aggregations")
-                notes_parts.append("  - Single source to single destination")
-                notes_parts.append("  - Minimal joins (1-2 tables)")
-                notes_parts.append("  - Example: CSV → Delta with column renames and type casts")
-                notes_parts.append("")
-                notes_parts.append("• **MEDIUM** (Baseline - TPC-DI benchmark):")
-                notes_parts.append("  - Standard ETL with multiple transformations")
-                notes_parts.append("  - 3-5 table joins")
-                notes_parts.append("  - Aggregations with GROUP BY, window functions")
                 notes_parts.append("  - Example: Dimensional modeling, fact table creation")
                 notes_parts.append("")
                 notes_parts.append("• **COMPLEX** (3x slower → 3x the workers or runtime):")
@@ -2944,88 +2890,86 @@ Each workload needs to be confirmed individually. Review the configurations and 
             notes_parts.append("  - Pre-filter large indexes using metadata before vector search")
             notes_parts.append("  - Consider approximate nearest neighbor (ANN) algorithms for ultra-scale")
         
-        # IGNORE any brief notes provided by LLM - we generate comprehensive ones
-        # existing_notes = workload.get("notes", "")  # DON'T use LLM's brief notes
-        
-        # Add comprehensive header and footer if we have generated notes
-        if notes_parts:
-            # Add header
-            header_parts = []
-            header_parts.append("╔" + "=" * 58 + "╗")
-            header_parts.append("║" + " " * 10 + "DATABRICKS WORKLOAD CONFIGURATION" + " " * 15 + "║")
-            header_parts.append("║" + " " * 12 + f"Created by AI Assistant - {wtype}" + " " * (34 - len(wtype)) + "║")
-            header_parts.append("╚" + "=" * 58 + "╝")
-            header_parts.append("")
-            header_parts.append("This configuration was generated based on your requirements.")
-            header_parts.append("Review all sections carefully before deployment to production.")
-            header_parts.append("")
+        # Generate concise notes - keep only key rationale
+        if generate_notes:
+            # Build a succinct summary instead of verbose notes
+            summary_parts = []
+            summary_parts.append(f"**{wtype} Configuration** (AI-generated)")
+            summary_parts.append("")
             
-            # Add footer with summary
-            footer_parts = []
-            footer_parts.append("")
-            footer_parts.append("=" * 60)
-            footer_parts.append("**📋 CONFIGURATION SUMMARY**")
-            footer_parts.append("=" * 60)
-            footer_parts.append(f"• **Workload Type**: {wtype}")
-            footer_parts.append(f"• **Cloud**: {workload.get('cloud', 'Not specified').upper()}")
-            footer_parts.append(f"• **Region**: {workload.get('region', 'Not specified')}")
-            
-            # Add workload-specific summary
+            # Add concise config summary based on workload type
             if wtype == "DBSQL":
                 wh_type = workload.get("dbsql_warehouse_type", "SERVERLESS")
                 wh_size = workload.get("dbsql_warehouse_size", "Small")
                 wh_clusters = workload.get("dbsql_num_clusters", 1)
-                footer_parts.append(f"• **Warehouse**: {wh_type} {wh_size} × {wh_clusters} cluster(s)")
-                footer_parts.append(f"• **Expected Users**: {workload.get('total_users', 'Not specified')}")
-            elif wtype == "JOBS":
-                if workload.get("jobs_serverless"):
-                    footer_parts.append("• **Compute**: Serverless (fully managed)")
+                summary_parts.append(f"• **Warehouse**: {wh_type} {wh_size} × {wh_clusters} cluster(s)")
+                if workload.get("total_users"):
+                    summary_parts.append(f"• **Users**: {workload.get('total_users')} total")
+                summary_parts.append("")
+                summary_parts.append("**Why this config:**")
+                if wh_type == "SERVERLESS":
+                    summary_parts.append("• Serverless for instant startup, auto-scaling, pay-per-use")
                 else:
-                    instance = workload.get("jobs_instance_type", "Not specified")
-                    workers = workload.get("jobs_worker_max", 2)
-                    footer_parts.append(f"• **Compute**: Classic ({instance})")
-                    footer_parts.append(f"• **Cluster size**: 1 driver + {workers} workers max")
+                    summary_parts.append(f"• {wh_type} warehouse for consistent workloads")
+            elif wtype == "JOBS":
+                if workload.get("serverless_enabled"):
+                    summary_parts.append("• **Compute**: Serverless (managed)")
+                    summary_parts.append("")
+                    summary_parts.append("**Why this config:**")
+                    summary_parts.append("• Serverless for zero infra management, instant startup")
+                else:
+                    driver = workload.get("driver_node_type", "Not specified")
+                    worker = workload.get("worker_node_type", "Not specified")
+                    workers = workload.get("num_workers", 2)
+                    summary_parts.append(f"• **Driver**: {driver}")
+                    summary_parts.append(f"• **Workers**: {workers}× {worker}")
+                    summary_parts.append(f"• **Photon**: {'Enabled' if workload.get('photon_enabled') else 'Disabled'}")
+                    summary_parts.append("")
+                    summary_parts.append("**Why this config:**")
+                    summary_parts.append("• Instance types chosen based on ETL benchmarks")
             elif wtype == "DLT":
                 edition = workload.get("dlt_edition", "PRO")
-                footer_parts.append(f"• **Edition**: {edition}")
+                summary_parts.append(f"• **Edition**: {edition}")
+                summary_parts.append("")
+                summary_parts.append("**Why this config:**")
+                if edition == "CORE":
+                    summary_parts.append("• CORE for basic pipelines without CDC")
+                elif edition == "PRO":
+                    summary_parts.append("• PRO for CDC and enhanced monitoring")
+                else:
+                    summary_parts.append("• ADVANCED for data quality expectations")
             elif wtype == "LAKEBASE":
                 cu = workload.get("lakebase_cu", 2)
-                total_nodes = workload.get("lakebase_ha_nodes", 1)
-                num_read_replicas = workload.get("lakebase_num_read_replicas", 0)
-                footer_parts.append(f"• **Compute Units**: {cu} CU (auto-calculated)")
-                footer_parts.append(f"• **Active Nodes**: {total_nodes} (1 primary + {num_read_replicas} read replica(s))")
+                summary_parts.append(f"• **Compute Units**: {cu} CU")
+                summary_parts.append("")
+                summary_parts.append("**Why this config:**")
+                summary_parts.append("• CU auto-calculated from read/write requirements")
             elif wtype == "VECTOR_SEARCH":
                 endpoint_type = workload.get("vector_search_endpoint_type", "STANDARD")
-                total_vectors = workload.get("vector_search_total_vectors", 0)
-                dimensions = workload.get("vector_search_dimensions", 768)
-                footer_parts.append(f"• **Endpoint Type**: {endpoint_type}")
-                footer_parts.append(f"• **Total Vectors**: {total_vectors:,} vectors")
-                footer_parts.append(f"• **Dimensions**: {dimensions}d")
+                summary_parts.append(f"• **Endpoint**: {endpoint_type}")
+                summary_parts.append("")
+                summary_parts.append("**Why this config:**")
+                if endpoint_type == "STANDARD":
+                    summary_parts.append("• Standard for low-latency interactive search")
+                else:
+                    summary_parts.append("• Storage Optimized for large indexes, cost-efficient")
+            elif wtype == "MODEL_SERVING":
+                compute = workload.get("model_serving_compute_type", "CPU")
+                summary_parts.append(f"• **Compute**: {compute}")
+                summary_parts.append("")
+                summary_parts.append("**Why this config:**")
+                summary_parts.append(f"• {compute} sized based on model parameters")
+            elif wtype in ["FMAPI_DATABRICKS", "FMAPI_PROPRIETARY"]:
+                model = workload.get("fmapi_model", "Not specified")
+                summary_parts.append(f"• **Model**: {model}")
+                summary_parts.append("")
+                summary_parts.append("**Why this config:**")
+                summary_parts.append("• Token estimates based on use case requirements")
             
-            footer_parts.append("")
-            footer_parts.append("**⚠️ IMPORTANT REMINDERS:**")
-            footer_parts.append("• This is a PROPOSAL - review before confirming")
-            footer_parts.append("• Costs shown are estimates - actual costs may vary")
-            footer_parts.append("• Monitor actual usage and adjust sizing as needed")
-            footer_parts.append("• Consider starting with smaller configuration and scaling up")
-            footer_parts.append("• Set up budget alerts and cost monitoring")
-            footer_parts.append("")
-            footer_parts.append("**📊 NEXT STEPS:**")
-            footer_parts.append("1. Review the detailed configuration above")
-            footer_parts.append("2. Confirm this proposal to add to your estimate")
-            footer_parts.append("3. Adjust sizing based on actual usage patterns")
-            footer_parts.append("4. Set up monitoring and alerting")
-            footer_parts.append("5. Document any custom configurations or requirements")
-            footer_parts.append("")
-            footer_parts.append("=" * 60)
-            footer_parts.append("Need to modify this configuration? Just ask!")
-            footer_parts.append("=" * 60)
+            summary_parts.append("")
+            summary_parts.append("*Review and adjust sizing based on actual usage.*")
             
-            # Assemble the full notes
-            full_header = "\n".join(header_parts)
-            main_notes = "\n".join(notes_parts)
-            full_footer = "\n".join(footer_parts)
-            generated_notes = f"{full_header}\n{main_notes}\n{full_footer}"
+            generated_notes = "\n".join(summary_parts)
         else:
             generated_notes = ""
         
