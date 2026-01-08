@@ -4,13 +4,10 @@ AI Agent Service for Lakemeter
 Orchestrates conversations with Claude to help users create and analyze estimates.
 Implements tool calling for estimate management operations.
 
-The agent operates within the Estimate Detail page context, helping users:
-1. Propose workload configurations based on requirements
-2. Analyze existing estimates using calculated costs from context
-3. Provide optimization recommendations and best practices
-
-NOTE: This agent does NOT perform cost calculations - it uses costs provided by
-the Lakemeter pricing engine after configurations are saved.
+NOTE: This agent does NOT perform cost calculations. It:
+1. Proposes workload configurations based on user requirements
+2. Analyzes existing estimates using costs provided in context
+3. Creates drafts that are then saved via the regular API flow
 """
 import json
 import uuid
@@ -33,12 +30,12 @@ SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assis
 ## Workload Types You Can Configure
 - **JOBS (Lakeflow Jobs)**: Batch processing, ETL pipelines, scheduled tasks
 - **ALL_PURPOSE**: Interactive development, notebooks, exploration
-- **DLT (Lakeflow Spark Declarative Pipelines)**: Streaming pipelines, data quality
+- **SDP (Spark Declarative Pipelines)**: Declarative ETL, CDC, materialized views, data quality
 - **DBSQL (Databricks SQL)**: SQL analytics, BI dashboards, ad-hoc queries
 - **MODEL_SERVING**: Real-time ML inference endpoints
 - **VECTOR_SEARCH**: Vector similarity search for AI applications
 - **FMAPI_DATABRICKS**: Foundation Model APIs (Databricks-hosted models like Llama, DBRX)
-- **FMAPI_PROPRIETARY**: Foundation Model APIs (External models like GPT, Claude)
+- **FMAPI_PROPRIETARY**: Foundation Model APIs (GPT-5+, Claude, Gemini - all within Databricks security)
 - **LAKEBASE**: PostgreSQL-compatible database
 
 ## Key Questions to Ask Users
@@ -48,13 +45,39 @@ SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assis
 2. What cloud provider? (AWS, Azure, GCP)
 3. What region? (for compliance/latency requirements)
 
-### For Compute Workloads (Jobs, All Purpose, DLT):
+### For Compute Workloads (Jobs, All Purpose):
 1. Is this a scheduled batch job or interactive/continuous?
-2. For batch: How many runs per day? Average runtime per run?
-3. For continuous: How many hours per month will it run?
-4. How much data will be processed? (helps size the cluster)
-5. Do you need fault tolerance? (determines spot vs on-demand)
-6. Do you want serverless (simpler, pay-per-use) or classic (more control)?
+2. For batch ETL: What's the base table size being merged into? (100GB, 1TB, 5TB, 10TB+)
+   - Runtime is inferred from TPC-DI benchmarks (e.g., 1TB ~20min, 5TB ~20min, 10TB ~25min)
+3. For batch ETL: What's the job complexity?
+   - Simple (2x faster): append-only, basic transforms
+   - Medium (baseline): MERGE/upsert, 3-5 joins
+   - Complex (3x slower): 6+ joins, UDFs, ML features
+4. For batch: How many runs per day?
+5. For continuous: How many hours per month will it run?
+6. Do you need fault tolerance? (determines spot vs on-demand)
+7. Do you want serverless (simpler, pay-per-use) or classic (more control)?
+
+### For SDP (Spark Declarative Pipelines, formerly DLT):
+1. Do you need CDC (Change Data Capture / Apply Changes)?
+   - No CDC needed → **CORE** (lowest cost)
+   - CDC required → **PRO**
+2. Do you need data quality expectations/constraints?
+   - Yes → **ADVANCED** (adds expectations on top of PRO)
+3. Serverless or Classic?
+   - **Serverless**: 
+     - Standard mode: ~5 min startup, lower cost
+     - Performance mode: <1 min startup, higher cost
+     - **Key benefit**: Incremental refresh of Materialized Views (only processes changed data)
+   - **Classic**: Full refresh only, more control over cluster sizing and instance types
+
+**SDP Advantages:**
+- Declarative: Define WHAT you want, not HOW to do it
+- Automatic dependency management between tables
+- Built-in data quality with expectations
+- Automatic incremental processing (only process new/changed data)
+- Simplified maintenance vs procedural code
+- Serverless + MV = Incremental refresh (huge cost savings for large tables)
 
 ### For DBSQL:
 1. How many TOTAL users will access this warehouse?
@@ -79,25 +102,133 @@ SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assis
    (All types: auto-scaling, scale to zero, pay-per-use)
 
 ### For Model Serving:
-1. What type of model? (LLM, custom ML, embeddings)
-2. Expected queries per second?
-3. Latency requirements?
-4. GPU requirements?
+**FIRST, determine if Model Serving is the right choice:**
+- Custom/fine-tuned models → Model Serving ✓
+- Off-the-shelf LLMs (GPT, Claude, Llama) → Use **FMAPI** instead (simpler, pay-per-token)
+
+**Then ask these questions:**
+
+1. What type of model are you serving?
+   - **Traditional ML** (XGBoost, LightGBM, scikit-learn, custom Python) → **CPU**
+   - **Deep Learning** (PyTorch/TensorFlow CNN, RNN, Transformers) → **GPU**
+   - **Embeddings** (sentence-transformers, custom embeddings) → **CPU** (small) or **GPU** (large)
+   - **Fine-tuned LLM** → **GPU** (size depends on parameters)
+
+2. What's the model size (number of parameters)?
+   
+   **GPU Memory Rule of Thumb:**
+   - 1B parameters ≈ 2GB GPU memory (FP16/half precision)
+   - 1B parameters ≈ 4GB GPU memory (FP32/full precision)
+   - Most inference uses FP16 for efficiency
+   
+   | Model Size | Parameters | GPU Memory | Recommended Compute | Example Models |
+   |------------|-----------|------------|---------------------|----------------|
+   | Tiny | <100M | <1GB | **CPU** | XGBoost, LightGBM, scikit-learn, small embeddings |
+   | Small | 100M-1B | 1-2GB | **GPU_SMALL** (T4 16GB) | BERT-base, DistilBERT, MiniLM |
+   | Medium | 1B-8B | 2-16GB | **GPU_SMALL/MEDIUM** (T4/A10G/L4) | Llama-7B, Mistral-7B, Falcon-7B |
+   | Large | 8B-12B | 16-24GB | **GPU_MEDIUM** (A10G/L4 24GB) | Llama-13B (quantized), CodeLlama |
+   | XL | 12B-40B | 24-80GB | **GPU_LARGE** (A100 80GB, Azure) | Llama-70B (quantized), Mixtral |
+   | XXL | 40B-100B | 80-200GB | **MULTIGPU** (4-8x A10G or 2-4x A100) | Llama-70B (FP16), large models |
+   | Massive | >100B | >200GB | **FMAPI recommended** | Llama-405B, GPT-5 → use FMAPI |
+   
+   **Why GPU sizing matters:**
+   - Model must fit entirely in GPU memory for inference
+   - Too small GPU → Out of memory error, model won't load
+   - Larger GPU than needed → Works but wastes money
+   - >100B models → Use FMAPI (simpler, often cheaper, no infra management)
+
+3. Is this real-time inference or batch processing?
+   - **Real-time/Interactive** (latency matters): Use Model Serving
+     → Cold start: 2-3 minutes if scale to zero is enabled
+     → Keep min 1 replica running if you can't tolerate cold start
+   - **Batch** (>5 minutes latency OK): Use **Lakeflow Jobs** instead
+     → More cost-effective for bulk inference
+     → No need for always-on endpoints
+
+4. Expected queries per second (QPS)?
+   
+   **QPS → Concurrency → Scale-out Size:**
+   - Each endpoint handles **4 concurrent requests**
+   - Formula: **Concurrency needed = QPS × avg_inference_time_seconds**
+   
+   **Scale-out options:**
+   | Size | Concurrency | DBU |
+   |------|-------------|-----|
+   | Small | 4 | 10.48 |
+   | Medium | 4-16 | 10.48-41.92 |
+   | Large | 16-32 | 41.92-83.84 |
+   
+   **Example calculations:**
+   | QPS | Inference Time | Concurrency Needed | Scale-out |
+   |-----|----------------|-------------------|-----------|
+   | 10 | 100ms | 10 × 0.1 = 1 | Small (4) |
+   | 10 | 1s | 10 × 1 = 10 | Medium (4-16) |
+   | 50 | 200ms | 50 × 0.2 = 10 | Medium (4-16) |
+   | 100 | 500ms | 100 × 0.5 = 50 | Large (16-32) + autoscale |
+
+5. Can you tolerate 2-3 minute cold start?
+   - **Yes** → Enable scale to zero (cost savings when idle)
+     Best for: Variable/sporadic traffic, dev/test, cost-sensitive
+   - **No** → Set min provisioned concurrency ≥ 1
+     Best for: Production APIs, SLA requirements, consistent latency
 
 ### For FMAPI (Foundation Models):
-1. Which model? (Llama, DBRX, GPT, Claude, etc.)
-2. Expected token volume? (input + output tokens per month)
-3. Rate type: pay-per-token or provisioned throughput?
+**All models run within Databricks security perimeter - your data stays secure.**
+
+1. What's the use case?
+   - Chat/Conversational → Higher output tokens
+   - Summarization → Medium input, lower output
+   - Classification/Extraction → High input, minimal output
+   - Code generation → **Very high** (codebase context grows quickly)
+   - Embeddings → Input only, no output tokens
+
+2. Which model?
+   | Model | Best For |
+   |-------|----------|
+   | Llama 3.x | Open, customizable, good balance |
+   | Claude | Coding, long context (200K), reasoning |
+   | GPT-5+ | General purpose, multimodal |
+   | Gemini | General purpose, multimodal |
+
+3. Expected volume?
+   - Calculate: Users/day × Requests/user × Avg tokens/request
+   
+   **Token estimation guide:**
+   | Use Case | Avg Input | Avg Output | Total/Request |
+   |----------|-----------|------------|---------------|
+   | Simple Q&A | 100 | 200 | 300 |
+   | Chat with context | 500 | 300 | 800 |
+   | RAG with docs | 2,000 | 500 | 2,500 |
+   | Summarization | 3,000 | 500 | 3,500 |
+   | Code generation | 5,000-20,000 | 1,000-3,000 | 6,000-23,000 |
+   | Code with full repo context | 50,000+ | 2,000 | 52,000+ |
+
+4. Pay-per-token or Provisioned Throughput (PT)?
+   - **Pay-per-token**: All models (Llama, Claude, GPT-5+, Gemini)
+   - **Provisioned Throughput**: **Only for Databricks-hosted models** (Llama)
+     - NOT available for Claude, GPT-5+, Gemini
+     - PT makes sense at **1,000+ tokens/sec sustained** (~2.6B tokens/month)
+     - Guarantees throughput (tokens/sec)
+     - Committed capacity = lower per-token cost
 
 ### For Lakebase:
-1. How many compute units (CU)? (1-128, based on workload)
-2. Do you need HA? (adds 1 replica node for high availability)
-3. Expected hours per month?
+1. What are your expected reads per second? (e.g., 50,000 lookups/sec)
+2. What are your expected writes per second?
+   - Bulk writes (truncate and load operations): e.g., 10,000 rows/sec
+   - Incremental writes (with scanning, like updates/inserts): e.g., 2,000 rows/sec
+3. Do you need High Availability (HA) for automatic failover? (adds 1 standby replica)
+4. Do you need read replicas for read scaling? (0-2 replicas, each handles reads only)
+5. What is your average row size (uncompressed)? (default: 1KB)
+6. Expected hours per month?
+
+**Note**: Compute Units (CU) will be automatically calculated based on your workload.
+Available CU options: 1, 2, 4, 8
+Total instances: 1 primary + up to 2 read replicas = 3 instances max
 
 ## Best Practices to Recommend
 - **For Batch ETL**: Use Lakeflow Jobs with Photon enabled, spot instances for workers (up to 90% savings)
 - **For Interactive**: All Purpose for development, DBSQL Serverless for production queries
-- **For Streaming**: DLT with auto-scaling, consider Core vs Pro vs Advanced editions
+- **For Streaming/CDC**: SDP (Spark Declarative Pipelines) with auto-scaling, consider Core vs Pro vs Advanced editions
 - **For ML Inference**: Model Serving with appropriate GPU types
 - **For Cost Savings**: Spot instances, Serverless (pay-per-use), Reserved capacity (1yr/3yr for predictable workloads)
 - **For AWS Reserved**: Consider payment options (no_upfront, partial_upfront, all_upfront) for additional savings
@@ -128,7 +259,7 @@ A typical RAG (Retrieval-Augmented Generation) chatbot requires MULTIPLE workloa
 
 ### Code Assistant
 1. **Foundation Model**: Code generation/completion
-   - Models: Claude Sonnet, GPT-4, or CodeLlama
+   - Models: Claude Sonnet, GPT-5, or CodeLlama
    - Moderate input (code context), moderate output (completions)
 
 When user mentions: "chatbot", "RAG", "knowledge base", "document Q&A", "assistant" - 
@@ -150,9 +281,9 @@ Format notes as multiple lines for readability:
 - Assumption: 8 hours/day usage"
 
 ## Common Instance Types by Cloud
-- **AWS**: m5.xlarge, i3.xlarge, r5.xlarge (memory), c5.xlarge (compute), p3.2xlarge (GPU)
-- **Azure**: Standard_D4s_v3, Standard_E4s_v3 (memory), Standard_F4s_v2 (compute), Standard_NC6s_v3 (GPU)
-- **GCP**: n1-standard-4, n1-highmem-4 (memory), n1-highcpu-4 (compute), n1-standard-4-nvidia-tesla-t4 (GPU)
+- **AWS**: m6i.xlarge (general), m6id.2xlarge (ETL with NVMe), r5.xlarge (memory), c5.xlarge (compute), p3.2xlarge (GPU)
+- **Azure**: Standard_D4ds_v5 (general), Standard_D8ds_v5 (ETL), Standard_E4s_v3 (memory), Standard_F4s_v2 (compute)
+- **GCP**: n1-standard-4 (general), n1-standard-8 (ETL), n1-highmem-4 (memory), n1-highcpu-4 (compute)
 
 **NOTE**: For Azure, use Standard_D series (D4s_v3, D8s_v3) - these are widely available across regions.
 
@@ -232,10 +363,10 @@ Query Selectivity Categories (% of table returned as results):
 - **Low Selectivity (>5% of data)**: Minimal benefit (1-3x)
   Examples: 1 quarter (25%), entire product category (20%), all US customers (40%)
 
-### DLT Editions
-- CORE: Basic pipelines, no CDC
-- PRO: CDC, SCD Type 2, better monitoring
-- ADVANCED: Expectations, enhanced monitoring, data quality
+### SDP Editions (Spark Declarative Pipelines)
+- CORE: Basic declarative pipelines, no CDC
+- PRO: CDC (Apply Changes), SCD Type 2, better monitoring
+- ADVANCED: Data quality expectations, enhanced monitoring, constraints
 
 ### Pricing Tiers
 - on_demand: Pay as you go, most flexible
@@ -252,11 +383,40 @@ Query Selectivity Categories (% of table returned as results):
 - standard: Cost-effective, good for most workloads
 - performance: Faster provisioning, higher throughput, premium pricing
 
-### Model Serving Types
-- cpu: For small models, embeddings
-- gpu_small: For medium models (7B-13B params)
-- gpu_medium: For large models (30B-70B params)
-- gpu_large: For very large models (70B+ params)
+### Model Serving Compute Types by Cloud
+
+**AWS:**
+| Type | GPU Instance | Memory | Best For |
+|------|-------------|--------|----------|
+| CPU | - | 4GB/concurrency | XGBoost, scikit-learn, small embeddings |
+| GPU_SMALL | 1x T4 | 16GB | BERT, DistilBERT, models <8B params |
+| GPU_MEDIUM | 1x A10G | 24GB | Llama-7B, Mistral-7B, models 7-12B |
+| MULTIGPU_MEDIUM | 4x A10G | 96GB | Llama-70B, large models 30-50B |
+| GPU_MEDIUM_8 | 8x A10G | 192GB | Very large models 50-100B |
+
+**Azure:**
+| Type | GPU Instance | Memory | Best For |
+|------|-------------|--------|----------|
+| CPU | - | 4GB/concurrency | XGBoost, scikit-learn, small embeddings |
+| GPU_SMALL | 1x T4 | 16GB | BERT, DistilBERT, models <8B params |
+| GPU_LARGE | 1x A100 | 80GB | Llama-70B, large models 30-40B |
+| GPU_LARGE_2 | 2x A100 | 160GB | Very large models 40-80B |
+| GPU_LARGE_4 | 4x A100 | 320GB | Massive models 80-160B |
+
+**GCP:**
+| Type | GPU Instance | Memory | Best For |
+|------|-------------|--------|----------|
+| CPU | - | 4GB/concurrency | XGBoost, scikit-learn, small embeddings |
+| GPU_MEDIUM | 1x L4 | 24GB | Llama-7B, Mistral-7B, models 7-12B |
+
+**GPU Memory Rule of Thumb:**
+- 1B params ≈ 2GB GPU memory (FP16) or 4GB (FP32)
+- 7B params ≈ 14GB (FP16) → fits on T4 (16GB) or A10G/L4 (24GB)
+- 13B params ≈ 26GB (FP16) → needs A10G 24GB (tight) or A100
+- 70B params ≈ 140GB (FP16) → needs multi-GPU or A100 80GB with quantization
+
+**Recommendation:**
+- >100B params: Use **FMAPI** instead (Databricks hosts the model, pay per token)
 
 ## Important Notes
 - All costs shown are from the Lakemeter pricing engine
@@ -265,6 +425,7 @@ Query Selectivity Categories (% of table returned as results):
 - Ask clarifying questions before proposing configurations - don't assume!
 - ALWAYS use the estimate's cloud provider when suggesting instance types"""
 
+# System prompt for the AI assistant
 SYSTEM_PROMPT = SYSTEM_PROMPT_BASE + """
 
 ## Your Role (Estimate Detail Page)
@@ -293,13 +454,87 @@ NEVER propose a workload without first asking clarifying questions.
 **IMPORTANT**: When you say "let me ask questions", you MUST include the actual questions in the SAME response!
 Don't just say you'll ask questions - actually list them with numbers so users can respond.
 
+**CRITICAL**: Use the EXACT questions from the "Question Guidelines by Workload Type" section below for each workload type.
+DO NOT make up your own questions or deviate from the prescribed lists.
+
+## CRITICAL: Trust the Calculated Configuration
+When the propose_workload tool returns a configuration (e.g., number of clusters, warehouse size):
+- **USE THE EXACT VALUES** returned by the tool - do NOT modify them
+- **DO NOT add extra "headroom"** or "buffer capacity" beyond what was calculated
+- **DO NOT multiply** the calculated values by safety factors
+- The sizing engine already:
+  - Rounds UP to nearest whole number (e.g., 1.86 → 2 clusters)
+  - Accounts for query complexity and data volume
+  - Provides adequate capacity for the stated requirements
+- If you calculate 2 clusters, recommend EXACTLY 2 clusters - not 5x or 10x more
+- Only suggest increasing IF the user explicitly mentions concerns about handling spikes/bursts
+- When explaining the configuration, say "Based on your requirements, the optimal configuration is X" not "Minimum X, but I recommend Y for headroom"
+
+**Example of CORRECT recommendation:**
+"Based on your 100 users with 20% concurrency and 100GB data, you need 2 clusters (calculated from 1.86, rounded up)."
+
+**Example of INCORRECT recommendation (DO NOT DO THIS):**
+"You need minimum 2 clusters, but I recommend 10 clusters for headroom during peak loads."
+
 ## Question Guidelines by Workload Type:
 
 ### For ETL/Pipeline Workloads:
-1. What's the data volume? (GB/TB per run)
-2. What's the latency requirement? (real-time, hourly, daily)
-3. How long does processing typically take?
-4. Is fault tolerance acceptable? (for spot instance decision)
+**FIRST, ask which ETL approach they prefer:**
+1. Do you want **Lakeflow Jobs (Procedural)** or **Spark Declarative Pipelines (SDP)**?
+
+   | Aspect | Lakeflow Jobs (Procedural) | SDP (Declarative) |
+   |--------|---------------------------|-------------------|
+   | Control | Full control over execution | Execution handled by system |
+   | Complexity | Can be complex and verbose | Generally simpler and more concise |
+   | Optimization | Requires manual tuning | System handles optimization |
+   | Flexibility | High, but requires expertise | Lower, but easier to use |
+   | Use Cases | Custom pipelines, performance tuning | SQL queries, managed pipelines |
+
+   **Choose Lakeflow Jobs (Procedural) when:**
+   - Fine-grained control over execution logic is required
+   - Transformations involve complex business rules difficult to express declaratively
+   - Performance optimizations necessitate manual tuning
+   - Need external API calls, ML models, or custom Python/Scala logic
+
+   **Choose SDP (Declarative) when:**
+   - Simplified development and maintenance are priorities
+   - SQL-based transformations or managed workflows eliminate the need for procedural control
+   - Need built-in optimizations (automatic dependency management, incremental processing)
+   - Need CDC (Change Data Capture), materialized views, or data quality constraints
+
+**Then, ask these sizing questions:**
+2. Does your workload use any of these? (determines Photon eligibility)
+   - Python/Scala UDFs (User Defined Functions)
+   - RDD APIs or Dataset APIs
+   - Stateful streaming (e.g., aggregations over time windows)
+   - Kafka/Kinesis streaming to non-Delta/Parquet sinks
+   → If YES to any: Photon disabled (not supported)
+   → If NO to all: Photon enabled (2-3x faster for SQL/DataFrame operations)
+
+3. What's the base table size? (the Delta table you're merging into: 100GB, 1TB, 5TB, 10TB+)
+   - This determines cluster sizing based on TPC-DI benchmarks
+   - Runtime is automatically inferred from the benchmark (e.g., 1TB = ~20min)
+4. What's the job complexity?
+   - **Simple (2x faster)**: Append-only ingestion, basic transformations (SELECT, filter, type casts), single source → single destination, minimal joins (0-2 tables)
+     Example: CSV/JSON → Delta append, column renames, deduplication
+   - **Medium (baseline)**: Standard ETL with MERGE/upsert, 3-5 table joins, aggregations with GROUP BY, window functions
+     Example: Dimensional modeling, fact table updates, SCD Type 2
+   - **Complex (3x slower)**: Heavy transformations, 6+ table joins or self-joins, complex UDFs, ML feature engineering, graph processing
+     Example: Customer 360 builds, complex CDC merges, nested JSON explosions
+5. Do you want **Serverless** or **Classic** compute?
+   - **Serverless**: No infrastructure management, auto-scaling, pay-per-use
+     - **Standard mode**: ~5 min startup, lower cost
+     - **Performance mode**: <1 min startup, higher cost
+     - For SDP: Enables **incremental refresh** for Materialized Views
+     - For Jobs: No need to manage DBR (Databricks Runtime) versions
+   - **Classic**: More control over cluster configuration, instance types, spot pricing
+     - Better for: predictable workloads, cost optimization with spot instances, specific instance requirements
+6. Is this a scheduled batch job or continuous processing?
+   - Scheduled batch: runs at specific times (hourly, daily, etc.)
+   - Continuous: runs 24/7 for streaming data
+7. For batch jobs: How many runs per day? (e.g., 1 daily run, 24 hourly runs)
+8. How many days per month does it run? (22 = weekdays, 30 = daily)
+9. (Classic only) Is fault tolerance acceptable? (Yes = spot instances for 60-90% savings, No = on-demand)
 
 ### For Dashboarding/DBSQL:
 1. How many total dashboard users?
@@ -313,15 +548,70 @@ Don't just say you'll ask questions - actually list them with numbers so users c
 7. Usage pattern? (business hours 8-5, or 24/7 monitoring)
 
 ### For Interactive/All-Purpose:
-1. How many data scientists/analysts using it?
-2. What size datasets are they working with?
-3. How many hours per day is it used?
+**This is for development of ETL and ML workloads. For SQL queries, use DBSQL instead.**
+
+1. How many data scientists/engineers will share this cluster?
+   - 1 user → Single-user cluster (simpler, isolated)
+   - 2-10 users → Shared cluster
+   - 10+ users → Consider multiple clusters
+
+2. What's the typical dataset size for development?
+   | Dataset Size | Recommended Workers |
+   |--------------|---------------------|
+   | <10 GB | 1-2 workers |
+   | 10-100 GB | 2-4 workers |
+   | 100 GB - 1 TB | 4-8 workers |
+   | 1-10 TB | 8-16 workers |
+   | 10+ TB | Are you sure you need this much data in dev? Consider sampling. |
+
+3. What type of development?
+   - **ETL development** → General purpose instances, Photon-enabled
+   - **ML/Feature Engineering** → Memory-optimized instances
+
+4. Usage pattern?
+   - Hours per day: ___
+   - Days per month: ___ (22 = weekdays, 30 = daily)
+
+5. Cost optimization?
+   - Can you tolerate occasional task failures during dev?
+     - Yes → Spot workers (up to 90% savings)
+     - No → On-demand workers
 
 ### For GenAI/Chatbots:
 1. What model preference? (Claude, GPT, Llama, etc.)
 2. How many users and questions per day?
 3. What's the knowledge base size? (number of documents)
 4. How often is content updated? (for data prep sizing)
+
+### For Vector Search:
+**COPY THIS EXACT TEXT** when user asks about Vector Search:
+```
+I'll help you configure Vector Search! Please answer these 5 questions:
+
+1. **Endpoint Type**: Which do you need?
+   - Standard: 20-50ms latency, best for <320M vectors
+   - Storage Optimized: 250ms latency, 10M+ vectors, 7x cheaper per vector
+
+2. **Embedding Model**: What model are you using?
+   - gte-base: 768 dimensions
+   - bge-large-en: 1024 dimensions  
+   - OpenAI text-embedding-3-small: 1536 dimensions
+   - Custom: specify dimensions
+
+3. **Number of Documents**: How many documents will be indexed?
+
+4. **Pages per Document**: Average pages per document?
+
+5. **Query Volume**: Expected queries per second (QPS)?
+
+Note: Vector Search runs 24/7 continuously (730 hours/month) - it cannot be stopped.
+```
+DO NOT ask about "use case", "how many vectors", "index type preference", "hours per month", or any other questions.
+
+**When calling propose_workload for VECTOR_SEARCH, pass these 2 parameters:**
+- `vector_search_endpoint_type`: STANDARD (<320M vectors) or STORAGE_OPTIMIZED (10M+ vectors, 7x cheaper)
+- `vector_capacity_millions`: Calculate from answers: docs × pages × 1.2 × (dimensions÷768)
+  Example: 1M docs × 1000 pages × 1.2 × (1024÷768) = 1600 → pass 1600
 
 ## Using Context
 - The estimate details (name, cloud, region, tier) are provided in the context
@@ -343,8 +633,9 @@ When user requests multiple workloads at once (like "I need ETL, dashboards, and
 I can help you set up all of these! To configure them optimally, I need a few details:
 
 **For your ETL pipelines:**
-1. What's the data volume per batch? (GB/TB)
-2. How long do your batch jobs typically run?
+1. What's the base table size you're merging into? (100GB, 1TB, 5TB, 10TB+)
+2. What's the job complexity? (Simple: append-only, Medium: MERGE/upsert with joins, Complex: 6+ joins, UDFs)
+3. How many batch runs per day?
 
 **For dashboarding (20 users):**
 3. Are all 20 users active at the same time, or spread throughout the day?
@@ -358,53 +649,12 @@ Once you answer these, I'll propose each workload with the right configuration!
 ```
 
 ## Configuration Tips
-- For JOBS/DLT: Ask about runs_per_day + avg_runtime_minutes for batch, OR hours_per_month for continuous
+- For JOBS/DLT: Ask about base_table_size + runs_per_day for batch (runtime inferred from TPC-DI benchmarks), OR hours_per_month for continuous
 - For DBSQL: Ask about total users, concurrency %, data volume, and query selectivity to size warehouse
-- For serverless: STILL include VM types (for DBU rate calculation), but note VMs are managed by Databricks
+- For serverless: No VM types needed, but ask about workload intensity for cost estimates
 - For reserved pricing: Only recommend for predictable, long-running workloads
 - For spot workers: Only for fault-tolerant batch jobs that can handle interruptions
 - ALWAYS use instance types appropriate for the estimate's cloud provider!
-
-## IMPORTANT: Per-Workload Notes (detailed_rationale)
-When calling propose_workload, you MUST include a `detailed_rationale` field with a CONCISE summary specific to THAT workload only.
-
-**CRITICAL**: When proposing multiple workloads, each workload's `detailed_rationale` should ONLY describe that specific workload, NOT all workloads combined.
-
-**Format (keep it brief - 5-8 bullet points max):**
-```
-**Configuration:** [workload type], [key specs like size/workers/hours]
-
-**Why this setup:**
-• [Key decision 1 - e.g., why serverless vs classic]
-• [Key decision 2 - e.g., why this size/instance]
-• [Key decision 3 - e.g., why this pricing tier]
-
-**Cost tip:** [One actionable optimization suggestion]
-```
-
-**Example for DBSQL:**
-```
-**Configuration:** Serverless Small warehouse, 1 cluster, 198 hrs/mo (business hours)
-
-**Why this setup:**
-• Serverless for instant startup and scale-to-zero (ad-hoc analytics)
-• Small size handles 10 users at 10GB data with ~2s query times
-• Business hours only = pay only for actual usage
-
-**Cost tip:** If usage exceeds 500 hrs/mo consistently, consider Pro with reserved capacity.
-```
-
-**Example for Jobs:**
-```
-**Configuration:** Classic cluster with Photon, 4 workers × i3.xlarge, spot pricing
-
-**Why this setup:**
-• Photon enabled for 2x faster complex transformations
-• 4 workers sized for 100GB daily batch processing
-• Spot workers (60-90% savings) - job can retry on interruption
-
-**Cost tip:** For 12+ month predictable usage, consider reserved instances for ~30% savings.
-```
 
 ## DBSQL Sizing Guidelines
 
@@ -483,7 +733,7 @@ Note: All three types support Unity Catalog, auto-scaling, scale to zero, and pa
 **When in doubt:** If user mentions filtering by date ranges, user IDs, specific categories, or "drill-down" queries, assume moderate selectivity (5%) and recommend Pro/Serverless for datasets >10GB."""
 
 
-# Tool definitions for the AI Assistant
+# Tool definitions for the AI assistant
 TOOLS = [
     {
         "name": "propose_workload",
@@ -520,7 +770,7 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 "driver_node_type": {
                     "type": "string",
-                    "description": "Instance type for driver node (e.g., 'i3.xlarge', 'm5.large', 'Standard_DS3_v2')"
+                    "description": "Instance type for driver node (e.g., 'm6i.xlarge', 'm6id.2xlarge', 'Standard_D4ds_v5')"
                 },
                 "worker_node_type": {
                     "type": "string",
@@ -634,10 +884,14 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 
                 # === Vector Search Specific ===
-                "vector_search_index_type": {
+                "vector_search_endpoint_type": {
                     "type": "string",
-                    "enum": ["DIRECT_ACCESS", "DELTA_SYNC"],
-                    "description": "Vector Search index type"
+                    "enum": ["STANDARD", "STORAGE_OPTIMIZED"],
+                    "description": "REQUIRED for VECTOR_SEARCH. STANDARD: 20-50ms, <320M vectors. STORAGE_OPTIMIZED: 250ms, 10M+ vectors, 7x cheaper."
+                },
+                "vector_capacity_millions": {
+                    "type": "integer",
+                    "description": "REQUIRED for VECTOR_SEARCH. Capacity in millions. Calculate: docs × pages × 1.2 × (dimensions÷768). Example: 1M docs × 1000 pages × 1.2 × (1024÷768) = 1600M → pass 1600"
                 },
                 
                 # === Foundation Model API Specific ===
@@ -648,7 +902,7 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 "fmapi_model": {
                     "type": "string",
-                    "description": "Model name (e.g., 'claude-sonnet-4', 'gpt-4', 'llama-3-3-70b', 'dbrx-instruct')"
+                    "description": "Model name (e.g., 'claude-sonnet-4', 'gpt-5', 'llama-3-3-70b', 'dbrx-instruct')"
                 },
                 "fmapi_endpoint_type": {
                     "type": "string",
@@ -671,51 +925,60 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 
                 # === Lakebase Specific ===
-                "lakebase_cu": {
+                "lakebase_expected_reads_per_sec": {
                     "type": "integer",
-                    "description": "Lakebase Compute Units (1-128). More CUs = more concurrent connections and faster queries"
+                    "description": "Expected lookup reads per second (e.g., 10000)"
+                },
+                "lakebase_expected_bulk_writes_per_sec": {
+                    "type": "integer",
+                    "description": "Expected bulk write operations per second - truncate and load style (e.g., 5000)"
+                },
+                "lakebase_expected_incremental_writes_per_sec": {
+                    "type": "integer",
+                    "description": "Expected incremental writes per second - updates/inserts with scanning (e.g., 1000)"
+                },
+                "lakebase_avg_row_size_kb": {
+                    "type": "number",
+                    "description": "Average row size (uncompressed) in KB (default: 1KB). Affects throughput calculations"
                 },
                 "lakebase_ha_enabled": {
                     "type": "boolean",
-                    "description": "Enable High Availability (adds 1 replica node for failover)"
+                    "description": "Enable High Availability with 1 standby replica for automatic failover (recommended for production)"
+                },
+                "lakebase_num_read_replicas": {
+                    "type": "integer",
+                    "description": "Number of read replicas (0-2) for read scaling. Total instances = 1 primary + 0-2 read replicas (max 3 total). Each replica has same CU as primary and handles reads only. Writes always go to primary."
                 },
                 
                 # === Notes (DETAILED) ===
                 "reason": {
                     "type": "string",
-                    "description": "Brief one-line summary of the use case (e.g., 'Daily batch ETL processing 100GB data')"
-                },
-                "detailed_rationale": {
-                    "type": "string",
-                    "description": """REQUIRED: CONCISE explanation for THIS SPECIFIC workload only (5-8 bullet points max).
-Format:
-**Configuration:** [type], [key specs]
-**Why this setup:**
-• [Key decision 1]
-• [Key decision 2]
-• [Key decision 3]
-**Cost tip:** [One actionable suggestion]
-
-IMPORTANT: When proposing multiple workloads, each one must have its OWN detailed_rationale - do NOT combine explanations for all workloads."""
+                    "description": "Brief one-line summary of why this configuration was chosen"
                 },
                 "notes": {
                     "type": "string",
-                    "description": "DEPRECATED: Use detailed_rationale instead. Will be ignored if detailed_rationale is provided."
+                    "description": """OPTIONAL: You can leave this empty - comprehensive notes will be auto-generated.
+If you want to add custom notes, they will be REPLACED by auto-generated detailed notes covering:
+- Configuration rationale, sizing assumptions, cost considerations, usage assumptions, and trade-offs.
+Recommendation: Leave empty and let the system generate comprehensive notes automatically."""
                 }
             },
-            "required": ["workload_type", "workload_name", "reason", "detailed_rationale"]
+            "required": ["workload_type", "workload_name", "reason"]
         }
     },
     {
         "name": "ask_clarifying_questions",
-        "description": "Use this tool to ask the user clarifying questions before proposing a workload. This ensures you have the right information for an accurate configuration.",
+        "description": """Use this tool to ask the user clarifying questions before proposing a workload.
+CRITICAL: You MUST use the EXACT questions from the 'Question Guidelines by Workload Type' section for each workload type.
+For Vector Search specifically: Ask the 6 questions (Endpoint Type, Embedding Model/Dimensions, Number of Documents, Pages per Document, Query Volume, Hours per Month).
+DO NOT make up generic questions like 'primary use case', 'how many vectors', or 'index type preference'.""",
         "parameters": {
             "type": "object",
             "properties": {
                 "questions": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of questions to ask the user"
+                    "description": "EXACT questions copied from Question Guidelines section for this workload type"
                 },
                 "context": {
                     "type": "string",
@@ -802,17 +1065,16 @@ This will propose all necessary workloads (data prep, vector search, foundation 
     }
 ]
 
-
 class EstimateAgent:
     """
-    AI Agent that helps users create and manage Databricks pricing estimates.
+    AI Agent that helps users create and manage estimates.
     
-    Operates within the Estimate Detail page context:
-    - Proposes workload configurations based on user requirements
-    - Analyzes estimates using actual calculated costs from context
-    - Provides optimization recommendations and best practices
+    Maintains conversation state and handles tool execution.
+    Does NOT perform cost calculations - uses costs from context.
     
-    Does NOT perform cost calculations - uses costs from the pricing engine.
+    The AI assistant is only available on the estimate calculator page,
+    when a user has selected/created an estimate with required configuration
+    (cloud provider, region, Databricks tier).
     """
     
     def __init__(self, claude_client: ClaudeAIClient):
@@ -821,8 +1083,6 @@ class EstimateAgent:
         self.current_estimate: Optional[Dict[str, Any]] = None
         self.current_workloads: List[Dict[str, Any]] = []  # Actual workloads with costs
         self.proposed_workloads: List[Dict[str, Any]] = []  # Pending workload confirmations
-        self.proposed_estimate: Optional[Dict[str, Any]] = None  # Pending estimate confirmation
-        self._conversation_summary: str = ""  # Summary of old conversation for context
     
     def reset(self):
         """Reset the agent state for a new conversation."""
@@ -830,285 +1090,58 @@ class EstimateAgent:
         self.current_estimate = None
         self.current_workloads = []
         self.proposed_workloads = []
-        self.proposed_estimate = None
-        self._conversation_summary = ""
     
     def _trim_conversation_history(self, max_messages: int = 20):
         """
         Trim conversation history to prevent it from growing too long.
-        Properly handles tool_use/tool_result pairs to avoid API errors.
+        Keeps the most recent messages while preserving tool call/result pairs.
         
-        Strategy:
-        1. Find pairs of messages (assistant with tool_use + user with tool_result)
-        2. Keep complete pairs, remove orphaned messages
-        3. Keep at most max_messages but never break a pair
+        CRITICAL: Every tool_use block must have a corresponding tool_result block immediately after.
         """
         if len(self.conversation_history) <= max_messages:
             return
         
-        # Find indices of messages that must stay together (tool_use and its tool_result)
-        # A tool_use in assistant message must be followed by tool_result in next user message
-        tool_use_indices = set()
+        # Keep only the most recent messages
+        trimmed = self.conversation_history[-max_messages:]
         
-        for i, msg in enumerate(self.conversation_history):
-            # Check if this is an assistant message with tool_calls
-            if msg.get("role") == "assistant" and msg.get("tool_calls"):
-                tool_use_indices.add(i)
-                # The next message should be the tool_result
-                if i + 1 < len(self.conversation_history):
-                    next_msg = self.conversation_history[i + 1]
-                    if next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list):
-                        # This is a tool_result message - mark it as paired
-                        tool_use_indices.add(i + 1)
-        
-        # Start from the end and find a safe cut point
-        # We want at most max_messages, but we can't cut in the middle of a tool pair
-        start_idx = len(self.conversation_history) - max_messages
-        
-        # Ensure we don't start in the middle of a tool pair
-        # If start_idx lands on a tool_result (i.e., start_idx-1 is a tool_use), move forward
-        while start_idx > 0 and start_idx < len(self.conversation_history):
-            if start_idx in tool_use_indices:
-                # Check if this is a tool_result that needs its tool_use before it
-                prev_idx = start_idx - 1
-                if prev_idx in tool_use_indices:
-                    # We're cutting between tool_use and tool_result - bad!
-                    # Move start forward to skip this broken pair
-                    start_idx += 1
+        # Remove orphaned messages at the start that would break the conversation
+        while trimmed:
+            first_msg = trimmed[0]
+            
+            # If first message is a tool result (user message with list content containing tool_result)
+            # it's orphaned because the assistant tool_call is no longer in history
+            if first_msg.get("role") == "user" and isinstance(first_msg.get("content"), list):
+                content_list = first_msg.get("content", [])
+                if any(item.get("type") == "tool_result" for item in content_list if isinstance(item, dict)):
+                    trimmed = trimmed[1:]
                     continue
             
-            # Also check if start_idx-1 is a tool_use without its result being included
-            if start_idx - 1 in tool_use_indices and start_idx not in tool_use_indices:
-                # The message before is a tool_use but we're not including its result
-                # Move forward to skip the orphaned tool_use
-                start_idx += 1
-                continue
+            # If first message is an assistant with tool_calls, check if next message has matching tool_result
+            if first_msg.get("role") == "assistant" and first_msg.get("tool_calls"):
+                if len(trimmed) < 2:
+                    # No following message, remove orphaned tool_call
+                    trimmed = trimmed[1:]
+                    continue
+                    
+                next_msg = trimmed[1]
+                # Check if next message is the corresponding tool_result
+                if not (next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list)):
+                    # Next message is not a tool_result, remove orphaned tool_call
+                    trimmed = trimmed[1:]
+                    continue
             
+            # Message is valid, stop trimming
             break
         
-        # Apply the trim
-        if start_idx > 0:
-            self.conversation_history = self.conversation_history[start_idx:]
-            log_info(f"Trimmed conversation history to {len(self.conversation_history)} messages (from {start_idx})")
-    
-    def _validate_conversation_history(self):
-        """
-        Validate and fix conversation history to ensure tool_use/tool_result pairs are complete.
-        Removes orphaned tool_use messages AND orphaned tool_result messages.
-        """
-        if not self.conversation_history:
-            return
-        
-        # First pass: Collect all tool_use IDs and tool_result IDs
-        tool_use_ids = set()
-        tool_result_ids = set()
-        
-        for msg in self.conversation_history:
-            if msg.get("role") == "assistant" and msg.get("tool_calls"):
-                for tc in msg.get("tool_calls", []):
-                    if tc.get("id"):
-                        tool_use_ids.add(tc["id"])
-            
-            if msg.get("role") == "user" and isinstance(msg.get("content"), list):
-                for item in msg.get("content", []):
-                    if item.get("type") == "tool_result" and item.get("tool_use_id"):
-                        tool_result_ids.add(item["tool_use_id"])
-        
-        # Find orphaned tool_use IDs (those without tool_results)
-        orphaned_use_ids = tool_use_ids - tool_result_ids
-        # Find orphaned tool_result IDs (those without tool_use)
-        orphaned_result_ids = tool_result_ids - tool_use_ids
-        
-        if orphaned_use_ids or orphaned_result_ids:
-            log_warning(f"Found {len(orphaned_use_ids)} orphaned tool_use, {len(orphaned_result_ids)} orphaned tool_results")
-            
-            # Build cleaned history
-            cleaned_history = []
-            for msg in self.conversation_history:
-                if msg.get("role") == "assistant" and msg.get("tool_calls"):
-                    # Check if any tool_call in this message is orphaned
-                    msg_tool_ids = {tc.get("id") for tc in msg.get("tool_calls", [])}
-                    if msg_tool_ids & orphaned_use_ids:
-                        log_info(f"Removing assistant message with orphaned tool_use: {msg_tool_ids & orphaned_use_ids}")
-                        continue
-                    cleaned_history.append(msg)
-                elif msg.get("role") == "user" and isinstance(msg.get("content"), list):
-                    # Filter out orphaned tool_results
-                    filtered_content = []
-                    has_orphaned = False
-                    for item in msg.get("content", []):
-                        if item.get("type") == "tool_result":
-                            if item.get("tool_use_id") in orphaned_result_ids:
-                                has_orphaned = True
-                                log_info(f"Removing orphaned tool_result: {item.get('tool_use_id')}")
-                                continue
-                        filtered_content.append(item)
-                    
-                    if filtered_content:
-                        msg_copy = msg.copy()
-                        msg_copy["content"] = filtered_content
-                        cleaned_history.append(msg_copy)
-                    elif not has_orphaned:
-                        # Keep empty user messages that weren't tool results
-                        cleaned_history.append(msg)
-                else:
-                    cleaned_history.append(msg)
-            
-            self.conversation_history = cleaned_history
-            log_info(f"Cleaned conversation history: {len(self.conversation_history)} messages remaining")
-        
-        # Second pass: Ensure tool_use and tool_result are properly paired in sequence
-        # An assistant message with tool_calls MUST be followed immediately by tool_results
-        i = 0
-        while i < len(self.conversation_history):
-            msg = self.conversation_history[i]
-            if msg.get("role") == "assistant" and msg.get("tool_calls"):
-                tool_ids = {tc.get("id") for tc in msg.get("tool_calls", [])}
-                
-                # Check if next message is a user message with ALL the tool_results
-                if i + 1 < len(self.conversation_history):
-                    next_msg = self.conversation_history[i + 1]
-                    if next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list):
-                        result_ids = {
-                            item.get("tool_use_id") 
-                            for item in next_msg.get("content", []) 
-                            if item.get("type") == "tool_result"
-                        }
-                        if tool_ids == result_ids:
-                            i += 1  # All good, skip to after the tool results
-                        else:
-                            # Mismatch - remove the assistant message
-                            log_warning(f"Tool ID mismatch at index {i}: use={tool_ids}, results={result_ids}")
-                            self.conversation_history.pop(i)
-                            continue
-                    else:
-                        # Next message is not tool results - remove the assistant message
-                        log_warning(f"Assistant tool_calls at index {i} not followed by tool_results")
-                        self.conversation_history.pop(i)
-                        continue
-                else:
-                    # No next message - remove the assistant message
-                    log_warning(f"Assistant tool_calls at index {i} is last message, removing")
-                    self.conversation_history.pop(i)
-                    continue
-            i += 1
-    
-    async def _summarize_conversation(self, messages_to_summarize: List[Dict[str, Any]]) -> str:
-        """
-        Summarize old conversation messages to preserve context while reducing tokens.
-        
-        Args:
-            messages_to_summarize: List of messages to summarize
-            
-        Returns:
-            A concise summary of the conversation
-        """
-        if not messages_to_summarize:
-            return ""
-        
-        # Build a simple text representation of messages to summarize
-        conversation_text = []
-        for msg in messages_to_summarize:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            
-            # Skip tool result messages (they're technical)
-            if isinstance(content, list):
-                continue
-                
-            if role == "user":
-                conversation_text.append(f"User: {content}")
-            elif role == "assistant":
-                # Truncate long assistant responses
-                if len(content) > 500:
-                    content = content[:500] + "..."
-                conversation_text.append(f"Assistant: {content}")
-        
-        if not conversation_text:
-            return ""
-        
-        # Use Claude to summarize
-        summary_prompt = f"""Summarize this conversation in 2-3 sentences, focusing on:
-1. What the user asked for
-2. What workloads were discussed or proposed
-3. Any key decisions made
-
-Conversation:
-{chr(10).join(conversation_text)}
-
-Summary (be concise):"""
-        
-        try:
-            response = await self.client.chat(
-                messages=[{"role": "user", "content": summary_prompt}],
-                tools=[],
-                system="You are a helpful assistant that summarizes conversations concisely.",
-                max_tokens=200,
-                temperature=0.3
-            )
-            return response.get("content", "").strip()
-        except Exception as e:
-            log_warning(f"Failed to summarize conversation: {e}")
-            return ""
-    
-    async def _manage_conversation_history(self, max_recent: int = 10, summarize_threshold: int = 15):
-        """
-        Manage conversation history by summarizing old messages.
-        
-        Strategy:
-        - If history > summarize_threshold messages, summarize older messages
-        - Keep the last max_recent messages intact for context
-        - Add summary as a system context note
-        
-        Args:
-            max_recent: Number of recent messages to keep intact
-            summarize_threshold: Trigger summarization when history exceeds this
-        """
-        if len(self.conversation_history) <= summarize_threshold:
-            return
-        
-        # Separate messages to summarize vs keep
-        messages_to_summarize = self.conversation_history[:-max_recent]
-        messages_to_keep = self.conversation_history[-max_recent:]
-        
-        # Ensure we don't break tool_use/tool_result pairs in messages_to_keep
-        # If the first message to keep is a tool_result, include its tool_use
-        while messages_to_keep:
-            first_msg = messages_to_keep[0]
-            if (first_msg.get("role") == "user" and 
-                isinstance(first_msg.get("content"), list)):
-                # This is a tool_result - need the previous message (tool_use)
-                if messages_to_summarize:
-                    messages_to_keep.insert(0, messages_to_summarize.pop())
-                else:
-                    # No more messages to pull from - remove orphaned tool_result
-                    messages_to_keep.pop(0)
-            else:
-                break
-        
-        # Summarize old messages
-        summary = await self._summarize_conversation(messages_to_summarize)
-        
-        if summary:
-            # Add summary as context for the agent (will be included in system prompt)
-            self._conversation_summary = summary
-            log_info(f"Summarized {len(messages_to_summarize)} messages, keeping {len(messages_to_keep)} recent")
-        
-        # Update history with just the recent messages
-        self.conversation_history = messages_to_keep
+        self.conversation_history = trimmed
+        log_info(f"Trimmed conversation history to {len(self.conversation_history)} messages")
     
     def _get_system_prompt(self) -> str:
-        """Get the system prompt, including any conversation summary."""
-        prompt = SYSTEM_PROMPT
-        
-        # Add conversation summary if available
-        if hasattr(self, '_conversation_summary') and self._conversation_summary:
-            prompt += f"\n\n## Previous Conversation Summary\n{self._conversation_summary}"
-        
-        return prompt
+        """Get the system prompt for the AI assistant."""
+        return SYSTEM_PROMPT
     
     def _get_tools(self) -> List[Dict[str, Any]]:
-        """Get the available tools."""
+        """Get the available tools for the AI assistant."""
         return TOOLS
     
     def set_context(self, estimate: Dict[str, Any], workloads: List[Dict[str, Any]] = None):
@@ -1167,9 +1200,6 @@ Summary (be concise):"""
         tool_results = []
         proposed_workload = None
         
-        # Capture AI's explanation text (comes before tool calls)
-        ai_explanation_text = response.get("content", "")
-        
         if response.get("tool_calls"):
             for tool_call in response["tool_calls"]:
                 result = await self._execute_tool(
@@ -1185,12 +1215,6 @@ Summary (be concise):"""
                 # Check if this is a workload proposal
                 if tool_call["name"] == "propose_workload" and result.get("success"):
                     proposed_workload = result.get("proposed_workload")
-                    # Attach AI's explanation text to the workload notes
-                    if ai_explanation_text and proposed_workload:
-                        self._update_proposal_notes_with_explanation(
-                            proposed_workload.get("proposal_id"),
-                            ai_explanation_text
-                        )
             
             # Add assistant message with tool use to history
             self.conversation_history.append({
@@ -1199,18 +1223,18 @@ Summary (be concise):"""
                 "tool_calls": response["tool_calls"]
             })
             
-            # Add ALL tool results in a SINGLE user message (Claude API requirement)
-            all_tool_results = []
+            # Add tool results to history
             for i, tool_call in enumerate(response["tool_calls"]):
-                all_tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_call["id"],
-                    "content": json.dumps(tool_results[i]["output"])
+                self.conversation_history.append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_call["id"],
+                            "content": json.dumps(tool_results[i]["output"])
+                        }
+                    ]
                 })
-            self.conversation_history.append({
-                "role": "user",
-                "content": all_tool_results
-            })
             
             # Get follow-up response after tool execution
             follow_up = await self.client.chat(
@@ -1266,12 +1290,8 @@ Summary (be concise):"""
         current_tool = None
         tool_input_json = ""
         
-        # Validate and clean up conversation history before making API call
-        self._validate_conversation_history()
-        
-        # Manage conversation history - summarize if too long, then trim if still needed
-        await self._manage_conversation_history()
-        self._trim_conversation_history()  # Fallback safety trim
+        # Trim conversation history to prevent 400 errors from too-long requests
+        self._trim_conversation_history()
         
         async for chunk in self.client.chat_stream(
             messages=self.conversation_history,
@@ -1301,15 +1321,44 @@ Summary (be concise):"""
             
             elif chunk_type == "tool_call_complete":
                 # Handle complete tool call from OpenAI format
-                # Just accumulate the tool call - execution happens AFTER streaming completes
-                tool_id = chunk.get("id")
                 current_tool = {
-                    "id": tool_id,
+                    "id": chunk.get("id"),
                     "name": chunk.get("name"),
                     "arguments": chunk.get("arguments", {})
                 }
                 tool_calls.append(current_tool)
-                yield {"type": "tool_start", "tool": current_tool["name"]}
+                
+                # Execute tool
+                result = await self._execute_tool(
+                    current_tool["name"],
+                    current_tool["arguments"]
+                )
+                
+                yield {
+                    "type": "tool_result",
+                    "tool": current_tool["name"],
+                    "result": result
+                }
+                
+                # If it's a workload proposal, yield that separately
+                if current_tool["name"] == "propose_workload" and result.get("success"):
+                    yield {
+                        "type": "proposal",
+                        "workload": result.get("proposed_workload")
+                    }
+                
+                # If it's a GenAI architecture proposal, yield each workload separately
+                if current_tool["name"] == "propose_genai_architecture" and result.get("success"):
+                    for w in result.get("workloads", []):
+                        # Find the full workload from proposed_workloads
+                        for proposed in self.proposed_workloads:
+                            if proposed.get("proposal_id") == w.get("proposal_id"):
+                                yield {
+                                    "type": "proposal",
+                                    "workload": proposed
+                                }
+                                break
+                
                 current_tool = None
             
             elif chunk_type == "message_delta":
@@ -1327,56 +1376,31 @@ Summary (be concise):"""
         
         # Process any tool calls that were accumulated
         if tool_calls:
-            # Add assistant response to history (clean tool_calls without _result)
-            clean_tool_calls = [{k: v for k, v in tc.items() if k != "_result"} for tc in tool_calls]
+            # Add assistant response to history
             self.conversation_history.append({
                 "role": "assistant",
                 "content": full_content,
-                "tool_calls": clean_tool_calls
+                "tool_calls": tool_calls
             })
             
-            # Execute ALL tools and collect results
-            # IMPORTANT: Claude API requires all tool_results in a SINGLE user message
-            all_tool_results = []
-            
+            # Execute tools and add results to history
             for tool_call in tool_calls:
-                # Execute tool
                 result = await self._execute_tool(
                     tool_call["name"],
                     tool_call["arguments"]
                 )
                 
-                # Collect tool result for later
-                all_tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_call["id"],
-                    "content": json.dumps(result)
-                })
-                
-                # Yield tool result to client
                 yield {
                     "type": "tool_result",
                     "tool": tool_call["name"],
                     "result": result
                 }
                 
-                # If it's a workload proposal, update notes with AI explanation and yield
+                # If it's a workload proposal, yield that separately
                 if tool_call["name"] == "propose_workload" and result.get("success"):
-                    proposed_workload = result.get("proposed_workload")
-                    # Attach AI's explanation text (full_content) to the workload notes
-                    if full_content and proposed_workload:
-                        self._update_proposal_notes_with_explanation(
-                            proposed_workload.get("proposal_id"),
-                            full_content
-                        )
-                        # Re-fetch the updated proposal from proposed_workloads
-                        for p in self.proposed_workloads:
-                            if p.get("proposal_id") == proposed_workload.get("proposal_id"):
-                                proposed_workload = p
-                                break
                     yield {
                         "type": "proposal",
-                        "workload": proposed_workload
+                        "workload": result.get("proposed_workload")
                     }
                 
                 # If it's a GenAI architecture proposal, yield each workload separately
@@ -1385,61 +1409,58 @@ Summary (be concise):"""
                         # Find the full workload from proposed_workloads
                         for proposed in self.proposed_workloads:
                             if proposed.get("proposal_id") == w.get("proposal_id"):
-                                # Attach AI's explanation text to the workload notes
-                                if full_content:
-                                    self._update_proposal_notes_with_explanation(
-                                        proposed.get("proposal_id"),
-                                        full_content
-                                    )
                                 yield {
                                     "type": "proposal",
                                     "workload": proposed
                                 }
                                 break
                 
-                # If it's an estimate proposal, yield that separately
-                if tool_call["name"] in ["propose_estimate", "create_estimate"] and result.get("success"):
-                    yield {
-                        "type": "estimate_proposal",
-                        "estimate": result.get("proposed_estimate")
-                    }
-                
-                # If it's clarifying questions, yield the questions as content
-                if tool_call["name"] == "ask_clarifying_questions" and result.get("success"):
-                    questions_text = result.get("message", "")
-                    if questions_text:
-                        yield {"type": "content", "content": f"\n\n{questions_text}"}
-                        full_content += f"\n\n{questions_text}"
+                self.conversation_history.append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_call["id"],
+                            "content": json.dumps(result)
+                        }
+                    ]
+                })
             
-            # Add ALL tool results in a SINGLE user message (Claude API requirement)
-            self.conversation_history.append({
-                "role": "user",
-                "content": all_tool_results
-            })
+            # Get follow-up response
+            yield {"type": "content", "content": "\n\n"}
             
-            # Generate follow-up message based on what was executed
             follow_up_content = ""
-            has_questions = any(tc["name"] == "ask_clarifying_questions" for tc in tool_calls)
-            
-            if has_questions:
-                # Questions were already yielded above
-                follow_up_content = "Please answer the questions above so I can create an accurate configuration."
-            elif self.proposed_workloads:
-                follow_up_content = "I've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
-            elif self.proposed_estimate:
-                follow_up_content = "I've proposed an estimate above. Please review and confirm or reject it."
-            else:
-                follow_up_content = "I've processed your request."
-            
-            # IMPORTANT: Add follow-up as assistant message to maintain valid conversation structure
-            # (user message with tool_results must be followed by assistant message)
-            self.conversation_history.append({
-                "role": "assistant",
-                "content": full_content + f"\n\n{follow_up_content}"
-            })
-            
-            yield {"type": "content", "content": f"\n\n{follow_up_content}"}
-            full_content += f"\n\n{follow_up_content}"
+            try:
+                async for chunk in self.client.chat_stream(
+                    messages=self.conversation_history,
+                    tools=tools,
+                    system=system,
+                    max_tokens=4096,
+                    temperature=0.7
+                ):
+                    chunk_type = chunk.get("type")
+                    if chunk_type == "content_delta":
+                        content = chunk.get("content", "")
+                        follow_up_content += content
+                        full_content += content
+                        yield {"type": "content", "content": content}
+                    elif chunk_type == "error":
+                        log_error(f"Follow-up stream error: {chunk.get('content')}")
+                        yield {"type": "content", "content": f"\n\n*Error getting response: {chunk.get('content')}*"}
+                        break
+                    elif chunk_type == "done":
+                        break
+                
+                # If no follow-up content, provide a context-appropriate message
+                if not follow_up_content.strip() and self.proposed_workloads:
+                    default_msg = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
+                    yield {"type": "content", "content": default_msg}
+                    full_content += default_msg
+            except Exception as e:
+                log_error(f"Follow-up response error: {e}")
+                error_msg = f"\n\n*Error: {str(e)}*"
+                yield {"type": "content", "content": error_msg}
+                full_content += error_msg
         
         # Add final response to history
         self.conversation_history.append({
@@ -1451,8 +1472,7 @@ Summary (be concise):"""
             "type": "done",
             "estimate": self.current_estimate,
             "workloads": self.current_workloads,
-            "proposed_workloads": self.proposed_workloads,
-            "proposed_estimate": self.proposed_estimate
+            "proposed_workloads": self.proposed_workloads
         }
     
     def _build_context(self) -> str:
@@ -1551,12 +1571,7 @@ The following fields MUST be set before workloads can be added:
         """Execute a tool and return the result."""
         log_info(f"Executing tool: {tool_name} with args: {arguments}")
         
-        if tool_name == "create_estimate":
-            # Legacy support - treat as proposal
-            return self._propose_estimate(**arguments)
-        elif tool_name == "propose_estimate":
-            return self._propose_estimate(**arguments)
-        elif tool_name == "propose_workload":
+        if tool_name == "propose_workload":
             return self._propose_workload(**arguments)
         elif tool_name == "add_workload":
             # Legacy support - treat as proposal
@@ -1571,57 +1586,6 @@ The following fields MUST be set before workloads can be added:
             return self._propose_genai_architecture(**arguments)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
-    
-    def _propose_estimate(
-        self,
-        name: str,
-        cloud: str,
-        region: str,
-        description: str = "",
-        reason: str = ""
-    ) -> Dict[str, Any]:
-        """
-        Propose an estimate configuration for user confirmation.
-        Does NOT create the estimate - user must confirm first.
-        """
-        self.proposed_estimate = {
-            "proposal_id": str(uuid.uuid4()),
-            "name": name,
-            "estimate_name": name,  # Support both formats
-            "cloud": cloud.lower(),
-            "region": region,
-            "description": description,
-            "reason": reason,
-            "status": "pending_confirmation",
-            "created_at": datetime.now().isoformat()
-        }
-        
-        return {
-            "success": True,
-            "message": f"Proposed estimate '{name}' for {cloud.upper()} {region}",
-            "proposed_estimate": self.proposed_estimate,
-            "action_required": "User must confirm this estimate before it's created.",
-            "note": "Once confirmed, you can click on the estimate to add workloads."
-        }
-    
-    def confirm_estimate(self) -> Optional[Dict[str, Any]]:
-        """
-        Confirm the proposed estimate (called from API after user confirms).
-        Returns the estimate configuration to be saved.
-        """
-        if self.proposed_estimate:
-            estimate = self.proposed_estimate
-            estimate["status"] = "confirmed"
-            self.proposed_estimate = None
-            return estimate
-        return None
-    
-    def reject_estimate(self) -> bool:
-        """Reject the proposed estimate."""
-        if self.proposed_estimate:
-            self.proposed_estimate = None
-            return True
-        return False
     
     def _ask_clarifying_questions(
         self,
@@ -1715,7 +1679,7 @@ The following fields MUST be set before workloads can be added:
             model = "claude-sonnet-4"
         elif model_preference == "gpt":
             provider = "openai"
-            model = "gpt-4"
+            model = "gpt-5"
         elif model_preference == "llama":
             provider = "meta"
             model = "llama-3-3-70b"
@@ -1773,27 +1737,37 @@ Assumptions:
         
         # 2. Vector Search (for retrieval)
         if use_case in ["rag_chatbot", "customer_support", "document_processing"]:
-            # Estimate vector dimensions and storage
-            estimated_chunks = document_count * 5  # ~5 chunks per doc
+            # Estimate vector dimensions and storage based on chunking
+            # Assume 10 pages per document, 1.2 chunks per page (with overlap)
+            pages_per_doc = 10
+            chunks_per_page = 1.2
+            estimated_vectors = int(document_count * pages_per_doc * chunks_per_page)
+            
+            # Choose endpoint type based on estimated vector count
+            if estimated_vectors > 320_000_000:
+                endpoint_type = "STORAGE_OPTIMIZED"
+            elif estimated_vectors > 10_000_000:
+                # Borderline - default to STANDARD unless explicitly requesting cost optimization
+                endpoint_type = "STANDARD"
+            else:
+                endpoint_type = "STANDARD"
+            
+            # Default to 768 dimensions (common balanced choice)
+            dimensions = 768
             
             vector_search = {
                 "proposal_id": str(uuid.uuid4()),
                 "workload_type": "VECTOR_SEARCH",
                 "workload_name": f"{use_case_name} - Vector Search",
                 "cloud": cloud,
+                "vector_search_endpoint_type": endpoint_type,
                 "vector_search_index_type": "DELTA_SYNC",
+                "vector_search_dimensions": dimensions,
+                "vector_search_num_documents": document_count,
+                "vector_search_pages_per_doc": pages_per_doc,
+                "vector_search_qps": max(1, expected_conversations_per_day / (24 * 3600)),  # Convert daily conversations to QPS
                 "hours_per_month": 730,  # 24/7 for production
-                "reason": "Semantic search over document embeddings",
-                "notes": f"""Configuration Rationale:
-• Purpose: Store and query document embeddings for RAG retrieval
-• Index Type: DELTA_SYNC for automatic updates when docs change
-• 24/7 availability for production chatbot
-• Estimated vectors: ~{estimated_chunks:,} (based on {document_count} docs)
-
-Sizing:
-• Vector dimensions: 1536 (OpenAI) or 768 (other models)
-• Query latency: <100ms for top-k retrieval
-• Automatically scales with query volume""",
+                "reason": "Semantic search over document embeddings for RAG retrieval",
                 "status": "pending_confirmation"
             }
             add_workload_if_new(vector_search)
@@ -1935,9 +1909,6 @@ Each workload needs to be confirmed individually. Review the configurations and 
                     }
         
         # Build workload configuration with defaults
-        # Use detailed_rationale as the primary notes source
-        detailed_rationale = kwargs.pop("detailed_rationale", None)
-        
         workload = {
             "proposal_id": str(uuid.uuid4()),
             "workload_type": workload_type,
@@ -1947,11 +1918,6 @@ Each workload needs to be confirmed individually. Review the configurations and 
             "status": "pending_confirmation",
             **kwargs
         }
-        
-        # If detailed_rationale provided by AI, use it as the notes (preferred)
-        if detailed_rationale:
-            # Format as clean notes with header
-            workload["notes"] = f"AI Assistant Recommendation:\n{detailed_rationale}"
         
         # Apply sensible defaults based on workload type
         workload = self._apply_defaults(workload)
@@ -1967,28 +1933,6 @@ Each workload needs to be confirmed individually. Review the configurations and 
             "note": "Costs will be calculated after the workload is confirmed and saved."
         }
     
-    def _update_proposal_notes_with_explanation(self, proposal_id: str, explanation_text: str) -> None:
-        """
-        Update a proposed workload's notes with the AI's explanation text.
-        Only used as fallback if detailed_rationale wasn't provided in the tool call.
-        """
-        if not proposal_id:
-            return
-        
-        # Find the proposal
-        for proposal in self.proposed_workloads:
-            if proposal.get("proposal_id") == proposal_id:
-                current_notes = proposal.get("notes", "")
-                # Only update if notes don't already have AI recommendation
-                # (detailed_rationale would have set this in _propose_workload)
-                if not current_notes.startswith("AI Assistant Recommendation:"):
-                    # No detailed_rationale was provided - don't use full_content
-                    # as it may contain explanations for multiple workloads
-                    # Just leave the auto-generated notes or set a brief fallback
-                    if not current_notes or current_notes == "Configuration proposal - details to be added.":
-                        proposal["notes"] = f"Created by AI Assistant: {proposal.get('reason', 'Workload configuration')}"
-                break
-    
     def _apply_defaults(self, workload: Dict[str, Any]) -> Dict[str, Any]:
         """Apply sensible defaults based on workload type and generate explanatory notes."""
         wtype = workload["workload_type"]
@@ -1996,25 +1940,41 @@ Each workload needs to be confirmed individually. Review the configurations and 
         
         # Cloud-specific instance types for balanced cost/performance
         # Using widely available instance types across regions
+        # Worker nodes based on TPC-DI ETL benchmarks
         instance_types = {
             "aws": {
-                "general": "i3.xlarge",    # NVMe SSD, good for Spark shuffle
-                "memory": "r5.xlarge",      # Memory optimized
-                "compute": "c5.xlarge",     # Compute optimized
+                "general": "m6i.xlarge",      # General purpose, widely available
+                "memory": "r5.xlarge",        # Memory optimized
+                "compute": "c5.xlarge",       # Compute optimized
+                "etl_worker": "m6id.2xlarge", # TPC-DI benchmark: 8 vCPU, 32GB, NVMe SSD
             },
             "azure": {
                 "general": "Standard_D4s_v3",      # General purpose, widely available
                 "memory": "Standard_E4s_v3",       # Memory optimized
                 "compute": "Standard_F4s_v2",      # Compute optimized
+                "etl_worker": "Standard_D8ds_v5",  # TPC-DI benchmark: 8 vCPU, 32GB, NVMe SSD
             },
             "gcp": {
                 "general": "n1-standard-4",        # Balanced
                 "memory": "n1-highmem-4",          # Memory optimized
                 "compute": "n1-highcpu-4",         # Compute optimized
+                "etl_worker": "n1-standard-8",     # 8 vCPU, 30GB
             }
         }
         
-        default_instance = instance_types.get(cloud, instance_types["aws"])["general"]
+        # For ETL workloads (JOBS, DLT), use the etl_worker type
+        if wtype in ["JOBS", "DLT"]:
+            default_instance = instance_types.get(cloud, instance_types["aws"])["etl_worker"]
+        else:
+            default_instance = instance_types.get(cloud, instance_types["aws"])["general"]
+        
+        # Driver instance - smaller than workers, doesn't need to be big
+        driver_instances = {
+            "aws": "m6i.xlarge",           # 4 vCPUs, 16 GB RAM - sufficient for most cases
+            "azure": "Standard_D4ds_v5",   # 4 vCPUs, 16 GB RAM - sufficient for most cases
+            "gcp": "n1-standard-4",        # 4 vCPUs, 15 GB RAM
+        }
+        default_driver = driver_instances.get(cloud, "m6i.xlarge")
         
         # Common defaults
         workload.setdefault("hours_per_month", 730)
@@ -2032,7 +1992,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
             if not is_serverless:
                 # Non-serverless: set instance types and worker pricing
                 workload.setdefault("num_workers", 4)
-                workload.setdefault("driver_node_type", default_instance)
+                workload.setdefault("driver_node_type", default_driver)  # Driver doesn't need to be big
                 workload.setdefault("worker_node_type", default_instance)
                 
                 # DEFAULT TO SPOT WORKERS for cost savings
@@ -2045,22 +2005,82 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("=" * 60)
                 notes_parts.append("")
                 
-                # Instance Selection
-                notes_parts.append(f"**📦 Instance Type: {default_instance}**:")
+                # Instance Selection - Based on TPC-DI ETL Benchmarks
+                notes_parts.append(f"**📦 Worker Instance Type: {default_instance}** (TPC-DI Benchmark):")
                 if cloud == "aws":
-                    notes_parts.append("• **i3.xlarge**: 4 vCPUs, 30.5 GB RAM, 950 GB NVMe SSD")
-                    notes_parts.append("• **Why chosen**: NVMe SSD storage optimal for Spark shuffle operations")
-                    notes_parts.append("• **Use case**: ETL/batch jobs with high I/O requirements")
-                    notes_parts.append("• **Alternative**: m5d.xlarge for memory-intensive workloads")
+                    notes_parts.append("• **m6id.2xlarge**: 8 vCPUs, 32 GB RAM, 474 GB NVMe SSD")
+                    notes_parts.append("• **Why chosen**: TPC-DI benchmark-proven for ETL workloads")
+                    notes_parts.append("• **NVMe SSD**: Optimal for Spark shuffle and intermediate data")
+                    notes_parts.append("• **Alternative**: m6i.xlarge for smaller workloads, r5.xlarge for memory-intensive")
                 elif cloud == "azure":
-                    notes_parts.append("• **Standard_D4s_v3**: 4 vCPUs, 16 GB RAM, Premium SSD")
-                    notes_parts.append("• **Why chosen**: Balanced CPU/memory with SSD storage")
+                    notes_parts.append("• **Standard_D8ds_v5**: 8 vCPUs, 32 GB RAM, 300 GB NVMe SSD")
+                    notes_parts.append("• **Why chosen**: TPC-DI benchmark-proven for ETL workloads")
                     notes_parts.append("• **Availability**: D-series widely available across ALL Azure regions")
-                    notes_parts.append("• **Alternative**: E-series for memory-optimized workloads")
+                    notes_parts.append("• **Alternative**: Standard_D4ds_v5 for smaller workloads, E-series for memory-optimized")
                 else:  # GCP
-                    notes_parts.append("• **n1-standard-4**: 4 vCPUs, 15 GB RAM")
-                    notes_parts.append("• **Why chosen**: Balanced compute for general-purpose workloads")
-                    notes_parts.append("• **Alternative**: n1-highmem-4 for memory-intensive jobs")
+                    notes_parts.append("• **n1-standard-8**: 8 vCPUs, 30 GB RAM")
+                    notes_parts.append("• **Why chosen**: Balanced compute for ETL workloads")
+                    notes_parts.append("• **Alternative**: n1-highmem-8 for memory-intensive jobs")
+                
+                notes_parts.append("")
+                notes_parts.append("**📊 TPC-DI ETL Benchmark Reference (MEDIUM Complexity Baseline):**")
+                notes_parts.append("(Same performance for Classic Jobs, Serverless Jobs, DLT all editions)")
+                notes_parts.append("")
+                if cloud == "aws":
+                    notes_parts.append("| Data Scale | Driver         | Worker         | Workers | Runtime |")
+                    notes_parts.append("|------------|----------------|----------------|---------|---------|")
+                    notes_parts.append("| ~100 GB    | m6i.xlarge     | m6id.2xlarge   | 1       | ~10 min |")
+                    notes_parts.append("| ~1 TB      | m6i.xlarge     | m6id.2xlarge   | 2-4     | ~20 min |")
+                    notes_parts.append("| ~5 TB      | m6i.xlarge     | m6id.2xlarge   | 8-12    | ~20 min |")
+                    notes_parts.append("| ~10 TB     | m6i.2xlarge    | m6id.2xlarge   | 20      | ~25 min |")
+                elif cloud == "azure":
+                    notes_parts.append("| Data Scale | Driver              | Worker              | Workers | Runtime |")
+                    notes_parts.append("|------------|---------------------|---------------------|---------|---------|")
+                    notes_parts.append("| ~100 GB    | Standard_D4ds_v5    | Standard_D8ds_v5    | 1       | ~10 min |")
+                    notes_parts.append("| ~1 TB      | Standard_D4ds_v5    | Standard_D8ds_v5    | 2-4     | ~20 min |")
+                    notes_parts.append("| ~5 TB      | Standard_D4ds_v5    | Standard_D8ds_v5    | 8-12    | ~20 min |")
+                    notes_parts.append("| ~10 TB     | Standard_D8ds_v5    | Standard_D8ds_v5    | 20      | ~25 min |")
+                else:  # GCP
+                    notes_parts.append("| Data Scale | Driver         | Worker         | Workers | Runtime |")
+                    notes_parts.append("|------------|----------------|----------------|---------|---------|")
+                    notes_parts.append("| ~100 GB    | n1-standard-4  | n1-standard-8  | 1       | ~10 min |")
+                    notes_parts.append("| ~1 TB      | n1-standard-4  | n1-standard-8  | 2-4     | ~20 min |")
+                    notes_parts.append("| ~5 TB      | n1-standard-4  | n1-standard-8  | 8-12    | ~20 min |")
+                    notes_parts.append("| ~10 TB     | n1-standard-8  | n1-standard-8  | 20      | ~25 min |")
+                notes_parts.append("")
+                notes_parts.append("**⚡ Job Complexity Multipliers:**")
+                notes_parts.append("Benchmark above is for MEDIUM complexity. Adjust based on job type:")
+                notes_parts.append("")
+                notes_parts.append("• **SIMPLE** (2x faster → half the workers or runtime):")
+                notes_parts.append("  - Basic transformations: SELECT, filter, simple aggregations")
+                notes_parts.append("  - Single source to single destination")
+                notes_parts.append("  - Minimal joins (1-2 tables)")
+                notes_parts.append("  - Example: CSV → Delta with column renames and type casts")
+                notes_parts.append("")
+                notes_parts.append("• **MEDIUM** (Baseline - TPC-DI benchmark):")
+                notes_parts.append("  - Standard ETL with multiple transformations")
+                notes_parts.append("  - 3-5 table joins")
+                notes_parts.append("  - Aggregations with GROUP BY, window functions")
+                notes_parts.append("  - Example: Dimensional modeling, fact table creation")
+                notes_parts.append("")
+                notes_parts.append("• **COMPLEX** (3x slower → 3x the workers or runtime):")
+                notes_parts.append("  - Heavy transformations, nested structures")
+                notes_parts.append("  - 6+ table joins, self-joins")
+                notes_parts.append("  - Complex UDFs, ML feature engineering")
+                notes_parts.append("  - Graph processing, recursive operations")
+                notes_parts.append("  - Example: Customer 360, complex CDC merges")
+                notes_parts.append("")
+                notes_parts.append("**📋 Scaling Guidelines (MEDIUM complexity):**")
+                notes_parts.append("• ~100 GB: 1 worker, ~10 min (rounded to 5-min buffer)")
+                notes_parts.append("• ~1 TB: 2-4 workers, ~20 min")
+                notes_parts.append("• ~5 TB: 8-12 workers, ~20 min (scales efficiently)")
+                notes_parts.append("• ~10 TB+: 20 workers, ~25 min (use larger driver)")
+                notes_parts.append("")
+                notes_parts.append("**💰 Cost Estimation Tip:**")
+                notes_parts.append("• Always round runtime UP to nearest 5 minutes for buffer")
+                notes_parts.append("• Actual: 6 min → Estimate: 10 min")
+                notes_parts.append("• Actual: 19 min → Estimate: 20 min")
+                notes_parts.append("• Actual: 22 min → Estimate: 25 min")
                 
                 # Pricing Strategy
                 notes_parts.append("")
@@ -2069,9 +2089,17 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("  → Suitable for fault-tolerant batch/ETL workloads")
                 notes_parts.append("  → Databricks auto-replaces interrupted spot instances")
                 notes_parts.append("  → NOT recommended for time-sensitive/SLA-critical jobs")
-                notes_parts.append("• **Driver node**: On-demand (for stability)")
-                notes_parts.append("  → Ensures job coordination remains stable")
-                notes_parts.append("  → Stores critical DAG and task metadata")
+                notes_parts.append(f"• **Driver node**: {default_driver} (on-demand for stability)")
+                notes_parts.append("  → Driver coordinates tasks and manages metadata")
+                if cloud == "aws":
+                    notes_parts.append("  → m6i.xlarge (4 vCPU, 16 GB) for up to ~5TB datasets")
+                    notes_parts.append("  → m6i.2xlarge (8 vCPU, 32 GB) for 10TB+ datasets")
+                elif cloud == "azure":
+                    notes_parts.append("  → Standard_D4ds_v5 (4 vCPU, 16 GB) for up to ~5TB datasets")
+                    notes_parts.append("  → Standard_D8ds_v5 (8 vCPU, 32 GB) for 10TB+ datasets")
+                else:  # GCP
+                    notes_parts.append("  → n1-standard-4 (4 vCPU, 15 GB) for up to ~5TB datasets")
+                    notes_parts.append("  → n1-standard-8 (8 vCPU, 30 GB) for 10TB+ datasets")
                 notes_parts.append("• **Cost impact**: ~70-80% reduction in VM costs vs all on-demand")
                 notes_parts.append("• **Risk mitigation**: Driver stays up even if workers are interrupted")
                 
@@ -2107,9 +2135,9 @@ Each workload needs to be confirmed individually. Review the configurations and 
                     notes_parts.append("• Using JVM-based Spark execution")
                     notes_parts.append("• Consider enabling Photon for SQL-heavy workloads (2-3x speedup)")
                 
-                # Operational Guidance
+                # Operational Guidance (outside photon if/else)
                 notes_parts.append("")
-                notes_parts.append("**🎯 OPERATIONAL GUIDANCE:**:")
+                notes_parts.append("**🎯 OPERATIONAL GUIDANCE:**")
                 notes_parts.append("• **Startup time**: 5-7 minutes for cluster initialization")
                 notes_parts.append("  → Consider cluster pools for <1 min startup")
                 notes_parts.append("• **Job scheduling**: Use Databricks Workflows for orchestration")
@@ -2118,19 +2146,12 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("• **Spot best practices**: Enable retries, set max spot price limit")
                 
             else:  # Serverless
-                # IMPORTANT: Still set VM specs for DBU rate calculation (even though VMs are managed)
-                workload.setdefault("num_workers", 4)
-                workload.setdefault("driver_node_type", default_instance)
-                workload.setdefault("worker_node_type", default_instance)
-                workload.setdefault("worker_pricing_tier", "on_demand")  # Serverless uses on-demand equivalent pricing
-                workload.setdefault("driver_pricing_tier", "on_demand")
-                
                 notes_parts.append("=" * 60)
                 notes_parts.append("**DATABRICKS JOBS (SERVERLESS MODE) CONFIGURATION**")
                 notes_parts.append("=" * 60)
                 notes_parts.append("")
                 notes_parts.append("**🚀 Serverless Compute**:")
-                notes_parts.append("• **Zero infrastructure management**: VMs managed by Databricks")
+                notes_parts.append("• **Zero infrastructure management**: No instance types, cluster sizing")
                 notes_parts.append("• **Instant startup**: <1 minute (vs 5-7 min for classic clusters)")
                 notes_parts.append("• **Auto-scaling**: Automatic based on Spark task parallelism")
                 notes_parts.append("• **Pay-per-use**: Billed only for actual compute seconds used")
@@ -2138,11 +2159,6 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("• **Use cases**: Ad-hoc jobs, inconsistent schedules, rapid development")
                 notes_parts.append("• **Cost**: ~30% premium vs classic, but often cheaper due to instant termination")
                 notes_parts.append("• **Limitations**: Limited Spark config customization, no cluster pools")
-                notes_parts.append("")
-                notes_parts.append(f"**📦 VM Specs (for DBU calculation - managed by Databricks):**")
-                notes_parts.append(f"• Reference instance: {default_instance}")
-                notes_parts.append("• Actual VMs are auto-provisioned and managed by Databricks")
-                notes_parts.append("• No VM costs billed - DBU rate includes compute")
         
         if wtype == "DLT":
             edition = workload.setdefault("dlt_edition", "PRO")
@@ -2156,75 +2172,80 @@ Each workload needs to be confirmed individually. Review the configurations and 
             
             if edition == "CORE":
                 notes_parts.append("**CORE Edition Features:**")
-                notes_parts.append("• **Basic pipeline functionality**: Bronze → Silver → Gold transformations")
-                notes_parts.append("• **Incremental processing**: Efficient updates with Delta Lake")
+                notes_parts.append("• **Streaming + Batch**: Both real-time and batch data processing")
+                notes_parts.append("• **Bronze → Silver → Gold**: Standard medallion architecture")
                 notes_parts.append("• **Declarative Python/SQL**: Define tables, DLT handles orchestration")
                 notes_parts.append("• **Automatic retries**: Built-in fault tolerance")
-                notes_parts.append("• **Cost**: Lowest DBU rate (0.20x DBU multiplier)")
+                notes_parts.append("• **Cost**: Lowest DBU rate")
                 notes_parts.append("")
                 notes_parts.append("**Best For:**")
-                notes_parts.append("• Simple ETL without CDC/SCD requirements")
+                notes_parts.append("• Simple ETL without CDC requirements")
                 notes_parts.append("• Append-only data ingestion pipelines")
-                notes_parts.append("• Cost-sensitive non-production workloads")
+                notes_parts.append("• Cost-sensitive workloads")
                 notes_parts.append("")
                 notes_parts.append("**Limitations:**")
-                notes_parts.append("• ❌ No Change Data Capture (CDC)")
-                notes_parts.append("• ❌ No SCD Type 2 (historical tracking)")
-                notes_parts.append("• ❌ Limited data quality expectations")
+                notes_parts.append("• ❌ No Change Data Capture (CDC / Apply Changes)")
+                notes_parts.append("• ❌ No data quality expectations/constraints")
                 notes_parts.append("")
-                notes_parts.append("**💡 Consider upgrading to PRO for:**")
-                notes_parts.append("• Production pipelines requiring CDC")
-                notes_parts.append("• Historical data tracking (SCD Type 2)")
+                notes_parts.append("**💡 Upgrade to PRO for:** CDC / Apply Changes")
+                notes_parts.append("**💡 Upgrade to ADVANCED for:** Data quality expectations")
                 
             elif edition == "PRO":
                 notes_parts.append("**PRO Edition Features:**")
-                notes_parts.append("• **All CORE features**, PLUS:")
-                notes_parts.append("• **Change Data Capture (CDC)**: Apply changes from databases (INSERT/UPDATE/DELETE)")
-                notes_parts.append("• **SCD Type 2**: Automatically track historical changes with valid_from/valid_to")
-                notes_parts.append("• **Enhanced monitoring**: Detailed pipeline metrics and lineage")
-                notes_parts.append("• **Data quality expectations**: Basic validation rules (NOT NULL, ranges)")
-                notes_parts.append("• **Cost**: Medium DBU rate (0.30x DBU multiplier, +50% vs CORE)")
+                notes_parts.append("• **All CORE features** (streaming + batch), PLUS:")
+                notes_parts.append("• **Change Data Capture (CDC)**: Apply Changes from databases")
+                notes_parts.append("  → Handles INSERT/UPDATE/DELETE from source systems")
+                notes_parts.append("  → Supports SCD Type 1 and Type 2")
+                notes_parts.append("• **Cost**: Medium DBU rate (+50% vs CORE)")
                 notes_parts.append("")
                 notes_parts.append("**Best For:**")
-                notes_parts.append("• Production ETL pipelines with CDC requirements")
-                notes_parts.append("• Streaming data from databases (MySQL, Postgres, SQL Server)")
-                notes_parts.append("• Maintaining historical snapshots of dimension tables")
-                notes_parts.append("• Most enterprise data engineering workloads")
+                notes_parts.append("• Database replication with incremental changes")
+                notes_parts.append("• CDC from MySQL, Postgres, SQL Server, Oracle")
+                notes_parts.append("• Slowly Changing Dimensions (SCD Type 2)")
                 notes_parts.append("")
-                notes_parts.append("**Example Use Cases:**")
-                notes_parts.append("• Replicate CRM database changes to Delta Lake")
-                notes_parts.append("• Track customer attribute changes over time (SCD Type 2)")
-                notes_parts.append("• Merge new/updated records from upstream sources")
+                notes_parts.append("**Limitations:**")
+                notes_parts.append("• ❌ No data quality expectations/constraints")
                 notes_parts.append("")
-                notes_parts.append("**💡 Consider upgrading to ADVANCED for:**")
-                notes_parts.append("• Mission-critical pipelines requiring strict data quality")
-                notes_parts.append("• Complex expectations and custom validation logic")
+                notes_parts.append("**💡 Upgrade to ADVANCED for:** Data quality expectations")
                 
             else:  # ADVANCED
                 notes_parts.append("**ADVANCED Edition Features:**")
-                notes_parts.append("• **All PRO features**, PLUS:")
-                notes_parts.append("• **Advanced data quality expectations**: Custom validation with Python/SQL")
-                notes_parts.append("  → Expectations can FAIL or WARN on violations")
+                notes_parts.append("• **All PRO features** (streaming + batch + CDC), PLUS:")
+                notes_parts.append("• **Data Quality Expectations**: Define constraints on data")
+                notes_parts.append("  → Expectations can FAIL (drop bad rows) or WARN (log only)")
                 notes_parts.append("  → Track which records failed which expectations")
-                notes_parts.append("  → Quarantine bad data to separate tables")
-                notes_parts.append("• **Enhanced observability**: Detailed event logs, data quality metrics")
-                notes_parts.append("• **Row-level lineage**: Track data flow at record level")
-                notes_parts.append("• **Pipeline debugging**: Better error messages and troubleshooting")
-                notes_parts.append("• **Cost**: Highest DBU rate (0.36x DBU multiplier, +80% vs CORE, +20% vs PRO)")
+                notes_parts.append("  → Quarantine bad data to separate error tables")
+                notes_parts.append("• **Constraints**: Enforce business rules at table level")
+                notes_parts.append("• **Cost**: Highest DBU rate (+80% vs CORE)")
                 notes_parts.append("")
                 notes_parts.append("**Best For:**")
-                notes_parts.append("• Production-critical pipelines with strict SLAs")
-                notes_parts.append("• Regulated industries (finance, healthcare) requiring data quality audits")
-                notes_parts.append("• Pipelines feeding downstream ML/BI with zero tolerance for bad data")
-                notes_parts.append("• Complex validation logic (referential integrity, business rules)")
+                notes_parts.append("• Strict data quality requirements")
+                notes_parts.append("• Regulated industries (finance, healthcare)")
+                notes_parts.append("• Mission-critical pipelines with SLAs")
                 notes_parts.append("")
-                notes_parts.append("**Example Use Cases:**")
-                notes_parts.append("• Financial transactions (must validate balances, detect anomalies)")
-                notes_parts.append("• Healthcare data (HIPAA compliance, mandatory field validation)")
-                notes_parts.append("• Customer 360 (enforce referential integrity across 10+ sources)")
+                notes_parts.append("**Example Expectations:**")
+                notes_parts.append("• `expect('valid_email', 'email LIKE %@%')`")
+                notes_parts.append("• `expect_or_fail('positive_amount', 'amount > 0')`")
                 notes_parts.append("")
                 notes_parts.append("**ROI Consideration:**")
                 notes_parts.append("• +20% cost vs PRO, but prevents data quality issues saving 10x in debugging")
+            
+            # Serverless vs Classic
+            is_serverless = workload.get("serverless_enabled", False)
+            notes_parts.append("")
+            notes_parts.append(f"**⚡ Compute Mode: {'Serverless' if is_serverless else 'Classic'}**")
+            if is_serverless:
+                notes_parts.append("• **Incremental Refresh**: Materialized views refresh incrementally (only changed data)")
+                notes_parts.append("• **Instant startup**: No cluster warm-up time")
+                notes_parts.append("• **Auto-scaling**: Automatic resource management")
+                notes_parts.append("• **Cost**: Pay-per-use, efficient for variable workloads")
+            else:
+                notes_parts.append("• **Full Refresh**: Materialized views refresh completely each run")
+                notes_parts.append("• **Cluster startup**: 5-7 minutes for cluster initialization")
+                notes_parts.append("• **Manual scaling**: Configure min/max workers")
+                notes_parts.append("• **Cost**: Pay for cluster uptime, better for predictable workloads")
+                notes_parts.append("")
+                notes_parts.append("**💡 Consider Serverless for:** Incremental MV refresh, variable schedules")
             
             notes_parts.append("")
             notes_parts.append("**🎯 DLT OPERATIONAL GUIDANCE:**")
@@ -2507,43 +2528,263 @@ Each workload needs to be confirmed individually. Review the configurations and 
                     notes_parts.append("• ⚠️ Consider Pro/Serverless for 5-17x faster performance on selective queries with Predictive I/O")
         
         if wtype == "LAKEBASE":
-            cu = workload.setdefault("lakebase_cu", 2)
-            ha_nodes = workload.setdefault("lakebase_ha_nodes", 1)
+            # Get user inputs
+            reads_per_sec = workload.get("lakebase_expected_reads_per_sec", 0)
+            bulk_writes_per_sec = workload.get("lakebase_expected_bulk_writes_per_sec", 0)
+            incremental_writes_per_sec = workload.get("lakebase_expected_incremental_writes_per_sec", 0)
+            avg_row_size_kb = workload.get("lakebase_avg_row_size_kb", 1.0)
+            ha_enabled = workload.get("lakebase_ha_enabled", False)
+            num_read_replicas = workload.get("lakebase_num_read_replicas", 0)
+            
+            # Validate read replicas (max 2, total 3 instances including primary)
+            num_read_replicas = min(max(0, num_read_replicas), 2)
+            workload["lakebase_num_read_replicas"] = num_read_replicas
+            
+            # Performance benchmarks for 1 CU with 1KB row size (uncompressed)
+            READS_PER_CU_1KB = 10000  # Can vary 2,000-30,000 based on data size and cache hit ratio
+            BULK_WRITES_PER_CU_1KB = 15000
+            INCREMENTAL_WRITES_PER_CU_1KB = 1200
+            
+            # Adjust for row size (throughput inversely proportional to row size)
+            row_size_factor = avg_row_size_kb / 1.0
+            reads_per_cu = READS_PER_CU_1KB / row_size_factor
+            bulk_writes_per_cu = BULK_WRITES_PER_CU_1KB / row_size_factor
+            incremental_writes_per_cu = INCREMENTAL_WRITES_PER_CU_1KB / row_size_factor
+            
+            # Calculate CU needed
+            if reads_per_sec > 0 or bulk_writes_per_sec > 0 or incremental_writes_per_sec > 0:
+                import math
+                
+                # Calculate reads distribution across primary + read replicas
+                # All nodes (primary + replicas) can handle reads
+                total_read_nodes = 1 + num_read_replicas  # primary + replicas (max 3 total)
+                reads_per_node = reads_per_sec / total_read_nodes
+                cu_for_reads_per_node = reads_per_node / reads_per_cu
+                
+                # Calculate writes (only primary handles writes)
+                # Note: Bulk and incremental writes use different capacities, so calculate separately
+                cu_for_bulk_writes = bulk_writes_per_sec / bulk_writes_per_cu if bulk_writes_per_sec > 0 else 0
+                cu_for_incremental_writes = incremental_writes_per_sec / incremental_writes_per_cu if incremental_writes_per_sec > 0 else 0
+                
+                # Read and write QPS ARE cumulative (sum, not max)
+                # Primary must handle: (reads distributed across nodes) + (all writes)
+                cu_for_primary = cu_for_reads_per_node + cu_for_bulk_writes + cu_for_incremental_writes
+                
+                # Each replica only handles reads
+                cu_for_replica = cu_for_reads_per_node
+                
+                # All nodes must have the same CU (replicas match primary)
+                # So we use the primary's requirement (which is always >= replica)
+                cu_needed = cu_for_primary
+                
+                # Round up to next available CU option: 1, 2, 4, 8
+                CU_OPTIONS = [1, 2, 4, 8]
+                cu = next((cu_opt for cu_opt in CU_OPTIONS if cu_opt >= cu_needed), 8)
+                cu = min(cu, 8)  # Cap at 8 CU
+            else:
+                # No workload specified, default to 2 CU
+                cu = 2
+            
+            workload["lakebase_cu"] = cu
+            
+            # Total active nodes = primary + read replicas (for billing/display)
+            # HA standby is tracked separately in notes but not stored in DB
+            total_active_nodes = 1 + num_read_replicas
+            workload["lakebase_ha_nodes"] = total_active_nodes
             
             notes_parts.append("")
             notes_parts.append("=" * 60)
             notes_parts.append("**LAKEBASE (POSTGRESQL) CONFIGURATION**")
             notes_parts.append("=" * 60)
             notes_parts.append("")
-            notes_parts.append(f"**🗄️ Compute Units: {cu} CU**:")
+            notes_parts.append(f"**🗄️ Compute Units: {cu} CU** (Auto-calculated from workload)")
             notes_parts.append(f"• Each CU = 1 vCPU + dedicated memory + storage IOPS")
             notes_parts.append(f"• **Your configuration**: {cu} CU = ~{cu*2}GB RAM, {cu*1000} IOPS baseline")
-            notes_parts.append(f"• **Concurrent connections**: ~{cu*50} max recommended")
-            notes_parts.append(f"• **Query throughput**: ~{cu*100} simple queries/second")
             notes_parts.append("")
+            
+            # Add workload inputs if specified
+            if reads_per_sec > 0 or bulk_writes_per_sec > 0 or incremental_writes_per_sec > 0:
+                notes_parts.append("**📊 Workload Requirements (Provided):**")
+                if reads_per_sec > 0:
+                    notes_parts.append(f"• Expected reads: {reads_per_sec:,} lookups/sec")
+                if bulk_writes_per_sec > 0:
+                    notes_parts.append(f"• Bulk writes: {bulk_writes_per_sec:,} rows/sec (truncate & load operations)")
+                if incremental_writes_per_sec > 0:
+                    notes_parts.append(f"• Incremental writes: {incremental_writes_per_sec:,} rows/sec (updates/inserts with scanning)")
+                if avg_row_size_kb != 1.0:
+                    notes_parts.append(f"• Average row size (uncompressed): {avg_row_size_kb}KB (affects throughput)")
+                notes_parts.append("")
+                
+                notes_parts.append("**🔧 CU Sizing Calculation:**")
+                notes_parts.append(f"• Performance per CU (1KB rows): {int(reads_per_cu):,} reads/sec, {int(bulk_writes_per_cu):,} bulk writes/sec, {int(incremental_writes_per_cu):,} incremental writes/sec")
+                
+                total_read_nodes = 1 + num_read_replicas
+                if num_read_replicas > 0:
+                    reads_per_node = reads_per_sec / total_read_nodes
+                    notes_parts.append(f"• Reads distributed across {total_read_nodes} nodes (1 primary + {num_read_replicas} read replica(s)): {reads_per_node:.0f} reads/sec per node")
+                    cu_for_reads_per_node = reads_per_node / reads_per_cu
+                    notes_parts.append(f"• CU for reads per node: {cu_for_reads_per_node:.2f} CU")
+                else:
+                    cu_for_reads_per_node = reads_per_sec / reads_per_cu if reads_per_sec > 0 else 0
+                    notes_parts.append(f"• CU for reads (primary only): {cu_for_reads_per_node:.2f} CU")
+                
+                cu_for_bulk = bulk_writes_per_sec / bulk_writes_per_cu if bulk_writes_per_sec > 0 else 0
+                cu_for_incr = incremental_writes_per_sec / incremental_writes_per_cu if incremental_writes_per_sec > 0 else 0
+                notes_parts.append(f"• CU for writes (primary only): {cu_for_bulk:.2f} (bulk) + {cu_for_incr:.2f} (incremental) = {cu_for_bulk + cu_for_incr:.2f} CU")
+                notes_parts.append(f"• **Total CU needed (reads + writes are cumulative)**: {cu_for_reads_per_node + cu_for_bulk + cu_for_incr:.2f} CU")
+                notes_parts.append(f"• **Selected CU** (rounded to available options 1/2/4/8): **{cu} CU**")
+                notes_parts.append("")
+            
+            notes_parts.append("**Performance Benchmarks (1 CU with 1KB uncompressed rows):**")
+            notes_parts.append("• **Reads**: ~10,000 reads/sec (varies 2,000-30,000 based on data size and cache hit ratio)")
+            notes_parts.append("• **Bulk Writes**: ~15,000 rows/sec (truncate and load operations)")
+            notes_parts.append("• **Incremental Writes**: ~1,200 rows/sec (updates/inserts with scanning)")
+            notes_parts.append("• **Concurrent Connections**: ~50 per CU")
+            notes_parts.append(f"• **Your {cu} CU capacity**: ~{int(cu * 10000):,} reads/sec, ~{int(cu * 15000):,} bulk writes/sec, ~{int(cu * 1200):,} incremental writes/sec")
+            notes_parts.append("")
+            
             notes_parts.append("**Sizing Guidelines:**")
-            notes_parts.append("• 1-2 CU: Development, <10 concurrent connections")
-            notes_parts.append("• 2-4 CU: Small production, <50 concurrent connections")
-            notes_parts.append("• 4-8 CU: Medium production, <200 concurrent connections")
-            notes_parts.append("• 8+ CU: Large production, complex queries, high concurrency")
+            notes_parts.append("• 1 CU: Development, light workloads, <10K reads/sec")
+            notes_parts.append("• 2 CU: Small production, <20K reads/sec, <30K bulk writes/sec")
+            notes_parts.append("• 4 CU: Medium production, <40K reads/sec, <60K bulk writes/sec")
+            notes_parts.append("• 8 CU: Large production, <80K reads/sec, <120K bulk writes/sec")
             notes_parts.append("")
-            notes_parts.append(f"**High Availability: {ha_nodes} standby node(s)**:")
-            if ha_nodes > 0:
-                notes_parts.append("• ✅ HA enabled: Automatic failover to standby")
-                notes_parts.append(f"• **Recovery time**: <60 seconds with {ha_nodes} standby")
-                notes_parts.append("• **Cost**: +100% (each standby = full replica)")
+            
+            # Read Replicas
+            if num_read_replicas > 0:
+                notes_parts.append(f"**📖 Read Replicas: {num_read_replicas} replica(s) (Max: 2)**:")
+                notes_parts.append(f"• **Total instances**: 1 primary + {num_read_replicas} read replica(s) = {total_read_nodes} instances")
+                notes_parts.append(f"• Each replica has {cu} CU (same as primary)")
+                notes_parts.append("• ✅ Read replicas handle READ requests only")
+                notes_parts.append("• ⚠️ Write requests ALWAYS go to primary node")
+                notes_parts.append(f"• **Read capacity**: {total_read_nodes}x scaling for reads ({int(total_read_nodes * cu * 10000):,} reads/sec total)")
+                notes_parts.append(f"• **Write capacity**: No scaling (writes on primary only: {int(cu * 15000):,} bulk writes/sec, {int(cu * 1200):,} incremental writes/sec)")
+                notes_parts.append(f"• **Cost**: +{num_read_replicas * 100}% (each replica = full CU cost)")
+                notes_parts.append("• **Best for**: Read-heavy workloads needing horizontal read scaling")
+                notes_parts.append("")
+            else:
+                notes_parts.append("**📖 Read Replicas: None**:")
+                notes_parts.append("• All requests (reads + writes) handled by primary node")
+                notes_parts.append("• **For read scaling**: Add 1-2 read replicas (each with same CU as primary)")
+                notes_parts.append("• **Total instances**: Max 3 (1 primary + 2 read replicas)")
+                notes_parts.append("• **Note**: Read replicas only handle reads, writes always on primary")
+                notes_parts.append("")
+            
+            notes_parts.append(f"**High Availability (HA): {'1 standby node' if ha_enabled else 'Disabled'}**:")
+            if ha_enabled:
+                notes_parts.append("• ✅ HA enabled: Automatic failover to standby replica")
+                notes_parts.append("• **Recovery time**: <60 seconds with 1 standby")
+                notes_parts.append("• **Cost**: +100% (standby = full replica, not for reads)")
                 notes_parts.append("• **Best for**: Production systems requiring 99.95%+ uptime")
+                notes_parts.append("• ⚠️ HA standby is for failover only - does NOT handle read traffic")
             else:
                 notes_parts.append("• ⚠️ HA disabled: Single point of failure")
                 notes_parts.append("• **Risk**: Downtime during maintenance or failures")
                 notes_parts.append("• **Cost savings**: 50% (no standby replicas)")
                 notes_parts.append("• **Best for**: Development/test environments")
             notes_parts.append("")
+            
             notes_parts.append("**🎯 LAKEBASE OPERATIONAL GUIDANCE:**")
             notes_parts.append("• **Backups**: Automated daily backups with 7-day retention")
-            notes_parts.append("• **Monitoring**: Track connection pool usage, query latency")
-            notes_parts.append("• **Scaling**: Vertical (add CUs) for more power, horizontal (read replicas) for scale")
-            notes_parts.append("• **Cost optimization**: Right-size CUs based on actual CPU/memory usage")
+            notes_parts.append("• **Monitoring**: Track connection pool usage, query latency, cache hit ratio")
+            notes_parts.append("• **Scaling**:")
+            notes_parts.append("  - Vertical (increase CU): More CPU/memory for complex queries and writes")
+            notes_parts.append("  - Horizontal (add read replicas): Scale reads only (max 2 replicas, 3 instances total)")
+            notes_parts.append("• **Cost optimization**: Right-size CUs based on actual CPU/memory/throughput usage")
+            notes_parts.append("• **Write vs Read**:")
+            notes_parts.append("  - Bulk writes: Use for initial loads, full refreshes (faster: 15K rows/sec/CU)")
+            notes_parts.append("                    - Incremental writes: Use for updates/inserts (slower due to scanning: 1.2K rows/sec/CU)")
+            notes_parts.append("  - Reads: Can distribute across replicas for horizontal scaling")
+        
+        if wtype == "VECTOR_SEARCH":
+            # Get LLM-calculated values (LLM calculates and passes these directly)
+            endpoint_type = workload.get("vector_search_endpoint_type", "STANDARD")
+            capacity_millions = workload.get("vector_capacity_millions", 1)
+            
+            # Set vector_search_mode for DB (lowercase version of endpoint_type)
+            mode = "storage_optimized" if endpoint_type == "STORAGE_OPTIMIZED" else "standard"
+            workload["vector_search_mode"] = mode
+            
+            # Ensure capacity is set
+            workload["vector_capacity_millions"] = capacity_millions
+            
+            # Calculate total_vectors for display
+            total_vectors = capacity_millions * 1_000_000
+            workload["vector_search_total_vectors"] = total_vectors
+            
+            # Vector Search runs 24/7 - cannot be stopped
+            workload["hours_per_month"] = 730
+            
+            notes_parts.append("")
+            notes_parts.append("=" * 60)
+            notes_parts.append("**VECTOR SEARCH CONFIGURATION**")
+            notes_parts.append("=" * 60)
+            notes_parts.append("")
+            notes_parts.append(f"**🔍 Index Configuration:**")
+            notes_parts.append(f"• **Endpoint Type**: {endpoint_type}")
+            
+            if endpoint_type == "STANDARD":
+                notes_parts.append("  - Search Latency: **20-50ms** (ultra-low latency)")
+                notes_parts.append("  - Best for: Real-time search, chatbots, interactive applications")
+                notes_parts.append("  - Recommended for: <320M vectors")
+                notes_parts.append("  - Cost: Premium (optimized for speed)")
+            else:
+                notes_parts.append("  - Search Latency: **~250ms** (optimized latency)")
+                notes_parts.append("  - Best for: Large-scale search, batch processing")
+                notes_parts.append("  - Recommended for: 10M+ vectors")
+                notes_parts.append("  - Cost: **7x cheaper per vector** (optimized for cost)")
+            
+            notes_parts.append("")
+            notes_parts.append(f"**📊 Index Size & Capacity:**")
+            notes_parts.append(f"• **Capacity**: {capacity_millions}M vectors (~{total_vectors:,} vectors)")
+            notes_parts.append("")
+            notes_parts.append("**📐 Vector Calculation Formula:**")
+            notes_parts.append("  docs × pages × 1.2 chunks/page × (dimensions÷768)")
+            notes_parts.append(f"  = {capacity_millions}M vectors")
+            notes_parts.append("")
+            
+            notes_parts.append("**⚡ Performance & Scale:**")
+            notes_parts.append("• **Automatic Scaling**: Handles traffic spikes automatically")
+            notes_parts.append("• **High Availability**: Built-in redundancy across availability zones")
+            notes_parts.append("• **Index Updates**: Real-time sync with Delta tables (DELTA_SYNC)")
+            notes_parts.append("• **Runtime**: 24/7 continuous operation (730 hours/month)")
+            notes_parts.append("")
+            
+            # Endpoint type recommendation logic
+            if total_vectors < 10_000_000:
+                notes_parts.append("**💡 Recommendation:**")
+                notes_parts.append(f"• With {total_vectors:,} vectors: **Standard endpoint** is recommended")
+                notes_parts.append("• Provides ultra-low latency (20-50ms) for best user experience")
+                notes_parts.append("• Cost is reasonable at this scale")
+            elif 10_000_000 <= total_vectors < 320_000_000:
+                notes_parts.append("**💡 Recommendation:**")
+                notes_parts.append(f"• With {total_vectors:,} vectors: Consider **Storage Optimized** for cost efficiency")
+                notes_parts.append("• **Trade-off**: 250ms latency vs 7x lower cost per vector")
+                notes_parts.append("• **Standard**: Choose if real-time latency (<50ms) is critical")
+                notes_parts.append("• **Storage Optimized**: Choose if batch/async search is acceptable and cost is priority")
+            else:
+                notes_parts.append("**💡 Recommendation:**")
+                notes_parts.append(f"• With {total_vectors:,} vectors: **Storage Optimized endpoint** is strongly recommended")
+                notes_parts.append("• Standard endpoints are limited to ~320M vectors")
+                notes_parts.append("• Storage Optimized provides 7x cost savings at scale")
+            notes_parts.append("")
+            
+            notes_parts.append("**🎯 VECTOR SEARCH OPERATIONAL GUIDANCE:**")
+            notes_parts.append("• **Monitoring**: Track search latency, QPS, index size, sync lag (for DELTA_SYNC)")
+            notes_parts.append("• **Optimization**:")
+            notes_parts.append("  - Use filters to reduce search space (metadata filtering)")
+            notes_parts.append("  - Optimize vector dimensions (lower = faster + cheaper, but may reduce accuracy)")
+            notes_parts.append("  - Consider hybrid search (vector + keyword) for better results")
+            notes_parts.append("• **Scaling**: Automatically scales based on QPS and index size")
+            notes_parts.append("• **Cost Optimization**:")
+            notes_parts.append("  - Storage Optimized: Up to 7x cheaper for large indexes")
+            notes_parts.append("  - Right-size dimensions based on model requirements")
+            notes_parts.append("  - Use DELTA_SYNC for automatic updates vs DIRECT_ACCESS for manual control")
+            notes_parts.append("• **Best Practices**:")
+            notes_parts.append("  - Test both endpoint types with your latency requirements")
+            notes_parts.append("  - Monitor p50/p95/p99 latencies, not just average")
+            notes_parts.append("  - Pre-filter large indexes using metadata before vector search")
+            notes_parts.append("  - Consider approximate nearest neighbor (ANN) algorithms for ultra-scale")
         
         # IGNORE any brief notes provided by LLM - we generate comprehensive ones
         # existing_notes = workload.get("notes", "")  # DON'T use LLM's brief notes
@@ -2591,9 +2832,17 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 footer_parts.append(f"• **Edition**: {edition}")
             elif wtype == "LAKEBASE":
                 cu = workload.get("lakebase_cu", 2)
-                ha = workload.get("lakebase_ha_nodes", 1)
-                footer_parts.append(f"• **Compute Units**: {cu} CU")
-                footer_parts.append(f"• **High Availability**: {'Enabled' if ha > 0 else 'Disabled'}")
+                total_nodes = workload.get("lakebase_ha_nodes", 1)
+                num_read_replicas = workload.get("lakebase_num_read_replicas", 0)
+                footer_parts.append(f"• **Compute Units**: {cu} CU (auto-calculated)")
+                footer_parts.append(f"• **Active Nodes**: {total_nodes} (1 primary + {num_read_replicas} read replica(s))")
+            elif wtype == "VECTOR_SEARCH":
+                endpoint_type = workload.get("vector_search_endpoint_type", "STANDARD")
+                total_vectors = workload.get("vector_search_total_vectors", 0)
+                dimensions = workload.get("vector_search_dimensions", 768)
+                footer_parts.append(f"• **Endpoint Type**: {endpoint_type}")
+                footer_parts.append(f"• **Total Vectors**: {total_vectors:,} vectors")
+                footer_parts.append(f"• **Dimensions**: {dimensions}d")
             
             footer_parts.append("")
             footer_parts.append("**⚠️ IMPORTANT REMINDERS:**")
@@ -2622,15 +2871,8 @@ Each workload needs to be confirmed individually. Review the configurations and 
         else:
             generated_notes = ""
         
-        # Check if AI provided detailed_rationale (indicated by "AI Assistant Recommendation:" prefix)
-        existing_notes = workload.get("notes", "")
-        has_ai_rationale = existing_notes.startswith("AI Assistant Recommendation:")
-        
-        if has_ai_rationale:
-            # AI rationale is already set - keep it as is (don't append verbose technical details)
-            pass
-        elif generated_notes:
-            # No AI rationale provided - use auto-generated notes
+        # Only use our comprehensive generated notes, not the LLM's brief summary
+        if generated_notes:
             workload["notes"] = generated_notes
         else:
             # Fallback only if no notes were generated at all

@@ -607,13 +607,13 @@ export default function Estimates() {
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name or customer..."
-            className="w-full pl-10 pr-4"
-          />
+          className="w-full pl-10 pr-4"
+        />
         </div>
         
         <SortDropdown sortBy={sortBy} setSortBy={setSortBy} />
@@ -623,7 +623,7 @@ export default function Estimates() {
       {isLoading ? (
         <div className="card overflow-hidden">
           <div className="p-4 space-y-3">
-            {[1, 2, 3].map((i) => (
+          {[1, 2, 3].map((i) => (
               <div key={i} className="flex items-center gap-4 animate-pulse">
                 <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
                 <div className="flex-1">
@@ -632,7 +632,7 @@ export default function Estimates() {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
         </div>
       ) : filteredEstimates.length === 0 ? (
         <motion.div
@@ -707,8 +707,8 @@ export default function Estimates() {
               const isSelected = selectedIds.has(estimate.estimate_id)
               
               return (
-                <motion.div
-                  key={estimate.estimate_id}
+            <motion.div
+              key={estimate.estimate_id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: index * 0.015 }}
@@ -775,8 +775,8 @@ export default function Estimates() {
                     <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
                       {estimate.customer_name || '—'}
                     </p>
-                  </div>
-                  
+                </div>
+                
                   {/* Cloud Badge */}
                   <div className="hidden sm:flex col-span-1 justify-center">
                     {estimate.cloud && cloudBadges[estimate.cloud.toLowerCase()] ? (
@@ -812,7 +812,7 @@ export default function Estimates() {
                             }}
                           >
                             {tierBadges[estimate.tier.toLowerCase()].label}
-                          </span>
+                    </span>
                         )}
                       </div>
                     ) : (
@@ -838,32 +838,32 @@ export default function Estimates() {
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                       {formatRelativeTime(estimate.updated_at)}
                     </p>
-                  </div>
-                  
-                  {/* Actions */}
+                </div>
+                
+                {/* Actions */}
                   <div className="col-span-1 flex items-center justify-end gap-0.5">
                     {!isBulkMode && (
                       <>
-                        <button
-                          onClick={(e) => handleDuplicate(e, estimate.estimate_id)}
+                  <button
+                    onClick={(e) => handleDuplicate(e, estimate.estimate_id)}
                           className="p-1.5 rounded hover:bg-[var(--bg-hover)]"
                           style={{ color: 'var(--text-muted)' }}
-                          title="Duplicate"
-                        >
+                    title="Duplicate"
+                  >
                           <DocumentDuplicateIcon className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => handleDelete(e, estimate.estimate_id, estimate.estimate_name)}
+                  </button>
+                  <button
+                    onClick={(e) => handleDelete(e, estimate.estimate_id, estimate.estimate_name)}
                           className="p-1.5 rounded hover:text-red-500 hover:bg-red-500/10"
                           style={{ color: 'var(--text-muted)' }}
-                          title="Delete"
-                        >
+                    title="Delete"
+                  >
                           <TrashIcon className="w-4 h-4" />
-                        </button>
+                  </button>
                       </>
                     )}
-                  </div>
-                </motion.div>
+              </div>
+            </motion.div>
               )
             })}
           </div>

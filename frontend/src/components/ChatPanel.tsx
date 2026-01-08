@@ -62,20 +62,10 @@ interface ProposedWorkload {
   [key: string]: any
 }
 
-interface ProposedEstimate {
-  proposal_id: string
-  name: string
-  cloud: string
-  region: string
-  description?: string
-  reason?: string
-}
-
 interface ChatPanelProps {
   isOpen: boolean
   onClose: () => void
   onEstimateCreated?: (estimateId: string) => void
-  onEstimateConfirmed?: (estimateConfig: any) => Promise<void>  // Called when user confirms a proposed estimate
   onWorkloadConfirmed?: (workloadConfig: any) => Promise<void>  // Called when user confirms a proposed workload
   currentEstimate?: any
   currentWorkloads?: any[]
@@ -90,7 +80,6 @@ export function ChatPanel({
   isOpen,
   onClose,
   onEstimateCreated: _onEstimateCreated, // Reserved for future use
-  onEstimateConfirmed,
   onWorkloadConfirmed,
   currentEstimate,
   currentWorkloads,
@@ -105,7 +94,6 @@ export function ChatPanel({
   const [draftEstimate, setDraftEstimate] = useState<DraftEstimate | null>(null)
   const [draftWorkloads, setDraftWorkloads] = useState<DraftWorkload[]>([])
   const [proposedWorkloads, setProposedWorkloads] = useState<ProposedWorkload[]>([])
-  const [proposedEstimate, setProposedEstimate] = useState<ProposedEstimate | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isMinimized, setIsMinimized] = useState(false)
   const [localPanelWidth, setLocalPanelWidth] = useState(380)
@@ -374,11 +362,6 @@ export function ChatPanel({
                     return [...prev, chunk.workload]
                   })
                 }
-              } else if (chunk.type === 'estimate_proposal') {
-                // AI proposed an estimate - set pending proposal
-                if (chunk.estimate) {
-                  setProposedEstimate(chunk.estimate)
-                }
               } else if (chunk.type === 'done') {
                 // Only update proposals if there wasn't an error in the content
                 // (Don't show stale proposals when AI service errors occur)
@@ -394,9 +377,6 @@ export function ChatPanel({
                   }
                   if (chunk.proposed_workloads && chunk.proposed_workloads.length > 0) {
                     setProposedWorkloads(chunk.proposed_workloads)
-                  }
-                  if (chunk.proposed_estimate) {
-                    setProposedEstimate(chunk.proposed_estimate)
                   }
                 }
               } else if (chunk.type === 'error') {
@@ -450,7 +430,6 @@ export function ChatPanel({
     setDraftEstimate(null)
     setDraftWorkloads([])
     setProposedWorkloads([])
-    setProposedEstimate(null)
     setError(null)
     
     // Restore welcome message with fresh context
@@ -461,82 +440,6 @@ export function ChatPanel({
       timestamp: new Date()
     }
     setMessages([welcomeMessage])
-  }
-  
-  const handleConfirmEstimate = async () => {
-    if (!conversationId || !proposedEstimate) return
-    
-    try {
-      const response = await fetch(`/api/v1/chat/${conversationId}/confirm-estimate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirmed: true })
-      })
-      
-      if (!response.ok) throw new Error('Failed to confirm estimate')
-      
-      const result = await response.json()
-      
-      // Clear the proposal
-      setProposedEstimate(null)
-      
-      // Call the parent callback with the estimate config and AWAIT the result
-      // The callback will actually create the estimate in the database
-      if (onEstimateConfirmed && result.estimate_config) {
-        try {
-          await onEstimateConfirmed(result.estimate_config)
-          
-          // Only show success message AFTER the estimate is actually created
-          setMessages(prev => [...prev, {
-            id: `system-${Date.now()}`,
-            role: 'system',
-            content: `✅ Estimate "${result.estimate_config?.estimate_name}" created! Click on it to add workloads.`,
-            timestamp: new Date()
-          }])
-        } catch (createErr: any) {
-          // Show error if creation failed
-          setMessages(prev => [...prev, {
-            id: `system-${Date.now()}`,
-            role: 'system',
-            content: `❌ Failed to create estimate: ${createErr.message || 'Database error'}. Please try again.`,
-            timestamp: new Date()
-          }])
-          setError(createErr.message || 'Failed to create estimate in database')
-        }
-      }
-      
-    } catch (err: any) {
-      setError(err.message || 'Failed to confirm estimate')
-    }
-  }
-  
-  const handleRejectEstimate = async () => {
-    if (!conversationId) return
-    
-    try {
-      const response = await fetch(`/api/v1/chat/${conversationId}/confirm-estimate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirmed: false })
-      })
-      
-      if (!response.ok) throw new Error('Failed to reject estimate')
-      
-      // Clear the proposal
-      const name = proposedEstimate?.name
-      setProposedEstimate(null)
-      
-      // Add info message
-      setMessages(prev => [...prev, {
-        id: `system-${Date.now()}`,
-        role: 'system',
-        content: `❌ Estimate "${name}" proposal rejected.`,
-        timestamp: new Date()
-      }])
-      
-    } catch (err: any) {
-      setError(err.message || 'Failed to reject estimate')
-    }
   }
   
   const handleConfirmWorkload = async (proposalId: string) => {
@@ -729,61 +632,6 @@ export function ChatPanel({
         </div>
       )}
 
-      {/* Proposed Estimate - Awaiting Confirmation */}
-      {proposedEstimate && (
-        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
-          <div className="flex items-center gap-2 mb-2">
-            <ExclamationCircleIcon className="w-4 h-4 text-amber-600" />
-            <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
-              Proposed Estimate - Confirm to Create
-            </span>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-200 dark:border-amber-700">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
-                    {proposedEstimate.name}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-400">
-                  <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
-                    {proposedEstimate.cloud?.toUpperCase()}
-                  </span>
-                  <span>{proposedEstimate.region}</span>
-                </div>
-                {proposedEstimate.description && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
-                    {proposedEstimate.description}
-                  </p>
-                )}
-                {proposedEstimate.reason && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">
-                    💡 {proposedEstimate.reason}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={handleConfirmEstimate}
-                  className="p-1.5 rounded-full bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-800/50 text-green-700 dark:text-green-400 transition-colors"
-                  title="Confirm & Create"
-                >
-                  <CheckCircleIcon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleRejectEstimate}
-                  className="p-1.5 rounded-full bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-800/50 text-red-700 dark:text-red-400 transition-colors"
-                  title="Reject"
-                >
-                  <XMarkIcon className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {/* Proposed Workloads - Awaiting Confirmation */}
       {proposedWorkloads.length > 0 && (
         <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
