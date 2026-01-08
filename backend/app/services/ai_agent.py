@@ -1080,6 +1080,8 @@ class EstimateAgent:
         self.current_estimate: Optional[Dict[str, Any]] = None
         self.current_workloads: List[Dict[str, Any]] = []  # Actual workloads with costs
         self.proposed_workloads: List[Dict[str, Any]] = []  # Pending workload confirmations
+        self.conversation_summary: str = ""  # Summarized context from older messages
+        self._executed_tool_ids: set = set()  # Track executed tools to prevent duplicates
     
     def reset(self):
         """Reset the agent state for a new conversation."""
@@ -1087,55 +1089,190 @@ class EstimateAgent:
         self.current_estimate = None
         self.current_workloads = []
         self.proposed_workloads = []
+        self.conversation_summary = ""
+        self._executed_tool_ids = set()
     
-    def _trim_conversation_history(self, max_messages: int = 20):
+    async def _manage_conversation_history(self, max_recent_messages: int = 10, summarize_threshold: int = 15):
         """
-        Trim conversation history to prevent it from growing too long.
-        Keeps the most recent messages while preserving tool call/result pairs.
+        Manage conversation history by summarizing older messages instead of just trimming.
+        
+        When history exceeds summarize_threshold, summarizes older messages into
+        a concise summary that's added to the system prompt context.
+        Keeps the most recent max_recent_messages intact.
+        
+        This preserves context while keeping the API request size manageable.
+        """
+        if len(self.conversation_history) <= summarize_threshold:
+            return
+        
+        # Calculate how many messages to summarize
+        messages_to_keep = max_recent_messages
+        messages_to_summarize = self.conversation_history[:-messages_to_keep]
+        messages_to_keep_list = self.conversation_history[-messages_to_keep:]
+        
+        # Build text from messages to summarize (skip tool_result messages as they're verbose)
+        summary_text_parts = []
+        for msg in messages_to_summarize:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            
+            # Skip tool result messages (they contain JSON)
+            if isinstance(content, list):
+                continue
+            
+            # Skip empty content
+            if not content or not content.strip():
+                continue
+                
+            # Truncate very long messages
+            if len(content) > 500:
+                content = content[:500] + "..."
+            
+            summary_text_parts.append(f"{role.upper()}: {content}")
+        
+        if not summary_text_parts:
+            # Nothing meaningful to summarize, just trim
+            self.conversation_history = messages_to_keep_list
+            return
+        
+        summary_text = "\n".join(summary_text_parts)
+        
+        # Use Claude to generate a concise summary
+        try:
+            summary_prompt = f"""Summarize this conversation history in 2-3 sentences, focusing on:
+1. What the user asked for
+2. What was discussed or proposed
+3. Any decisions made or pending
+
+Conversation:
+{summary_text}
+
+Summary (2-3 sentences):"""
+            
+            summary_response = await self.client.chat(
+                messages=[{"role": "user", "content": summary_prompt}],
+                system="You are a helpful assistant that creates concise conversation summaries.",
+                max_tokens=200,
+                temperature=0.3
+            )
+            
+            new_summary = summary_response.get("content", "").strip()
+            
+            if new_summary:
+                # Append to existing summary or create new one
+                if self.conversation_summary:
+                    self.conversation_summary = f"{self.conversation_summary}\n\nMore recently: {new_summary}"
+                else:
+                    self.conversation_summary = new_summary
+                    
+                log_info(f"Summarized {len(messages_to_summarize)} messages into conversation summary")
+        except Exception as e:
+            log_error(f"Failed to summarize conversation: {e}")
+            # Fall back to keeping without summary
+        
+        # Keep only recent messages, removing orphaned tool calls/results
+        self.conversation_history = self._clean_conversation_start(messages_to_keep_list)
+        log_info(f"Conversation history now has {len(self.conversation_history)} messages")
+    
+    def _clean_conversation_start(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Clean the start of a message list to remove orphaned tool calls/results.
         
         CRITICAL: Every tool_use block must have a corresponding tool_result block immediately after.
         """
-        if len(self.conversation_history) <= max_messages:
-            return
+        cleaned = list(messages)
         
-        # Keep only the most recent messages
-        trimmed = self.conversation_history[-max_messages:]
-        
-        # Remove orphaned messages at the start that would break the conversation
-        while trimmed:
-            first_msg = trimmed[0]
+        while cleaned:
+            first_msg = cleaned[0]
             
             # If first message is a tool result (user message with list content containing tool_result)
             # it's orphaned because the assistant tool_call is no longer in history
             if first_msg.get("role") == "user" and isinstance(first_msg.get("content"), list):
                 content_list = first_msg.get("content", [])
                 if any(item.get("type") == "tool_result" for item in content_list if isinstance(item, dict)):
-                    trimmed = trimmed[1:]
+                    cleaned = cleaned[1:]
                     continue
             
             # If first message is an assistant with tool_calls, check if next message has matching tool_result
             if first_msg.get("role") == "assistant" and first_msg.get("tool_calls"):
-                if len(trimmed) < 2:
+                if len(cleaned) < 2:
                     # No following message, remove orphaned tool_call
-                    trimmed = trimmed[1:]
+                    cleaned = cleaned[1:]
                     continue
                     
-                next_msg = trimmed[1]
+                next_msg = cleaned[1]
                 # Check if next message is the corresponding tool_result
                 if not (next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list)):
                     # Next message is not a tool_result, remove orphaned tool_call
-                    trimmed = trimmed[1:]
+                    cleaned = cleaned[1:]
                     continue
             
-            # Message is valid, stop trimming
+            # Message is valid, stop cleaning
             break
         
-        self.conversation_history = trimmed
-        log_info(f"Trimmed conversation history to {len(self.conversation_history)} messages")
+        return cleaned
+    
+    def _validate_conversation_history(self):
+        """
+        Validate and fix conversation history to ensure tool_use/tool_result pairs are intact.
+        Removes any orphaned tool_use messages that don't have corresponding tool_results.
+        """
+        if not self.conversation_history:
+            return
+            
+        # Scan for tool_use IDs that need tool_results
+        valid_history = []
+        i = 0
+        
+        while i < len(self.conversation_history):
+            msg = self.conversation_history[i]
+            
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                # This assistant message has tool calls - check for corresponding tool_result
+                tool_ids = {tc.get("id") for tc in msg.get("tool_calls", [])}
+                
+                # Look for the next user message with tool_results
+                if i + 1 < len(self.conversation_history):
+                    next_msg = self.conversation_history[i + 1]
+                    if next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list):
+                        # Check if it contains matching tool_results
+                        result_ids = set()
+                        for item in next_msg.get("content", []):
+                            if isinstance(item, dict) and item.get("type") == "tool_result":
+                                result_ids.add(item.get("tool_use_id"))
+                        
+                        if tool_ids & result_ids:  # At least some overlap
+                            # Valid pair, keep both
+                            valid_history.append(msg)
+                            valid_history.append(next_msg)
+                            i += 2
+                            continue
+                
+                # No valid tool_result found - skip this assistant message
+                log_warning(f"Removing orphaned tool_use message with IDs: {tool_ids}")
+                i += 1
+            else:
+                valid_history.append(msg)
+                i += 1
+        
+        if len(valid_history) != len(self.conversation_history):
+            log_info(f"Cleaned conversation history: {len(self.conversation_history)} -> {len(valid_history)} messages")
+            self.conversation_history = valid_history
     
     def _get_system_prompt(self) -> str:
-        """Get the system prompt for the AI assistant."""
-        return SYSTEM_PROMPT
+        """Get the system prompt for the AI assistant, including any conversation summary."""
+        prompt = SYSTEM_PROMPT
+        
+        # Add conversation summary if we have one
+        if self.conversation_summary:
+            prompt += f"""
+
+## Previous Conversation Summary
+{self.conversation_summary}
+
+(The detailed conversation history above has been summarized to save context. Recent messages are shown in full.)"""
+        
+        return prompt
     
     def _get_tools(self) -> List[Dict[str, Any]]:
         """Get the available tools for the AI assistant."""
@@ -1270,11 +1407,20 @@ class EstimateAgent:
         
         Yields chunks with type 'content', 'tool_start', 'tool_result', 'proposal', or 'done'.
         """
+        # Reset executed tools tracking for this request
+        self._executed_tool_ids = set()
+        
+        # Validate conversation history before adding new message
+        self._validate_conversation_history()
+        
         # Add user message to history
         self.conversation_history.append({
             "role": "user",
             "content": user_message
         })
+        
+        # Manage conversation history (summarize if needed)
+        await self._manage_conversation_history()
         
         # Build context
         context_info = self._build_context()
@@ -1284,11 +1430,9 @@ class EstimateAgent:
         # Stream response
         full_content = ""
         tool_calls = []
+        tool_results_cache = {}  # Cache tool results to avoid re-execution
         current_tool = None
         tool_input_json = ""
-        
-        # Trim conversation history to prevent 400 errors from too-long requests
-        self._trim_conversation_history()
         
         async for chunk in self.client.chat_stream(
             messages=self.conversation_history,
@@ -1318,18 +1462,28 @@ class EstimateAgent:
             
             elif chunk_type == "tool_call_complete":
                 # Handle complete tool call from OpenAI format
+                tool_id = chunk.get("id")
                 current_tool = {
-                    "id": chunk.get("id"),
+                    "id": tool_id,
                     "name": chunk.get("name"),
                     "arguments": chunk.get("arguments", {})
                 }
-                tool_calls.append(current_tool)
                 
-                # Execute tool
+                # Skip if already executed (prevent duplicates)
+                if tool_id in self._executed_tool_ids:
+                    log_warning(f"Skipping duplicate tool execution: {tool_id}")
+                    current_tool = None
+                    continue
+                
+                tool_calls.append(current_tool)
+                self._executed_tool_ids.add(tool_id)
+                
+                # Execute tool and cache result
                 result = await self._execute_tool(
                     current_tool["name"],
                     current_tool["arguments"]
                 )
+                tool_results_cache[tool_id] = result
                 
                 yield {
                     "type": "tool_result",
@@ -1337,24 +1491,10 @@ class EstimateAgent:
                     "result": result
                 }
                 
-                # If it's a workload proposal, yield that separately
-                if current_tool["name"] == "propose_workload" and result.get("success"):
-                    yield {
-                        "type": "proposal",
-                        "workload": result.get("proposed_workload")
-                    }
-                
-                # If it's a GenAI architecture proposal, yield each workload separately
-                if current_tool["name"] == "propose_genai_architecture" and result.get("success"):
-                    for w in result.get("workloads", []):
-                        # Find the full workload from proposed_workloads
-                        for proposed in self.proposed_workloads:
-                            if proposed.get("proposal_id") == w.get("proposal_id"):
-                                yield {
-                                    "type": "proposal",
-                                    "workload": proposed
-                                }
-                                break
+                # Yield proposals
+                self._yield_proposals_from_result(current_tool["name"], result)
+                for proposal_event in self._get_proposal_events(current_tool["name"], result):
+                    yield proposal_event
                 
                 current_tool = None
             
@@ -1364,106 +1504,87 @@ class EstimateAgent:
                         current_tool["arguments"] = json.loads(tool_input_json)
                     except json.JSONDecodeError:
                         current_tool["arguments"] = {}
-                    tool_calls.append(current_tool)
+                    
+                    tool_id = current_tool.get("id")
+                    if tool_id and tool_id not in self._executed_tool_ids:
+                        tool_calls.append(current_tool)
+                    
                     current_tool = None
                     tool_input_json = ""
             
             elif chunk_type == "done":
                 break
         
-        # Process any tool calls that were accumulated
+        # Process any accumulated tool calls that weren't executed during streaming
         if tool_calls:
-            # Add assistant response to history
+            # Add assistant response to history with tool calls
             self.conversation_history.append({
                 "role": "assistant",
-                "content": full_content,
+                "content": full_content if full_content else " ",  # Claude requires non-empty content
                 "tool_calls": tool_calls
             })
             
-            # Execute tools and add results to history
+            # Collect all tool results in a single user message
+            all_tool_results = []
             for tool_call in tool_calls:
-                result = await self._execute_tool(
-                    tool_call["name"],
-                    tool_call["arguments"]
-                )
+                tool_id = tool_call["id"]
                 
-                yield {
-                    "type": "tool_result",
-                    "tool": tool_call["name"],
-                    "result": result
-                }
-                
-                # If it's a workload proposal, yield that separately
-                if tool_call["name"] == "propose_workload" and result.get("success"):
+                # Use cached result or execute if not yet done
+                if tool_id in tool_results_cache:
+                    result = tool_results_cache[tool_id]
+                elif tool_id not in self._executed_tool_ids:
+                    self._executed_tool_ids.add(tool_id)
+                    result = await self._execute_tool(
+                        tool_call["name"],
+                        tool_call["arguments"]
+                    )
+                    tool_results_cache[tool_id] = result
+                    
                     yield {
-                        "type": "proposal",
-                        "workload": result.get("proposed_workload")
+                        "type": "tool_result",
+                        "tool": tool_call["name"],
+                        "result": result
                     }
+                    
+                    for proposal_event in self._get_proposal_events(tool_call["name"], result):
+                        yield proposal_event
+                else:
+                    result = tool_results_cache.get(tool_id, {"executed": True})
                 
-                # If it's a GenAI architecture proposal, yield each workload separately
-                if tool_call["name"] == "propose_genai_architecture" and result.get("success"):
-                    for w in result.get("workloads", []):
-                        # Find the full workload from proposed_workloads
-                        for proposed in self.proposed_workloads:
-                            if proposed.get("proposal_id") == w.get("proposal_id"):
-                                yield {
-                                    "type": "proposal",
-                                    "workload": proposed
-                                }
-                                break
-                
-                self.conversation_history.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_call["id"],
-                            "content": json.dumps(result)
-                        }
-                    ]
+                all_tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_id,
+                    "content": json.dumps(result)
                 })
             
-            # Get follow-up response
-            yield {"type": "content", "content": "\n\n"}
+            # Add ALL tool results in a single user message (required by Claude API)
+            self.conversation_history.append({
+                "role": "user",
+                "content": all_tool_results
+            })
             
-            follow_up_content = ""
-            try:
-                async for chunk in self.client.chat_stream(
-                    messages=self.conversation_history,
-                    tools=tools,
-                    system=system,
-                    max_tokens=4096,
-                    temperature=0.7
-                ):
-                    chunk_type = chunk.get("type")
-                    if chunk_type == "content_delta":
-                        content = chunk.get("content", "")
-                        follow_up_content += content
-                        full_content += content
-                        yield {"type": "content", "content": content}
-                    elif chunk_type == "error":
-                        log_error(f"Follow-up stream error: {chunk.get('content')}")
-                        yield {"type": "content", "content": f"\n\n*Error getting response: {chunk.get('content')}*"}
-                        break
-                    elif chunk_type == "done":
-                        break
-                
-                # If no follow-up content, provide a context-appropriate message
-                if not follow_up_content.strip() and self.proposed_workloads:
-                    default_msg = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
-                    yield {"type": "content", "content": default_msg}
-                    full_content += default_msg
-            except Exception as e:
-                log_error(f"Follow-up response error: {e}")
-                error_msg = f"\n\n*Error: {str(e)}*"
-                yield {"type": "content", "content": error_msg}
-                full_content += error_msg
-        
-        # Add final response to history
-        self.conversation_history.append({
-            "role": "assistant",
-            "content": full_content
-        })
+            # Generate follow-up message locally instead of making another API call
+            # This avoids the tool_use/tool_result mismatch error
+            follow_up_msg = ""
+            if self.proposed_workloads:
+                follow_up_msg = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
+            
+            if follow_up_msg:
+                yield {"type": "content", "content": follow_up_msg}
+                full_content += follow_up_msg
+            
+            # Add assistant response after tool results
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": follow_up_msg if follow_up_msg else "I've processed your request."
+            })
+        else:
+            # No tool calls, just add the response to history
+            if full_content:
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": full_content
+                })
         
         yield {
             "type": "done",
@@ -1471,6 +1592,33 @@ class EstimateAgent:
             "workloads": self.current_workloads,
             "proposed_workloads": self.proposed_workloads
         }
+    
+    def _get_proposal_events(self, tool_name: str, result: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate proposal events from tool execution results."""
+        events = []
+        
+        if tool_name == "propose_workload" and result.get("success"):
+            events.append({
+                "type": "proposal",
+                "workload": result.get("proposed_workload")
+            })
+        
+        if tool_name == "propose_genai_architecture" and result.get("success"):
+            for w in result.get("workloads", []):
+                for proposed in self.proposed_workloads:
+                    if proposed.get("proposal_id") == w.get("proposal_id"):
+                        events.append({
+                            "type": "proposal",
+                            "workload": proposed
+                        })
+                        break
+        
+        return events
+    
+    def _yield_proposals_from_result(self, tool_name: str, result: Dict[str, Any]):
+        """Helper to handle proposal tracking - doesn't yield, just for side effects."""
+        # This is called for side effects only (tracking in proposed_workloads happens in _execute_tool)
+        pass
     
     def _build_context(self) -> str:
         """Build context string with current estimate state and actual costs."""
