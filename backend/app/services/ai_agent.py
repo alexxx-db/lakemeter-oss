@@ -1092,87 +1092,22 @@ class EstimateAgent:
         self.conversation_summary = ""
         self._executed_tool_ids = set()
     
-    async def _manage_conversation_history(self, max_recent_messages: int = 10, summarize_threshold: int = 15):
+    async def _manage_conversation_history(self, max_recent_messages: int = 15, trim_threshold: int = 25):
         """
-        Manage conversation history by summarizing older messages instead of just trimming.
+        Manage conversation history by trimming older messages.
         
-        When history exceeds summarize_threshold, summarizes older messages into
-        a concise summary that's added to the system prompt context.
-        Keeps the most recent max_recent_messages intact.
-        
-        This preserves context while keeping the API request size manageable.
+        When history exceeds trim_threshold, keeps only the most recent max_recent_messages.
+        This keeps API requests fast while preserving recent context.
         """
-        if len(self.conversation_history) <= summarize_threshold:
+        if len(self.conversation_history) <= trim_threshold:
             return
         
-        # Calculate how many messages to summarize
-        messages_to_keep = max_recent_messages
-        messages_to_summarize = self.conversation_history[:-messages_to_keep]
-        messages_to_keep_list = self.conversation_history[-messages_to_keep:]
+        # Keep only recent messages
+        messages_to_keep_list = self.conversation_history[-max_recent_messages:]
         
-        # Build text from messages to summarize (skip tool_result messages as they're verbose)
-        summary_text_parts = []
-        for msg in messages_to_summarize:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            
-            # Skip tool result messages (they contain JSON)
-            if isinstance(content, list):
-                continue
-            
-            # Skip empty content
-            if not content or not content.strip():
-                continue
-                
-            # Truncate very long messages
-            if len(content) > 500:
-                content = content[:500] + "..."
-            
-            summary_text_parts.append(f"{role.upper()}: {content}")
-        
-        if not summary_text_parts:
-            # Nothing meaningful to summarize, just trim
-            self.conversation_history = messages_to_keep_list
-            return
-        
-        summary_text = "\n".join(summary_text_parts)
-        
-        # Use Claude to generate a concise summary
-        try:
-            summary_prompt = f"""Summarize this conversation history in 2-3 sentences, focusing on:
-1. What the user asked for
-2. What was discussed or proposed
-3. Any decisions made or pending
-
-Conversation:
-{summary_text}
-
-Summary (2-3 sentences):"""
-            
-            summary_response = await self.client.chat(
-                messages=[{"role": "user", "content": summary_prompt}],
-                system="You are a helpful assistant that creates concise conversation summaries.",
-                max_tokens=200,
-                temperature=0.3
-            )
-            
-            new_summary = summary_response.get("content", "").strip()
-            
-            if new_summary:
-                # Append to existing summary or create new one
-                if self.conversation_summary:
-                    self.conversation_summary = f"{self.conversation_summary}\n\nMore recently: {new_summary}"
-                else:
-                    self.conversation_summary = new_summary
-                    
-                log_info(f"Summarized {len(messages_to_summarize)} messages into conversation summary")
-        except Exception as e:
-            log_error(f"Failed to summarize conversation: {e}")
-            # Fall back to keeping without summary
-        
-        # Keep only recent messages, removing orphaned tool calls/results
+        # Clean orphaned tool calls/results from the start
         self.conversation_history = self._clean_conversation_start(messages_to_keep_list)
-        log_info(f"Conversation history now has {len(self.conversation_history)} messages")
+        log_info(f"Trimmed conversation history to {len(self.conversation_history)} messages")
     
     def _clean_conversation_start(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
