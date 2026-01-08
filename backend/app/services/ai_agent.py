@@ -1368,6 +1368,9 @@ class EstimateAgent:
         tool_results_cache = {}  # Cache tool results to avoid re-execution
         current_tool = None
         tool_input_json = ""
+        chunks_received = 0
+        
+        log_info(f"Starting chat_stream with {len(self.conversation_history)} messages")
         
         async for chunk in self.client.chat_stream(
             messages=self.conversation_history,
@@ -1377,6 +1380,12 @@ class EstimateAgent:
             temperature=0.7
         ):
             chunk_type = chunk.get("type")
+            chunks_received += 1
+            
+            if chunk_type == "error":
+                log_error(f"Received error chunk: {chunk.get('content')}")
+                yield {"type": "content", "content": f"\n\n**Error**: {chunk.get('content', 'Unknown error')}\n"}
+                break
             
             if chunk_type == "content_delta":
                 content = chunk.get("content", "")
@@ -1392,12 +1401,17 @@ class EstimateAgent:
                 tool_input_json = ""
                 yield {"type": "tool_start", "tool": chunk.get("name")}
                 
-                # Add user-friendly status message for certain tools
+                # Add user-friendly status message for all tools
                 tool_name = chunk.get("name")
-                if tool_name == "propose_workload":
-                    yield {"type": "content", "content": "\n\n*Generating workload configuration...*\n"}
-                elif tool_name == "propose_genai_architecture":
-                    yield {"type": "content", "content": "\n\n*Generating GenAI architecture proposal...*\n"}
+                tool_status_messages = {
+                    "propose_workload": "*Generating workload configuration...*",
+                    "propose_genai_architecture": "*Generating GenAI architecture proposal...*",
+                    "get_estimate_summary": "*Analyzing your estimate...*",
+                    "analyze_estimate": "*Analyzing workloads for optimization...*",
+                    "ask_clarifying_questions": "*Preparing questions...*",
+                }
+                status_msg = tool_status_messages.get(tool_name, f"*Processing {tool_name.replace('_', ' ')}...*")
+                yield {"type": "content", "content": f"\n\n{status_msg}\n"}
             
             elif chunk_type == "tool_input_delta":
                 tool_input_json += chunk.get("partial_json", "")
