@@ -767,19 +767,24 @@ export function ChatPanel({
                       remarkPlugins={[remarkGfm]}
                       components={{
                         // Enhanced heading styles
-                        h1: ({children}) => <h1 className="text-base font-bold text-[var(--text-primary)] mt-4 mb-2 pb-1 border-b border-[var(--border-primary)]">{children}</h1>,
-                        h2: ({children}) => <h2 className="text-[14px] font-bold text-[var(--text-primary)] mt-4 mb-2">{children}</h2>,
-                        h3: ({children}) => <h3 className="text-[13px] font-semibold text-[var(--text-primary)] mt-3 mb-1.5">{children}</h3>,
+                        h1: ({children}) => <h1 className="text-base font-bold text-[var(--text-primary)] mt-3 mb-2 pb-1 border-b border-[var(--border-primary)]">{children}</h1>,
+                        h2: ({children}) => <h2 className="text-[14px] font-bold text-[var(--text-primary)] mt-3 mb-1.5">{children}</h2>,
+                        h3: ({children}) => <h3 className="text-[13px] font-semibold text-[var(--text-primary)] mt-2 mb-1">{children}</h3>,
                         // Paragraphs with proper spacing
-                        p: ({children}) => <p className="my-2.5 text-[var(--text-primary)] leading-[1.7]">{children}</p>,
-                        // Enhanced list styles
-                        ul: ({children}) => <ul className="my-2.5 ml-0 space-y-1.5">{children}</ul>,
-                        ol: ({children}) => <ol className="my-2.5 ml-0 space-y-1.5 list-decimal list-inside">{children}</ol>,
+                        p: ({children}) => <p className="my-2 text-[var(--text-primary)] leading-relaxed">{children}</p>,
+                        // Enhanced list styles - separate bullet and numbered lists
+                        ul: ({children}) => (
+                          <ul className="my-2 ml-0 space-y-1.5 [&>li]:before:content-['•'] [&>li]:before:text-orange-500 [&>li]:before:mr-2 [&>li]:before:font-bold">
+                            {children}
+                          </ul>
+                        ),
+                        ol: ({children}) => (
+                          <ol className="my-2 ml-0 space-y-1.5 list-decimal [&>li]:ml-5 [&>li]:pl-1 marker:text-orange-500 marker:font-semibold">
+                            {children}
+                          </ol>
+                        ),
                         li: ({children}) => (
-                          <li className="flex gap-2 text-[var(--text-primary)]">
-                            <span className="text-orange-500 flex-shrink-0 mt-[2px]">•</span>
-                            <span className="flex-1">{children}</span>
-                          </li>
+                          <li className="text-[var(--text-primary)] leading-relaxed">{children}</li>
                         ),
                         // Bold text
                         strong: ({children}) => <strong className="font-semibold text-[var(--text-primary)]">{children}</strong>,

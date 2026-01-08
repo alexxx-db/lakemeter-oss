@@ -2148,6 +2148,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
         
         # Flag to indicate notes should be generated
         generate_notes = True
+        notes_parts = []  # Placeholder for verbose notes (not used in final output)
         
         if wtype in ["JOBS", "ALL_PURPOSE", "DLT"]:
             # Set serverless default - prefer serverless for simplicity
