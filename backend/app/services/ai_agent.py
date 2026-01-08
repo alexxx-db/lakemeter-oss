@@ -2091,9 +2091,16 @@ Each workload needs to be confirmed individually. Review the configurations and 
         }
         default_driver = driver_instances.get(cloud, "m6i.xlarge")
         
-        # Common defaults
-        workload.setdefault("hours_per_month", 730)
+        # Common defaults - use run-based values for proper real-time calculation
         workload.setdefault("days_per_month", 22)
+        workload.setdefault("runs_per_day", 1)
+        workload.setdefault("avg_runtime_minutes", 60)
+        # Calculate hours_per_month from run-based values if not explicitly set
+        if not workload.get("hours_per_month"):
+            runs = workload.get("runs_per_day", 1)
+            runtime = workload.get("avg_runtime_minutes", 60)
+            days = workload.get("days_per_month", 22)
+            workload["hours_per_month"] = runs * (runtime / 60) * days
         
         # Flag to indicate notes should be generated
         generate_notes = True
