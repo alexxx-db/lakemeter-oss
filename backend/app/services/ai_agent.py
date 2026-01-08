@@ -2894,15 +2894,35 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 wh_type = workload.get("dbsql_warehouse_type", "SERVERLESS")
                 wh_size = workload.get("dbsql_warehouse_size", "Small")
                 wh_clusters = workload.get("dbsql_num_clusters", 1)
+                total_users = workload.get("total_users", 0)
+                use_case = workload.get("use_case_type", "bi_dashboard")
+                data_volume = workload.get("typical_data_volume", "1-10GB")
+                
                 summary_parts.append(f"• **Warehouse**: {wh_type} {wh_size} × {wh_clusters} cluster(s)")
-                if workload.get("total_users"):
-                    summary_parts.append(f"• **Users**: {workload.get('total_users')} total")
+                if total_users:
+                    summary_parts.append(f"• **Users**: {total_users} total")
                 summary_parts.append("")
-                summary_parts.append("**Why this config:**")
+                summary_parts.append("**Rationale:**")
                 if wh_type == "SERVERLESS":
-                    summary_parts.append("• Serverless for instant startup, auto-scaling, pay-per-use")
+                    summary_parts.append("• **Serverless**: Instant startup (<5s), scales to zero when idle - best for variable/ad-hoc usage")
+                    summary_parts.append("• **Predictive I/O**: 5-17x faster queries on selective filters (dates, IDs)")
+                elif wh_type == "PRO":
+                    summary_parts.append("• **PRO**: 3-4 min startup, Unity Catalog support - better for constant workloads")
                 else:
-                    summary_parts.append(f"• {wh_type} warehouse for consistent workloads")
+                    summary_parts.append("• **Classic**: Legacy option, no Predictive I/O - consider upgrading to Pro/Serverless")
+                
+                # Size rationale
+                size_rationale = {
+                    "2X-Small": "Light usage (1-5 users), 77 QPM capacity",
+                    "X-Small": "Small teams (5-10 users), 131 QPM capacity",
+                    "Small": "Standard BI (10-20 users), 224 QPM, ~2s queries on 10GB",
+                    "Medium": "Active dashboards (20-40 users), 380 QPM, <1s on 10GB",
+                    "Large": "Heavy workloads (40-80 users), 646 QPM",
+                    "X-Large": "High concurrency (80-150 users), 1,098 QPM",
+                }
+                summary_parts.append(f"• **{wh_size}**: {size_rationale.get(wh_size, 'Sized for expected query volume')}")
+                if wh_clusters > 1:
+                    summary_parts.append(f"• **{wh_clusters} clusters**: Horizontal scaling for {total_users}+ concurrent users")
             elif wtype in ["JOBS", "ALL_PURPOSE"]:
                 driver = workload.get("driver_node_type", "Not specified")
                 worker = workload.get("worker_node_type", "Not specified")
@@ -2915,35 +2935,48 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 summary_parts.append(f"• **Workers**: {workers}× {worker}")
                 summary_parts.append(f"• **Photon**: {'Enabled' if photon else 'Disabled'}")
                 summary_parts.append("")
-                summary_parts.append("**Why this config:**")
+                summary_parts.append("**Rationale:**")
                 if is_serverless:
-                    summary_parts.append("• Serverless: instant startup, auto-scaling, pay-per-use")
-                    summary_parts.append("• VM types shown for DBU rate estimation only")
-                    summary_parts.append("• Actual infrastructure managed by Databricks")
+                    summary_parts.append("• **Serverless**: Best for variable/ad-hoc workloads - instant startup (<1 min), auto-scaling, pay only for compute seconds used")
+                    summary_parts.append(f"• **{driver}** (driver): Standard 4 vCPU driver for task coordination - sufficient for most ETL jobs")
+                    summary_parts.append(f"• **{worker}** (workers): 8 vCPU with NVMe SSD - optimized for Spark shuffle operations (TPC-DI benchmark)")
+                    summary_parts.append(f"• **{workers} workers**: Sized for medium complexity ETL - scale up for larger datasets or complex joins")
                 else:
-                    summary_parts.append("• Classic: full control over cluster configuration")
-                    summary_parts.append("• Instance types based on TPC-DI ETL benchmarks")
+                    summary_parts.append("• **Classic**: Better for predictable, long-running jobs - more control, spot pricing available")
+                    summary_parts.append(f"• **{driver}** (driver): 4 vCPU on-demand for stability - coordinates Spark tasks")
+                    summary_parts.append(f"• **{worker}** (workers): 8 vCPU with NVMe SSD - TPC-DI benchmark proven for ETL")
+                    summary_parts.append(f"• **{workers} workers**: Based on data volume - ~1TB needs 2-4 workers, ~5TB needs 8-12")
+                if photon:
+                    summary_parts.append("• **Photon enabled**: 2-3x faster for SQL/DataFrame ops - recommended for most workloads")
+                else:
+                    summary_parts.append("• **Photon disabled**: Required for Python UDFs, RDD APIs, or streaming to non-Delta sinks")
             elif wtype == "DLT":
                 edition = workload.get("dlt_edition", "PRO")
                 driver = workload.get("driver_node_type", "Not specified")
                 worker = workload.get("worker_node_type", "Not specified")
                 workers = workload.get("num_workers", 2)
                 is_serverless = workload.get("serverless_enabled", False)
+                photon = workload.get("photon_enabled", True)
                 
                 summary_parts.append(f"• **Edition**: {edition}")
                 summary_parts.append(f"• **Mode**: {'Serverless' if is_serverless else 'Classic'}")
                 summary_parts.append(f"• **Driver**: {driver}")
                 summary_parts.append(f"• **Workers**: {workers}× {worker}")
                 summary_parts.append("")
-                summary_parts.append("**Why this config:**")
+                summary_parts.append("**Rationale:**")
                 if edition == "CORE":
-                    summary_parts.append("• CORE: streaming + batch, lowest cost")
+                    summary_parts.append("• **CORE edition**: Streaming + batch ETL, medallion architecture - lowest DBU cost, no CDC needed")
                 elif edition == "PRO":
-                    summary_parts.append("• PRO: includes CDC/Apply Changes for database sync")
+                    summary_parts.append("• **PRO edition**: Includes CDC/Apply Changes - required for syncing from MySQL, Postgres, SQL Server")
                 else:
-                    summary_parts.append("• ADVANCED: data quality expectations + constraints")
+                    summary_parts.append("• **ADVANCED edition**: Data quality expectations - enforce constraints, quarantine bad records")
                 if is_serverless:
-                    summary_parts.append("• Serverless: incremental MV refresh, instant startup")
+                    summary_parts.append("• **Serverless**: Incremental materialized view refresh, instant startup, auto-scaling")
+                    summary_parts.append(f"• **{driver}/{worker}**: VM types for DBU estimation only - infrastructure managed by Databricks")
+                else:
+                    summary_parts.append(f"• **{driver}** (driver): 4 vCPU for pipeline coordination")
+                    summary_parts.append(f"• **{worker}** (workers): 8 vCPU with NVMe - optimized for streaming and batch transforms")
+                    summary_parts.append(f"• **{workers} workers**: Scale based on data volume and pipeline complexity")
             elif wtype == "LAKEBASE":
                 cu = workload.get("lakebase_cu", 2)
                 summary_parts.append(f"• **Compute Units**: {cu} CU")
