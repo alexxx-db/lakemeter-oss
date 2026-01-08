@@ -1563,10 +1563,23 @@ Summary (2-3 sentences):"""
                 "content": all_tool_results
             })
             
-            # Generate follow-up message locally instead of making another API call
-            # This avoids the tool_use/tool_result mismatch error
+            # Generate follow-up message based on tool results
             follow_up_msg = ""
-            if self.proposed_workloads:
+            
+            # Check if any tool result has a message to display (like ask_clarifying_questions)
+            for tool_call in tool_calls:
+                tool_id = tool_call["id"]
+                result = tool_results_cache.get(tool_id, {})
+                
+                # For ask_clarifying_questions, display the questions
+                if tool_call["name"] == "ask_clarifying_questions" and result.get("message"):
+                    follow_up_msg = "\n\n" + result["message"]
+                    if result.get("note"):
+                        follow_up_msg += "\n\n" + result["note"]
+                    break
+            
+            # If no specific message from tools, check for proposed workloads
+            if not follow_up_msg and self.proposed_workloads:
                 follow_up_msg = "\n\nI've proposed the workloads above. Please review each one and click ✓ to confirm or ✗ to reject."
             
             if follow_up_msg:
