@@ -254,13 +254,14 @@ export function ChatPanel({
     }
   }, [isOpen, currentEstimate, currentWorkloads, totalCost, buildWelcomeContent])
 
-  const sendMessage = useCallback(async () => {
-    if (!inputValue.trim() || isLoading) return
+  const sendMessage = useCallback(async (directMessage?: string) => {
+    const messageToSend = directMessage || inputValue.trim()
+    if (!messageToSend || isLoading) return
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: inputValue.trim(),
+      content: messageToSend,
       timestamp: new Date()
     }
 
@@ -903,10 +904,7 @@ export function ChatPanel({
                 {quickActions.map((action: { label: string; action: string }, idx: number) => (
                   <button
                     key={idx}
-                    onClick={() => {
-                      setInputValue(action.action)
-                      setTimeout(() => sendMessage(), 100)
-                    }}
+                    onClick={() => sendMessage(action.action)}
                     className="text-[11px] px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-700 dark:hover:text-orange-300 text-[var(--text-secondary)] transition-all duration-150 shadow-sm hover:shadow"
                   >
                     {action.label}
@@ -938,7 +936,7 @@ export function ChatPanel({
             )}
           </div>
           <button
-            onClick={sendMessage}
+            onClick={() => sendMessage()}
             disabled={!inputValue.trim() || isLoading}
             className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-500 text-white rounded-xl hover:from-orange-600 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-150 flex-shrink-0"
           >
