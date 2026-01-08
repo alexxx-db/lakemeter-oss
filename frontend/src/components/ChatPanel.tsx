@@ -772,20 +772,10 @@ export function ChatPanel({
                         h3: ({children}) => <h3 className="text-[13px] font-semibold text-[var(--text-primary)] mt-2 mb-1">{children}</h3>,
                         // Paragraphs with proper spacing
                         p: ({children}) => <p className="my-2 text-[var(--text-primary)] leading-relaxed">{children}</p>,
-                        // Enhanced list styles - separate bullet and numbered lists
-                        ul: ({children}) => (
-                          <ul className="my-2 ml-0 space-y-1.5 [&>li]:before:content-['•'] [&>li]:before:text-orange-500 [&>li]:before:mr-2 [&>li]:before:font-bold">
-                            {children}
-                          </ul>
-                        ),
-                        ol: ({children}) => (
-                          <ol className="my-2 ml-0 space-y-1.5 list-decimal [&>li]:ml-5 [&>li]:pl-1 marker:text-orange-500 marker:font-semibold">
-                            {children}
-                          </ol>
-                        ),
-                        li: ({children}) => (
-                          <li className="text-[var(--text-primary)] leading-relaxed">{children}</li>
-                        ),
+                        // Simple list styles
+                        ul: ({children}) => <ul className="my-2 ml-4 space-y-1 list-disc">{children}</ul>,
+                        ol: ({children}) => <ol className="my-2 ml-4 space-y-1 list-decimal">{children}</ol>,
+                        li: ({children}) => <li className="text-[var(--text-primary)]">{children}</li>,
                         // Bold text
                         strong: ({children}) => <strong className="font-semibold text-[var(--text-primary)]">{children}</strong>,
                         // Italic
