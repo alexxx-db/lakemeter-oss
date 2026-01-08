@@ -2251,19 +2251,10 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("• **Spot best practices**: Enable retries, set max spot price limit")
                 
             else:  # Serverless
-                notes_parts.append("=" * 60)
-                notes_parts.append("**DATABRICKS JOBS (SERVERLESS MODE) CONFIGURATION**")
-                notes_parts.append("=" * 60)
-                notes_parts.append("")
-                notes_parts.append("**🚀 Serverless Compute**:")
-                notes_parts.append("• **Zero infrastructure management**: No instance types, cluster sizing")
-                notes_parts.append("• **Instant startup**: <1 minute (vs 5-7 min for classic clusters)")
-                notes_parts.append("• **Auto-scaling**: Automatic based on Spark task parallelism")
-                notes_parts.append("• **Pay-per-use**: Billed only for actual compute seconds used")
-                notes_parts.append("• **Built-in optimization**: Photon always enabled, auto-tuned Spark configs")
-                notes_parts.append("• **Use cases**: Ad-hoc jobs, inconsistent schedules, rapid development")
-                notes_parts.append("• **Cost**: ~30% premium vs classic, but often cheaper due to instant termination")
-                notes_parts.append("• **Limitations**: Limited Spark config customization, no cluster pools")
+                # Even for serverless, set VM types for DBU estimation in calculator
+                workload.setdefault("num_workers", 2)
+                workload.setdefault("driver_node_type", default_driver)
+                workload.setdefault("worker_node_type", default_instance)
         
         if wtype == "DLT":
             edition = workload.setdefault("dlt_edition", "PRO")
@@ -2912,33 +2903,47 @@ Each workload needs to be confirmed individually. Review the configurations and 
                     summary_parts.append("• Serverless for instant startup, auto-scaling, pay-per-use")
                 else:
                     summary_parts.append(f"• {wh_type} warehouse for consistent workloads")
-            elif wtype == "JOBS":
-                if workload.get("serverless_enabled"):
-                    summary_parts.append("• **Compute**: Serverless (managed)")
-                    summary_parts.append("")
-                    summary_parts.append("**Why this config:**")
-                    summary_parts.append("• Serverless for zero infra management, instant startup")
+            elif wtype in ["JOBS", "ALL_PURPOSE"]:
+                driver = workload.get("driver_node_type", "Not specified")
+                worker = workload.get("worker_node_type", "Not specified")
+                workers = workload.get("num_workers", 2)
+                is_serverless = workload.get("serverless_enabled", False)
+                photon = workload.get("photon_enabled", True)
+                
+                summary_parts.append(f"• **Mode**: {'Serverless' if is_serverless else 'Classic'}")
+                summary_parts.append(f"• **Driver**: {driver}")
+                summary_parts.append(f"• **Workers**: {workers}× {worker}")
+                summary_parts.append(f"• **Photon**: {'Enabled' if photon else 'Disabled'}")
+                summary_parts.append("")
+                summary_parts.append("**Why this config:**")
+                if is_serverless:
+                    summary_parts.append("• Serverless: instant startup, auto-scaling, pay-per-use")
+                    summary_parts.append("• VM types shown for DBU rate estimation only")
+                    summary_parts.append("• Actual infrastructure managed by Databricks")
                 else:
-                    driver = workload.get("driver_node_type", "Not specified")
-                    worker = workload.get("worker_node_type", "Not specified")
-                    workers = workload.get("num_workers", 2)
-                    summary_parts.append(f"• **Driver**: {driver}")
-                    summary_parts.append(f"• **Workers**: {workers}× {worker}")
-                    summary_parts.append(f"• **Photon**: {'Enabled' if workload.get('photon_enabled') else 'Disabled'}")
-                    summary_parts.append("")
-                    summary_parts.append("**Why this config:**")
-                    summary_parts.append("• Instance types chosen based on ETL benchmarks")
+                    summary_parts.append("• Classic: full control over cluster configuration")
+                    summary_parts.append("• Instance types based on TPC-DI ETL benchmarks")
             elif wtype == "DLT":
                 edition = workload.get("dlt_edition", "PRO")
+                driver = workload.get("driver_node_type", "Not specified")
+                worker = workload.get("worker_node_type", "Not specified")
+                workers = workload.get("num_workers", 2)
+                is_serverless = workload.get("serverless_enabled", False)
+                
                 summary_parts.append(f"• **Edition**: {edition}")
+                summary_parts.append(f"• **Mode**: {'Serverless' if is_serverless else 'Classic'}")
+                summary_parts.append(f"• **Driver**: {driver}")
+                summary_parts.append(f"• **Workers**: {workers}× {worker}")
                 summary_parts.append("")
                 summary_parts.append("**Why this config:**")
                 if edition == "CORE":
-                    summary_parts.append("• CORE for basic pipelines without CDC")
+                    summary_parts.append("• CORE: streaming + batch, lowest cost")
                 elif edition == "PRO":
-                    summary_parts.append("• PRO for CDC and enhanced monitoring")
+                    summary_parts.append("• PRO: includes CDC/Apply Changes for database sync")
                 else:
-                    summary_parts.append("• ADVANCED for data quality expectations")
+                    summary_parts.append("• ADVANCED: data quality expectations + constraints")
+                if is_serverless:
+                    summary_parts.append("• Serverless: incremental MV refresh, instant startup")
             elif wtype == "LAKEBASE":
                 cu = workload.get("lakebase_cu", 2)
                 summary_parts.append(f"• **Compute Units**: {cu} CU")
