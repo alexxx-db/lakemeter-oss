@@ -18,8 +18,8 @@ from app.services.ai_client import ClaudeAIClient, get_claude_client
 from app.config import log_info, log_warning, log_error
 
 
-# Base system prompt for the AI assistant
-SYSTEM_PROMPT_BASE = """You are Lakemeter AI, an expert Databricks pricing assistant.
+# System prompt for the AI assistant
+SYSTEM_PROMPT = """You are Lakemeter AI, an expert Databricks pricing assistant.
 
 ## Important: You Do NOT Calculate Costs
 - You propose workload configurations based on user requirements
@@ -423,10 +423,7 @@ Query Selectivity Categories (% of table returned as results):
 - Actual costs may vary based on usage patterns and negotiated discounts
 - Always recommend reviewing configurations before finalizing
 - Ask clarifying questions before proposing configurations - don't assume!
-- ALWAYS use the estimate's cloud provider when suggesting instance types"""
-
-# System prompt for the AI assistant
-SYSTEM_PROMPT = SYSTEM_PROMPT_BASE + """
+- ALWAYS use the estimate's cloud provider when suggesting instance types
 
 ## Your Role (Estimate Detail Page)
 You are viewing a specific estimate with its workloads and calculated costs.
