@@ -173,7 +173,7 @@
     "frontend/src/App.tsx": "2025-12-31T04:49:07.36246843+08:00",
     "frontend/src/api/client.ts": "2026-01-07T01:59:21.448490045+08:00",
     "frontend/src/components/ChatPanel.tsx": "2026-01-09T12:06:53.936529236+08:00",
-    "frontend/src/components/Layout.tsx": "2026-01-09T12:07:05.939923458+08:00",
+    "frontend/src/components/Layout.tsx": "2026-01-09T15:03:14.195447084+08:00",
     "frontend/src/components/SearchableSelect.tsx": "2025-12-31T03:27:03.953432306+08:00",
     "frontend/src/components/WorkloadForm.tsx": "2026-01-07T10:47:21.383100679+08:00",
     "frontend/src/hooks/useTheme.ts": "2025-12-12T22:38:05.674798122+08:00",
