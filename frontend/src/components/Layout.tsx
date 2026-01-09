@@ -319,25 +319,25 @@ export default function Layout() {
               {/* AI Assistant Button - Only show on estimate detail pages */}
               {isEstimateDetailPage && (
                 <motion.button
-                  onClick={() => setIsChatOpen(true)}
-                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  onClick={() => setIsChatOpen(!isChatOpen)}
+                  whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className={clsx(
-                    "relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300",
+                    "relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300 group",
                     isChatOpen 
                       ? "bg-gradient-to-br from-lava-600 via-amber-500 to-yellow-500 text-white shadow-lg shadow-lava-600/30" 
                       : "text-lava-600 hover:text-white hover:bg-gradient-to-br hover:from-lava-600 hover:via-amber-500 hover:to-yellow-500 hover:shadow-lg hover:shadow-lava-600/30"
                   )}
-                  title="AI Assistant"
+                  title={isChatOpen ? "Close AI Assistant" : "Open AI Assistant"}
                 >
                   <motion.div
-                    animate={isChatOpen ? { rotate: [0, 15, -15, 0] } : {}}
-                    transition={{ duration: 0.5, repeat: isChatOpen ? Infinity : 0, repeatDelay: 2 }}
+                    className="group-hover:animate-pulse"
+                    animate={isChatOpen ? {} : {}}
                   >
                     <SparklesIcon className="w-5 h-5" />
                   </motion.div>
                   {/* Glow effect on hover */}
-                  <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-lava-500 to-amber-400 opacity-0 hover:opacity-20 blur-md transition-opacity duration-300" />
+                  <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-lava-500 to-amber-400 opacity-0 group-hover:opacity-20 blur-md transition-opacity duration-300" />
                 </motion.button>
               )}
             </div>
