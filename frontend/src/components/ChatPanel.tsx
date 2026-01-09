@@ -285,10 +285,20 @@ export function ChatPanel({
       abortControllerRef.current = new AbortController()
       
       // Build enriched workloads context with actual calculated costs
+      // Debug: Log what we're working with
+      console.log('[ChatPanel] Building enriched workloads:', {
+        currentWorkloadsCount: currentWorkloads?.length,
+        draftWorkloadsCount: draftWorkloads?.length,
+        itemCostsKeys: itemCosts ? Object.keys(itemCosts) : [],
+        sampleWorkload: currentWorkloads?.[0],
+        sampleCosts: itemCosts ? Object.values(itemCosts)[0] : null
+      })
+      
       const enrichedWorkloads = (currentWorkloads || draftWorkloads || []).map(w => {
         // lineItems use line_item_id, drafts use draft_id
         const itemId = w.line_item_id || w.item_id || w.draft_id
         const costs = itemCosts?.[itemId]
+        console.log(`[ChatPanel] Workload ${w.workload_name}: itemId=${itemId}, costs=`, costs)
         return {
           ...w,
           total_cost: costs?.total || w.total_cost || 0,

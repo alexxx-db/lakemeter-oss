@@ -1264,6 +1264,11 @@ export default function Calculator() {
         dbus: isNaN(itemCosts.monthlyDBUs) ? 0 : itemCosts.monthlyDBUs
       }
     })
+    console.log('[Calculator] Syncing costs to store:', {
+      lineItemsCount: lineItems.length,
+      costsKeys: Object.keys(costs),
+      sampleCost: Object.values(costs)[0]
+    })
     setLocalCalculatedCosts(costs)
   }, [lineItems, pendingFormEdits, formData.cloud, formData.region, formData.tier, setLocalCalculatedCosts, getVMPrice, vmPricingMap, getInstanceDbuRate, instanceDbuRateMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
   
