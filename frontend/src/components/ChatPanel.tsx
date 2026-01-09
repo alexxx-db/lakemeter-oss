@@ -202,10 +202,15 @@ export function ChatPanel({
     }
   }, [isOpen])
 
-  // Build welcome message content based on context - simplified, quick actions show capabilities
+  // Build welcome message content based on context
   const buildWelcomeContent = useCallback(() => {
     if (currentEstimate) {
-      return `How can I help you today?`
+      let content = `How can I help you?\n`
+      content += `• 📊 **Analyze** your workloads and costs\n`
+      content += `• 💡 **Suggest optimizations** to save money\n`
+      content += `• ➕ **Add new workloads** to your estimate\n`
+      content += `• ❓ **Answer questions** about Databricks pricing`
+      return content
     } else {
       return `Hi! I'm your Databricks pricing assistant.\n\n*Loading estimate details...*`
     }
