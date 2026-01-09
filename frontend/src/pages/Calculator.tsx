@@ -187,6 +187,79 @@ const getWorkloadTypeConfig = (workloadType: string | null | undefined) => {
   }
 }
 
+// ============================================
+// SHARED UTILITIES - Used across all views
+// ============================================
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount)
+}
+
+const formatNumber = (num: number, decimals: number = 2) => {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  }).format(num)
+}
+
+// ============================================
+// SHARED COMPONENTS - Used across all views
+// ============================================
+
+interface CostBreakdown {
+  totalCost: number
+  dbuCost: number
+  vmCost: number
+  monthlyDBUs: number
+  unitsUsed?: number
+}
+
+// Shared cost display component - consistent across table, compact, and expanded views
+interface WorkloadCostDisplayProps {
+  costs: CostBreakdown
+  size?: 'sm' | 'md' | 'lg'
+  showDBUs?: boolean
+  isLoading?: boolean
+  className?: string
+}
+
+const WorkloadCostDisplay: React.FC<WorkloadCostDisplayProps> = ({ 
+  costs, 
+  size = 'md', 
+  showDBUs = true,
+  isLoading = false,
+  className
+}) => {
+  const sizeClasses = {
+    sm: { cost: 'text-sm', dbu: 'text-[10px]' },
+    md: { cost: 'text-base', dbu: 'text-xs' },
+    lg: { cost: 'text-lg', dbu: 'text-xs' }
+  }
+  
+  return (
+    <div className={clsx("flex flex-col items-end justify-center", isLoading && "opacity-60", className)}>
+      <span className={clsx("font-medium text-[var(--text-primary)] transition-opacity", sizeClasses[size].cost)}>
+        {formatCurrency(costs.totalCost)}
+        {isLoading && <span className="text-xs font-normal text-[var(--text-muted)] ml-1">...</span>}
+      </span>
+      {showDBUs && (
+        <span className={clsx("text-[var(--text-muted)]", sizeClasses[size].dbu)}>
+          {formatNumber(costs.monthlyDBUs)} DBUs/mo
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// END SHARED COMPONENTS
+// ============================================
+
 // DBU Pricing ($/DBU) - PREMIUM tier fallback values
 // Note: Actual prices come from pricing bundle or API, these are fallbacks
 const DBU_PRICING: Record<string, Record<string, number>> = {
@@ -1442,22 +1515,6 @@ export default function Calculator() {
     setFormulaVisibleItems(newVisible)
   }
   
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount)
-  }
-  
-  const formatNumber = (num: number, decimals: number = 2) => {
-    return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals
-    }).format(num)
-  }
-  
   // Get usage summary for a workload
   const getUsageSummary = (item: LineItem) => {
     if (item.hours_per_month) {
@@ -2421,11 +2478,8 @@ export default function Calculator() {
                             
                             {/* Cost + Actions - Combined for tighter spacing */}
                             <div className="col-span-7 sm:col-span-4 flex items-center justify-end gap-3">
-                              {/* Cost */}
-                              <div className="flex flex-col items-end justify-center">
-                                <span className="font-medium text-[var(--text-primary)]">{formatCurrency(costs.totalCost)}</span>
-                                <span className="text-[10px] text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                              </div>
+                              {/* Cost - Using shared component */}
+                              <WorkloadCostDisplay costs={costs} size="sm" />
                               
                               {/* Actions */}
                               <div className="flex items-center gap-0.5">
@@ -3072,32 +3126,19 @@ export default function Calculator() {
                             </div>
                           </div>
                           
-                          {/* Cost - Instant local calculation */}
-                          <div className="text-right min-w-[100px]">
-                            {/* Check if this workload needs VM costs and we're still loading them */}
-                            {(() => {
-                              // Workloads that need VM costs: classic compute (not serverless)
+                          {/* Cost - Using shared component */}
+                          <WorkloadCostDisplay 
+                            costs={costs}
+                            size={workloadsViewMode === 'cards' && !isExpanded ? 'md' : 'lg'}
+                            isLoading={(() => {
                               const wType = item.workload_type || ''
                               const needsVMCosts = !item.serverless_enabled && 
                                 ['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType) ||
                                 (wType === 'DBSQL' && item.dbsql_warehouse_type !== 'SERVERLESS')
-                              const showVMLoading = isLoadingVMCosts && needsVMCosts && costs.vmCost === 0
-                              
-                              return (
-                                <>
-                                  <p className={clsx(
-                                    "font-medium text-[var(--text-primary)] transition-opacity",
-                                    workloadsViewMode === 'cards' && !isExpanded ? "text-base" : "text-lg",
-                                    showVMLoading && "opacity-60"
-                                  )}>
-                                    {formatCurrency(costs.totalCost)}
-                                    {showVMLoading && <span className="text-xs font-normal text-[var(--text-muted)] ml-1">...</span>}
-                                  </p>
-                                  <p className="text-xs text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs/mo</p>
-                                </>
-                              )
+                              return isLoadingVMCosts && needsVMCosts && costs.vmCost === 0
                             })()}
-                          </div>
+                            className="min-w-[100px]"
+                          />
                           
                           {/* Actions */}
                           <div className="flex items-center gap-1">
@@ -3186,119 +3227,139 @@ export default function Calculator() {
                             </div>
                             
                             {/* Calculation Formula Display */}
+                            {/* Formula display - collapsible, synced with table view */}
                             <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
-                              <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
-                                <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
-                                {(() => {
-                                  const hoursPerMonth = item.hours_per_month || 
-                                    (item.runs_per_day && item.avg_runtime_minutes 
-                                      ? item.runs_per_day * (item.avg_runtime_minutes / 60) * (item.days_per_month || 30)
-                                      : 730)
-                                  const dbuPriceDisplay = costs.dbuPrice?.toFixed(2) || '0.00'
-                                  
-                                  // Vector Search
-                                  if (item.workload_type === 'VECTOR_SEARCH') {
-                                    return (
-                                      <>
-                                        <span className="text-blue-500">{costs.unitsUsed || 1} units</span>
-                                        <span>×</span>
-                                        <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '4.00'} DBU/hr</span>
-                                        <span>×</span>
-                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
-                                        <span>=</span>
-                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                        <span>×</span>
-                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                                        <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
-                                      </>
-                                    )
-                                  }
-                                  
-                                  // FMAPI (token-based)
-                                  if (item.workload_type === 'FMAPI_DATABRICKS' || item.workload_type === 'FMAPI_PROPRIETARY') {
-                                    return (
-                                      <>
-                                        <span className="text-blue-500">{item.fmapi_quantity || 0}M tokens</span>
-                                        <span>×</span>
-                                        <span className="text-purple-500">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
-                                        <span>=</span>
-                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                        <span>×</span>
-                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                                        <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
-                                      </>
-                                    )
-                                  }
-                                  
-                                  // Lakebase
-                                  if (item.workload_type === 'LAKEBASE') {
-                                    return (
-                                      <>
-                                        <span className="text-blue-500">{item.lakebase_cu || 1} CU</span>
-                                        <span>×</span>
-                                        <span className="text-purple-500">{item.lakebase_ha_nodes || 1} nodes</span>
-                                        <span>×</span>
-                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
-                                        <span>=</span>
-                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                        <span>×</span>
-                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                                        <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
-                                      </>
-                                    )
-                                  }
-                                  
-                                  // Model Serving
-                                  if (item.workload_type === 'MODEL_SERVING') {
-                                    return (
-                                      <>
-                                        <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '2.00'} DBU/hr</span>
-                                        <span>×</span>
-                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
-                                        <span>=</span>
-                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                        <span>×</span>
-                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                                        <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
-                                      </>
-                                    )
-                                  }
-                                  
-                                  // Compute workloads (JOBS, ALL_PURPOSE, DLT, DBSQL)
-                                  const hasVMCost = costs.vmCost > 0
-                                  return (
-                                    <>
-                                      {costs.dbuPerHour && costs.dbuPerHour > 0 && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id) }}
+                                className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] hover:text-lava-600 transition-colors group"
+                              >
+                                <svg 
+                                  className={`w-3 h-3 transition-transform ${formulaVisibleItems.has(item.line_item_id) ? 'rotate-90' : ''}`} 
+                                  fill="none" 
+                                  viewBox="0 0 24 24" 
+                                  stroke="currentColor"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                                <span className="font-medium group-hover:underline">
+                                  {formulaVisibleItems.has(item.line_item_id) ? 'Hide calculations' : 'Show calculations'}
+                                </span>
+                              </button>
+                              
+                              {formulaVisibleItems.has(item.line_item_id) && (
+                                <div className="mt-2 flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                  <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
+                                  {(() => {
+                                    const hoursPerMonth = item.hours_per_month || 
+                                      (item.runs_per_day && item.avg_runtime_minutes 
+                                        ? item.runs_per_day * (item.avg_runtime_minutes / 60) * (item.days_per_month || 30)
+                                        : 730)
+                                    const dbuPriceDisplay = costs.dbuPrice?.toFixed(2) || '0.00'
+                                    
+                                    // Vector Search
+                                    if (item.workload_type === 'VECTOR_SEARCH') {
+                                      return (
                                         <>
-                                          <span className="text-purple-500">{costs.dbuPerHour.toFixed(2)} DBU/hr</span>
+                                          <span className="text-blue-500">{costs.unitsUsed || 1} units</span>
                                           <span>×</span>
-                                        </>
-                                      )}
-                                      <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
-                                      <span>=</span>
-                                      <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                      <span>×</span>
-                                      <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
-                                      {hasVMCost ? (
-                                        <>
-                                          <span className="mx-1">|</span>
-                                          <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
-                                          <span>+</span>
-                                          <span className="text-teal-500">VM: {formatCurrency(costs.vmCost)}</span>
+                                          <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '4.00'} DBU/hr</span>
+                                          <span>×</span>
+                                          <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
+                                          <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </>
-                                      ) : (
+                                      )
+                                    }
+                                    
+                                    // FMAPI (token-based)
+                                    if (item.workload_type === 'FMAPI_DATABRICKS' || item.workload_type === 'FMAPI_PROPRIETARY') {
+                                      return (
+                                        <>
+                                          <span className="text-blue-500">{item.fmapi_quantity || 0}M tokens</span>
+                                          <span>×</span>
+                                          <span className="text-purple-500">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
+                                          <span>=</span>
+                                          <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
+                                        </>
+                                      )
+                                    }
+                                    
+                                    // Lakebase
+                                    if (item.workload_type === 'LAKEBASE') {
+                                      return (
+                                        <>
+                                          <span className="text-blue-500">{item.lakebase_cu || 1} CU</span>
+                                          <span>×</span>
+                                          <span className="text-purple-500">{item.lakebase_ha_nodes || 1} nodes</span>
+                                          <span>×</span>
+                                          <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                          <span>=</span>
+                                          <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
+                                        </>
+                                      )
+                                    }
+                                    
+                                    // Model Serving
+                                    if (item.workload_type === 'MODEL_SERVING') {
+                                      return (
+                                        <>
+                                          <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '2.00'} DBU/hr</span>
+                                          <span>×</span>
+                                          <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                          <span>=</span>
+                                          <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span>×</span>
+                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span>=</span>
+                                          <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
+                                        </>
+                                      )
+                                    }
+                                    
+                                    // Compute workloads (JOBS, ALL_PURPOSE, DLT, DBSQL)
+                                    const hasVMCost = costs.vmCost > 0
+                                    return (
+                                      <>
+                                        {costs.dbuPerHour && costs.dbuPerHour > 0 && (
+                                          <>
+                                            <span className="text-purple-500">{costs.dbuPerHour.toFixed(2)} DBU/hr</span>
+                                            <span>×</span>
+                                          </>
+                                        )}
+                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
-                                      )}
-                                      <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
-                                    </>
-                                  )
-                                })()}
-                              </div>
+                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span>×</span>
+                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                        {hasVMCost ? (
+                                          <>
+                                            <span className="mx-1">|</span>
+                                            <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                            <span>+</span>
+                                            <span className="text-teal-500">VM: {formatCurrency(costs.vmCost)}</span>
+                                            <span>=</span>
+                                          </>
+                                        ) : (
+                                          <span>=</span>
+                                        )}
+                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
+                                      </>
+                                    )
+                                  })()}
+                                </div>
+                              )}
                             </div>
                           </>
                         )}
