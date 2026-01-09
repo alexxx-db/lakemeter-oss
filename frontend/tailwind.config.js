@@ -8,15 +8,25 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['DM Sans', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['JetBrains Mono', 'SF Mono', 'Menlo', 'monospace'],
+        sans: ['DM Sans', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['DM Mono', 'SF Mono', 'Menlo', 'monospace'],
       },
       colors: {
-        // Custom slate overrides for darker backgrounds
-        slate: {
-          950: '#0a0f14',
-          925: '#0d1117',
-        }
+        // Databricks Brand Colors
+        'db-lava': {
+          600: '#FF3621',
+          500: '#FF5240',
+          400: '#FF7A6A',
+        },
+        'db-navy': {
+          900: '#0B2026',
+          800: '#132A32',
+          700: '#1E3A44',
+        },
+        'db-oat': {
+          medium: '#EEEDE9',
+          light: '#F9F7F4',
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-out',

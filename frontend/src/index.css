@@ -1,43 +1,57 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Theme CSS Variables */
+/* Databricks Brand Colors */
 :root {
-  --databricks-red: #FF3621;
-  --databricks-orange: #FF6F3C;
-  --databricks-coral: #FF9E7A;
+  /* Primary Brand Colors */
+  --db-lava-600: #FF3621;
+  --db-lava-500: #FF5240;
+  --db-lava-400: #FF7A6A;
+  --db-navy-900: #0B2026;
+  --db-navy-800: #132A32;
+  --db-navy-700: #1E3A44;
+  --db-oat-medium: #EEEDE9;
+  --db-oat-light: #F9F7F4;
+  --db-white: #FFFFFF;
   
-  /* Light theme colors */
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;
-  --bg-card: #ffffff;
-  --bg-input: #ffffff;
-  --bg-hover: #f1f5f9;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --border-primary: #e2e8f0;
-  --border-secondary: #cbd5e1;
+  /* Light theme - using Oat tones */
+  --bg-primary: var(--db-oat-light);
+  --bg-secondary: var(--db-white);
+  --bg-tertiary: var(--db-oat-medium);
+  --bg-card: var(--db-white);
+  --bg-input: var(--db-white);
+  --bg-hover: var(--db-oat-medium);
+  --text-primary: var(--db-navy-900);
+  --text-secondary: #3D5159;
+  --text-muted: #6B7D85;
+  --border-primary: #DDD9D4;
+  --border-secondary: #C9C5BF;
+  
+  /* Accent colors */
+  --accent-primary: var(--db-lava-600);
+  --accent-hover: var(--db-lava-500);
+  --accent-light: rgba(255, 54, 33, 0.1);
 }
 
-/* Dark theme colors - high contrast dark palette */
+/* Dark theme - using Navy tones */
 html.dark,
 .dark {
-  --bg-primary: #0a0e14;
-  --bg-secondary: #12171f;
-  --bg-tertiary: #1a2230;
-  --bg-card: #12171f;
-  --bg-input: #1a2230;
-  --bg-hover: #242e3f;
-  --text-primary: #ffffff;
-  --text-secondary: #c1c9d4;
-  --text-muted: #8b95a5;
-  --border-primary: #2a3545;
-  --border-secondary: #3a4a5f;
+  --bg-primary: var(--db-navy-900);
+  --bg-secondary: var(--db-navy-800);
+  --bg-tertiary: var(--db-navy-700);
+  --bg-card: var(--db-navy-800);
+  --bg-input: var(--db-navy-700);
+  --bg-hover: #243840;
+  --text-primary: var(--db-white);
+  --text-secondary: #B8C4C9;
+  --text-muted: #7A8E96;
+  --border-primary: #2A4550;
+  --border-secondary: #3A5560;
+  
+  --accent-light: rgba(255, 54, 33, 0.15);
 }
 
 /* Base body styles */
@@ -49,6 +63,11 @@ body {
   transition: background-color 0.2s, color 0.2s;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Monospace text - use DM Mono */
+code, pre, .font-mono {
+  font-family: 'DM Mono', 'SF Mono', Menlo, monospace;
 }
 
 /* Custom scrollbar */
@@ -87,8 +106,8 @@ input::placeholder, textarea::placeholder {
 
 input:focus, select:focus, textarea:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
-  border-color: rgba(249, 115, 22, 0.5);
+  box-shadow: 0 0 0 2px var(--accent-light);
+  border-color: var(--db-lava-600);
 }
 
 input:hover, select:hover, textarea:hover {
@@ -100,14 +119,14 @@ input[type="checkbox"] {
   height: 1rem;
   border-radius: 0.25rem;
   cursor: pointer;
-  accent-color: var(--databricks-red);
+  accent-color: var(--db-lava-600);
 }
 
 select {
   cursor: pointer;
   appearance: none;
   background-repeat: no-repeat;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238b95a5' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236B7D85' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   background-position: right 0.75rem center;
   background-size: 1.25em 1.25em;
   padding-right: 2.5rem;
@@ -140,7 +159,7 @@ input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 1rem;
   height: 1rem;
-  background: var(--databricks-red);
+  background: var(--db-lava-600);
   border-radius: 50%;
   cursor: pointer;
   box-shadow: 0 4px 6px -1px rgba(255, 54, 33, 0.3);
@@ -155,12 +174,12 @@ input[type="range"]::-webkit-slider-thumb {
   }
   
   .btn-primary {
-    background-color: var(--databricks-red);
+    background-color: var(--db-lava-600);
     color: white;
   }
   
   .btn-primary:hover:not(:disabled) {
-    background-color: var(--databricks-orange);
+    background-color: var(--db-lava-500);
     box-shadow: 0 10px 15px -3px rgba(255, 54, 33, 0.25);
   }
   
@@ -218,9 +237,15 @@ input[type="range"]::-webkit-slider-thumb {
     color: var(--text-secondary);
   }
   
+  .badge-lava {
+    background-color: var(--accent-light);
+    color: var(--db-lava-600);
+    border: 1px solid rgba(255, 54, 33, 0.25);
+  }
+  
   .badge-orange {
     background-color: rgba(255, 111, 60, 0.15);
-    color: var(--databricks-orange);
+    color: #FF6F3C;
     border: 1px solid rgba(255, 111, 60, 0.25);
   }
   
@@ -259,7 +284,7 @@ input[type="range"]::-webkit-slider-thumb {
   
   .cost-value-highlight {
     @apply text-lg font-bold;
-    color: var(--databricks-red);
+    color: var(--db-lava-600);
   }
 }
 
@@ -276,7 +301,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .toggle-checked {
-  background-color: var(--databricks-red);
+  background-color: var(--db-lava-600);
 }
 
 .toggle-unchecked {
