@@ -2360,7 +2360,7 @@ export default function Calculator() {
                                 <TypeIcon className={clsx("w-4 h-4", typeConfig.color)} />
                               </div>
                               <div className="min-w-0">
-                                <p className="font-medium text-[var(--text-primary)] text-sm truncate">{item.workload_name}</p>
+                                <p className="font-semibold text-[var(--text-primary)] text-sm truncate">{item.workload_name}</p>
                                 <p className="text-xs text-[var(--text-muted)] truncate">{typeName}</p>
                               </div>
                             </div>
@@ -2423,7 +2423,7 @@ export default function Calculator() {
                             <div className="col-span-7 sm:col-span-4 flex items-center justify-end gap-3">
                               {/* Cost */}
                               <div className="flex flex-col items-end justify-center">
-                                <span className="font-bold text-[var(--text-primary)]">{formatCurrency(costs.totalCost)}</span>
+                                <span className="font-medium text-[var(--text-primary)]">{formatCurrency(costs.totalCost)}</span>
                                 <span className="text-[10px] text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                               </div>
                               
@@ -2636,7 +2636,7 @@ export default function Calculator() {
                                             <span>×</span>
                                             <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                             <span>=</span>
-                                            <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
+                                            <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                           </div>
                                         </div>
                                       )
@@ -2675,7 +2675,7 @@ export default function Calculator() {
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2722,7 +2722,7 @@ export default function Calculator() {
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2761,7 +2761,7 @@ export default function Calculator() {
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2827,7 +2827,7 @@ export default function Calculator() {
                                             </>
                                           )}
                                           <span>=</span>
-                                          <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2942,7 +2942,7 @@ export default function Calculator() {
                                           </>
                                         )}
                                         <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                       </div>
                                     </div>
                                   )
@@ -3210,7 +3210,7 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3227,7 +3227,7 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3246,7 +3246,7 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3263,7 +3263,7 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3294,7 +3294,7 @@ export default function Calculator() {
                                       ) : (
                                         <span>=</span>
                                       )}
-                                      <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                      <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                     </>
                                   )
                                 })()}
