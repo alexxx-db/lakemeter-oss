@@ -34,6 +34,7 @@ interface Message {
   toolResults?: ToolResult[]
   isStreaming?: boolean
   isThinking?: boolean
+  isEdited?: boolean
 }
 
 interface ToolResult {
@@ -71,7 +72,6 @@ interface ChatPanelProps {
   onClose: () => void
   onEstimateCreated?: (estimateId: string) => void
   onWorkloadConfirmed?: (workloadConfig: any) => Promise<void>  // Called when user confirms a proposed workload
-  onDeleteEstimate?: () => Promise<void>  // Called when user confirms estimate deletion
   currentEstimate?: any
   currentWorkloads?: any[]
   // Calculated costs for each workload (keyed by item_id)
@@ -86,7 +86,6 @@ export function ChatPanel({
   onClose,
   onEstimateCreated: _onEstimateCreated, // Reserved for future use
   onWorkloadConfirmed,
-  onDeleteEstimate,
   currentEstimate,
   currentWorkloads,
   itemCosts,
@@ -105,7 +104,6 @@ export function ChatPanel({
   const [localPanelWidth, setLocalPanelWidth] = useState(380)
   const [isResizing, setIsResizing] = useState(false)
   const [showQuickActions, setShowQuickActions] = useState(false) // Hidden by default
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
   
@@ -256,44 +254,20 @@ export function ChatPanel({
     setEditingContent('')
   }, [])
   
-  const saveEditMessage = useCallback(async (messageId: string) => {
+  const saveEditMessage = useCallback((messageId: string) => {
     if (!editingContent.trim()) return
     
-    // Find and update the message
-    const messageIndex = messages.findIndex(m => m.id === messageId)
-    if (messageIndex === -1) return
-    
-    // Update the message and remove all messages after it
-    setMessages(prev => {
-      const newMessages = prev.slice(0, messageIndex)
-      newMessages.push({
-        ...prev[messageIndex],
-        content: editingContent.trim()
-      })
-      return newMessages
-    })
+    // Update the message in place with edited flag
+    setMessages(prev => prev.map(m => 
+      m.id === messageId 
+        ? { ...m, content: editingContent.trim(), isEdited: true }
+        : m
+    ))
     
     setEditingMessageId(null)
     setEditingContent('')
-    
-    // Re-send the edited message
-    setTimeout(() => {
-      sendMessage(editingContent.trim())
-    }, 100)
-  }, [editingContent, messages])
+  }, [editingContent])
   
-  // Handle delete estimate
-  const handleDeleteEstimate = useCallback(async () => {
-    if (!onDeleteEstimate) return
-    
-    try {
-      await onDeleteEstimate()
-      setShowDeleteConfirm(false)
-    } catch (err) {
-      console.error('Failed to delete estimate:', err)
-      setError('Failed to delete estimate')
-    }
-  }, [onDeleteEstimate])
   
   // Add welcome message on first open
   useEffect(() => {
@@ -654,92 +628,45 @@ export function ChatPanel({
 
       {/* Current Estimate Context - Shows the estimate being worked on */}
       {currentEstimate && (
-        <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-900/50 border-b border-[var(--border-primary)]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                <DocumentPlusIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+        <div className="px-4 py-2.5 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-900/50 border-b border-[var(--border-primary)]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                <DocumentPlusIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               </div>
-              <div>
-                <div className="font-medium text-sm text-[var(--text-primary)] truncate max-w-[120px]">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-sm text-[var(--text-primary)] truncate">
                   {currentEstimate.estimate_name || currentEstimate.name || 'Estimate'}
                 </div>
-                <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
-                  <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
+                <div className="flex items-center gap-1 text-[10px] text-[var(--text-muted)] flex-wrap">
+                  <span className="px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
                     {(currentEstimate.cloud || 'AWS').toUpperCase()}
                   </span>
-                  <span>{currentEstimate.region || 'N/A'}</span>
-                  <span className="text-[var(--text-muted)]">•</span>
-                  <span className="text-[var(--text-secondary)]">{currentEstimate.tier || 'PREMIUM'}</span>
+                  <span className="truncate">{currentEstimate.region || 'N/A'}</span>
+                  <span>•</span>
+                  <span>{currentEstimate.tier || 'PREMIUM'}</span>
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="text-right">
-                <div className="text-[10px] text-[var(--text-muted)] mb-0.5">
-                  {currentWorkloads?.length || 0} workload{(currentWorkloads?.length || 0) !== 1 ? 's' : ''}
-                </div>
-                <div className="font-bold text-base text-[var(--text-primary)]">
-                  {totalCost > 0 ? (
-                    <span className="text-green-600 dark:text-green-400">
-                      ${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  ) : (
-                    <span className="text-[var(--text-muted)]">—</span>
-                  )}
-                  <span className="text-[10px] font-normal text-[var(--text-muted)]">/mo</span>
-                </div>
+            <div className="text-right flex-shrink-0">
+              <div className="text-[10px] text-[var(--text-muted)]">
+                {currentWorkloads?.length || 0} workloads
               </div>
-              {/* Delete Estimate Button */}
-              {onDeleteEstimate && (
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-[var(--text-muted)] hover:text-red-600 transition-colors"
-                  title="Delete estimate"
-                >
-                  <TrashIcon className="w-4 h-4" />
-                </button>
-              )}
+              <div className="font-bold text-sm text-[var(--text-primary)]">
+                {totalCost > 0 ? (
+                  <span className="text-green-600 dark:text-green-400">
+                    ${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                ) : (
+                  <span className="text-[var(--text-muted)]">—</span>
+                )}
+                <span className="text-[10px] font-normal text-[var(--text-muted)]">/mo</span>
+              </div>
             </div>
           </div>
         </div>
       )}
       
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-primary)] rounded-xl shadow-2xl max-w-sm w-full p-5 border border-[var(--border-primary)]">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                <TrashIcon className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-[var(--text-primary)]">Delete Estimate?</h3>
-                <p className="text-sm text-[var(--text-secondary)]">This cannot be undone.</p>
-              </div>
-            </div>
-            <p className="text-sm text-[var(--text-secondary)] mb-5">
-              Are you sure you want to delete "<strong>{currentEstimate?.estimate_name || currentEstimate?.name || 'this estimate'}</strong>" 
-              and all its workloads?
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteEstimate}
-                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Proposed Workloads - Awaiting Confirmation */}
       {proposedWorkloads.length > 0 && (
         <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
@@ -836,7 +763,7 @@ export function ChatPanel({
                       className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1"
                     >
                       <CheckIcon className="w-3 h-3" />
-                      Re-send
+                      Save
                     </button>
                   </div>
                 </div>
@@ -945,22 +872,26 @@ export function ChatPanel({
                     </div>
                   )}
 
-                  {/* Timestamp and Edit Button */}
+                  {/* Timestamp, Edited tag, and Edit Button */}
                   <div className={clsx(
-                    'flex items-center gap-2 mt-2',
+                    'flex items-center gap-2 mt-1.5',
                     message.role === 'user' ? 'justify-end' : 'justify-start'
                   )}>
+                    {/* Edited tag */}
+                    {message.isEdited && (
+                      <span className="text-[9px] text-[var(--text-muted)] italic">(edited)</span>
+                    )}
                     <span className="text-[10px] text-[var(--text-muted)]">
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    {/* Edit button for user messages */}
+                    {/* Edit button for user messages - always visible */}
                     {message.role === 'user' && message.id !== 'welcome' && !isLoading && (
                       <button
                         onClick={() => startEditMessage(message.id, message.content)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-[var(--text-muted)] hover:text-blue-600 transition-all"
+                        className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-400 hover:text-blue-600 transition-colors"
                         title="Edit message"
                       >
-                        <PencilIcon className="w-3 h-3" />
+                        <PencilIcon className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
@@ -1002,7 +933,7 @@ export function ChatPanel({
 
       {/* Input Area */}
       <div className="p-4 border-t border-[var(--border-primary)] bg-gradient-to-t from-[var(--bg-secondary)] to-[var(--bg-primary)]">
-        {/* Quick Actions Toggle - Hidden by default */}
+        {/* Quick Actions Toggle */}
         {!isLoading && (
           <div className="mb-2">
             <button
@@ -1017,14 +948,14 @@ export function ChatPanel({
               {showQuickActions ? "Hide Quick Actions" : "Show Quick Actions"}
             </button>
             
-            {/* Quick Action Buttons - Centered, Databricks-style */}
+            {/* Quick Action Buttons - Single row */}
             {showQuickActions && (
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <div className="mt-2 flex justify-center gap-1.5 overflow-x-auto pb-1">
                 {quickActions.map((action: { label: string; action: string }, idx: number) => (
                   <button
                     key={idx}
                     onClick={() => sendMessage(action.action)}
-                    className="text-xs px-4 py-2.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-lava-50 dark:hover:bg-lava-900/20 hover:border-lava-400 hover:text-lava-700 dark:hover:text-lava-400 text-[var(--text-secondary)] transition-all duration-150 shadow-sm hover:shadow"
+                    className="text-[11px] px-3 py-1.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-lava-50 dark:hover:bg-lava-900/20 hover:border-lava-400 hover:text-lava-700 dark:hover:text-lava-400 text-[var(--text-secondary)] transition-all whitespace-nowrap"
                   >
                     {action.label}
                   </button>

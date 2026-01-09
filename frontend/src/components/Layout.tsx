@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Squares2X2Icon, 
@@ -87,7 +87,6 @@ export default function Layout() {
     lineItems,
     localCalculatedCosts,
     createLineItem,
-    deleteEstimate,
     calculateAllWorkloadCosts,
     setSessionExpired,
     // Reference data loading (moved to app startup for faster page loads)
@@ -96,8 +95,6 @@ export default function Layout() {
     isReferenceDataLoaded,
     isPricingBundleLoaded
   } = useStore()
-  
-  const navigate = useNavigate()
   
   // Determine if we're on an estimate detail page (AI assistant only available there)
   const isEstimateDetailPage = location.pathname.startsWith('/calculator/') && location.pathname !== '/calculator'
@@ -398,18 +395,6 @@ export default function Layout() {
               } catch (err: any) {
                 toast.error(err.message || 'Failed to add workload')
                 throw err  // Re-throw so ChatPanel can show error
-              }
-            }
-          }}
-          onDeleteEstimate={async () => {
-            if (currentEstimate?.estimate_id) {
-              try {
-                await deleteEstimate(currentEstimate.estimate_id)
-                toast.success('Estimate deleted')
-                navigate('/') // Navigate back to estimates list
-              } catch (err: any) {
-                toast.error(err.message || 'Failed to delete estimate')
-                throw err
               }
             }
           }}
