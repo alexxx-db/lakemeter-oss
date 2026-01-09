@@ -44,23 +44,49 @@ const navigation = [
   { name: 'New Estimate', href: '/calculator', icon: PlusCircleIcon },
 ]
 
-// Lakemeter logo - Ruler with integrated dollar sign
+// Lakemeter logo - Lakehouse with meter/gauge
 const LakemeterLogo = () => (
   <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-    {/* Vertical ruler bar */}
-    <rect x="6" y="3" width="5" height="18" rx="1" stroke="#f97316" strokeWidth="1.5" fill="none" />
-    {/* Ruler tick marks */}
-    <path d="M6 7h2.5M6 11h3.5M6 15h2.5M6 19h2.5" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" />
-    {/* Dollar sign integrated on the right */}
+    {/* House roof */}
     <path 
-      d="M16 8.5c-1.5-1-3.5-.5-3.5 1.5s2 1.5 3.5 2.5c1.5 1 1 3-1 3.5c-1.5.4-3-.2-3.5-1"
+      d="M12 2L3 9h3v8h12V9h3L12 2z" 
       stroke="#f97316" 
-      strokeWidth="2" 
-      strokeLinecap="round"
+      strokeWidth="1.5" 
       strokeLinejoin="round"
+      fill="none"
     />
-    {/* Dollar sign vertical line */}
-    <path d="M15 6v12" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" />
+    {/* Gauge arc inside house */}
+    <path 
+      d="M7 12a5 5 0 0 1 10 0" 
+      stroke="#f97316" 
+      strokeWidth="1.5" 
+      strokeLinecap="round"
+      fill="none"
+    />
+    {/* Gauge needle */}
+    <path 
+      d="M12 12l2.5-3.5" 
+      stroke="#ea580c" 
+      strokeWidth="1.5" 
+      strokeLinecap="round"
+    />
+    {/* Center dot */}
+    <circle cx="12" cy="12" r="1.2" fill="#f97316" />
+    {/* Water waves at bottom */}
+    <path 
+      d="M3 19c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" 
+      stroke="#f97316" 
+      strokeWidth="1.5" 
+      strokeLinecap="round"
+      fill="none"
+    />
+    <path 
+      d="M3 22c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" 
+      stroke="#fdba74" 
+      strokeWidth="1.5" 
+      strokeLinecap="round"
+      fill="none"
+    />
   </svg>
 )
 
