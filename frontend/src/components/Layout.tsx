@@ -46,7 +46,7 @@ const navigation = [
 
 // Lakemeter logo - Minimal lakehouse + gauge
 const LakemeterLogo = () => (
-  <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
+  <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7">
     {/* Simple roof line */}
     <path d="M4 8l8-5 8 5" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     {/* Gauge arc */}
@@ -203,18 +203,18 @@ export default function Layout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2.5 group">
+            <Link to="/" className="flex items-center gap-3 group">
               <div 
-                className="w-8 h-8 rounded-lg flex items-center justify-center border group-hover:border-orange-500/50 transition-colors"
+                className="w-10 h-10 rounded-lg flex items-center justify-center border group-hover:border-orange-500/50 transition-colors"
                 style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)' }}
               >
                 <LakemeterLogo />
               </div>
               <div>
-                <span className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                <span className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
                   Lakemeter
                 </span>
-                <span className="hidden sm:inline text-[10px] ml-2 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                <span className="hidden sm:inline text-xs ml-2 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                   Pricing Calculator
                 </span>
               </div>
