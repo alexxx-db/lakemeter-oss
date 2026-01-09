@@ -1413,7 +1413,7 @@ export default function Calculator() {
     try {
       await deleteEstimate(id)
       toast.success('Estimate deleted')
-      navigate('/estimates', { replace: true })
+      navigate('/', { replace: true })
     } catch {
       toast.error('Failed to delete estimate')
       setIsDeleting(false)
@@ -1714,7 +1714,7 @@ export default function Calculator() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex items-center gap-3 mb-6">
           <button
-            onClick={() => navigate('/estimates')}
+            onClick={() => navigate('/')}
             className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
           >
             <ArrowLeftIcon className="w-5 h-5" />
