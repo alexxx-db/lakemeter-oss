@@ -44,48 +44,37 @@ const navigation = [
   { name: 'New Estimate', href: '/calculator', icon: PlusCircleIcon },
 ]
 
-// Lakemeter logo - Lakehouse with meter/gauge
+// Lakemeter logo - Minimal lakehouse + gauge
 const LakemeterLogo = () => (
   <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-    {/* House roof */}
+    {/* Simple house roof */}
     <path 
-      d="M12 2L3 9h3v8h12V9h3L12 2z" 
+      d="M4 11l8-7 8 7" 
       stroke="#f97316" 
-      strokeWidth="1.5" 
-      strokeLinejoin="round"
-      fill="none"
-    />
-    {/* Gauge arc inside house */}
-    <path 
-      d="M7 12a5 5 0 0 1 10 0" 
-      stroke="#f97316" 
-      strokeWidth="1.5" 
+      strokeWidth="2" 
       strokeLinecap="round"
-      fill="none"
+      strokeLinejoin="round"
+    />
+    {/* Gauge arc */}
+    <path 
+      d="M7 16a5 5 0 0 1 10 0" 
+      stroke="#f97316" 
+      strokeWidth="2" 
+      strokeLinecap="round"
     />
     {/* Gauge needle */}
     <path 
-      d="M12 12l2.5-3.5" 
+      d="M12 16l3-4" 
       stroke="#ea580c" 
-      strokeWidth="1.5" 
+      strokeWidth="2" 
       strokeLinecap="round"
     />
-    {/* Center dot */}
-    <circle cx="12" cy="12" r="1.2" fill="#f97316" />
-    {/* Water waves at bottom */}
+    {/* Single wave */}
     <path 
-      d="M3 19c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" 
-      stroke="#f97316" 
-      strokeWidth="1.5" 
-      strokeLinecap="round"
-      fill="none"
-    />
-    <path 
-      d="M3 22c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" 
+      d="M5 21c2-1.5 4-1.5 6 0s4 1.5 6 0" 
       stroke="#fdba74" 
-      strokeWidth="1.5" 
+      strokeWidth="2" 
       strokeLinecap="round"
-      fill="none"
     />
   </svg>
 )
@@ -495,3 +484,4 @@ export default function Layout() {
     </div>
   )
 }
+
