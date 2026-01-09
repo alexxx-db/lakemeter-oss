@@ -1840,17 +1840,15 @@ The following fields MUST be set before workloads can be added:
                 "avg_runtime_minutes": runtime_mins,
                 "days_per_month": days_per_month if data_prep_frequency != "weekly" else 4,
                 "reason": "Document processing and chunking for embeddings",
-                "notes": f"""Configuration Rationale:
-• Purpose: Process and chunk documents for vector embeddings
-• Serverless: Chosen for cost efficiency - only pay when running
-• Photon enabled: 2-3x faster document processing
-• Frequency: {data_prep_frequency} based on your content update needs
-• Runtime: {runtime_mins} min estimated for ~{document_count} documents
+                "notes": f"""**Data Prep Configuration** (AI-generated)
 
-Assumptions:
-• Average document size: ~10KB
-• Chunk size: ~500 tokens for optimal retrieval
-• Using Delta Lake for document storage""",
+- **Purpose**: Process and chunk documents for vector embeddings
+- **Serverless**: Cost efficient - pay only when running
+- **Photon**: 2-3x faster document processing
+- **Frequency**: {data_prep_frequency} based on content update needs
+- **Runtime**: {runtime_mins} min for ~{document_count} documents
+
+**Assumptions:** ~10KB avg doc size, ~500 token chunks, Delta Lake storage""",
                 "status": "pending_confirmation"
             }
             add_workload_if_new(data_prep)
@@ -1906,17 +1904,15 @@ Assumptions:
             "fmapi_quantity": round(monthly_input_tokens, 2),
             "hours_per_month": 730,
             "reason": "Input tokens for context + questions",
-            "notes": f"""Configuration Rationale:
-• Model: {model} ({provider}) - good balance of quality and cost
-• Input tokens: {monthly_input_tokens:.2f}M/month
-• Calculation: {expected_conversations_per_day} conversations/day × {days_per_month} days × {avg_context_tokens} tokens/conversation
+                "notes": f"""**FMAPI Input Tokens** (AI-generated)
 
-Token Breakdown:
-• Retrieved context: ~{avg_context_tokens - 500} tokens
-• User question: ~500 tokens
-• System prompt: included in context
+- **Model**: {model} ({provider})
+- **Input tokens**: {monthly_input_tokens:.2f}M/month
+- **Calculation**: {expected_conversations_per_day} conv/day × {days_per_month} days × {avg_context_tokens} tokens/conv
 
-Tip: Add separate workload for output tokens to see full cost.""",
+**Token breakdown:** ~{avg_context_tokens - 500} context + ~500 question
+
+*Tip: Add separate workload for output tokens*""",
             "status": "pending_confirmation"
         }
         add_workload_if_new(fm_input)
@@ -1935,13 +1931,13 @@ Tip: Add separate workload for output tokens to see full cost.""",
             "fmapi_quantity": round(monthly_output_tokens, 2),
             "hours_per_month": 730,
             "reason": "Output tokens for generated responses",
-            "notes": f"""Configuration Rationale:
-• Model: {model} ({provider})
-• Output tokens: {monthly_output_tokens:.2f}M/month
-• Calculation: {expected_conversations_per_day} conv/day × {days_per_month} days × {avg_response_tokens} tokens/response
+                "notes": f"""**FMAPI Output Tokens** (AI-generated)
 
-Note: Output tokens are typically 3-5x more expensive than input tokens.
-Consider caching common responses to reduce costs.""",
+- **Model**: {model} ({provider})
+- **Output tokens**: {monthly_output_tokens:.2f}M/month
+- **Calculation**: {expected_conversations_per_day} conv/day × {days_per_month} days × {avg_response_tokens} tokens/response
+
+*Note: Output tokens are 3-5x more expensive than input. Consider caching common responses.*""",
             "status": "pending_confirmation"
         }
         add_workload_if_new(fm_output)
@@ -2845,10 +2841,9 @@ Each workload needs to be confirmed individually. Review the configurations and 
         
         # Generate concise notes - keep only key rationale
         if generate_notes:
-            # Build a succinct summary instead of verbose notes
+            # Build a succinct summary with proper markdown formatting
             summary_parts = []
-            summary_parts.append(f"**{wtype} Configuration** (AI-generated)")
-            summary_parts.append("")
+            summary_parts.append(f"**{wtype} Configuration** (AI-generated)\n")
             
             # Add concise config summary based on workload type
             if wtype == "DBSQL":
@@ -2856,34 +2851,34 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 wh_size = workload.get("dbsql_warehouse_size", "Small")
                 wh_clusters = workload.get("dbsql_num_clusters", 1)
                 total_users = workload.get("total_users", 0)
-                use_case = workload.get("use_case_type", "bi_dashboard")
-                data_volume = workload.get("typical_data_volume", "1-10GB")
                 
-                summary_parts.append(f"• **Warehouse**: {wh_type} {wh_size} × {wh_clusters} cluster(s)")
+                summary_parts.append(f"- **Warehouse**: {wh_type} {wh_size} × {wh_clusters} cluster(s)")
                 if total_users:
-                    summary_parts.append(f"• **Users**: {total_users} total")
-                summary_parts.append("")
-                summary_parts.append("**Rationale:**")
-                if wh_type == "SERVERLESS":
-                    summary_parts.append("• **Serverless**: Instant startup (<5s), scales to zero when idle - best for variable/ad-hoc usage")
-                    summary_parts.append("• **Predictive I/O**: 5-17x faster queries on selective filters (dates, IDs)")
-                elif wh_type == "PRO":
-                    summary_parts.append("• **PRO**: 3-4 min startup, Unity Catalog support - better for constant workloads")
+                    summary_parts.append(f"- **Users**: {total_users} total\n")
                 else:
-                    summary_parts.append("• **Classic**: Legacy option, no Predictive I/O - consider upgrading to Pro/Serverless")
+                    summary_parts.append("")
+                    
+                summary_parts.append("**Rationale:**\n")
+                if wh_type == "SERVERLESS":
+                    summary_parts.append("- **Serverless**: Instant startup (<5s), scales to zero when idle")
+                    summary_parts.append("- **Predictive I/O**: 5-17x faster on selective filters")
+                elif wh_type == "PRO":
+                    summary_parts.append("- **PRO**: 3-4 min startup, Unity Catalog support")
+                else:
+                    summary_parts.append("- **Classic**: Legacy option, consider upgrading")
                 
-                # Size rationale
                 size_rationale = {
-                    "2X-Small": "Light usage (1-5 users), 77 QPM capacity",
-                    "X-Small": "Small teams (5-10 users), 131 QPM capacity",
-                    "Small": "Standard BI (10-20 users), 224 QPM, ~2s queries on 10GB",
-                    "Medium": "Active dashboards (20-40 users), 380 QPM, <1s on 10GB",
+                    "2X-Small": "Light usage (1-5 users), 77 QPM",
+                    "X-Small": "Small teams (5-10 users), 131 QPM",
+                    "Small": "Standard BI (10-20 users), 224 QPM",
+                    "Medium": "Active dashboards (20-40 users), 380 QPM",
                     "Large": "Heavy workloads (40-80 users), 646 QPM",
                     "X-Large": "High concurrency (80-150 users), 1,098 QPM",
                 }
-                summary_parts.append(f"• **{wh_size}**: {size_rationale.get(wh_size, 'Sized for expected query volume')}")
+                summary_parts.append(f"- **{wh_size}**: {size_rationale.get(wh_size, 'Sized for query volume')}")
                 if wh_clusters > 1:
-                    summary_parts.append(f"• **{wh_clusters} clusters**: Horizontal scaling for {total_users}+ concurrent users")
+                    summary_parts.append(f"- **{wh_clusters} clusters**: Horizontal scaling for concurrency")
+                    
             elif wtype in ["JOBS", "ALL_PURPOSE"]:
                 driver = workload.get("driver_node_type", "Not specified")
                 worker = workload.get("worker_node_type", "Not specified")
@@ -2891,83 +2886,78 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 is_serverless = workload.get("serverless_enabled", False)
                 photon = workload.get("photon_enabled", True)
                 
-                summary_parts.append(f"• **Mode**: {'Serverless' if is_serverless else 'Classic'}")
-                summary_parts.append(f"• **Driver**: {driver}")
-                summary_parts.append(f"• **Workers**: {workers}× {worker}")
-                summary_parts.append(f"• **Photon**: {'Enabled' if photon else 'Disabled'}")
-                summary_parts.append("")
-                summary_parts.append("**Rationale:**")
+                summary_parts.append(f"- **Mode**: {'Serverless' if is_serverless else 'Classic'}")
+                summary_parts.append(f"- **Driver**: {driver}")
+                summary_parts.append(f"- **Workers**: {workers}× {worker}")
+                summary_parts.append(f"- **Photon**: {'Enabled' if photon else 'Disabled'}\n")
+                
+                summary_parts.append("**Rationale:**\n")
                 if is_serverless:
-                    summary_parts.append("• **Serverless**: Best for variable/ad-hoc workloads - instant startup (<1 min), auto-scaling, pay only for compute seconds used")
-                    summary_parts.append(f"• **{driver}** (driver): Standard 4 vCPU driver for task coordination - sufficient for most ETL jobs")
-                    summary_parts.append(f"• **{worker}** (workers): 8 vCPU with NVMe SSD - optimized for Spark shuffle operations (TPC-DI benchmark)")
-                    summary_parts.append(f"• **{workers} workers**: Sized for medium complexity ETL - scale up for larger datasets or complex joins")
+                    summary_parts.append("- **Serverless**: Instant startup, auto-scaling, pay per compute second")
+                    summary_parts.append(f"- **{driver}** (driver): Task coordination")
+                    summary_parts.append(f"- **{worker}** (workers): Optimized for Spark shuffle")
+                    summary_parts.append(f"- **{workers} workers**: Scale up for larger datasets")
                 else:
-                    summary_parts.append("• **Classic**: Better for predictable, long-running jobs - more control, spot pricing available")
-                    summary_parts.append(f"• **{driver}** (driver): 4 vCPU on-demand for stability - coordinates Spark tasks")
-                    summary_parts.append(f"• **{worker}** (workers): 8 vCPU with NVMe SSD - TPC-DI benchmark proven for ETL")
-                    summary_parts.append(f"• **{workers} workers**: Based on data volume - ~1TB needs 2-4 workers, ~5TB needs 8-12")
+                    summary_parts.append("- **Classic**: Predictable jobs, spot pricing available")
+                    summary_parts.append(f"- **{driver}** (driver): On-demand for stability")
+                    summary_parts.append(f"- **{worker}** (workers): ETL-optimized")
+                    summary_parts.append(f"- **{workers} workers**: ~1TB→2-4 workers, ~5TB→8-12")
                 if photon:
-                    summary_parts.append("• **Photon enabled**: 2-3x faster for SQL/DataFrame ops - recommended for most workloads")
+                    summary_parts.append("- **Photon**: 2-3x faster for SQL/DataFrame ops")
                 else:
-                    summary_parts.append("• **Photon disabled**: Required for Python UDFs, RDD APIs, or streaming to non-Delta sinks")
+                    summary_parts.append("- **No Photon**: For Python UDFs, RDD APIs")
+                    
             elif wtype == "DLT":
                 edition = workload.get("dlt_edition", "PRO")
                 driver = workload.get("driver_node_type", "Not specified")
                 worker = workload.get("worker_node_type", "Not specified")
                 workers = workload.get("num_workers", 2)
                 is_serverless = workload.get("serverless_enabled", False)
-                photon = workload.get("photon_enabled", True)
                 
-                summary_parts.append(f"• **Edition**: {edition}")
-                summary_parts.append(f"• **Mode**: {'Serverless' if is_serverless else 'Classic'}")
-                summary_parts.append(f"• **Driver**: {driver}")
-                summary_parts.append(f"• **Workers**: {workers}× {worker}")
-                summary_parts.append("")
-                summary_parts.append("**Rationale:**")
+                summary_parts.append(f"- **Edition**: {edition}")
+                summary_parts.append(f"- **Mode**: {'Serverless' if is_serverless else 'Classic'}")
+                summary_parts.append(f"- **Driver**: {driver}")
+                summary_parts.append(f"- **Workers**: {workers}× {worker}\n")
+                
+                summary_parts.append("**Rationale:**\n")
                 if edition == "CORE":
-                    summary_parts.append("• **CORE edition**: Streaming + batch ETL, medallion architecture - lowest DBU cost, no CDC needed")
+                    summary_parts.append("- **CORE**: Streaming + batch, lowest DBU cost")
                 elif edition == "PRO":
-                    summary_parts.append("• **PRO edition**: Includes CDC/Apply Changes - required for syncing from MySQL, Postgres, SQL Server")
+                    summary_parts.append("- **PRO**: Includes CDC/Apply Changes for database sync")
                 else:
-                    summary_parts.append("• **ADVANCED edition**: Data quality expectations - enforce constraints, quarantine bad records")
+                    summary_parts.append("- **ADVANCED**: Data quality expectations, constraints")
                 if is_serverless:
-                    summary_parts.append("• **Serverless**: Incremental materialized view refresh, instant startup, auto-scaling")
-                    summary_parts.append(f"• **{driver}/{worker}**: VM types for DBU estimation only - infrastructure managed by Databricks")
+                    summary_parts.append("- **Serverless**: Auto-scaling, instant startup")
+                    summary_parts.append(f"- **VMs**: For DBU estimation (managed by Databricks)")
                 else:
-                    summary_parts.append(f"• **{driver}** (driver): 4 vCPU for pipeline coordination")
-                    summary_parts.append(f"• **{worker}** (workers): 8 vCPU with NVMe - optimized for streaming and batch transforms")
-                    summary_parts.append(f"• **{workers} workers**: Scale based on data volume and pipeline complexity")
+                    summary_parts.append(f"- **{driver}**: Pipeline coordination")
+                    summary_parts.append(f"- **{workers}× {worker}**: Based on data volume")
+                    
             elif wtype == "LAKEBASE":
                 cu = workload.get("lakebase_cu", 2)
-                summary_parts.append(f"• **Compute Units**: {cu} CU")
-                summary_parts.append("")
-                summary_parts.append("**Why this config:**")
-                summary_parts.append("• CU auto-calculated from read/write requirements")
+                summary_parts.append(f"- **Compute Units**: {cu} CU\n")
+                summary_parts.append("**Rationale:** CU auto-calculated from read/write requirements")
+                
             elif wtype == "VECTOR_SEARCH":
                 endpoint_type = workload.get("vector_search_endpoint_type", "STANDARD")
-                summary_parts.append(f"• **Endpoint**: {endpoint_type}")
-                summary_parts.append("")
-                summary_parts.append("**Why this config:**")
+                summary_parts.append(f"- **Endpoint**: {endpoint_type}\n")
+                summary_parts.append("**Rationale:**\n")
                 if endpoint_type == "STANDARD":
-                    summary_parts.append("• Standard for low-latency interactive search")
+                    summary_parts.append("- Low-latency interactive search")
                 else:
-                    summary_parts.append("• Storage Optimized for large indexes, cost-efficient")
+                    summary_parts.append("- Storage optimized for large indexes")
+                    
             elif wtype == "MODEL_SERVING":
                 compute = workload.get("model_serving_compute_type", "CPU")
-                summary_parts.append(f"• **Compute**: {compute}")
-                summary_parts.append("")
-                summary_parts.append("**Why this config:**")
-                summary_parts.append(f"• {compute} sized based on model parameters")
+                summary_parts.append(f"- **Compute**: {compute}\n")
+                summary_parts.append(f"**Rationale:** {compute} sized for model parameters")
+                
             elif wtype in ["FMAPI_DATABRICKS", "FMAPI_PROPRIETARY"]:
                 model = workload.get("fmapi_model", "Not specified")
-                summary_parts.append(f"• **Model**: {model}")
-                summary_parts.append("")
-                summary_parts.append("**Why this config:**")
-                summary_parts.append("• Token estimates based on use case requirements")
+                summary_parts.append(f"- **Model**: {model}\n")
+                summary_parts.append("**Rationale:** Token estimates based on use case")
             
-            summary_parts.append("")
-            summary_parts.append("*Review and adjust sizing based on actual usage.*")
+            summary_parts.append("\n*Review and adjust based on actual usage.*")
             
             generated_notes = "\n".join(summary_parts)
         else:
