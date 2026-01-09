@@ -1408,17 +1408,15 @@ export default function Calculator() {
     if (!id) return
     
     setIsDeleting(true)
+    setShowDeleteConfirm(false) // Close modal immediately
+    
     try {
       await deleteEstimate(id)
-      setShowDeleteConfirm(false)
-      setIsDeleting(false)
       toast.success('Estimate deleted')
-      // Use setTimeout to ensure state updates complete before navigation
-      setTimeout(() => navigate('/estimates'), 0)
+      navigate('/estimates', { replace: true })
     } catch {
       toast.error('Failed to delete estimate')
       setIsDeleting(false)
-      setShowDeleteConfirm(false)
     }
   }
   
@@ -1695,6 +1693,19 @@ export default function Calculator() {
     if (!formData.region) missing.push('Region')
     if (!formData.tier) missing.push('Databricks Tier')
     return missing
+  }
+  
+  // Show deleting state when estimate is being deleted
+  if (isDeleting) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
+          <div className="w-12 h-12 rounded-full border-4 border-[var(--border-primary)] border-t-red-500 animate-spin"></div>
+          <p className="text-sm font-medium text-[var(--text-primary)]">Deleting estimate...</p>
+          <p className="text-xs text-[var(--text-muted)]">You will be redirected shortly</p>
+        </div>
+      </div>
+    )
   }
   
   // Show loading state when loading an existing estimate
