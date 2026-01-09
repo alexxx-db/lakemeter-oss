@@ -44,21 +44,19 @@ const navigation = [
   { name: 'New Estimate', href: '/calculator', icon: PlusCircleIcon },
 ]
 
-// Lakemeter logo - Polished app icon style
+// Lakemeter logo - Minimal lakehouse + gauge
 const LakemeterLogo = () => (
   <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-    {/* Rounded square background */}
-    <rect x="1" y="1" width="22" height="22" rx="5" fill="#f97316" />
-    {/* Roof line */}
-    <path d="M5 6l7-3 7 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    {/* Simple roof line */}
+    <path d="M4 8l8-5 8 5" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     {/* Gauge arc */}
-    <path d="M7 13a5 5 0 0 1 10 0" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <path d="M6 15a5 5 0 0 1 12 0" stroke="#f97316" strokeWidth="2" strokeLinecap="round" />
     {/* Needle */}
-    <path d="M12 13l2.5-3" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <path d="M12 15l2.5-3.5" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" />
     {/* Center dot */}
-    <circle cx="12" cy="13" r="1.3" fill="white" />
-    {/* Wave */}
-    <path d="M4 20q4-2 8 0t8 0" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <circle cx="12" cy="15" r="1.5" fill="#f97316" />
+    {/* Single wave */}
+    <path d="M4 21q4-2 8 0t8 0" stroke="#f97316" strokeWidth="2" strokeLinecap="round" />
   </svg>
 )
 
