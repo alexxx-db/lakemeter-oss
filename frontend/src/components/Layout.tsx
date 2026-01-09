@@ -44,11 +44,11 @@ const navigation = [
   { name: 'New Estimate', href: '/calculator', icon: PlusCircleIcon },
 ]
 
-// Lakemeter logo - White icon on orange background
+// Lakemeter logo - White icon on Databricks Lava background
 const LakemeterLogo = () => (
   <svg viewBox="0 0 24 24" fill="none" className="w-7 h-7">
-    {/* Orange rounded background */}
-    <rect x="0" y="0" width="24" height="24" rx="5" fill="#f97316" />
+    {/* Databricks Lava 600 background */}
+    <rect x="0" y="0" width="24" height="24" rx="5" fill="#FF3621" />
     {/* Roof line */}
     <path d="M5 9l7-4 7 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     {/* Gauge arc */}
