@@ -29,9 +29,9 @@ DATABRICKS_HOST = os.getenv("DATABRICKS_HOST", "https://fe-vm-lakemeter.cloud.da
 MODEL_ENDPOINT = "databricks-claude-sonnet-4-5"
 CLAUDE_ENDPOINT = f"{DATABRICKS_HOST}/serving-endpoints/{MODEL_ENDPOINT}/invocations"
 
-# Rate limiting configuration (conservative defaults)
+# Rate limiting configuration
 MAX_QUERIES_PER_HOUR = 500
-MAX_INPUT_TOKENS_PER_MINUTE = 500000
+MAX_INPUT_TOKENS_PER_MINUTE = 200000
 MAX_OUTPUT_TOKENS_PER_MINUTE = 50000
 
 
