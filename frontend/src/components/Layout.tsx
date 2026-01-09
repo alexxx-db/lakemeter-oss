@@ -50,15 +50,15 @@ const LakemeterLogo = () => (
     {/* Rounded square background */}
     <rect x="1" y="1" width="22" height="22" rx="5" fill="#f97316" />
     {/* Roof line */}
-    <path d="M5 10l7-4 7 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5 6l7-3 7 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     {/* Gauge arc */}
-    <path d="M7 15a5 5 0 0 1 10 0" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <path d="M7 13a5 5 0 0 1 10 0" stroke="white" strokeWidth="2" strokeLinecap="round" />
     {/* Needle */}
-    <path d="M12 15l2-3" stroke="white" strokeWidth="2" strokeLinecap="round" />
+    <path d="M12 13l2.5-3" stroke="white" strokeWidth="2" strokeLinecap="round" />
     {/* Center dot */}
-    <circle cx="12" cy="15" r="1.3" fill="white" />
+    <circle cx="12" cy="13" r="1.3" fill="white" />
     {/* Wave */}
-    <path d="M5 20q3.5-1.5 7 0t7 0" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.9" />
+    <path d="M4 20q4-2 8 0t8 0" stroke="white" strokeWidth="2" strokeLinecap="round" />
   </svg>
 )
 
