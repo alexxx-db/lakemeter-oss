@@ -44,10 +44,36 @@ const navigation = [
   { name: 'New Estimate', href: '/calculator', icon: PlusCircleIcon },
 ]
 
-// Databricks logo SVG component
-const DatabricksLogo = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-orange-500">
-    <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l6.9 3.45L12 11.08 5.1 7.63 12 4.18zM4 8.63l7 3.5v7.24l-7-3.5V8.63zm16 7.24l-7 3.5v-7.24l7-3.5v7.24z"/>
+// Lakemeter logo - Gauge/meter with price indicator
+const LakemeterLogo = () => (
+  <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
+    {/* Outer gauge arc */}
+    <path 
+      d="M4 14a8 8 0 1 1 16 0" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round"
+      className="text-orange-500"
+    />
+    {/* Tick marks */}
+    <path d="M6 14h1.5M16.5 14H18M7.5 9.5l1 .75M15.5 10.25l1-.75M12 6v1.5" 
+      stroke="currentColor" 
+      strokeWidth="1.5" 
+      strokeLinecap="round"
+      className="text-orange-400/60"
+    />
+    {/* Needle pointing to high value (cost) */}
+    <path 
+      d="M12 14l4-6" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round"
+      className="text-orange-600"
+    />
+    {/* Center dot */}
+    <circle cx="12" cy="14" r="2" fill="currentColor" className="text-orange-500" />
+    {/* Dollar sign at bottom */}
+    <text x="12" y="20" textAnchor="middle" fontSize="5" fontWeight="bold" fill="currentColor" className="text-orange-500">$</text>
   </svg>
 )
 
@@ -158,7 +184,7 @@ export default function Layout() {
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
         >
           <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center bg-orange-500/10">
-            <DatabricksLogo />
+            <LakemeterLogo />
           </div>
           <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
             Authentication Required
@@ -199,7 +225,7 @@ export default function Layout() {
                 className="w-8 h-8 rounded-lg flex items-center justify-center border group-hover:border-orange-500/50 transition-colors"
                 style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)' }}
               >
-                <DatabricksLogo />
+                <LakemeterLogo />
               </div>
               <div>
                 <span className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
