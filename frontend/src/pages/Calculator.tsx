@@ -2423,7 +2423,7 @@ export default function Calculator() {
                             <div className="col-span-7 sm:col-span-4 flex items-center justify-end gap-3">
                               {/* Cost */}
                               <div className="flex flex-col items-end justify-center">
-                                <span className="font-bold text-lava-600">{formatCurrency(costs.totalCost)}</span>
+                                <span className="font-bold text-[var(--text-primary)]">{formatCurrency(costs.totalCost)}</span>
                                 <span className="text-[10px] text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                               </div>
                               
@@ -2632,11 +2632,11 @@ export default function Calculator() {
                                             <span>×</span>
                                             <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                             <span>=</span>
-                                            <span className="text-lava-600 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                            <span className="text-[var(--text-secondary)] font-medium">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                             <span>×</span>
                                             <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                             <span>=</span>
-                                            <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                            <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
                                           </div>
                                         </div>
                                       )
@@ -2671,11 +2671,11 @@ export default function Calculator() {
                                             </>
                                           )}
                                           <span>=</span>
-                                          <span className="text-lava-600 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-[var(--text-secondary)] font-medium">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2718,11 +2718,11 @@ export default function Calculator() {
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
-                                          <span className="text-lava-600 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-[var(--text-secondary)] font-medium">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2757,11 +2757,11 @@ export default function Calculator() {
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
-                                          <span className="text-lava-600 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-[var(--text-secondary)] font-medium">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2797,7 +2797,7 @@ export default function Calculator() {
                                             <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                           )}
                                           <span>=</span>
-                                          <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
@@ -2827,7 +2827,7 @@ export default function Calculator() {
                                             </>
                                           )}
                                           <span>=</span>
-                                          <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2906,7 +2906,7 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                         <span>=</span>
-                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
@@ -2942,7 +2942,7 @@ export default function Calculator() {
                                           </>
                                         )}
                                         <span>=</span>
-                                        <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-bold">{formatCurrency(costs.totalCost)}</span>
                                       </div>
                                     </div>
                                   )
@@ -3206,11 +3206,11 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
-                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3223,11 +3223,11 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-purple-500">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
                                         <span>=</span>
-                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3242,11 +3242,11 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
-                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3259,11 +3259,11 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
-                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3280,7 +3280,7 @@ export default function Calculator() {
                                       )}
                                       <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                       <span>=</span>
-                                      <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                      <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                       <span>×</span>
                                       <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                       {hasVMCost ? (
@@ -3294,7 +3294,7 @@ export default function Calculator() {
                                       ) : (
                                         <span>=</span>
                                       )}
-                                      <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                      <span className="text-[var(--text-primary)] font-semibold">{formatCurrency(costs.totalCost)}</span>
                                     </>
                                   )
                                 })()}
