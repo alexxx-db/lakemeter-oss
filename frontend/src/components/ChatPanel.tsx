@@ -286,7 +286,8 @@ export function ChatPanel({
       
       // Build enriched workloads context with actual calculated costs
       const enrichedWorkloads = (currentWorkloads || draftWorkloads || []).map(w => {
-        const itemId = w.item_id || w.draft_id
+        // lineItems use line_item_id, drafts use draft_id
+        const itemId = w.line_item_id || w.item_id || w.draft_id
         const costs = itemCosts?.[itemId]
         return {
           ...w,
