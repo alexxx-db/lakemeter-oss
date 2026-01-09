@@ -50,30 +50,29 @@ const LakemeterLogo = () => (
     {/* Outer gauge arc */}
     <path 
       d="M4 14a8 8 0 1 1 16 0" 
-      stroke="currentColor" 
+      stroke="#f97316"
       strokeWidth="2" 
       strokeLinecap="round"
-      className="text-orange-500"
     />
     {/* Tick marks */}
-    <path d="M6 14h1.5M16.5 14H18M7.5 9.5l1 .75M15.5 10.25l1-.75M12 6v1.5" 
-      stroke="currentColor" 
+    <path 
+      d="M6 14h1.5M16.5 14H18M7.5 9.5l1 .75M15.5 10.25l1-.75M12 6v1.5" 
+      stroke="#fdba74"
       strokeWidth="1.5" 
       strokeLinecap="round"
-      className="text-orange-400/60"
+      opacity="0.6"
     />
     {/* Needle pointing to high value (cost) */}
     <path 
       d="M12 14l4-6" 
-      stroke="currentColor" 
+      stroke="#ea580c"
       strokeWidth="2" 
       strokeLinecap="round"
-      className="text-orange-600"
     />
     {/* Center dot */}
-    <circle cx="12" cy="14" r="2" fill="currentColor" className="text-orange-500" />
+    <circle cx="12" cy="14" r="2" fill="#f97316" />
     {/* Dollar sign at bottom */}
-    <text x="12" y="20" textAnchor="middle" fontSize="5" fontWeight="bold" fill="currentColor" className="text-orange-500">$</text>
+    <text x="12" y="20" textAnchor="middle" fontSize="5" fontWeight="bold" fill="#f97316">$</text>
   </svg>
 )
 

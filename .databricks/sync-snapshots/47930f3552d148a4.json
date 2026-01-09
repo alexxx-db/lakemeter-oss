@@ -169,7 +169,7 @@
     "frontend/package-lock.json": "2026-01-01T04:45:24.159146069+08:00",
     "frontend/package.json": "2026-01-01T04:45:24.119375124+08:00",
     "frontend/postcss.config.js": "2025-12-16T17:25:07.479435251+08:00",
-    "frontend/public/databricks-icon.svg": "2025-12-16T17:25:07.479979255+08:00",
+    "frontend/public/databricks-icon.svg": "2026-01-09T15:57:23.319177676+08:00",
     "frontend/src/App.tsx": "2025-12-31T04:49:07.36246843+08:00",
     "frontend/src/api/client.ts": "2026-01-07T01:59:21.448490045+08:00",
     "frontend/src/components/ChatPanel.tsx": "2026-01-09T12:06:53.936529236+08:00",
