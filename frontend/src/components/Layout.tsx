@@ -48,13 +48,13 @@ const navigation = [
 const LakemeterLogo = () => (
   <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
     {/* Simple roof line */}
-    <path d="M4 11l8-6 8 6" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M4 8l8-5 8 5" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     {/* Gauge arc */}
-    <path d="M6 16a6 6 0 0 1 12 0" stroke="#f97316" strokeWidth="2" strokeLinecap="round" />
+    <path d="M6 15a5 5 0 0 1 12 0" stroke="#f97316" strokeWidth="2" strokeLinecap="round" />
     {/* Needle */}
-    <path d="M12 16l3-4" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" />
+    <path d="M12 15l2.5-3.5" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" />
     {/* Center dot */}
-    <circle cx="12" cy="16" r="1.5" fill="#f97316" />
+    <circle cx="12" cy="15" r="1.5" fill="#f97316" />
     {/* Single wave */}
     <path d="M4 21q4-2 8 0t8 0" stroke="#f97316" strokeWidth="2" strokeLinecap="round" />
   </svg>
