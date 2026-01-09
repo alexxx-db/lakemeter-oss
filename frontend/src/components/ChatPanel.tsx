@@ -538,7 +538,7 @@ export function ChatPanel({
       ) : (
         <div 
           ref={panelRef}
-          className="fixed inset-y-0 right-0 bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-50 flex flex-col"
+          className="fixed top-14 bottom-0 right-0 bg-[var(--bg-primary)] border-l border-[var(--border-primary)] shadow-2xl z-40 flex flex-col"
           style={{ width: `min(100vw, ${panelWidth}px)` }}
         >
           {/* Resize Handle */}
@@ -558,17 +558,10 @@ export function ChatPanel({
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-lava-600 to-amber-500 flex items-center justify-center shadow-sm">
             <SparklesIcon className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <h2 className="font-semibold text-sm text-[var(--text-primary)]">AI Assistant</h2>
-            {conversationId ? (
-              <span className="text-[10px] text-green-600 dark:text-green-400 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                Active session
-              </span>
-            ) : (
-              <span className="text-[10px] text-[var(--text-muted)]">Ready to help</span>
-            )}
-          </div>
+          <h2 className="font-semibold text-sm text-[var(--text-primary)]">AI Assistant</h2>
+          {conversationId && (
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Active session" />
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -912,8 +905,8 @@ export function ChatPanel({
         )}
         
         {/* Text Input with Auto-expand */}
-        <div className="relative flex gap-2 items-end">
-          <div className="flex-1 relative">
+        <div className="relative flex gap-2 items-stretch">
+          <div className="flex-1 relative flex">
             <textarea
               ref={inputRef}
               value={inputValue}
@@ -922,11 +915,11 @@ export function ChatPanel({
               placeholder="Ask about pricing, workloads, or optimization..."
               disabled={isLoading}
               rows={1}
-              className="w-full resize-none rounded-xl border-2 border-[var(--border-primary)] bg-[var(--bg-primary)] px-4 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-lava-500 dark:focus:border-lava-600 disabled:opacity-50 placeholder:text-[var(--text-muted)] shadow-sm transition-colors"
+              className="w-full resize-none rounded-xl border-2 border-[var(--border-primary)] bg-[var(--bg-primary)] px-4 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-lava-500 dark:focus:border-lava-600 disabled:opacity-50 placeholder:text-[var(--text-muted)] shadow-sm transition-colors overflow-y-auto"
               style={{ minHeight: '48px', maxHeight: '150px' }}
             />
             {inputValue.length > 50 && (
-              <span className="absolute right-3 bottom-2 text-[9px] text-[var(--text-muted)] bg-[var(--bg-secondary)] px-1 rounded">
+              <span className="absolute right-3 bottom-3 text-[9px] text-[var(--text-muted)] bg-[var(--bg-secondary)] px-1 rounded">
                 {inputValue.length}
               </span>
             )}
@@ -934,7 +927,7 @@ export function ChatPanel({
           <button
             onClick={() => sendMessage()}
             disabled={!inputValue.trim() || isLoading}
-            className="h-12 w-12 bg-gradient-to-br from-lava-600 to-amber-500 text-white rounded-xl hover:from-lava-700 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-150 flex-shrink-0"
+            className="h-12 w-12 bg-gradient-to-br from-lava-600 to-amber-500 text-white rounded-xl hover:from-lava-700 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-150 flex-shrink-0 self-end"
           >
             {isLoading ? (
               <ArrowPathIcon className="w-5 h-5 animate-spin" />
