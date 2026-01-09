@@ -552,15 +552,12 @@ export function ChatPanel({
             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 rounded-full bg-[var(--border-secondary)] opacity-0 hover:opacity-100 transition-opacity" />
           </div>
           
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] bg-gradient-to-r from-[var(--bg-secondary)] to-[var(--bg-primary)]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-lava-600 to-amber-500 flex items-center justify-center shadow-sm">
-            <SparklesIcon className="w-4 h-4 text-white" />
-          </div>
+      {/* Header - Slim */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+        <div className="flex items-center gap-2">
           <h2 className="font-semibold text-sm text-[var(--text-primary)]">AI Assistant</h2>
           {conversationId && (
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Active session" />
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="Active session" />
           )}
         </div>
         <div className="flex items-center gap-1">
@@ -697,41 +694,11 @@ export function ChatPanel({
               message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
             )}
           >
-            {/* Avatar */}
-            <div className={clsx(
-              'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5',
-              message.role === 'user' 
-                ? 'bg-gradient-to-br from-blue-500 to-blue-600' 
-                : message.role === 'system'
-                ? 'bg-gradient-to-br from-green-500 to-emerald-600'
-                : 'bg-gradient-to-br from-lava-600 to-amber-500'
-            )}>
-              {message.role === 'user' ? (
-                <span className="text-[10px] font-bold text-white">You</span>
-              ) : message.role === 'system' ? (
-                <CheckCircleIcon className="w-4 h-4 text-white" />
-              ) : (
-                <SparklesIcon className="w-4 h-4 text-white" />
-              )}
-            </div>
-
-            {/* Message Content */}
+            {/* Message Content - No avatar or label needed, position indicates role */}
             <div className={clsx(
               'flex-1 min-w-0',
               message.role === 'user' ? 'text-right' : 'text-left'
             )}>
-              {/* Role Label */}
-              <div className={clsx(
-                'text-[11px] font-medium mb-1.5',
-                message.role === 'user' 
-                  ? 'text-blue-600 dark:text-blue-400' 
-                  : message.role === 'system'
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-lava-700 dark:text-lava-500'
-              )}>
-                {message.role === 'user' ? 'You' : message.role === 'system' ? 'System' : 'AI Assistant'}
-              </div>
-              
               <div className={clsx(
                 'inline-block text-[13px] leading-[1.7]',
                 message.role === 'user'
