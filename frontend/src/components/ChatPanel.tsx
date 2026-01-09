@@ -18,7 +18,11 @@ import {
   DocumentPlusIcon,
   TrashIcon,
   MinusIcon,
-  ChevronUpIcon
+  ChevronUpIcon,
+  ChevronDownIcon,
+  StopIcon,
+  PencilIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline'
 // AI Chat Panel uses fetch directly - no store needed
 
@@ -67,6 +71,7 @@ interface ChatPanelProps {
   onClose: () => void
   onEstimateCreated?: (estimateId: string) => void
   onWorkloadConfirmed?: (workloadConfig: any) => Promise<void>  // Called when user confirms a proposed workload
+  onDeleteEstimate?: () => Promise<void>  // Called when user confirms estimate deletion
   currentEstimate?: any
   currentWorkloads?: any[]
   // Calculated costs for each workload (keyed by item_id)
@@ -81,6 +86,7 @@ export function ChatPanel({
   onClose,
   onEstimateCreated: _onEstimateCreated, // Reserved for future use
   onWorkloadConfirmed,
+  onDeleteEstimate,
   currentEstimate,
   currentWorkloads,
   itemCosts,
@@ -98,7 +104,10 @@ export function ChatPanel({
   const [isMinimized, setIsMinimized] = useState(false)
   const [localPanelWidth, setLocalPanelWidth] = useState(380)
   const [isResizing, setIsResizing] = useState(false)
-  const [showQuickActions, setShowQuickActions] = useState(true)
+  const [showQuickActions, setShowQuickActions] = useState(false) // Hidden by default
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingContent, setEditingContent] = useState('')
   
   // Use controlled width if provided, otherwise use local state
   const panelWidth = controlledWidth ?? localPanelWidth
@@ -195,38 +204,96 @@ export function ChatPanel({
     }
   }, [isOpen])
 
-  // Build welcome message content based on context
+  // Build welcome message content based on context - simplified since card shows estimate info
   const buildWelcomeContent = useCallback(() => {
     if (currentEstimate) {
-      // Estimate detail page with existing estimate
-      const estimateName = currentEstimate.estimate_name || currentEstimate.name || 'Unnamed'
-      const cloud = (currentEstimate.cloud || 'AWS').toUpperCase()
-      const region = currentEstimate.region || 'unknown region'
-      const tier = currentEstimate.tier || 'PREMIUM'
-      const workloadCount = currentWorkloads?.length || 0
+      // Simple welcome - the card above already shows estimate details
+      let content = `How can I help you?\n`
+      content += `• 📊 **Analyze** your workloads and costs\n`
+      content += `• 💡 **Suggest optimizations** to save money\n`
+      content += `• ➕ **Add new workloads** to your estimate\n`
+      content += `• ❓ **Answer questions** about Databricks pricing`
       
-      // Build estimate context display (simplified - no workload list)
-      let contextInfo = `📋 **Current Estimate:** ${estimateName}\n`
-      contextInfo += `☁️ ${cloud} • ${region} • ${tier}\n`
-      contextInfo += `📊 ${workloadCount} workload${workloadCount !== 1 ? 's' : ''}`
-      
-      // Use the memoized totalCost for real-time sync
-      if (totalCost > 0) {
-        contextInfo += ` • **$${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo**`
-      }
-      
-      contextInfo += `\n\n---\n\nHow can I help you?\n`
-      contextInfo += `• 📊 **Analyze** your workloads and costs\n`
-      contextInfo += `• 💡 **Suggest optimizations** to save money\n`
-      contextInfo += `• ➕ **Add new workloads** to your estimate\n`
-      contextInfo += `• ❓ **Answer questions** about Databricks pricing`
-      
-      return contextInfo
+      return content
     } else {
       // Estimate detail page without estimate (loading or new)
       return `Hi! I'm your Databricks pricing assistant. I can help you create and manage cost estimates.\n\n*Loading estimate details...*`
     }
-  }, [currentEstimate, currentWorkloads, totalCost])
+  }, [currentEstimate])
+  
+  // Stop/cancel generation
+  const stopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+      setIsLoading(false)
+      
+      // Update the last message to indicate it was stopped
+      setMessages(prev => {
+        const newMessages = [...prev]
+        const lastIdx = newMessages.length - 1
+        if (lastIdx >= 0 && newMessages[lastIdx].isStreaming) {
+          newMessages[lastIdx] = {
+            ...newMessages[lastIdx],
+            isStreaming: false,
+            isThinking: false,
+            content: newMessages[lastIdx].content + '\n\n*[Generation stopped]*'
+          }
+        }
+        return newMessages
+      })
+    }
+  }, [])
+  
+  // Edit message handler
+  const startEditMessage = useCallback((messageId: string, content: string) => {
+    setEditingMessageId(messageId)
+    setEditingContent(content)
+  }, [])
+  
+  const cancelEditMessage = useCallback(() => {
+    setEditingMessageId(null)
+    setEditingContent('')
+  }, [])
+  
+  const saveEditMessage = useCallback(async (messageId: string) => {
+    if (!editingContent.trim()) return
+    
+    // Find and update the message
+    const messageIndex = messages.findIndex(m => m.id === messageId)
+    if (messageIndex === -1) return
+    
+    // Update the message and remove all messages after it
+    setMessages(prev => {
+      const newMessages = prev.slice(0, messageIndex)
+      newMessages.push({
+        ...prev[messageIndex],
+        content: editingContent.trim()
+      })
+      return newMessages
+    })
+    
+    setEditingMessageId(null)
+    setEditingContent('')
+    
+    // Re-send the edited message
+    setTimeout(() => {
+      sendMessage(editingContent.trim())
+    }, 100)
+  }, [editingContent, messages])
+  
+  // Handle delete estimate
+  const handleDeleteEstimate = useCallback(async () => {
+    if (!onDeleteEstimate) return
+    
+    try {
+      await onDeleteEstimate()
+      setShowDeleteConfirm(false)
+    } catch (err) {
+      console.error('Failed to delete estimate:', err)
+      setError('Failed to delete estimate')
+    }
+  }, [onDeleteEstimate])
   
   // Add welcome message on first open
   useEffect(() => {
@@ -594,7 +661,7 @@ export function ChatPanel({
                 <DocumentPlusIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <div className="font-medium text-sm text-[var(--text-primary)] truncate max-w-[150px]">
+                <div className="font-medium text-sm text-[var(--text-primary)] truncate max-w-[120px]">
                   {currentEstimate.estimate_name || currentEstimate.name || 'Estimate'}
                 </div>
                 <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
@@ -602,23 +669,72 @@ export function ChatPanel({
                     {(currentEstimate.cloud || 'AWS').toUpperCase()}
                   </span>
                   <span>{currentEstimate.region || 'N/A'}</span>
+                  <span className="text-[var(--text-muted)]">•</span>
+                  <span className="text-[var(--text-secondary)]">{currentEstimate.tier || 'PREMIUM'}</span>
                 </div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-[10px] text-[var(--text-muted)] mb-0.5">
-                {currentWorkloads?.length || 0} workload{(currentWorkloads?.length || 0) !== 1 ? 's' : ''}
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <div className="text-[10px] text-[var(--text-muted)] mb-0.5">
+                  {currentWorkloads?.length || 0} workload{(currentWorkloads?.length || 0) !== 1 ? 's' : ''}
+                </div>
+                <div className="font-bold text-base text-[var(--text-primary)]">
+                  {totalCost > 0 ? (
+                    <span className="text-green-600 dark:text-green-400">
+                      ${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  ) : (
+                    <span className="text-[var(--text-muted)]">—</span>
+                  )}
+                  <span className="text-[10px] font-normal text-[var(--text-muted)]">/mo</span>
+                </div>
               </div>
-              <div className="font-bold text-base text-[var(--text-primary)]">
-                {totalCost > 0 ? (
-                  <span className="text-green-600 dark:text-green-400">
-                    ${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                ) : (
-                  <span className="text-[var(--text-muted)]">—</span>
-                )}
-                <span className="text-[10px] font-normal text-[var(--text-muted)]">/mo</span>
+              {/* Delete Estimate Button */}
+              {onDeleteEstimate && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-[var(--text-muted)] hover:text-red-600 transition-colors"
+                  title="Delete estimate"
+                >
+                  <TrashIcon className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-primary)] rounded-xl shadow-2xl max-w-sm w-full p-5 border border-[var(--border-primary)]">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <TrashIcon className="w-5 h-5 text-red-600" />
               </div>
+              <div>
+                <h3 className="font-semibold text-[var(--text-primary)]">Delete Estimate?</h3>
+                <p className="text-sm text-[var(--text-secondary)]">This cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm text-[var(--text-secondary)] mb-5">
+              Are you sure you want to delete "<strong>{currentEstimate?.estimate_name || currentEstimate?.name || 'this estimate'}</strong>" 
+              and all its workloads?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteEstimate}
+                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
@@ -690,7 +806,7 @@ export function ChatPanel({
           <div
             key={message.id}
             className={clsx(
-              'flex gap-3',
+              'flex gap-3 group',
               message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
             )}
           >
@@ -699,116 +815,157 @@ export function ChatPanel({
               'flex-1 min-w-0',
               message.role === 'user' ? 'text-right' : 'text-left'
             )}>
-              <div className={clsx(
-                'inline-block text-[13px] leading-[1.7]',
-                message.role === 'user'
-                  ? 'bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-md max-w-[85%] whitespace-pre-wrap text-left shadow-sm'
-                  : message.role === 'system'
-                  ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-4 py-2.5 rounded-xl border border-green-200 dark:border-green-800'
-                  : 'text-[var(--text-primary)] max-w-full'
-              )}>
-                {(message.isStreaming || message.isThinking) && !message.content ? (
-                  <div className="flex items-center gap-3 px-2 py-2">
-                    <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                    <span className="text-sm text-[var(--text-secondary)] italic">
-                      {message.isThinking ? 'AI is thinking...' : 'Generating response...'}
-                    </span>
-                  </div>
-                ) : message.role === 'user' ? (
-                  // User messages - plain text with preserved whitespace
-                  <span className="whitespace-pre-wrap">{message.content}</span>
-                ) : (
-                  // AI/System messages - enhanced markdown rendering
-                  <div className="ai-message-content">
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        // Enhanced heading styles
-                        h1: ({children}) => <h1 className="text-base font-bold text-[var(--text-primary)] mt-3 mb-2 pb-1 border-b border-[var(--border-primary)]">{children}</h1>,
-                        h2: ({children}) => <h2 className="text-[14px] font-bold text-[var(--text-primary)] mt-3 mb-1.5">{children}</h2>,
-                        h3: ({children}) => <h3 className="text-[13px] font-semibold text-[var(--text-primary)] mt-2 mb-1">{children}</h3>,
-                        // Paragraphs with proper spacing
-                        p: ({children}) => <p className="my-2 text-[var(--text-primary)] leading-relaxed">{children}</p>,
-                        // Simple list styles
-                        ul: ({children}) => <ul className="my-2 ml-4 space-y-1 list-disc">{children}</ul>,
-                        ol: ({children}) => <ol className="my-2 ml-4 space-y-1 list-decimal">{children}</ol>,
-                        li: ({children}) => <li className="text-[var(--text-primary)]">{children}</li>,
-                        // Bold text
-                        strong: ({children}) => <strong className="font-semibold text-[var(--text-primary)]">{children}</strong>,
-                        // Italic
-                        em: ({children}) => <em className="text-[var(--text-secondary)] italic">{children}</em>,
-                        // Inline code
-                        code: ({className, children}) => {
-                          const isBlock = className?.includes('language-')
-                          if (isBlock) {
-                            return (
-                              <code className="block bg-slate-900 dark:bg-slate-950 text-slate-100 p-3 rounded-lg text-xs font-mono overflow-x-auto my-3 border border-slate-700">
-                                {children}
-                              </code>
-                            )
-                          }
-                          return (
-                            <code className="px-1.5 py-0.5 bg-lava-600/10 dark:bg-lava-600/30 text-lava-700 dark:text-lava-400 rounded text-[12px] font-mono">
-                              {children}
-                            </code>
-                          )
-                        },
-                        // Code blocks
-                        pre: ({children}) => <pre className="my-3 overflow-hidden rounded-lg">{children}</pre>,
-                        // Blockquotes
-                        blockquote: ({children}) => (
-                          <blockquote className="my-3 pl-3 border-l-3 border-lava-500 bg-lava-600/5 dark:bg-lava-600/10 py-2 pr-3 rounded-r-lg text-[var(--text-secondary)] italic">
-                            {children}
-                          </blockquote>
-                        ),
-                        // Horizontal rule
-                        hr: () => <hr className="my-4 border-[var(--border-primary)]" />,
-                        // Links
-                        a: ({href, children}) => (
-                          <a href={href} className="text-lava-700 dark:text-lava-500 hover:underline font-medium" target="_blank" rel="noopener noreferrer">
-                            {children}
-                          </a>
-                        ),
-                      }}
+              {/* User message editing */}
+              {message.role === 'user' && editingMessageId === message.id ? (
+                <div className="inline-block max-w-[85%] text-left">
+                  <textarea
+                    value={editingContent}
+                    onChange={(e) => setEditingContent(e.target.value)}
+                    className="w-full min-w-[200px] p-3 text-[13px] rounded-xl border border-blue-400 bg-blue-50 dark:bg-blue-900/20 focus:outline-none focus:ring-2 focus:ring-blue-500 text-[var(--text-primary)]"
+                    rows={3}
+                  />
+                  <div className="flex gap-2 mt-2 justify-end">
+                    <button
+                      onClick={cancelEditMessage}
+                      className="px-3 py-1.5 text-xs rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
                     >
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
-                )}
-              </div>
-
-              {/* Tool Results - More prominent styling */}
-              {message.toolResults && message.toolResults.length > 0 && (
-                <div className="mt-2.5 flex flex-wrap gap-2">
-                  {message.toolResults.map((tr, idx) => (
-                    <div
-                      key={idx}
-                      className="text-[11px] px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center gap-1.5"
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => saveEditMessage(message.id)}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1"
                     >
-                      {tr.result?.success ? (
-                        <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                      ) : (
-                        <ArrowPathIcon className="w-3.5 h-3.5 text-lava-600" />
-                      )}
-                      <span className="font-medium text-slate-600 dark:text-slate-300">
-                        {tr.tool.replace(/_/g, ' ')}
-                      </span>
-                    </div>
-                  ))}
+                      <CheckIcon className="w-3 h-3" />
+                      Re-send
+                    </button>
+                  </div>
                 </div>
-              )}
+              ) : (
+                <>
+                  <div className={clsx(
+                    'inline-block text-[13px] leading-[1.7]',
+                    message.role === 'user'
+                      ? 'bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-md max-w-[85%] whitespace-pre-wrap text-left shadow-sm'
+                      : message.role === 'system'
+                      ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-4 py-2.5 rounded-xl border border-green-200 dark:border-green-800'
+                      : 'text-[var(--text-primary)] max-w-full'
+                  )}>
+                    {(message.isStreaming || message.isThinking) && !message.content ? (
+                      <div className="flex items-center gap-3 px-2 py-2">
+                        <div className="flex gap-1">
+                          <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <span className="text-sm text-[var(--text-secondary)] italic">
+                          {message.isThinking ? 'AI is thinking...' : 'Generating response...'}
+                        </span>
+                      </div>
+                    ) : message.role === 'user' ? (
+                      // User messages - plain text with preserved whitespace
+                      <span className="whitespace-pre-wrap">{message.content}</span>
+                    ) : (
+                      // AI/System messages - enhanced markdown rendering
+                      <div className="ai-message-content">
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            // Enhanced heading styles
+                            h1: ({children}) => <h1 className="text-base font-bold text-[var(--text-primary)] mt-3 mb-2 pb-1 border-b border-[var(--border-primary)]">{children}</h1>,
+                            h2: ({children}) => <h2 className="text-[14px] font-bold text-[var(--text-primary)] mt-3 mb-1.5">{children}</h2>,
+                            h3: ({children}) => <h3 className="text-[13px] font-semibold text-[var(--text-primary)] mt-2 mb-1">{children}</h3>,
+                            // Paragraphs with proper spacing
+                            p: ({children}) => <p className="my-2 text-[var(--text-primary)] leading-relaxed">{children}</p>,
+                            // Simple list styles
+                            ul: ({children}) => <ul className="my-2 ml-4 space-y-1 list-disc">{children}</ul>,
+                            ol: ({children}) => <ol className="my-2 ml-4 space-y-1 list-decimal">{children}</ol>,
+                            li: ({children}) => <li className="text-[var(--text-primary)]">{children}</li>,
+                            // Bold text
+                            strong: ({children}) => <strong className="font-semibold text-[var(--text-primary)]">{children}</strong>,
+                            // Italic
+                            em: ({children}) => <em className="text-[var(--text-secondary)] italic">{children}</em>,
+                            // Inline code
+                            code: ({className, children}) => {
+                              const isBlock = className?.includes('language-')
+                              if (isBlock) {
+                                return (
+                                  <code className="block bg-slate-900 dark:bg-slate-950 text-slate-100 p-3 rounded-lg text-xs font-mono overflow-x-auto my-3 border border-slate-700">
+                                    {children}
+                                  </code>
+                                )
+                              }
+                              return (
+                                <code className="px-1.5 py-0.5 bg-lava-600/10 dark:bg-lava-600/30 text-lava-700 dark:text-lava-400 rounded text-[12px] font-mono">
+                                  {children}
+                                </code>
+                              )
+                            },
+                            // Code blocks
+                            pre: ({children}) => <pre className="my-3 overflow-hidden rounded-lg">{children}</pre>,
+                            // Blockquotes
+                            blockquote: ({children}) => (
+                              <blockquote className="my-3 pl-3 border-l-3 border-lava-500 bg-lava-600/5 dark:bg-lava-600/10 py-2 pr-3 rounded-r-lg text-[var(--text-secondary)] italic">
+                                {children}
+                              </blockquote>
+                            ),
+                            // Horizontal rule
+                            hr: () => <hr className="my-4 border-[var(--border-primary)]" />,
+                            // Links
+                            a: ({href, children}) => (
+                              <a href={href} className="text-lava-700 dark:text-lava-500 hover:underline font-medium" target="_blank" rel="noopener noreferrer">
+                                {children}
+                              </a>
+                            ),
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
 
-              {/* Timestamp */}
-              <div className={clsx(
-                'text-[10px] text-[var(--text-muted)] mt-2',
-                message.role === 'user' ? 'text-right' : 'text-left'
-              )}>
-                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
+                  {/* Tool Results - More prominent styling */}
+                  {message.toolResults && message.toolResults.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      {message.toolResults.map((tr, idx) => (
+                        <div
+                          key={idx}
+                          className="text-[11px] px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center gap-1.5"
+                        >
+                          {tr.result?.success ? (
+                            <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
+                          ) : (
+                            <ArrowPathIcon className="w-3.5 h-3.5 text-lava-600" />
+                          )}
+                          <span className="font-medium text-slate-600 dark:text-slate-300">
+                            {tr.tool.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Timestamp and Edit Button */}
+                  <div className={clsx(
+                    'flex items-center gap-2 mt-2',
+                    message.role === 'user' ? 'justify-end' : 'justify-start'
+                  )}>
+                    <span className="text-[10px] text-[var(--text-muted)]">
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {/* Edit button for user messages */}
+                    {message.role === 'user' && message.id !== 'welcome' && !isLoading && (
+                      <button
+                        onClick={() => startEditMessage(message.id, message.content)}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-[var(--text-muted)] hover:text-blue-600 transition-all"
+                        title="Edit message"
+                      >
+                        <PencilIcon className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         ))}
@@ -845,23 +1002,29 @@ export function ChatPanel({
 
       {/* Input Area */}
       <div className="p-4 border-t border-[var(--border-primary)] bg-gradient-to-t from-[var(--bg-secondary)] to-[var(--bg-primary)]">
-        {/* Quick Action Chips - Always visible but collapsible */}
+        {/* Quick Actions Toggle - Hidden by default */}
         {!isLoading && (
-          <div className="mb-3">
+          <div className="mb-2">
             <button
               onClick={() => setShowQuickActions(!showQuickActions)}
-              className="text-[10px] text-[var(--text-muted)] hover:text-lava-700 dark:hover:text-lava-500 flex items-center gap-1 mb-2 transition-colors"
+              className="text-[10px] text-[var(--text-muted)] hover:text-lava-700 dark:hover:text-lava-500 flex items-center gap-1 transition-colors"
             >
-              <ChevronUpIcon className={clsx("w-3 h-3 transition-transform duration-200", showQuickActions ? "rotate-180" : "")} />
-              {showQuickActions ? "Hide suggestions" : "Show suggestions"}
+              {showQuickActions ? (
+                <ChevronDownIcon className="w-3 h-3" />
+              ) : (
+                <ChevronUpIcon className="w-3 h-3" />
+              )}
+              {showQuickActions ? "Hide Quick Actions" : "Show Quick Actions"}
             </button>
+            
+            {/* Quick Action Buttons - Centered, Databricks-style */}
             {showQuickActions && (
-              <div className="flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
                 {quickActions.map((action: { label: string; action: string }, idx: number) => (
                   <button
                     key={idx}
                     onClick={() => sendMessage(action.action)}
-                    className="text-[11px] px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-lava-600/5 dark:hover:bg-lava-600/20 hover:border-lava-400 dark:hover:border-lava-700 hover:text-lava-700 dark:hover:text-lava-400 text-[var(--text-secondary)] transition-all duration-150 shadow-sm hover:shadow"
+                    className="text-xs px-4 py-2.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-lava-50 dark:hover:bg-lava-900/20 hover:border-lava-400 hover:text-lava-700 dark:hover:text-lava-400 text-[var(--text-secondary)] transition-all duration-150 shadow-sm hover:shadow"
                   >
                     {action.label}
                   </button>
@@ -871,40 +1034,55 @@ export function ChatPanel({
           </div>
         )}
         
-        {/* Text Input with Auto-expand */}
-        <div className="relative flex gap-2 items-stretch">
-          <div className="flex-1 relative flex">
-            <textarea
-              ref={inputRef}
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask about pricing, workloads, or optimization..."
-              disabled={isLoading}
-              rows={1}
-              className="w-full resize-none rounded-xl border-2 border-[var(--border-primary)] bg-[var(--bg-primary)] px-4 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-lava-500 dark:focus:border-lava-600 disabled:opacity-50 placeholder:text-[var(--text-muted)] shadow-sm transition-colors overflow-y-auto"
-              style={{ minHeight: '48px', maxHeight: '150px' }}
-            />
-            {inputValue.length > 50 && (
-              <span className="absolute right-3 bottom-3 text-[9px] text-[var(--text-muted)] bg-[var(--bg-secondary)] px-1 rounded">
-                {inputValue.length}
-              </span>
-            )}
-          </div>
+        {/* Text Input with Auto-expand - Submit button inside */}
+        <div className="relative">
+          <textarea
+            ref={inputRef}
+            value={inputValue}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about pricing, workloads, or optimization..."
+            disabled={isLoading}
+            rows={1}
+            className="w-full resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] pl-4 pr-12 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-lava-500 dark:focus:border-lava-600 disabled:opacity-50 placeholder:text-[var(--text-muted)] shadow-sm transition-colors"
+            style={{ 
+              minHeight: '44px', 
+              maxHeight: '150px',
+              height: 'auto',
+              overflow: inputValue.length > 100 ? 'auto' : 'hidden'
+            }}
+          />
+          
+          {/* Submit/Stop Button - Inside the input area */}
           <button
-            onClick={() => sendMessage()}
-            disabled={!inputValue.trim() || isLoading}
-            className="h-12 w-12 bg-gradient-to-br from-lava-600 to-amber-500 text-white rounded-xl hover:from-lava-700 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-150 flex-shrink-0 self-end"
+            onClick={isLoading ? stopGeneration : () => sendMessage()}
+            disabled={!isLoading && !inputValue.trim()}
+            className={clsx(
+              "absolute right-2 bottom-2 w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150",
+              isLoading 
+                ? "bg-red-500 hover:bg-red-600 text-white"
+                : inputValue.trim()
+                  ? "bg-lava-600 hover:bg-lava-700 text-white"
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-muted)] cursor-not-allowed"
+            )}
+            title={isLoading ? "Stop generation" : "Send message"}
           >
             {isLoading ? (
-              <ArrowPathIcon className="w-5 h-5 animate-spin" />
+              <StopIcon className="w-4 h-4" />
             ) : (
-              <PaperAirplaneIcon className="w-5 h-5" />
+              <PaperAirplaneIcon className="w-4 h-4" />
             )}
           </button>
+          
+          {/* Character count for long messages */}
+          {inputValue.length > 100 && (
+            <span className="absolute right-12 bottom-3 text-[9px] text-[var(--text-muted)] bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded">
+              {inputValue.length}
+            </span>
+          )}
         </div>
         
-        <div className="flex items-center justify-between mt-2.5 text-[9px] text-[var(--text-muted)]">
+        <div className="flex items-center justify-between mt-2 text-[9px] text-[var(--text-muted)]">
           <span>Shift+Enter for new line</span>
           <span>Powered by Claude Sonnet 4.5</span>
         </div>
