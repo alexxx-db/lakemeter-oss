@@ -3086,7 +3086,7 @@ export default function Calculator() {
                               return (
                                 <>
                                   <p className={clsx(
-                                    "font-bold text-lava-600 transition-opacity",
+                                    "font-medium text-[var(--text-primary)] transition-opacity",
                                     workloadsViewMode === 'cards' && !isExpanded ? "text-base" : "text-lg",
                                     showVMLoading && "opacity-60"
                                   )}>
