@@ -47,35 +47,16 @@ const navigation = [
 // Lakemeter logo - Minimal lakehouse + gauge
 const LakemeterLogo = () => (
   <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-    {/* Simple house roof */}
-    <path 
-      d="M4 11l8-7 8 7" 
-      stroke="#f97316" 
-      strokeWidth="2" 
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+    {/* Simple roof line */}
+    <path d="M4 11l8-6 8 6" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     {/* Gauge arc */}
-    <path 
-      d="M7 16a5 5 0 0 1 10 0" 
-      stroke="#f97316" 
-      strokeWidth="2" 
-      strokeLinecap="round"
-    />
-    {/* Gauge needle */}
-    <path 
-      d="M12 16l3-4" 
-      stroke="#ea580c" 
-      strokeWidth="2" 
-      strokeLinecap="round"
-    />
+    <path d="M6 16a6 6 0 0 1 12 0" stroke="#f97316" strokeWidth="2" strokeLinecap="round" />
+    {/* Needle */}
+    <path d="M12 16l3-4" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" />
+    {/* Center dot */}
+    <circle cx="12" cy="16" r="1.5" fill="#f97316" />
     {/* Single wave */}
-    <path 
-      d="M5 21c2-1.5 4-1.5 6 0s4 1.5 6 0" 
-      stroke="#fdba74" 
-      strokeWidth="2" 
-      strokeLinecap="round"
-    />
+    <path d="M4 21q4-2 8 0t8 0" stroke="#f97316" strokeWidth="2" strokeLinecap="round" />
   </svg>
 )
 
@@ -484,4 +465,3 @@ export default function Layout() {
     </div>
   )
 }
-
