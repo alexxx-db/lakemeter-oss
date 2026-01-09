@@ -44,35 +44,23 @@ const navigation = [
   { name: 'New Estimate', href: '/calculator', icon: PlusCircleIcon },
 ]
 
-// Lakemeter logo - Gauge/meter with price indicator
+// Lakemeter logo - Ruler with integrated dollar sign
 const LakemeterLogo = () => (
   <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
-    {/* Outer gauge arc */}
+    {/* Vertical ruler bar */}
+    <rect x="6" y="3" width="5" height="18" rx="1" stroke="#f97316" strokeWidth="1.5" fill="none" />
+    {/* Ruler tick marks */}
+    <path d="M6 7h2.5M6 11h3.5M6 15h2.5M6 19h2.5" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" />
+    {/* Dollar sign integrated on the right */}
     <path 
-      d="M4 14a8 8 0 1 1 16 0" 
-      stroke="#f97316"
+      d="M16 8.5c-1.5-1-3.5-.5-3.5 1.5s2 1.5 3.5 2.5c1.5 1 1 3-1 3.5c-1.5.4-3-.2-3.5-1"
+      stroke="#f97316" 
       strokeWidth="2" 
       strokeLinecap="round"
+      strokeLinejoin="round"
     />
-    {/* Tick marks */}
-    <path 
-      d="M6 14h1.5M16.5 14H18M7.5 9.5l1 .75M15.5 10.25l1-.75M12 6v1.5" 
-      stroke="#fdba74"
-      strokeWidth="1.5" 
-      strokeLinecap="round"
-      opacity="0.6"
-    />
-    {/* Needle pointing to high value (cost) */}
-    <path 
-      d="M12 14l4-6" 
-      stroke="#ea580c"
-      strokeWidth="2" 
-      strokeLinecap="round"
-    />
-    {/* Center dot */}
-    <circle cx="12" cy="14" r="2" fill="#f97316" />
-    {/* Dollar sign at bottom */}
-    <text x="12" y="20" textAnchor="middle" fontSize="5" fontWeight="bold" fill="#f97316">$</text>
+    {/* Dollar sign vertical line */}
+    <path d="M15 6v12" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
 )
 
