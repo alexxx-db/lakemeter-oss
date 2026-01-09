@@ -285,20 +285,19 @@ export function ChatPanel({
       abortControllerRef.current = new AbortController()
       
       // Build enriched workloads context with actual calculated costs
-      // Debug: Log what we're working with
-      console.log('[ChatPanel] Building enriched workloads:', {
-        currentWorkloadsCount: currentWorkloads?.length,
-        draftWorkloadsCount: draftWorkloads?.length,
-        itemCostsKeys: itemCosts ? Object.keys(itemCosts) : [],
-        sampleWorkload: currentWorkloads?.[0],
-        sampleCosts: itemCosts ? Object.values(itemCosts)[0] : null
-      })
+      // Debug: Log what data we have
+      console.log('[ChatPanel Debug] itemCosts:', itemCosts)
+      console.log('[ChatPanel Debug] currentWorkloads:', currentWorkloads?.map(w => ({ 
+        name: w.workload_name, 
+        line_item_id: w.line_item_id,
+        item_id: w.item_id 
+      })))
       
       const enrichedWorkloads = (currentWorkloads || draftWorkloads || []).map(w => {
         // lineItems use line_item_id, drafts use draft_id
         const itemId = w.line_item_id || w.item_id || w.draft_id
         const costs = itemCosts?.[itemId]
-        console.log(`[ChatPanel] Workload ${w.workload_name}: itemId=${itemId}, costs=`, costs)
+        console.log(`[ChatPanel Debug] ${w.workload_name}: itemId=${itemId}, hasCosts=${!!costs}, total=${costs?.total}`)
         return {
           ...w,
           total_cost: costs?.total || w.total_cost || 0,
