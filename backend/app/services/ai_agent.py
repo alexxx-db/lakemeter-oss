@@ -1111,111 +1111,68 @@ class EstimateAgent:
     
     def _clean_conversation_start(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Clean the start of a message list to remove orphaned tool calls/results.
+        Clean the start of a message list to remove any legacy tool structures.
         
-        CRITICAL: Every tool_use block must have a corresponding tool_result block immediately after.
+        With the simplified approach, we only store text messages.
+        This function handles any legacy messages that might still have tool structures.
         """
-        cleaned = list(messages)
+        cleaned = []
         
-        while cleaned:
-            first_msg = cleaned[0]
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
             
-            # If first message is a tool result (user message with list content containing tool_result)
-            # it's orphaned because the assistant tool_call is no longer in history
-            if first_msg.get("role") == "user" and isinstance(first_msg.get("content"), list):
-                content_list = first_msg.get("content", [])
-                if any(item.get("type") == "tool_result" for item in content_list if isinstance(item, dict)):
-                    cleaned = cleaned[1:]
-                    continue
+            # Skip legacy tool_result messages (user with list content)
+            if role == "user" and isinstance(content, list):
+                continue
             
-            # If first message is an assistant with tool_calls, check if next message has matching tool_result
-            if first_msg.get("role") == "assistant" and first_msg.get("tool_calls"):
-                if len(cleaned) < 2:
-                    # No following message, remove orphaned tool_call
-                    cleaned = cleaned[1:]
-                    continue
-                    
-                next_msg = cleaned[1]
-                # Check if next message is the corresponding tool_result
-                if not (next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list)):
-                    # Next message is not a tool_result, remove orphaned tool_call
-                    cleaned = cleaned[1:]
-                    continue
+            # Convert legacy tool_calls to text-only
+            if role == "assistant" and msg.get("tool_calls"):
+                text_content = content if content and str(content).strip() else "I've processed your request."
+                cleaned.append({
+                    "role": "assistant",
+                    "content": text_content
+                })
+                continue
             
-            # Message is valid, stop cleaning
-            break
+            # Regular message - keep it
+            cleaned.append(msg)
         
         return cleaned
     
     def _validate_conversation_history(self):
         """
-        Validate and fix conversation history to ensure tool_use/tool_result pairs are intact.
-        More aggressive cleaning - ALL tool_ids must have matching tool_results.
+        Simple validation - remove any legacy tool_calls/tool_results from history.
+        With the new simplified approach, we only store text messages.
         """
         if not self.conversation_history:
             return
         
         clean_history = []
-        i = 0
         
-        while i < len(self.conversation_history):
-            msg = self.conversation_history[i]
+        for msg in self.conversation_history:
             role = msg.get("role")
+            content = msg.get("content")
             
-            # Skip orphaned tool result messages (user with list content at start)
-            if role == "user" and isinstance(msg.get("content"), list):
-                content_list = msg.get("content", [])
-                has_tool_result = any(
-                    isinstance(item, dict) and item.get("type") == "tool_result"
-                    for item in content_list
-                )
-                if has_tool_result:
-                    # Check if previous message in clean_history has matching tool_calls
-                    if clean_history and clean_history[-1].get("tool_calls"):
-                        prev_tool_ids = {tc.get("id") for tc in clean_history[-1].get("tool_calls", [])}
-                        result_ids = {
-                            item.get("tool_use_id")
-                            for item in content_list
-                            if isinstance(item, dict) and item.get("type") == "tool_result"
-                        }
-                        if prev_tool_ids <= result_ids:  # All tool_ids have results
-                            clean_history.append(msg)
-                            i += 1
-                            continue
-                    # Orphaned tool_result - skip it
-                    log_warning(f"Removing orphaned tool_result message")
-                    i += 1
-                    continue
+            # Skip legacy tool_result messages (user with list content)
+            if role == "user" and isinstance(content, list):
+                # This is a legacy tool_result message - skip it
+                log_warning("Removing legacy tool_result message from history")
+                continue
             
-            # For assistant with tool_calls, verify next message has ALL matching tool_results
+            # For assistant messages with tool_calls, convert to text-only
             if role == "assistant" and msg.get("tool_calls"):
-                tool_ids = {tc.get("id") for tc in msg.get("tool_calls", [])}
-                
-                # Check next message for matching tool_results
-                if i + 1 < len(self.conversation_history):
-                    next_msg = self.conversation_history[i + 1]
-                    if next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list):
-                        result_ids = {
-                            item.get("tool_use_id")
-                            for item in next_msg.get("content", [])
-                            if isinstance(item, dict) and item.get("type") == "tool_result"
-                        }
-                        # ALL tool_ids must have matching results (not just some overlap)
-                        if tool_ids and tool_ids <= result_ids:
-                            # Valid pair - keep both
-                            clean_history.append(msg)
-                            clean_history.append(next_msg)
-                            i += 2
-                            continue
-                
-                # Invalid - skip the tool_calls message
-                log_warning(f"Removing orphaned tool_use: {tool_ids}")
-                i += 1
+                # Convert to simple text message
+                text_content = content if content and content.strip() else "I've processed your request."
+                clean_history.append({
+                    "role": "assistant",
+                    "content": text_content
+                })
+                log_info("Converted legacy tool_calls message to text-only")
                 continue
             
             # Regular message - keep it
             clean_history.append(msg)
-            i += 1
         
         if len(clean_history) != len(self.conversation_history):
             log_info(f"Cleaned history: {len(self.conversation_history)} -> {len(clean_history)} messages")
@@ -1509,17 +1466,12 @@ class EstimateAgent:
         
         # Process any accumulated tool calls that weren't executed during streaming
         if tool_calls:
-            # Add assistant response to history with tool calls
-            self.conversation_history.append({
-                "role": "assistant",
-                "content": full_content if full_content else " ",  # Claude requires non-empty content
-                "tool_calls": tool_calls
-            })
+            # Execute tools and collect results (but DON'T store complex tool structure in history)
+            tool_summaries = []
             
-            # Collect all tool results in a single user message
-            all_tool_results = []
             for tool_call in tool_calls:
                 tool_id = tool_call["id"]
+                tool_name = tool_call["name"]
                 
                 # Use cached result or execute if not yet done
                 if tool_id in tool_results_cache:
@@ -1527,33 +1479,45 @@ class EstimateAgent:
                 elif tool_id not in self._executed_tool_ids:
                     self._executed_tool_ids.add(tool_id)
                     result = await self._execute_tool(
-                        tool_call["name"],
+                        tool_name,
                         tool_call["arguments"]
                     )
                     tool_results_cache[tool_id] = result
                     
                     yield {
                         "type": "tool_result",
-                        "tool": tool_call["name"],
+                        "tool": tool_name,
                         "result": result
                     }
                     
-                    for proposal_event in self._get_proposal_events(tool_call["name"], result):
+                    for proposal_event in self._get_proposal_events(tool_name, result):
                         yield proposal_event
+                        
+                        # Display workload rationale in chat
+                        if proposal_event.get("type") == "proposal":
+                            workload = proposal_event.get("workload", {})
+                            notes = workload.get("notes", "")
+                            workload_name = workload.get("workload_name", "Workload")
+                            if notes:
+                                yield {"type": "content", "content": f"\n\n**{workload_name} - Configuration Rationale:**\n\n{notes}\n"}
                 else:
                     result = tool_results_cache.get(tool_id, {"executed": True})
                 
-                all_tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_id,
-                    "content": json.dumps(result)
-                })
-            
-            # Add ALL tool results in a single user message (required by Claude API)
-            self.conversation_history.append({
-                "role": "user",
-                "content": all_tool_results
-            })
+                # Create text summary for conversation history
+                if result.get("success"):
+                    if tool_name == "propose_workload":
+                        workload = result.get("proposed_workload", {})
+                        tool_summaries.append(f"Proposed {workload.get('workload_type', 'workload')}: {workload.get('workload_name', 'unnamed')}")
+                    elif tool_name == "ask_clarifying_questions":
+                        tool_summaries.append("Asked clarifying questions")
+                    elif tool_name == "get_estimate_summary":
+                        tool_summaries.append("Retrieved estimate summary")
+                    elif tool_name == "analyze_estimate":
+                        tool_summaries.append("Analyzed estimate for optimizations")
+                    else:
+                        tool_summaries.append(f"Executed {tool_name}")
+                else:
+                    tool_summaries.append(f"{tool_name}: {result.get('error', 'completed')}")
             
             # Generate follow-up message based on tool results
             follow_up_msg = ""
@@ -1578,10 +1542,15 @@ class EstimateAgent:
                 yield {"type": "content", "content": follow_up_msg}
                 full_content += follow_up_msg
             
-            # Add assistant response after tool results
+            # SIMPLIFIED HISTORY: Store only text, no tool_calls or tool_results structures
+            # This eliminates the tool_use/tool_result mismatch error entirely
+            history_content = full_content if full_content else ""
+            if tool_summaries:
+                history_content += f"\n\n[Actions: {'; '.join(tool_summaries)}]"
+            
             self.conversation_history.append({
                 "role": "assistant",
-                "content": follow_up_msg if follow_up_msg else "I've processed your request."
+                "content": history_content if history_content else "I've processed your request."
             })
         else:
             # No tool calls, just add the response to history
