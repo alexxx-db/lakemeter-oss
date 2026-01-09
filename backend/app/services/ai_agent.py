@@ -2982,27 +2982,133 @@ Each workload needs to be confirmed individually. Review the configurations and 
                     
             elif wtype == "LAKEBASE":
                 cu = workload.get("lakebase_cu", 2)
-                summary_parts.append(f"- **Compute Units**: {cu} CU\n")
-                summary_parts.append("**Rationale:** CU auto-calculated from read/write requirements")
+                reads_per_sec = workload.get("lakebase_expected_reads_per_sec", 0)
+                bulk_writes = workload.get("lakebase_expected_bulk_writes_per_sec", 0)
+                incr_writes = workload.get("lakebase_expected_incremental_writes_per_sec", 0)
+                ha_enabled = workload.get("lakebase_ha_enabled", False)
+                read_replicas = workload.get("lakebase_num_read_replicas", 0)
+                
+                summary_parts.append("**Configuration Summary:**\n")
+                
+                # Workload Profile
+                if reads_per_sec or bulk_writes or incr_writes:
+                    summary_parts.append("**Workload Profile:**")
+                    if reads_per_sec:
+                        summary_parts.append(f"- Reads: ~{reads_per_sec:,} reads/second")
+                    if incr_writes:
+                        summary_parts.append(f"- Incremental writes: ~{incr_writes:,} writes/second")
+                    if bulk_writes:
+                        summary_parts.append(f"- Bulk writes: ~{bulk_writes:,} writes/second\n")
+                
+                # Architecture
+                total_instances = 1 + (1 if ha_enabled else 0) + read_replicas
+                summary_parts.append(f"**Architecture ({total_instances} Total Instance{'s' if total_instances > 1 else ''}):**")
+                summary_parts.append(f"- 1 Primary instance - Handles all writes + reads ({cu} CU)")
+                if ha_enabled:
+                    summary_parts.append("- 1 HA Standby replica - Automatic failover for production reliability")
+                if read_replicas > 0:
+                    summary_parts.append(f"- {read_replicas} Read replica{'s' if read_replicas > 1 else ''} - Scales read capacity, offloads read traffic\n")
+                else:
+                    summary_parts.append("")
+                
+                # Compute Units
+                summary_parts.append("**Compute Units:**")
+                summary_parts.append(f"- {cu} CU (auto-calculated based on throughput needs)")
+                summary_parts.append("- Capacity per CU: ~10,000 reads/sec, ~15,000 bulk writes/sec, ~1,200 incremental writes/sec")
+                if reads_per_sec or bulk_writes or incr_writes:
+                    # Calculate utilization
+                    read_util = (reads_per_sec / 10000) * 100 if reads_per_sec else 0
+                    bulk_util = (bulk_writes / 15000) * 100 if bulk_writes else 0
+                    incr_util = (incr_writes / 1200) * 100 if incr_writes else 0
+                    max_util = max(read_util, bulk_util, incr_util)
+                    summary_parts.append(f"- Current utilization: ~{max_util:.0f}% of {cu} CU capacity\n")
+                
+                # HA & Scaling
+                if ha_enabled or read_replicas > 0:
+                    summary_parts.append("**High Availability & Scaling:**")
+                    if ha_enabled:
+                        summary_parts.append("- HA enabled: Automatic failover with zero data loss")
+                    if read_replicas > 0:
+                        summary_parts.append(f"- Read replicas: {read_replicas}x read throughput capacity")
                 
             elif wtype == "VECTOR_SEARCH":
                 endpoint_type = workload.get("vector_search_endpoint_type", "STANDARD")
-                summary_parts.append(f"- **Endpoint**: {endpoint_type}\n")
-                summary_parts.append("**Rationale:**\n")
+                num_docs = workload.get("vector_search_num_documents", 0)
+                dimensions = workload.get("vector_search_dimensions", 768)
+                queries_per_day = workload.get("vector_search_queries_per_day", 0)
+                
+                summary_parts.append("**Configuration Summary:**\n")
+                summary_parts.append(f"**Endpoint Type:** {endpoint_type}")
                 if endpoint_type == "STANDARD":
-                    summary_parts.append("- Low-latency interactive search")
+                    summary_parts.append("- Optimized for low-latency interactive search (<100ms)")
+                    summary_parts.append("- Ideal for real-time applications (chatbots, search)\n")
                 else:
-                    summary_parts.append("- Storage optimized for large indexes")
+                    summary_parts.append("- Optimized for large-scale vector storage")
+                    summary_parts.append("- Cost-efficient for batch/background queries\n")
+                
+                if num_docs or dimensions:
+                    summary_parts.append("**Index Configuration:**")
+                    if num_docs:
+                        summary_parts.append(f"- Documents: ~{num_docs:,} vectors")
+                    summary_parts.append(f"- Dimensions: {dimensions} (embedding model dependent)")
+                    if num_docs:
+                        index_size_gb = (num_docs * dimensions * 4) / (1024**3)
+                        summary_parts.append(f"- Estimated index size: ~{index_size_gb:.1f} GB\n")
+                
+                if queries_per_day:
+                    summary_parts.append("**Query Volume:**")
+                    summary_parts.append(f"- {queries_per_day:,} queries/day (~{queries_per_day//24}/hour)")
                     
             elif wtype == "MODEL_SERVING":
                 compute = workload.get("model_serving_compute_type", "CPU")
-                summary_parts.append(f"- **Compute**: {compute}\n")
-                summary_parts.append(f"**Rationale:** {compute} sized for model parameters")
+                concurrency = workload.get("model_serving_concurrency", 1)
+                
+                summary_parts.append("**Configuration Summary:**\n")
+                summary_parts.append(f"**Compute Type:** {compute}")
+                if compute == "CPU":
+                    summary_parts.append("- Best for: Small models, text processing, low-latency")
+                    summary_parts.append("- Scales quickly, cost-effective for variable traffic\n")
+                elif "GPU_SMALL" in compute:
+                    summary_parts.append("- Best for: Medium models (1-7B params)")
+                    summary_parts.append("- T4 GPU: Good balance of cost and performance\n")
+                elif "GPU_MEDIUM" in compute:
+                    summary_parts.append("- Best for: Large models (7-30B params)")
+                    summary_parts.append("- A10G GPU: Faster inference for production\n")
+                else:
+                    summary_parts.append("- Best for: Very large models (30B+ params)")
+                    summary_parts.append("- A100 GPU: Maximum performance\n")
+                
+                if concurrency and concurrency > 1:
+                    summary_parts.append(f"**Scaling:** {concurrency} concurrent instances")
+                    summary_parts.append("- Horizontal scaling for high availability")
                 
             elif wtype in ["FMAPI_DATABRICKS", "FMAPI_PROPRIETARY"]:
                 model = workload.get("fmapi_model", "Not specified")
-                summary_parts.append(f"- **Model**: {model}\n")
-                summary_parts.append("**Rationale:** Token estimates based on use case")
+                rate_type = workload.get("fmapi_rate_type", "token")
+                tokens = workload.get("fmapi_tokens_millions", 0)
+                
+                summary_parts.append("**Configuration Summary:**\n")
+                summary_parts.append(f"**Model:** {model}")
+                
+                if "llama" in model.lower():
+                    summary_parts.append("- Open-source, cost-effective for high volume\n")
+                elif "claude" in model.lower():
+                    summary_parts.append("- Strong reasoning, excellent for complex tasks\n")
+                elif "gpt" in model.lower():
+                    summary_parts.append("- Industry standard, broad capabilities\n")
+                elif "mixtral" in model.lower():
+                    summary_parts.append("- MoE architecture, efficient for diverse tasks\n")
+                else:
+                    summary_parts.append("")
+                
+                if rate_type == "token" and tokens:
+                    summary_parts.append(f"**Token Usage:** {tokens}M tokens/month")
+                    avg_tokens_per_conv = 2000
+                    est_conversations = (tokens * 1_000_000) / avg_tokens_per_conv
+                    summary_parts.append(f"- Estimated: ~{est_conversations:,.0f} conversations/month")
+                elif rate_type == "provisioned":
+                    summary_parts.append("**Provisioned Throughput:** Reserved capacity")
+                    summary_parts.append("- Guaranteed tokens/minute, predictable pricing")
             
             summary_parts.append("\n*Review and adjust based on actual usage.*")
             

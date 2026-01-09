@@ -365,7 +365,6 @@ export default function Layout() {
       </footer>
       
       {/* AI Chat Panel - Only on estimate detail pages */}
-      {isEstimateDetailPage && console.log('[Layout Debug] localCalculatedCosts:', localCalculatedCosts, 'lineItems:', lineItems?.length)}
       {isEstimateDetailPage && (
         <ChatPanel
           isOpen={isChatOpen}
