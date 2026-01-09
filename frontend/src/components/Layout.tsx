@@ -44,7 +44,7 @@ const navigation = [
   { name: 'New Estimate', href: '/calculator', icon: PlusCircleIcon },
 ]
 
-// Lakemeter logo - Contained in rounded square
+// Lakemeter logo - Polished app icon style
 const LakemeterLogo = () => (
   <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
     {/* Rounded square background */}
@@ -56,9 +56,9 @@ const LakemeterLogo = () => (
     {/* Needle */}
     <path d="M12 15l2-3" stroke="white" strokeWidth="2" strokeLinecap="round" />
     {/* Center dot */}
-    <circle cx="12" cy="15" r="1.5" fill="white" />
+    <circle cx="12" cy="15" r="1.3" fill="white" />
     {/* Wave */}
-    <path d="M5 19q3.5-1.5 7 0t7 0" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.9" />
+    <path d="M5 20q3.5-1.5 7 0t7 0" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.9" />
   </svg>
 )
 
