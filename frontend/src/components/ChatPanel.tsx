@@ -103,7 +103,7 @@ export function ChatPanel({
   const [isMinimized, setIsMinimized] = useState(false)
   const [localPanelWidth, setLocalPanelWidth] = useState(380)
   const [isResizing, setIsResizing] = useState(false)
-  const [showQuickActions, setShowQuickActions] = useState(false) // Hidden by default
+  const [showQuickActions, setShowQuickActions] = useState(true) // Visible by default
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
   
@@ -202,20 +202,12 @@ export function ChatPanel({
     }
   }, [isOpen])
 
-  // Build welcome message content based on context - simplified since card shows estimate info
+  // Build welcome message content based on context - simplified, quick actions show capabilities
   const buildWelcomeContent = useCallback(() => {
     if (currentEstimate) {
-      // Simple welcome - the card above already shows estimate details
-      let content = `How can I help you?\n`
-      content += `• 📊 **Analyze** your workloads and costs\n`
-      content += `• 💡 **Suggest optimizations** to save money\n`
-      content += `• ➕ **Add new workloads** to your estimate\n`
-      content += `• ❓ **Answer questions** about Databricks pricing`
-      
-      return content
+      return `How can I help you today?`
     } else {
-      // Estimate detail page without estimate (loading or new)
-      return `Hi! I'm your Databricks pricing assistant. I can help you create and manage cost estimates.\n\n*Loading estimate details...*`
+      return `Hi! I'm your Databricks pricing assistant.\n\n*Loading estimate details...*`
     }
   }, [currentEstimate])
   
@@ -948,14 +940,14 @@ export function ChatPanel({
               {showQuickActions ? "Hide Quick Actions" : "Show Quick Actions"}
             </button>
             
-            {/* Quick Action Buttons - Single row */}
+            {/* Quick Action Buttons - 2x2 on mobile, single row on larger */}
             {showQuickActions && (
-              <div className="mt-2 flex justify-center gap-1.5 overflow-x-auto pb-1">
+              <div className="mt-2 grid grid-cols-2 sm:flex sm:justify-center gap-1.5">
                 {quickActions.map((action: { label: string; action: string }, idx: number) => (
                   <button
                     key={idx}
                     onClick={() => sendMessage(action.action)}
-                    className="text-[11px] px-3 py-1.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-lava-50 dark:hover:bg-lava-900/20 hover:border-lava-400 hover:text-lava-700 dark:hover:text-lava-400 text-[var(--text-secondary)] transition-all whitespace-nowrap"
+                    className="text-[10px] px-2.5 py-1.5 rounded-full border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-lava-50 dark:hover:bg-lava-900/20 hover:border-lava-400 hover:text-lava-700 dark:hover:text-lava-400 text-[var(--text-secondary)] transition-all text-center"
                   >
                     {action.label}
                   </button>
