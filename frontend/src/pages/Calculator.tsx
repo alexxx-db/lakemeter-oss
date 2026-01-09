@@ -356,6 +356,7 @@ export default function Calculator() {
     getRegionsForCloud,
     createEstimate,
     updateEstimate,
+    deleteEstimate,
     deleteLineItem,
     cloneLineItem,
     setSelectedCloud,
@@ -396,6 +397,8 @@ export default function Calculator() {
   
   const [isSaving, setIsSaving] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
   const [formulaVisibleItems, setFormulaVisibleItems] = useState<Set<string>>(new Set())
@@ -1396,6 +1399,22 @@ export default function Calculator() {
     }
   }
   
+  const handleDeleteEstimate = async () => {
+    if (!id) return
+    
+    setIsDeleting(true)
+    try {
+      await deleteEstimate(id)
+      toast.success('Estimate deleted')
+      navigate('/estimates')
+    } catch {
+      toast.error('Failed to delete estimate')
+    } finally {
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+  
   const handleRefreshData = async () => {
     clearReferenceCache()
     toast.loading('Refreshing pricing data...', { id: 'refresh-data' })
@@ -1786,6 +1805,17 @@ export default function Calculator() {
             <ArrowDownTrayIcon className="w-4 h-4" />
             <span className="hidden sm:inline">Excel</span>
           </button>
+          
+          {id && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isDeleting}
+              title="Delete this estimate"
+              className="btn btn-ghost text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+            >
+              <TrashIcon className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
       
@@ -3713,6 +3743,60 @@ export default function Calculator() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+      
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)] p-6 max-w-md w-full mx-4"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <TrashIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-[var(--text-primary)]">Delete Estimate</h3>
+                <p className="text-sm text-[var(--text-muted)]">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-[var(--text-secondary)] mb-6">
+              Are you sure you want to delete <span className="font-semibold">"{formData.estimate_name || 'this estimate'}"</span>? 
+              All {lineItems.length} workload{lineItems.length !== 1 ? 's' : ''} will also be deleted.
+            </p>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteEstimate}
+                disabled={isDeleting}
+                className="btn bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isDeleting ? (
+                  <>
+                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <TrashIcon className="w-4 h-4" />
+                    Delete Estimate
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>
