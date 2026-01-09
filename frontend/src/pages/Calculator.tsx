@@ -399,6 +399,11 @@ export default function Calculator() {
   const [isExporting, setIsExporting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showWorkloadDeleteConfirm, setShowWorkloadDeleteConfirm] = useState(false)
+  const [workloadToDelete, setWorkloadToDelete] = useState<LineItem | null>(null)
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [isDeletingWorkload, setIsDeletingWorkload] = useState(false)
+  const [showUnsavedChangesConfirm, setShowUnsavedChangesConfirm] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
   const [formulaVisibleItems, setFormulaVisibleItems] = useState<Set<string>>(new Set())
@@ -1405,11 +1410,13 @@ export default function Calculator() {
     setIsDeleting(true)
     try {
       await deleteEstimate(id)
+      setShowDeleteConfirm(false)
+      setIsDeleting(false)
       toast.success('Estimate deleted')
-      navigate('/estimates')
+      // Use setTimeout to ensure state updates complete before navigation
+      setTimeout(() => navigate('/estimates'), 0)
     } catch {
       toast.error('Failed to delete estimate')
-    } finally {
       setIsDeleting(false)
       setShowDeleteConfirm(false)
     }
@@ -1426,40 +1433,48 @@ export default function Calculator() {
     }
   }
   
-  const handleDeleteLineItem = async (item: LineItem) => {
-    if (window.confirm(`Delete "${item.workload_name}"?`)) {
-      try {
-        await deleteLineItem(item.line_item_id)
-        toast.success('Workload removed')
-        // Note: Workload deletions are immediately persisted to DB - no need to mark config as changed
-      } catch {
-        toast.error('Failed to delete')
-      }
+  const handleDeleteLineItem = (item: LineItem) => {
+    setWorkloadToDelete(item)
+    setShowWorkloadDeleteConfirm(true)
+  }
+  
+  const confirmDeleteWorkload = async () => {
+    if (!workloadToDelete) return
+    
+    setIsDeletingWorkload(true)
+    try {
+      await deleteLineItem(workloadToDelete.line_item_id)
+      toast.success('Workload removed')
+    } catch {
+      toast.error('Failed to delete')
+    } finally {
+      setIsDeletingWorkload(false)
+      setShowWorkloadDeleteConfirm(false)
+      setWorkloadToDelete(null)
     }
   }
   
   // Bulk delete handler
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedItems.size === 0) return
-    
-    const itemNames = lineItems
-      .filter(item => selectedItems.has(item.line_item_id))
-      .map(item => item.workload_name)
-      .join(', ')
-    
-    if (window.confirm(`Delete ${selectedItems.size} workload(s)?\n\n${itemNames}`)) {
-      try {
-        let deletedCount = 0
-        for (const itemId of selectedItems) {
-          await deleteLineItem(itemId)
-          deletedCount++
-        }
-        toast.success(`${deletedCount} workload(s) deleted`)
-        setSelectedItems(new Set())
-        // Note: Workload deletions are immediately persisted to DB - no need to mark config as changed
-      } catch {
-        toast.error('Failed to delete some workloads')
+    setShowBulkDeleteConfirm(true)
+  }
+  
+  const confirmBulkDelete = async () => {
+    setIsDeletingWorkload(true)
+    try {
+      let deletedCount = 0
+      for (const itemId of selectedItems) {
+        await deleteLineItem(itemId)
+        deletedCount++
       }
+      toast.success(`${deletedCount} workload(s) deleted`)
+      setSelectedItems(new Set())
+    } catch {
+      toast.error('Failed to delete some workloads')
+    } finally {
+      setIsDeletingWorkload(false)
+      setShowBulkDeleteConfirm(false)
     }
   }
   
@@ -1506,12 +1521,15 @@ export default function Calculator() {
   
   const handleNavigateBack = () => {
     if (hasUnsavedChanges) {
-      if (window.confirm('You have unsaved changes. Are you sure you want to leave?')) {
-        navigate('/')
-      }
+      setShowUnsavedChangesConfirm(true)
     } else {
       navigate('/')
     }
+  }
+  
+  const confirmLeaveWithoutSaving = () => {
+    setShowUnsavedChangesConfirm(false)
+    navigate('/')
   }
   
   const toggleExpand = (itemId: string) => {
@@ -3794,6 +3812,165 @@ export default function Calculator() {
                     Delete Estimate
                   </>
                 )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      
+      {/* Delete Workload Confirmation Modal */}
+      {showWorkloadDeleteConfirm && workloadToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)] p-6 max-w-md w-full mx-4"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <TrashIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-[var(--text-primary)]">Delete Workload</h3>
+                <p className="text-sm text-[var(--text-muted)]">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-[var(--text-secondary)] mb-6">
+              Are you sure you want to delete <span className="font-semibold">"{workloadToDelete.workload_name}"</span>?
+            </p>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowWorkloadDeleteConfirm(false)
+                  setWorkloadToDelete(null)
+                }}
+                disabled={isDeletingWorkload}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteWorkload}
+                disabled={isDeletingWorkload}
+                className="btn bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isDeletingWorkload ? (
+                  <>
+                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <TrashIcon className="w-4 h-4" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      
+      {/* Bulk Delete Workloads Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)] p-6 max-w-md w-full mx-4"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <TrashIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-[var(--text-primary)]">Delete {selectedItems.size} Workload{selectedItems.size !== 1 ? 's' : ''}</h3>
+                <p className="text-sm text-[var(--text-muted)]">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <div className="text-sm text-[var(--text-secondary)] mb-6">
+              <p className="mb-2">The following workloads will be deleted:</p>
+              <div className="max-h-32 overflow-y-auto bg-[var(--bg-tertiary)] rounded-lg p-2">
+                {lineItems
+                  .filter(item => selectedItems.has(item.line_item_id))
+                  .map(item => (
+                    <div key={item.line_item_id} className="text-xs py-0.5 text-[var(--text-muted)]">
+                      • {item.workload_name}
+                    </div>
+                  ))}
+              </div>
+            </div>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                disabled={isDeletingWorkload}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkDelete}
+                disabled={isDeletingWorkload}
+                className="btn bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isDeletingWorkload ? (
+                  <>
+                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <TrashIcon className="w-4 h-4" />
+                    Delete All
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      
+      {/* Unsaved Changes Confirmation Modal */}
+      {showUnsavedChangesConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)] p-6 max-w-md w-full mx-4"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <ExclamationTriangleIcon className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-[var(--text-primary)]">Unsaved Changes</h3>
+                <p className="text-sm text-[var(--text-muted)]">You have unsaved configuration changes</p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-[var(--text-secondary)] mb-6">
+              Are you sure you want to leave? Your unsaved changes will be lost.
+            </p>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowUnsavedChangesConfirm(false)}
+                className="btn btn-secondary"
+              >
+                Stay
+              </button>
+              <button
+                onClick={confirmLeaveWithoutSaving}
+                className="btn bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                Leave Anyway
               </button>
             </div>
           </motion.div>

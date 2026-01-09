@@ -215,6 +215,12 @@ export default function Estimates() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const [isBulkExporting, setIsBulkExporting] = useState(false)
   
+  // Delete Confirmation States
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [estimateToDelete, setEstimateToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  
   // Fetch estimates on mount
   useEffect(() => {
     fetchEstimates()
@@ -308,15 +314,25 @@ export default function Estimates() {
   }, [estimates, searchQuery, cloudFilter, sortBy, accountFilter])
   
   // Handlers
-  const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
+  const handleDelete = (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation()
-    if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
-      try {
-        await deleteEstimate(id)
-        toast.success('Estimate deleted')
-      } catch {
-        toast.error('Failed to delete')
-      }
+    setEstimateToDelete({ id, name })
+    setShowDeleteConfirm(true)
+  }
+  
+  const confirmDelete = async () => {
+    if (!estimateToDelete) return
+    
+    setIsDeleting(true)
+    try {
+      await deleteEstimate(estimateToDelete.id)
+      toast.success('Estimate deleted')
+    } catch {
+      toast.error('Failed to delete')
+    } finally {
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
+      setEstimateToDelete(null)
     }
   }
   
@@ -364,11 +380,12 @@ export default function Estimates() {
     setSelectedIds(newSelected)
   }
   
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedIds.size === 0) return
-    
-    if (!window.confirm(`Delete ${selectedIds.size} estimate(s)? This cannot be undone.`)) return
-    
+    setShowBulkDeleteConfirm(true)
+  }
+  
+  const confirmBulkDelete = async () => {
     setIsBulkDeleting(true)
     let successCount = 0
     let failCount = 0
@@ -384,6 +401,7 @@ export default function Estimates() {
     
     setIsBulkDeleting(false)
     setSelectedIds(new Set())
+    setShowBulkDeleteConfirm(false)
     
     if (failCount === 0) {
       toast.success(`Deleted ${successCount} estimate(s)`)
@@ -879,6 +897,125 @@ export default function Estimates() {
           >
             Showing {filteredEstimates.length} of {estimates.length} estimates
           </div>
+        </div>
+      )}
+      
+      {/* Delete Estimate Confirmation Modal */}
+      {showDeleteConfirm && estimateToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)] p-6 max-w-md w-full mx-4"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <TrashIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-[var(--text-primary)]">Delete Estimate</h3>
+                <p className="text-sm text-[var(--text-muted)]">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-[var(--text-secondary)] mb-6">
+              Are you sure you want to delete <span className="font-semibold">"{estimateToDelete.name}"</span>? 
+              All workloads in this estimate will also be deleted.
+            </p>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false)
+                  setEstimateToDelete(null)
+                }}
+                disabled={isDeleting}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="btn bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isDeleting ? (
+                  <>
+                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <TrashIcon className="w-4 h-4" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      
+      {/* Bulk Delete Estimates Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)] p-6 max-w-md w-full mx-4"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <TrashIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-[var(--text-primary)]">Delete {selectedIds.size} Estimate{selectedIds.size !== 1 ? 's' : ''}</h3>
+                <p className="text-sm text-[var(--text-muted)]">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <div className="text-sm text-[var(--text-secondary)] mb-6">
+              <p className="mb-2">The following estimates will be deleted:</p>
+              <div className="max-h-32 overflow-y-auto bg-[var(--bg-tertiary)] rounded-lg p-2">
+                {estimates
+                  .filter(e => selectedIds.has(e.estimate_id))
+                  .map(e => (
+                    <div key={e.estimate_id} className="text-xs py-0.5 text-[var(--text-muted)]">
+                      • {e.estimate_name}
+                    </div>
+                  ))}
+              </div>
+            </div>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                disabled={isBulkDeleting}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkDelete}
+                disabled={isBulkDeleting}
+                className="btn bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isBulkDeleting ? (
+                  <>
+                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <TrashIcon className="w-4 h-4" />
+                    Delete All
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
       
