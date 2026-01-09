@@ -1522,16 +1522,63 @@ class EstimateAgent:
             # Generate follow-up message based on tool results
             follow_up_msg = ""
             
-            # Check if any tool result has a message to display (like ask_clarifying_questions)
+            # Format and display tool results
             for tool_call in tool_calls:
                 tool_id = tool_call["id"]
+                tool_name = tool_call["name"]
                 result = tool_results_cache.get(tool_id, {})
                 
                 # For ask_clarifying_questions, display the questions
-                if tool_call["name"] == "ask_clarifying_questions" and result.get("message"):
+                if tool_name == "ask_clarifying_questions" and result.get("message"):
                     follow_up_msg = "\n\n" + result["message"]
                     if result.get("note"):
                         follow_up_msg += "\n\n" + result["note"]
+                    break
+                
+                # For get_estimate_summary, format the summary
+                elif tool_name == "get_estimate_summary" and not result.get("error"):
+                    est = result.get("estimate", {})
+                    workloads = result.get("workloads", [])
+                    
+                    follow_up_msg = f"\n\n**Estimate Summary: {est.get('name', 'Unnamed')}**\n\n"
+                    follow_up_msg += f"- **Cloud**: {est.get('cloud', 'N/A')}\n"
+                    follow_up_msg += f"- **Region**: {est.get('region', 'N/A')}\n"
+                    follow_up_msg += f"- **Workloads**: {result.get('workload_count', 0)}\n\n"
+                    
+                    if workloads:
+                        follow_up_msg += "**Cost Breakdown:**\n\n"
+                        for w in workloads:
+                            follow_up_msg += f"- **{w.get('name', 'Unnamed')}** ({w.get('type', 'N/A')}): {w.get('monthly_cost', '$0.00')}\n"
+                        follow_up_msg += "\n"
+                    
+                    follow_up_msg += f"**Total Monthly**: {result.get('total_monthly_cost', '$0.00')}\n"
+                    follow_up_msg += f"**Total Annual**: {result.get('total_annual_cost', '$0.00')}\n"
+                    
+                    if result.get("pending_proposals", 0) > 0:
+                        follow_up_msg += f"\n*{result['pending_proposals']} pending proposal(s)*"
+                    break
+                
+                # For analyze_estimate, format recommendations
+                elif tool_name == "analyze_estimate" and not result.get("error"):
+                    recommendations = result.get("recommendations", [])
+                    
+                    follow_up_msg = f"\n\n**Estimate Analysis**\n\n"
+                    follow_up_msg += f"- **Total Monthly Cost**: {result.get('total_monthly_cost', '$0.00')}\n"
+                    follow_up_msg += f"- **Total Annual Cost**: {result.get('total_annual_cost', '$0.00')}\n"
+                    follow_up_msg += f"- **Workloads**: {result.get('workload_count', 0)}\n\n"
+                    
+                    if recommendations:
+                        follow_up_msg += f"**Optimization Recommendations** ({len(recommendations)}):\n\n"
+                        for i, rec in enumerate(recommendations, 1):
+                            follow_up_msg += f"**{i}. {rec.get('workload', 'N/A')}** ({rec.get('type', 'general')})\n"
+                            follow_up_msg += f"   - {rec.get('suggestion', 'No suggestion')}\n"
+                            if rec.get('potential_savings'):
+                                follow_up_msg += f"   - *Potential savings*: {rec['potential_savings']}\n"
+                            if rec.get('consideration'):
+                                follow_up_msg += f"   - *Note*: {rec['consideration']}\n"
+                            follow_up_msg += "\n"
+                    else:
+                        follow_up_msg += "*No specific optimization recommendations at this time. Your estimate looks well-configured!*\n"
                     break
             
             # If no specific message from tools, check for proposed workloads
