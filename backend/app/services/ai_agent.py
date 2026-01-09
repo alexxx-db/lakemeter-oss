@@ -1150,49 +1150,76 @@ class EstimateAgent:
     def _validate_conversation_history(self):
         """
         Validate and fix conversation history to ensure tool_use/tool_result pairs are intact.
-        Removes any orphaned tool_use messages that don't have corresponding tool_results.
+        More aggressive cleaning - ALL tool_ids must have matching tool_results.
         """
         if not self.conversation_history:
             return
-            
-        # Scan for tool_use IDs that need tool_results
-        valid_history = []
+        
+        clean_history = []
         i = 0
         
         while i < len(self.conversation_history):
             msg = self.conversation_history[i]
+            role = msg.get("role")
             
-            if msg.get("role") == "assistant" and msg.get("tool_calls"):
-                # This assistant message has tool calls - check for corresponding tool_result
+            # Skip orphaned tool result messages (user with list content at start)
+            if role == "user" and isinstance(msg.get("content"), list):
+                content_list = msg.get("content", [])
+                has_tool_result = any(
+                    isinstance(item, dict) and item.get("type") == "tool_result"
+                    for item in content_list
+                )
+                if has_tool_result:
+                    # Check if previous message in clean_history has matching tool_calls
+                    if clean_history and clean_history[-1].get("tool_calls"):
+                        prev_tool_ids = {tc.get("id") for tc in clean_history[-1].get("tool_calls", [])}
+                        result_ids = {
+                            item.get("tool_use_id")
+                            for item in content_list
+                            if isinstance(item, dict) and item.get("type") == "tool_result"
+                        }
+                        if prev_tool_ids <= result_ids:  # All tool_ids have results
+                            clean_history.append(msg)
+                            i += 1
+                            continue
+                    # Orphaned tool_result - skip it
+                    log_warning(f"Removing orphaned tool_result message")
+                    i += 1
+                    continue
+            
+            # For assistant with tool_calls, verify next message has ALL matching tool_results
+            if role == "assistant" and msg.get("tool_calls"):
                 tool_ids = {tc.get("id") for tc in msg.get("tool_calls", [])}
                 
-                # Look for the next user message with tool_results
+                # Check next message for matching tool_results
                 if i + 1 < len(self.conversation_history):
                     next_msg = self.conversation_history[i + 1]
                     if next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list):
-                        # Check if it contains matching tool_results
-                        result_ids = set()
-                        for item in next_msg.get("content", []):
-                            if isinstance(item, dict) and item.get("type") == "tool_result":
-                                result_ids.add(item.get("tool_use_id"))
-                        
-                        if tool_ids & result_ids:  # At least some overlap
-                            # Valid pair, keep both
-                            valid_history.append(msg)
-                            valid_history.append(next_msg)
+                        result_ids = {
+                            item.get("tool_use_id")
+                            for item in next_msg.get("content", [])
+                            if isinstance(item, dict) and item.get("type") == "tool_result"
+                        }
+                        # ALL tool_ids must have matching results (not just some overlap)
+                        if tool_ids and tool_ids <= result_ids:
+                            # Valid pair - keep both
+                            clean_history.append(msg)
+                            clean_history.append(next_msg)
                             i += 2
                             continue
                 
-                # No valid tool_result found - skip this assistant message
-                log_warning(f"Removing orphaned tool_use message with IDs: {tool_ids}")
+                # Invalid - skip the tool_calls message
+                log_warning(f"Removing orphaned tool_use: {tool_ids}")
                 i += 1
-            else:
-                valid_history.append(msg)
-                i += 1
+                continue
+            
+            # Regular message - keep it
+            clean_history.append(msg)
+            i += 1
         
-        if len(valid_history) != len(self.conversation_history):
-            log_info(f"Cleaned conversation history: {len(self.conversation_history)} -> {len(valid_history)} messages")
-            self.conversation_history = valid_history
+        if len(clean_history) != len(self.conversation_history):
+            log_info(f"Cleaned history: {len(self.conversation_history)} -> {len(clean_history)} messages")
+        self.conversation_history = clean_history
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the AI assistant, including any conversation summary."""
@@ -1447,10 +1474,19 @@ class EstimateAgent:
                     "result": result
                 }
                 
-                # Yield proposals
+                # Yield proposals and display rationale in chat
                 self._yield_proposals_from_result(current_tool["name"], result)
                 for proposal_event in self._get_proposal_events(current_tool["name"], result):
                     yield proposal_event
+                    
+                    # Display workload rationale in chat
+                    if proposal_event.get("type") == "proposal":
+                        workload = proposal_event.get("workload", {})
+                        notes = workload.get("notes", "")
+                        workload_name = workload.get("workload_name", "Workload")
+                        if notes:
+                            # Format notes for chat display
+                            yield {"type": "content", "content": f"\n\n**{workload_name} - Configuration Rationale:**\n\n{notes}\n"}
                 
                 current_tool = None
             
