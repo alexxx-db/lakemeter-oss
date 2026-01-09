@@ -15,7 +15,7 @@ export default function EstimateDetail() {
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="text-center">
-        <div className="w-8 h-8 rounded-full border-2 border-orange-500 border-t-transparent animate-spin mx-auto mb-3" />
+        <div className="w-8 h-8 rounded-full border-2 border-lava-600 border-t-transparent animate-spin mx-auto mb-3" />
         <p className="text-sm text-slate-500">Loading...</p>
       </div>
     </div>

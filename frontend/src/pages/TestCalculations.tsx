@@ -1454,11 +1454,11 @@ export default function TestCalculations() {
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           exit={{ opacity: 0, height: 0 }}
-          className="card p-4 mb-6 border-2 border-orange-500/30"
+          className="card p-4 mb-6 border-2 border-lava-600/30"
         >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <BoltIcon className="w-5 h-5 text-orange-500" />
+              <BoltIcon className="w-5 h-5 text-lava-600" />
               <h3 className="font-semibold text-[var(--text-primary)]">Single Test Configuration</h3>
             </div>
             <button
@@ -1929,7 +1929,7 @@ export default function TestCalculations() {
         <div className="mb-6">
           <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
             <motion.div
-              className={`h-full ${paused ? 'bg-yellow-500' : 'bg-orange-500'}`}
+              className={`h-full ${paused ? 'bg-yellow-500' : 'bg-lava-600'}`}
               initial={{ width: 0 }}
               animate={{ width: `${(progress.current / progress.total) * 100}%` }}
             />
@@ -2046,7 +2046,7 @@ export default function TestCalculations() {
                                 </div>
                                 <div className="flex justify-between border-t border-[var(--border-primary)] pt-1 mt-1">
                                   <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
-                                  <span className="text-orange-500 font-semibold">{formatCurrency(result.localResult.totalCost)}</span>
+                                  <span className="text-lava-600 font-semibold">{formatCurrency(result.localResult.totalCost)}</span>
                                 </div>
                                 {result.localResult.dbuPrice && (
                                   <div className="flex justify-between text-[10px]">
@@ -2086,7 +2086,7 @@ export default function TestCalculations() {
                                   </div>
                                   <div className="flex justify-between border-t border-[var(--border-primary)] pt-1 mt-1">
                                     <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
-                                    <span className={result.discrepancies.some(d => d.field === 'totalCost') ? 'text-red-500 font-semibold' : 'text-orange-500 font-semibold'}>
+                                    <span className={result.discrepancies.some(d => d.field === 'totalCost') ? 'text-red-500 font-semibold' : 'text-lava-600 font-semibold'}>
                                       {formatCurrency(result.apiResult.totalCost)}
                                     </span>
                                   </div>

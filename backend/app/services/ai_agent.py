@@ -548,28 +548,72 @@ When the propose_workload tool returns a configuration (e.g., number of clusters
 **This is for development of ETL and ML workloads. For SQL queries, use DBSQL instead.**
 
 1. How many data scientists/engineers will share this cluster?
-   - 1 user → Single-user cluster (simpler, isolated)
-   - 2-10 users → Shared cluster
-   - 10+ users → Consider multiple clusters
 
-2. What's the typical dataset size for development?
-   | Dataset Size | Recommended Workers |
-   |--------------|---------------------|
-   | <10 GB | 1-2 workers |
-   | 10-100 GB | 2-4 workers |
-   | 100 GB - 1 TB | 4-8 workers |
-   | 1-10 TB | 8-16 workers |
-   | 10+ TB | Are you sure you need this much data in dev? Consider sampling. |
+2. **What type of development?** (Ask this FIRST - determines sizing approach)
+   - **ETL development / General data exploration** → Use ETL benchmark sizing
+   - **ML/Feature Engineering** → Use memory-based sizing
 
-3. What type of development?
-   - **ETL development** → General purpose instances, Photon-enabled
-   - **ML/Feature Engineering** → Memory-optimized instances
+---
 
-4. Usage pattern?
+**IF ETL Development / General Data Exploration:**
+
+3. What's the typical dataset size (Delta table)?
+
+4. How many concurrent ETL operations (notebooks/jobs) run at the same time?
+   - **Default assumption if no answer: 20% of users run concurrently**
+     - 5 users → 1 concurrent op
+     - 10 users → 2 concurrent ops
+     - 20 users → 4 concurrent ops
+   
+   **Sizing: TPC-DI baseline × concurrent operations (shared cluster)**
+   
+   | Dataset Size | 1 concurrent op | 2 concurrent ops | 3 concurrent ops | 4 concurrent ops |
+   |--------------|-----------------|------------------|------------------|------------------|
+   | ~100 GB | 1 worker | 2 workers | 3 workers | 4 workers |
+   | ~1 TB | 2 workers | 4 workers | 6 workers | 8 workers |
+   | ~5 TB | 10 workers | 20 workers | 30 workers | 40 workers |
+   | ~10 TB | 20 workers | 40 workers | Consider 2 clusters | Consider 2 clusters |
+   
+   - Instance type: General purpose (m6id.2xlarge / Standard_D8ds_v5), Photon-enabled
+   - **>40 workers:** Split into 2+ smaller clusters
+
+---
+
+**IF ML/Feature Engineering:**
+
+3. What's the training data size (Delta table)?
+   
+   **Delta → Pandas conversion:** Delta is ~5-10x compressed vs in-memory Pandas DataFrame
+   - 10 GB Delta ≈ 50-100 GB in Pandas
+   - 50 GB Delta ≈ 250-500 GB in Pandas
+   - 100 GB Delta ≈ 500 GB - 1 TB in Pandas
+
+4. **Single-node vs Distributed:**
+   
+   **Rule: Training data in Pandas should be <25% of total RAM**
+   
+   | Delta Size | Pandas Size (est.) | RAM Needed | Recommendation |
+   |------------|-------------------|------------|----------------|
+   | <5 GB | <50 GB | 64 GB | Single node: r5.2xlarge (64 GB) |
+   | 5-12 GB | 50-120 GB | 128 GB | Single node: r5.4xlarge (128 GB) |
+   | 12-25 GB | 120-250 GB | 256 GB | Single node: r5.8xlarge (256 GB) |
+   | >25 GB | >250 GB | >256 GB | **Distributed: Use multiple workers** |
+   
+   **For Distributed ML (>25 GB Delta):**
+   - Same 25% RAM rule per worker
+   - Workers needed = Total Pandas size / (Worker RAM × 0.25)
+   - Example: 100 GB Delta → ~700 GB Pandas → 700 / (64 × 0.25) = 44 workers with 64 GB RAM
+   - Consider: r5.4xlarge (128 GB) workers → fewer nodes needed
+   
+   - Instance type: Memory-optimized (r5.xlarge-8xlarge / Standard_E series)
+
+---
+
+5. Usage pattern?
    - Hours per day: ___
    - Days per month: ___ (22 = weekdays, 30 = daily)
 
-5. Cost optimization?
+6. Cost optimization?
    - Can you tolerate occasional task failures during dev?
      - Yes → Spot workers (up to 90% savings)
      - No → On-demand workers
@@ -2147,20 +2191,11 @@ Each workload needs to be confirmed individually. Review the configurations and 
         }
         default_driver = driver_instances.get(cloud, "m6i.xlarge")
         
-        # Common defaults - use run-based values for proper real-time calculation
+        # Common defaults
+        workload.setdefault("hours_per_month", 730)
         workload.setdefault("days_per_month", 22)
-        workload.setdefault("runs_per_day", 1)
-        workload.setdefault("avg_runtime_minutes", 60)
-        # Calculate hours_per_month from run-based values if not explicitly set
-        if not workload.get("hours_per_month"):
-            runs = workload.get("runs_per_day", 1)
-            runtime = workload.get("avg_runtime_minutes", 60)
-            days = workload.get("days_per_month", 22)
-            workload["hours_per_month"] = runs * (runtime / 60) * days
         
-        # Flag to indicate notes should be generated
-        generate_notes = True
-        notes_parts = []  # Placeholder for verbose notes (not used in final output)
+        notes_parts = []
         
         if wtype in ["JOBS", "ALL_PURPOSE", "DLT"]:
             # Set serverless default - prefer serverless for simplicity
@@ -2172,12 +2207,75 @@ Each workload needs to be confirmed individually. Review the configurations and 
             if not is_serverless:
                 # Non-serverless: set instance types and worker pricing
                 workload.setdefault("num_workers", 4)
-                workload.setdefault("driver_node_type", default_driver)
+                workload.setdefault("driver_node_type", default_driver)  # Driver doesn't need to be big
                 workload.setdefault("worker_node_type", default_instance)
                 
                 # DEFAULT TO SPOT WORKERS for cost savings
                 workload.setdefault("worker_pricing_tier", "spot")
                 workload.setdefault("driver_pricing_tier", "on_demand")
+                
+                # Comprehensive Job Configuration Notes
+                notes_parts.append("=" * 60)
+                notes_parts.append("**DATABRICKS JOBS (CLASSIC COMPUTE) CONFIGURATION**")
+                notes_parts.append("=" * 60)
+                notes_parts.append("")
+                
+                # Instance Selection - Based on TPC-DI ETL Benchmarks
+                notes_parts.append(f"**📦 Worker Instance Type: {default_instance}** (TPC-DI Benchmark):")
+                if cloud == "aws":
+                    notes_parts.append("• **m6id.2xlarge**: 8 vCPUs, 32 GB RAM, 474 GB NVMe SSD")
+                    notes_parts.append("• **Why chosen**: TPC-DI benchmark-proven for ETL workloads")
+                    notes_parts.append("• **NVMe SSD**: Optimal for Spark shuffle and intermediate data")
+                    notes_parts.append("• **Alternative**: m6i.xlarge for smaller workloads, r5.xlarge for memory-intensive")
+                elif cloud == "azure":
+                    notes_parts.append("• **Standard_D8ds_v5**: 8 vCPUs, 32 GB RAM, 300 GB NVMe SSD")
+                    notes_parts.append("• **Why chosen**: TPC-DI benchmark-proven for ETL workloads")
+                    notes_parts.append("• **Availability**: D-series widely available across ALL Azure regions")
+                    notes_parts.append("• **Alternative**: Standard_D4ds_v5 for smaller workloads, E-series for memory-optimized")
+                else:  # GCP
+                    notes_parts.append("• **n1-standard-8**: 8 vCPUs, 30 GB RAM")
+                    notes_parts.append("• **Why chosen**: Balanced compute for ETL workloads")
+                    notes_parts.append("• **Alternative**: n1-highmem-8 for memory-intensive jobs")
+                
+                notes_parts.append("")
+                notes_parts.append("**📊 TPC-DI ETL Benchmark Reference (MEDIUM Complexity Baseline):**")
+                notes_parts.append("(Same performance for Classic Jobs, Serverless Jobs, DLT all editions)")
+                notes_parts.append("")
+                if cloud == "aws":
+                    notes_parts.append("| Data Scale | Driver         | Worker         | Workers | Runtime |")
+                    notes_parts.append("|------------|----------------|----------------|---------|---------|")
+                    notes_parts.append("| ~100 GB    | m6i.xlarge     | m6id.2xlarge   | 1       | ~10 min |")
+                    notes_parts.append("| ~1 TB      | m6i.xlarge     | m6id.2xlarge   | 2       | ~20 min |")
+                    notes_parts.append("| ~5 TB      | m6i.xlarge     | m6id.2xlarge   | 10      | ~20 min |")
+                    notes_parts.append("| ~10 TB     | m6i.2xlarge    | m6id.2xlarge   | 20      | ~25 min |")
+                elif cloud == "azure":
+                    notes_parts.append("| Data Scale | Driver              | Worker              | Workers | Runtime |")
+                    notes_parts.append("|------------|---------------------|---------------------|---------|---------|")
+                    notes_parts.append("| ~100 GB    | Standard_D4ds_v5    | Standard_D8ds_v5    | 1       | ~10 min |")
+                    notes_parts.append("| ~1 TB      | Standard_D4ds_v5    | Standard_D8ds_v5    | 2       | ~20 min |")
+                    notes_parts.append("| ~5 TB      | Standard_D4ds_v5    | Standard_D8ds_v5    | 10      | ~20 min |")
+                    notes_parts.append("| ~10 TB     | Standard_D8ds_v5    | Standard_D8ds_v5    | 20      | ~25 min |")
+                else:  # GCP
+                    notes_parts.append("| Data Scale | Driver         | Worker         | Workers | Runtime |")
+                    notes_parts.append("|------------|----------------|----------------|---------|---------|")
+                    notes_parts.append("| ~100 GB    | n1-standard-4  | n1-standard-8  | 1       | ~10 min |")
+                    notes_parts.append("| ~1 TB      | n1-standard-4  | n1-standard-8  | 2       | ~20 min |")
+                    notes_parts.append("| ~5 TB      | n1-standard-4  | n1-standard-8  | 10      | ~20 min |")
+                    notes_parts.append("| ~10 TB     | n1-standard-8  | n1-standard-8  | 20      | ~25 min |")
+                notes_parts.append("")
+                notes_parts.append("**⚡ Job Complexity Multipliers:**")
+                notes_parts.append("Benchmark above is for MEDIUM complexity. Adjust based on job type:")
+                notes_parts.append("")
+                notes_parts.append("• **SIMPLE** (2x faster → half the workers or runtime):")
+                notes_parts.append("  - Basic transformations: SELECT, filter, simple aggregations")
+                notes_parts.append("  - Single source to single destination")
+                notes_parts.append("  - Minimal joins (1-2 tables)")
+                notes_parts.append("  - Example: CSV → Delta with column renames and type casts")
+                notes_parts.append("")
+                notes_parts.append("• **MEDIUM** (Baseline - TPC-DI benchmark):")
+                notes_parts.append("  - Standard ETL with multiple transformations")
+                notes_parts.append("  - 3-5 table joins")
+                notes_parts.append("  - Aggregations with GROUP BY, window functions")
                 notes_parts.append("  - Example: Dimensional modeling, fact table creation")
                 notes_parts.append("")
                 notes_parts.append("• **COMPLEX** (3x slower → 3x the workers or runtime):")
@@ -2263,10 +2361,19 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("• **Spot best practices**: Enable retries, set max spot price limit")
                 
             else:  # Serverless
-                # Even for serverless, set VM types for DBU estimation in calculator
-                workload.setdefault("num_workers", 2)
-                workload.setdefault("driver_node_type", default_driver)
-                workload.setdefault("worker_node_type", default_instance)
+                notes_parts.append("=" * 60)
+                notes_parts.append("**DATABRICKS JOBS (SERVERLESS MODE) CONFIGURATION**")
+                notes_parts.append("=" * 60)
+                notes_parts.append("")
+                notes_parts.append("**🚀 Serverless Compute**:")
+                notes_parts.append("• **Zero infrastructure management**: No instance types, cluster sizing")
+                notes_parts.append("• **Instant startup**: <1 minute (vs 5-7 min for classic clusters)")
+                notes_parts.append("• **Auto-scaling**: Automatic based on Spark task parallelism")
+                notes_parts.append("• **Pay-per-use**: Billed only for actual compute seconds used")
+                notes_parts.append("• **Built-in optimization**: Photon always enabled, auto-tuned Spark configs")
+                notes_parts.append("• **Use cases**: Ad-hoc jobs, inconsistent schedules, rapid development")
+                notes_parts.append("• **Cost**: ~30% premium vs classic, but often cheaper due to instant termination")
+                notes_parts.append("• **Limitations**: Limited Spark config customization, no cluster pools")
         
         if wtype == "DLT":
             edition = workload.setdefault("dlt_edition", "PRO")
@@ -2894,267 +3001,88 @@ Each workload needs to be confirmed individually. Review the configurations and 
             notes_parts.append("  - Pre-filter large indexes using metadata before vector search")
             notes_parts.append("  - Consider approximate nearest neighbor (ANN) algorithms for ultra-scale")
         
-        # Generate concise notes - keep only key rationale
-        if generate_notes:
-            # Build a succinct summary with proper markdown formatting
-            summary_parts = []
-            summary_parts.append(f"**{wtype} Configuration** (AI-generated)\n")
+        # IGNORE any brief notes provided by LLM - we generate comprehensive ones
+        # existing_notes = workload.get("notes", "")  # DON'T use LLM's brief notes
+        
+        # Add comprehensive header and footer if we have generated notes
+        if notes_parts:
+            # Add header
+            header_parts = []
+            header_parts.append("╔" + "=" * 58 + "╗")
+            header_parts.append("║" + " " * 10 + "DATABRICKS WORKLOAD CONFIGURATION" + " " * 15 + "║")
+            header_parts.append("║" + " " * 12 + f"Created by AI Assistant - {wtype}" + " " * (34 - len(wtype)) + "║")
+            header_parts.append("╚" + "=" * 58 + "╝")
+            header_parts.append("")
+            header_parts.append("This configuration was generated based on your requirements.")
+            header_parts.append("Review all sections carefully before deployment to production.")
+            header_parts.append("")
             
-            # Add concise config summary based on workload type
+            # Add footer with summary
+            footer_parts = []
+            footer_parts.append("")
+            footer_parts.append("=" * 60)
+            footer_parts.append("**📋 CONFIGURATION SUMMARY**")
+            footer_parts.append("=" * 60)
+            footer_parts.append(f"• **Workload Type**: {wtype}")
+            footer_parts.append(f"• **Cloud**: {workload.get('cloud', 'Not specified').upper()}")
+            footer_parts.append(f"• **Region**: {workload.get('region', 'Not specified')}")
+            
+            # Add workload-specific summary
             if wtype == "DBSQL":
                 wh_type = workload.get("dbsql_warehouse_type", "SERVERLESS")
                 wh_size = workload.get("dbsql_warehouse_size", "Small")
                 wh_clusters = workload.get("dbsql_num_clusters", 1)
-                total_users = workload.get("total_users", 0)
-                use_case = workload.get("use_case_type", "bi_dashboard")
-                data_vol = workload.get("typical_data_volume", "1-10GB")
-                query_complexity = workload.get("query_complexity", "medium")
-                
-                # Concurrency calculation
-                concurrency_ratios = {"bi_dashboard": 15, "analytics": 25, "monitoring": 50}
-                ratio = concurrency_ratios.get(use_case, 15)
-                concurrent_users = int(total_users * ratio / 100) if total_users else 0
-                
-                summary_parts.append("**Configuration:**")
-                summary_parts.append(f"- Type: {wh_type} warehouse")
-                if total_users:
-                    summary_parts.append(f"- Users: {total_users} total, ~{concurrent_users} concurrent ({ratio}% concurrency for {use_case.replace('_', ' ')})")
-                summary_parts.append(f"- Data: {data_vol} Delta tables with {query_complexity} complexity queries")
-                summary_parts.append(f"- Warehouse: {wh_size} size, {wh_clusters} cluster(s)")
-                summary_parts.append("")
-                    
-                summary_parts.append("**Why this setup:**")
-                if wh_type == "SERVERLESS":
-                    summary_parts.append("- **Serverless**: Instant startup (<5s), perfect for ad-hoc queries, scales to zero when idle")
-                    summary_parts.append("- **Predictive I/O**: 5-17x faster on selective queries vs Classic")
-                elif wh_type == "PRO":
-                    summary_parts.append("- **PRO**: 3-4 min startup, Unity Catalog support, Predictive I/O")
+                footer_parts.append(f"• **Warehouse**: {wh_type} {wh_size} × {wh_clusters} cluster(s)")
+                footer_parts.append(f"• **Expected Users**: {workload.get('total_users', 'Not specified')}")
+            elif wtype == "JOBS":
+                if workload.get("jobs_serverless"):
+                    footer_parts.append("• **Compute**: Serverless (fully managed)")
                 else:
-                    summary_parts.append("- **Classic**: Legacy option, consider upgrading to Pro/Serverless")
-                
-                size_rationale = {
-                    "2X-Small": f"At {data_vol} data volume, 2X-Small delivers ~77 QPM - suitable for light usage",
-                    "X-Small": f"At {data_vol} data volume, X-Small delivers ~131 QPM - good for small teams",
-                    "Small": f"At {data_vol} data volume, Small delivers ~224 QPM - excellent for interactive analytics",
-                    "Medium": f"At {data_vol} data volume, Medium delivers ~380 QPM - handles active dashboards well",
-                    "Large": f"At {data_vol} data volume, Large delivers ~646 QPM - for heavy analytical workloads",
-                    "X-Large": f"At {data_vol} data volume, X-Large delivers ~1,098 QPM - high concurrency needs",
-                }
-                summary_parts.append(f"- **{wh_size} warehouse**: {size_rationale.get(wh_size, 'Sized for query volume')}")
-                if wh_clusters > 1:
-                    summary_parts.append(f"- **{wh_clusters} clusters**: Horizontal scaling to handle {wh_clusters * 10} concurrent queries")
-                    
-            elif wtype in ["JOBS", "ALL_PURPOSE"]:
-                driver = workload.get("driver_node_type", "Not specified")
-                worker = workload.get("worker_node_type", "Not specified")
-                workers = workload.get("num_workers", 2)
-                is_serverless = workload.get("serverless_enabled", False)
-                photon = workload.get("photon_enabled", True)
-                runs = workload.get("runs_per_day", 1)
-                runtime = workload.get("avg_runtime_minutes", 60)
-                days = workload.get("days_per_month", 22)
-                worker_tier = workload.get("worker_pricing_tier", "on_demand")
-                hours_month = runs * (runtime / 60) * days
-                
-                summary_parts.append("**Configuration:**")
-                summary_parts.append(f"- Mode: {'Serverless' if is_serverless else 'Classic compute'}")
-                if not is_serverless:
-                    summary_parts.append(f"- Driver: {driver} (on-demand for stability)")
-                    summary_parts.append(f"- Workers: {workers}× {worker} ({worker_tier})")
-                summary_parts.append(f"- Photon: {'Enabled (2-3x faster)' if photon else 'Disabled (UDFs/RDDs)'}")
-                summary_parts.append(f"- Usage: {runs} runs/day × {runtime}min × {days} days = ~{hours_month:.0f} hrs/month")
-                summary_parts.append("")
-                
-                summary_parts.append("**Why this setup:**")
-                if is_serverless:
-                    summary_parts.append("- **Serverless**: Instant startup, auto-scaling, pay per compute second")
-                    summary_parts.append("- Best for: Variable workloads, rapid development, no infrastructure management")
-                    summary_parts.append("- VM specs shown for DBU estimation only (Databricks manages infrastructure)")
-                else:
-                    summary_parts.append("- **Classic**: More control over instance types and spot pricing")
-                    if worker_tier == "spot":
-                        summary_parts.append("- **Spot workers**: 60-90% cost savings, suitable for fault-tolerant batch jobs")
-                    summary_parts.append(f"- **{workers} workers**: Based on data volume and job complexity")
-                if photon:
-                    summary_parts.append("- **Photon enabled**: Native vectorized engine for 2-3x faster SQL/DataFrame")
-                    
+                    instance = workload.get("jobs_instance_type", "Not specified")
+                    workers = workload.get("jobs_worker_max", 2)
+                    footer_parts.append(f"• **Compute**: Classic ({instance})")
+                    footer_parts.append(f"• **Cluster size**: 1 driver + {workers} workers max")
             elif wtype == "DLT":
                 edition = workload.get("dlt_edition", "PRO")
-                driver = workload.get("driver_node_type", "Not specified")
-                worker = workload.get("worker_node_type", "Not specified")
-                workers = workload.get("num_workers", 2)
-                is_serverless = workload.get("serverless_enabled", False)
-                runs = workload.get("runs_per_day", 1)
-                runtime = workload.get("avg_runtime_minutes", 60)
-                days = workload.get("days_per_month", 22)
-                hours_month = runs * (runtime / 60) * days
-                
-                summary_parts.append("**Configuration:**")
-                summary_parts.append(f"- Edition: {edition}")
-                summary_parts.append(f"- Mode: {'Serverless' if is_serverless else 'Classic compute'}")
-                if not is_serverless:
-                    summary_parts.append(f"- Driver: {driver}")
-                    summary_parts.append(f"- Workers: {workers}× {worker}")
-                summary_parts.append(f"- Usage: ~{hours_month:.0f} hrs/month")
-                summary_parts.append("")
-                
-                summary_parts.append("**Why this setup:**")
-                if edition == "CORE":
-                    summary_parts.append("- **CORE edition**: Streaming + batch, lowest DBU cost")
-                    summary_parts.append("- Best for: Simple pipelines without CDC requirements")
-                elif edition == "PRO":
-                    summary_parts.append("- **PRO edition**: Includes CDC/Apply Changes for database sync")
-                    summary_parts.append("- Best for: Database replication, SCD Type 2, incremental updates")
-                else:
-                    summary_parts.append("- **ADVANCED edition**: Data quality expectations, constraints")
-                    summary_parts.append("- Best for: Regulated industries, mission-critical pipelines")
-                if is_serverless:
-                    summary_parts.append("- **Serverless**: Auto-scaling, instant startup, incremental MV refresh")
-                    summary_parts.append("- VM specs shown for DBU estimation only (Databricks manages infrastructure)")
-                else:
-                    summary_parts.append(f"- **Classic compute**: More control over cluster sizing")
-                    summary_parts.append(f"- **{workers} workers**: Sized for data volume and complexity")
-                    
+                footer_parts.append(f"• **Edition**: {edition}")
             elif wtype == "LAKEBASE":
                 cu = workload.get("lakebase_cu", 2)
-                reads_per_sec = workload.get("lakebase_expected_reads_per_sec", 0)
-                bulk_writes = workload.get("lakebase_expected_bulk_writes_per_sec", 0)
-                incr_writes = workload.get("lakebase_expected_incremental_writes_per_sec", 0)
-                ha_enabled = workload.get("lakebase_ha_enabled", False)
-                read_replicas = workload.get("lakebase_num_read_replicas", 0)
-                
-                # Workload Profile - always show even if values aren't specified
-                summary_parts.append("**Workload Profile:**")
-                if reads_per_sec or bulk_writes or incr_writes:
-                    if reads_per_sec:
-                        summary_parts.append(f"- Reads: ~{reads_per_sec:,} reads/second (lookups, queries)")
-                    if incr_writes:
-                        summary_parts.append(f"- Incremental writes: ~{incr_writes:,} writes/second (updates/inserts)")
-                    if bulk_writes:
-                        summary_parts.append(f"- Bulk writes: ~{bulk_writes:,} writes/second (batch loads)")
-                else:
-                    summary_parts.append("- Expected throughput: To be determined based on actual usage")
-                summary_parts.append("")
-                
-                # Architecture - always show
-                total_instances = 1 + (1 if ha_enabled else 0) + read_replicas
-                summary_parts.append(f"**Architecture ({total_instances} Total Instance{'s' if total_instances > 1 else ''}):**")
-                summary_parts.append(f"- 1 Primary instance - Handles all writes + reads ({cu} CU)")
-                if ha_enabled:
-                    summary_parts.append("- 1 HA Standby replica - Automatic failover for production reliability")
-                if read_replicas > 0:
-                    summary_parts.append(f"- {read_replicas} Read replica{'s' if read_replicas > 1 else ''} - Scales read capacity, offloads read traffic")
-                summary_parts.append("")
-                
-                # Compute Units - always show with capacity info
-                summary_parts.append("**Compute Units:**")
-                summary_parts.append(f"- {cu} CU (auto-calculated based on throughput needs)")
-                summary_parts.append("- Capacity per CU: ~10,000 reads/sec, ~15,000 bulk writes/sec, ~1,200 incremental writes/sec")
-                
-                # Calculate utilization if values provided
-                if reads_per_sec or bulk_writes or incr_writes:
-                    read_util = (reads_per_sec / (10000 * cu)) * 100 if reads_per_sec else 0
-                    bulk_util = (bulk_writes / (15000 * cu)) * 100 if bulk_writes else 0
-                    incr_util = (incr_writes / (1200 * cu)) * 100 if incr_writes else 0
-                    max_util = max(read_util, bulk_util, incr_util)
-                    summary_parts.append(f"- Current utilization: ~{max_util:.0f}% of {cu} CU capacity - plenty of headroom!")
-                else:
-                    summary_parts.append(f"- Your {cu} CU capacity: ~{cu*10000:,} reads/sec, ~{cu*15000:,} bulk writes/sec")
-                summary_parts.append("")
-                
-                # HA & Scaling - always show
-                summary_parts.append("**High Availability & Scaling:**")
-                if ha_enabled:
-                    summary_parts.append("- HA enabled: Automatic failover with zero data loss")
-                else:
-                    summary_parts.append("- HA disabled: Consider enabling for production reliability")
-                if read_replicas > 0:
-                    summary_parts.append(f"- Read replicas: {read_replicas}x read throughput capacity")
-                else:
-                    summary_parts.append("- No read replicas: Add if read scaling is needed")
-                
+                total_nodes = workload.get("lakebase_ha_nodes", 1)
+                num_read_replicas = workload.get("lakebase_num_read_replicas", 0)
+                footer_parts.append(f"• **Compute Units**: {cu} CU (auto-calculated)")
+                footer_parts.append(f"• **Active Nodes**: {total_nodes} (1 primary + {num_read_replicas} read replica(s))")
             elif wtype == "VECTOR_SEARCH":
                 endpoint_type = workload.get("vector_search_endpoint_type", "STANDARD")
-                num_docs = workload.get("vector_search_num_documents", 0)
+                total_vectors = workload.get("vector_search_total_vectors", 0)
                 dimensions = workload.get("vector_search_dimensions", 768)
-                queries_per_day = workload.get("vector_search_queries_per_day", 0)
-                
-                summary_parts.append("**Configuration Summary:**\n")
-                summary_parts.append(f"**Endpoint Type:** {endpoint_type}")
-                if endpoint_type == "STANDARD":
-                    summary_parts.append("- Optimized for low-latency interactive search (<100ms)")
-                    summary_parts.append("- Ideal for real-time applications (chatbots, search)\n")
-                else:
-                    summary_parts.append("- Optimized for large-scale vector storage")
-                    summary_parts.append("- Cost-efficient for batch/background queries\n")
-                
-                if num_docs or dimensions:
-                    summary_parts.append("**Index Configuration:**")
-                    if num_docs:
-                        summary_parts.append(f"- Documents: ~{num_docs:,} vectors")
-                    summary_parts.append(f"- Dimensions: {dimensions} (embedding model dependent)")
-                    if num_docs:
-                        index_size_gb = (num_docs * dimensions * 4) / (1024**3)
-                        summary_parts.append(f"- Estimated index size: ~{index_size_gb:.1f} GB\n")
-                
-                if queries_per_day:
-                    summary_parts.append("**Query Volume:**")
-                    summary_parts.append(f"- {queries_per_day:,} queries/day (~{queries_per_day//24}/hour)")
-                    
-            elif wtype == "MODEL_SERVING":
-                compute = workload.get("model_serving_compute_type", "CPU")
-                concurrency = workload.get("model_serving_concurrency", 1)
-                
-                summary_parts.append("**Configuration Summary:**\n")
-                summary_parts.append(f"**Compute Type:** {compute}")
-                if compute == "CPU":
-                    summary_parts.append("- Best for: Small models, text processing, low-latency")
-                    summary_parts.append("- Scales quickly, cost-effective for variable traffic\n")
-                elif "GPU_SMALL" in compute:
-                    summary_parts.append("- Best for: Medium models (1-7B params)")
-                    summary_parts.append("- T4 GPU: Good balance of cost and performance\n")
-                elif "GPU_MEDIUM" in compute:
-                    summary_parts.append("- Best for: Large models (7-30B params)")
-                    summary_parts.append("- A10G GPU: Faster inference for production\n")
-                else:
-                    summary_parts.append("- Best for: Very large models (30B+ params)")
-                    summary_parts.append("- A100 GPU: Maximum performance\n")
-                
-                if concurrency and concurrency > 1:
-                    summary_parts.append(f"**Scaling:** {concurrency} concurrent instances")
-                    summary_parts.append("- Horizontal scaling for high availability")
-                
-            elif wtype in ["FMAPI_DATABRICKS", "FMAPI_PROPRIETARY"]:
-                model = workload.get("fmapi_model", "Not specified")
-                rate_type = workload.get("fmapi_rate_type", "token")
-                tokens = workload.get("fmapi_tokens_millions", 0)
-                
-                summary_parts.append("**Configuration Summary:**\n")
-                summary_parts.append(f"**Model:** {model}")
-                
-                if "llama" in model.lower():
-                    summary_parts.append("- Open-source, cost-effective for high volume\n")
-                elif "claude" in model.lower():
-                    summary_parts.append("- Strong reasoning, excellent for complex tasks\n")
-                elif "gpt" in model.lower():
-                    summary_parts.append("- Industry standard, broad capabilities\n")
-                elif "mixtral" in model.lower():
-                    summary_parts.append("- MoE architecture, efficient for diverse tasks\n")
-                else:
-                    summary_parts.append("")
-                
-                if rate_type == "token" and tokens:
-                    summary_parts.append(f"**Token Usage:** {tokens}M tokens/month")
-                    avg_tokens_per_conv = 2000
-                    est_conversations = (tokens * 1_000_000) / avg_tokens_per_conv
-                    summary_parts.append(f"- Estimated: ~{est_conversations:,.0f} conversations/month")
-                elif rate_type == "provisioned":
-                    summary_parts.append("**Provisioned Throughput:** Reserved capacity")
-                    summary_parts.append("- Guaranteed tokens/minute, predictable pricing")
+                footer_parts.append(f"• **Endpoint Type**: {endpoint_type}")
+                footer_parts.append(f"• **Total Vectors**: {total_vectors:,} vectors")
+                footer_parts.append(f"• **Dimensions**: {dimensions}d")
             
-            summary_parts.append("\n*Review and adjust based on actual usage.*")
+            footer_parts.append("")
+            footer_parts.append("**⚠️ IMPORTANT REMINDERS:**")
+            footer_parts.append("• This is a PROPOSAL - review before confirming")
+            footer_parts.append("• Costs shown are estimates - actual costs may vary")
+            footer_parts.append("• Monitor actual usage and adjust sizing as needed")
+            footer_parts.append("• Consider starting with smaller configuration and scaling up")
+            footer_parts.append("• Set up budget alerts and cost monitoring")
+            footer_parts.append("")
+            footer_parts.append("**📊 NEXT STEPS:**")
+            footer_parts.append("1. Review the detailed configuration above")
+            footer_parts.append("2. Confirm this proposal to add to your estimate")
+            footer_parts.append("3. Adjust sizing based on actual usage patterns")
+            footer_parts.append("4. Set up monitoring and alerting")
+            footer_parts.append("5. Document any custom configurations or requirements")
+            footer_parts.append("")
+            footer_parts.append("=" * 60)
+            footer_parts.append("Need to modify this configuration? Just ask!")
+            footer_parts.append("=" * 60)
             
-            generated_notes = "\n".join(summary_parts)
+            # Assemble the full notes
+            full_header = "\n".join(header_parts)
+            main_notes = "\n".join(notes_parts)
+            full_footer = "\n".join(footer_parts)
+            generated_notes = f"{full_header}\n{main_notes}\n{full_footer}"
         else:
             generated_notes = ""
         

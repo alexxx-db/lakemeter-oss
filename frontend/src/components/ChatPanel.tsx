@@ -528,7 +528,7 @@ export function ChatPanel({
         <div className="fixed bottom-4 right-4 z-50">
           <button
             onClick={() => setIsMinimized(false)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-full shadow-lg hover:shadow-xl"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-lava-600 to-amber-500 text-white rounded-full shadow-lg hover:shadow-xl"
           >
             <SparklesIcon className="w-5 h-5" />
             <span className="font-medium text-sm">AI Assistant</span>
@@ -545,8 +545,8 @@ export function ChatPanel({
           <div
             onMouseDown={handleMouseDown}
             className={clsx(
-              "absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-orange-500/30 transition-colors z-10",
-              isResizing && "bg-orange-500/50"
+              "absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-lava-600/30 transition-colors z-10",
+              isResizing && "bg-lava-600/50"
             )}
           >
             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 rounded-full bg-[var(--border-secondary)] opacity-0 hover:opacity-100 transition-opacity" />
@@ -555,7 +555,7 @@ export function ChatPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] bg-gradient-to-r from-[var(--bg-secondary)] to-[var(--bg-primary)]">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-sm">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-lava-600 to-amber-500 flex items-center justify-center shadow-sm">
             <SparklesIcon className="w-4 h-4 text-white" />
           </div>
           <div>
@@ -711,7 +711,7 @@ export function ChatPanel({
                 ? 'bg-gradient-to-br from-blue-500 to-blue-600' 
                 : message.role === 'system'
                 ? 'bg-gradient-to-br from-green-500 to-emerald-600'
-                : 'bg-gradient-to-br from-orange-500 to-amber-500'
+                : 'bg-gradient-to-br from-lava-600 to-amber-500'
             )}>
               {message.role === 'user' ? (
                 <span className="text-[10px] font-bold text-white">You</span>
@@ -734,7 +734,7 @@ export function ChatPanel({
                   ? 'text-blue-600 dark:text-blue-400' 
                   : message.role === 'system'
                   ? 'text-green-600 dark:text-green-400'
-                  : 'text-orange-600 dark:text-orange-400'
+                  : 'text-lava-700 dark:text-lava-500'
               )}>
                 {message.role === 'user' ? 'You' : message.role === 'system' ? 'System' : 'AI Assistant'}
               </div>
@@ -750,9 +750,9 @@ export function ChatPanel({
                 {(message.isStreaming || message.isThinking) && !message.content ? (
                   <div className="flex items-center gap-3 px-2 py-2">
                     <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
                     <span className="text-sm text-[var(--text-secondary)] italic">
                       {message.isThinking ? 'AI is thinking...' : 'Generating response...'}
@@ -792,7 +792,7 @@ export function ChatPanel({
                             )
                           }
                           return (
-                            <code className="px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded text-[12px] font-mono">
+                            <code className="px-1.5 py-0.5 bg-lava-600/10 dark:bg-lava-600/30 text-lava-700 dark:text-lava-400 rounded text-[12px] font-mono">
                               {children}
                             </code>
                           )
@@ -801,7 +801,7 @@ export function ChatPanel({
                         pre: ({children}) => <pre className="my-3 overflow-hidden rounded-lg">{children}</pre>,
                         // Blockquotes
                         blockquote: ({children}) => (
-                          <blockquote className="my-3 pl-3 border-l-3 border-orange-400 bg-orange-50 dark:bg-orange-900/10 py-2 pr-3 rounded-r-lg text-[var(--text-secondary)] italic">
+                          <blockquote className="my-3 pl-3 border-l-3 border-lava-500 bg-lava-600/5 dark:bg-lava-600/10 py-2 pr-3 rounded-r-lg text-[var(--text-secondary)] italic">
                             {children}
                           </blockquote>
                         ),
@@ -809,7 +809,7 @@ export function ChatPanel({
                         hr: () => <hr className="my-4 border-[var(--border-primary)]" />,
                         // Links
                         a: ({href, children}) => (
-                          <a href={href} className="text-orange-600 dark:text-orange-400 hover:underline font-medium" target="_blank" rel="noopener noreferrer">
+                          <a href={href} className="text-lava-700 dark:text-lava-500 hover:underline font-medium" target="_blank" rel="noopener noreferrer">
                             {children}
                           </a>
                         ),
@@ -832,7 +832,7 @@ export function ChatPanel({
                       {tr.result?.success ? (
                         <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
                       ) : (
-                        <ArrowPathIcon className="w-3.5 h-3.5 text-orange-500" />
+                        <ArrowPathIcon className="w-3.5 h-3.5 text-lava-600" />
                       )}
                       <span className="font-medium text-slate-600 dark:text-slate-300">
                         {tr.tool.replace(/_/g, ' ')}
@@ -890,7 +890,7 @@ export function ChatPanel({
           <div className="mb-3">
             <button
               onClick={() => setShowQuickActions(!showQuickActions)}
-              className="text-[10px] text-[var(--text-muted)] hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1 mb-2 transition-colors"
+              className="text-[10px] text-[var(--text-muted)] hover:text-lava-700 dark:hover:text-lava-500 flex items-center gap-1 mb-2 transition-colors"
             >
               <ChevronUpIcon className={clsx("w-3 h-3 transition-transform duration-200", showQuickActions ? "rotate-180" : "")} />
               {showQuickActions ? "Hide suggestions" : "Show suggestions"}
@@ -901,7 +901,7 @@ export function ChatPanel({
                   <button
                     key={idx}
                     onClick={() => sendMessage(action.action)}
-                    className="text-[11px] px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-300 dark:hover:border-orange-700 hover:text-orange-700 dark:hover:text-orange-300 text-[var(--text-secondary)] transition-all duration-150 shadow-sm hover:shadow"
+                    className="text-[11px] px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-lava-600/5 dark:hover:bg-lava-600/20 hover:border-lava-400 dark:hover:border-lava-700 hover:text-lava-700 dark:hover:text-lava-400 text-[var(--text-secondary)] transition-all duration-150 shadow-sm hover:shadow"
                   >
                     {action.label}
                   </button>
@@ -922,7 +922,7 @@ export function ChatPanel({
               placeholder="Ask about pricing, workloads, or optimization..."
               disabled={isLoading}
               rows={1}
-              className="w-full resize-none rounded-xl border-2 border-[var(--border-primary)] bg-[var(--bg-primary)] px-4 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-orange-400 dark:focus:border-orange-500 disabled:opacity-50 placeholder:text-[var(--text-muted)] shadow-sm transition-colors"
+              className="w-full resize-none rounded-xl border-2 border-[var(--border-primary)] bg-[var(--bg-primary)] px-4 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-lava-500 dark:focus:border-lava-600 disabled:opacity-50 placeholder:text-[var(--text-muted)] shadow-sm transition-colors"
               style={{ minHeight: '48px', maxHeight: '150px' }}
             />
             {inputValue.length > 50 && (
@@ -934,7 +934,7 @@ export function ChatPanel({
           <button
             onClick={() => sendMessage()}
             disabled={!inputValue.trim() || isLoading}
-            className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-500 text-white rounded-xl hover:from-orange-600 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-150 flex-shrink-0"
+            className="h-12 w-12 bg-gradient-to-br from-lava-600 to-amber-500 text-white rounded-xl hover:from-lava-700 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-150 flex-shrink-0"
           >
             {isLoading ? (
               <ArrowPathIcon className="w-5 h-5 animate-spin" />
@@ -990,7 +990,7 @@ export function ChatToggleButton({ onClick, hasActiveConversation }: { onClick: 
         "fixed top-4 right-4 w-10 h-10 rounded-lg shadow-lg flex items-center justify-center transition-all hover:scale-105 z-40",
         hasActiveConversation
           ? "bg-teal-600 hover:bg-teal-700"
-          : "bg-gradient-to-br from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700"
+          : "bg-gradient-to-br from-lava-600 to-amber-600 hover:from-lava-700 hover:to-amber-700"
       )}
       title="AI Assistant"
     >

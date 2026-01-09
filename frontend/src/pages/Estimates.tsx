@@ -530,8 +530,8 @@ export default function Estimates() {
               onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
               className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition-colors min-w-[200px]"
               style={{ 
-                borderColor: accountFilter !== 'all' ? '#f97316' : 'var(--border-primary)',
-                color: accountFilter !== 'all' ? '#f97316' : 'var(--text-secondary)',
+                borderColor: accountFilter !== 'all' ? '#FF3621' : 'var(--border-primary)',
+                color: accountFilter !== 'all' ? '#FF3621' : 'var(--text-secondary)',
                 backgroundColor: accountFilter !== 'all' ? 'rgba(249, 115, 22, 0.1)' : 'var(--bg-primary)'
               }}
             >
@@ -567,9 +567,9 @@ export default function Estimates() {
                       }}
                       className={clsx(
                         'w-full px-3 py-2 text-sm text-left flex items-center justify-between transition-colors',
-                        accountFilter === 'all' ? 'bg-orange-500/10' : 'hover:bg-[var(--bg-hover)]'
+                        accountFilter === 'all' ? 'bg-lava-600/10' : 'hover:bg-[var(--bg-hover)]'
                       )}
-                      style={{ color: accountFilter === 'all' ? '#f97316' : 'var(--text-primary)' }}
+                      style={{ color: accountFilter === 'all' ? '#FF3621' : 'var(--text-primary)' }}
                     >
                       <span>All Accounts</span>
                       <span className="text-xs opacity-60">{accountNames.length}</span>
@@ -584,9 +584,9 @@ export default function Estimates() {
                         }}
                         className={clsx(
                           'w-full px-3 py-2 text-sm text-left flex items-center justify-between transition-colors',
-                          accountFilter === name ? 'bg-orange-500/10' : 'hover:bg-[var(--bg-hover)]'
+                          accountFilter === name ? 'bg-lava-600/10' : 'hover:bg-[var(--bg-hover)]'
                         )}
-                        style={{ color: accountFilter === name ? '#f97316' : 'var(--text-primary)' }}
+                        style={{ color: accountFilter === name ? '#FF3621' : 'var(--text-primary)' }}
                       >
                         <span className="truncate">{name}</span>
                         <div className="flex items-center gap-2 flex-shrink-0">

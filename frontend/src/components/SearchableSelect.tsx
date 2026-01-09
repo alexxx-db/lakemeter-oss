@@ -130,8 +130,8 @@ export default function SearchableSelect({
           "w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors",
           "bg-[var(--bg-secondary)] border-[var(--border-primary)]",
           "hover:border-[var(--border-secondary)]",
-          isOpen && "border-orange-500 ring-1 ring-orange-500/30",
-          !value && required && !isOpen && "border-orange-500/50 ring-1 ring-orange-500/30",
+          isOpen && "border-lava-600 ring-1 ring-lava-600/30",
+          !value && required && !isOpen && "border-lava-600/50 ring-1 ring-lava-600/30",
           disabled && "opacity-50 cursor-not-allowed"
         )}
       >
@@ -208,7 +208,7 @@ export default function SearchableSelect({
                       className={clsx(
                         "px-3 py-2 text-sm cursor-pointer transition-colors",
                         option.value === value
-                          ? "bg-orange-500/10 text-orange-500"
+                          ? "bg-lava-600/10 text-lava-600"
                           : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
                       )}
                     >
@@ -230,7 +230,7 @@ export default function SearchableSelect({
                   className={clsx(
                     "px-3 py-2 text-sm cursor-pointer transition-colors",
                     option.value === value
-                      ? "bg-orange-500/10 text-orange-500"
+                      ? "bg-lava-600/10 text-lava-600"
                       : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
                   )}
                 >

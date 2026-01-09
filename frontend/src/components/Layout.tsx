@@ -168,7 +168,7 @@ export default function Layout() {
           className="max-w-md w-full p-8 rounded-xl border text-center"
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
         >
-          <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center bg-orange-500/10">
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center bg-lava-600/10">
             <LakemeterLogo />
           </div>
           <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
@@ -183,7 +183,7 @@ export default function Layout() {
           >
             <p className="font-medium mb-2" style={{ color: 'var(--text-primary)' }}>For local development:</p>
             <p className="mb-2">Set the <code className="px-1.5 py-0.5 rounded bg-black/20">LOCAL_DEV_EMAIL</code> environment variable:</p>
-            <code className="block p-2 rounded bg-black/30 text-orange-400 text-xs">
+            <code className="block p-2 rounded bg-black/30 text-lava-500 text-xs">
               LOCAL_DEV_EMAIL=your.email@databricks.com
             </code>
           </div>
@@ -207,7 +207,7 @@ export default function Layout() {
             {/* Logo */}
             <Link to="/" className="flex items-center gap-3 group">
               <div 
-                className="w-10 h-10 rounded-lg flex items-center justify-center border group-hover:border-orange-500/50 transition-colors"
+                className="w-10 h-10 rounded-lg flex items-center justify-center border group-hover:border-lava-600/50 transition-colors"
                 style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)' }}
               >
                 <LakemeterLogo />
@@ -325,8 +325,8 @@ export default function Layout() {
                   className={clsx(
                     "relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300",
                     isChatOpen 
-                      ? "bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 text-white shadow-lg shadow-orange-500/30" 
-                      : "text-orange-500 hover:text-white hover:bg-gradient-to-br hover:from-orange-500 hover:via-amber-500 hover:to-yellow-500 hover:shadow-lg hover:shadow-orange-500/30"
+                      ? "bg-gradient-to-br from-lava-600 via-amber-500 to-yellow-500 text-white shadow-lg shadow-lava-600/30" 
+                      : "text-lava-600 hover:text-white hover:bg-gradient-to-br hover:from-lava-600 hover:via-amber-500 hover:to-yellow-500 hover:shadow-lg hover:shadow-lava-600/30"
                   )}
                   title="AI Assistant"
                 >
@@ -337,7 +337,7 @@ export default function Layout() {
                     <SparklesIcon className="w-5 h-5" />
                   </motion.div>
                   {/* Glow effect on hover */}
-                  <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-orange-400 to-amber-400 opacity-0 hover:opacity-20 blur-md transition-opacity duration-300" />
+                  <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-lava-500 to-amber-400 opacity-0 hover:opacity-20 blur-md transition-opacity duration-300" />
                 </motion.button>
               )}
             </div>
@@ -370,7 +370,7 @@ export default function Layout() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-            <span className="text-orange-500">Databricks</span> Pricing Calculator • Powered by Lakebase
+            <span className="text-lava-600">Databricks</span> Pricing Calculator • Powered by Lakebase
           </p>
         </div>
       </footer>
@@ -421,7 +421,7 @@ export default function Layout() {
               style={{ backgroundColor: 'var(--bg-primary)' }}
             >
               {/* Header with warning icon */}
-              <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-8 text-center">
+              <div className="bg-gradient-to-r from-amber-500 to-lava-600 px-6 py-8 text-center">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/20 flex items-center justify-center">
                   <ExclamationTriangleIcon className="w-10 h-10 text-white" />
                 </div>
@@ -450,7 +450,7 @@ export default function Layout() {
                 
                 <button
                   onClick={handleRefreshPage}
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-lava-600 to-amber-500 hover:from-lava-700 hover:to-amber-600 transition-all duration-200 shadow-lg hover:shadow-xl"
                 >
                   <ArrowPathIcon className="w-5 h-5" />
                   Refresh Page

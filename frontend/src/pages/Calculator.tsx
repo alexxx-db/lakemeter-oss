@@ -151,8 +151,8 @@ const WORKLOAD_TYPE_CONFIG: Record<string, {
   },
   'FMAPI_DATABRICKS': { 
     icon: SparklesIcon, 
-    color: 'text-orange-500', 
-    bgColor: 'bg-orange-500/10',
+    color: 'text-lava-600', 
+    bgColor: 'bg-lava-600/10',
     label: 'FMAPI DBX'
   },
   'FMAPI_PROPRIETARY': { 
@@ -174,15 +174,15 @@ const getWorkloadTypeConfig = (workloadType: string | null | undefined) => {
   if (!workloadType) {
     return { 
       icon: CpuChipIcon, 
-      color: 'text-orange-500', 
-      bgColor: 'bg-orange-500/10',
+      color: 'text-lava-600', 
+      bgColor: 'bg-lava-600/10',
       label: 'Workload'
     }
   }
   return WORKLOAD_TYPE_CONFIG[workloadType] || { 
     icon: CpuChipIcon, 
-    color: 'text-orange-500', 
-    bgColor: 'bg-orange-500/10',
+    color: 'text-lava-600', 
+    bgColor: 'bg-lava-600/10',
     label: workloadType
   }
 }
@@ -387,11 +387,11 @@ export default function Calculator() {
     if (ref) {
       ref.scrollIntoView({ behavior: 'smooth', block: 'center' })
       // Brief highlight effect
-      ref.classList.add('ring-2', 'ring-orange-500', 'ring-offset-2')
+      ref.classList.add('ring-2', 'ring-lava-600', 'ring-offset-2')
       setTimeout(() => {
         // Check ref still exists before removing classes
         if (workloadRefs.current[lineItemId]) {
-          workloadRefs.current[lineItemId]?.classList.remove('ring-2', 'ring-orange-500', 'ring-offset-2')
+          workloadRefs.current[lineItemId]?.classList.remove('ring-2', 'ring-lava-600', 'ring-offset-2')
         }
       }, 1500)
     }
@@ -1641,7 +1641,7 @@ export default function Calculator() {
               <div className="card p-8">
                 <div className="flex flex-col items-center gap-4">
                   <div className="relative">
-                    <div className="w-12 h-12 rounded-full border-4 border-[var(--border-primary)] border-t-orange-500 animate-spin"></div>
+                    <div className="w-12 h-12 rounded-full border-4 border-[var(--border-primary)] border-t-lava-600 animate-spin"></div>
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-medium text-[var(--text-primary)]">Loading estimate...</p>
@@ -1704,7 +1704,7 @@ export default function Calculator() {
           </div>
           
           {hasUnsavedChanges && (
-            <span className="flex items-center gap-1 text-xs text-orange-500 font-medium">
+            <span className="flex items-center gap-1 text-xs text-lava-600 font-medium">
               <ExclamationTriangleIcon className="w-3.5 h-3.5" />
               Unsaved
             </span>
@@ -1753,8 +1753,8 @@ export default function Calculator() {
               onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-orange-500/10">
-                  <CpuChipIcon className="w-5 h-5 text-orange-500" />
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-lava-600/10">
+                  <CpuChipIcon className="w-5 h-5 text-lava-600" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-[var(--text-primary)]">Configuration</h3>
@@ -1821,23 +1821,23 @@ export default function Calculator() {
                                 className={clsx(
                                   'relative p-4 rounded-xl border-2 transition-all text-center',
                                   formData.cloud === cloud.id
-                                    ? 'border-orange-500 bg-orange-500/10'
+                                    ? 'border-lava-600 bg-lava-600/10'
                                     : 'border-dashed border-[var(--border-secondary)]',
                                   isLocked
                                     ? 'opacity-40 cursor-not-allowed'
-                                    : formData.cloud !== cloud.id && 'hover:border-orange-500/50 hover:bg-orange-500/5'
+                                    : formData.cloud !== cloud.id && 'hover:border-lava-600/50 hover:bg-lava-600/5'
                                 )}
                                 title={isLocked ? 'Remove all workloads to change cloud provider' : undefined}
                               >
                                 <div className={clsx(
                                   'text-lg font-semibold',
-                                  formData.cloud === cloud.id ? 'text-orange-500' : 'text-[var(--text-primary)]'
+                                  formData.cloud === cloud.id ? 'text-lava-600' : 'text-[var(--text-primary)]'
                                 )}>
                                   {cloud.name}
                                 </div>
                                 {formData.cloud === cloud.id && (
                                   <div className="absolute top-2 right-2">
-                                    <CheckIcon className="w-4 h-4 text-orange-500" />
+                                    <CheckIcon className="w-4 h-4 text-lava-600" />
                                   </div>
                                 )}
                               </button>
@@ -1875,7 +1875,7 @@ export default function Calculator() {
                           }}
                           className={clsx(
                             "w-full text-sm",
-                            !formData.region && "border-orange-500/50 ring-1 ring-orange-500/30"
+                            !formData.region && "border-lava-600/50 ring-1 ring-lava-600/30"
                           )}
                         >
                           <option value="">{isLoadingRegions ? 'Loading regions...' : 'Select region'}</option>
@@ -1899,7 +1899,7 @@ export default function Calculator() {
                           }}
                           className={clsx(
                             "w-full text-sm",
-                            !formData.tier && "border-orange-500/50 ring-1 ring-orange-500/30"
+                            !formData.tier && "border-lava-600/50 ring-1 ring-lava-600/30"
                           )}
                         >
                           <option value="">Select tier</option>
@@ -2044,7 +2044,7 @@ export default function Calculator() {
                     title={!canCreateEstimate ? `Missing: ${getMissingFields().join(', ')}` : undefined}
                     className={clsx(
                       "btn btn-primary",
-                      hasUnsavedChanges && "ring-2 ring-orange-500/50 ring-offset-2 ring-offset-[var(--bg-primary)]"
+                      hasUnsavedChanges && "ring-2 ring-lava-600/50 ring-offset-2 ring-offset-[var(--bg-primary)]"
                     )}
                   >
                     <CheckIcon className="w-4 h-4" />
@@ -2064,7 +2064,7 @@ export default function Calculator() {
           >
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-semibold flex items-center gap-2 text-[var(--text-primary)]">
-                <ServerStackIcon className="w-5 h-5 text-orange-500" />
+                <ServerStackIcon className="w-5 h-5 text-lava-600" />
                 Workloads
                 <span className="ml-1 text-sm font-normal text-[var(--text-muted)]">
                   ({lineItems.length})
@@ -2120,7 +2120,7 @@ export default function Calculator() {
                         className={clsx(
                           "p-1.5 rounded-md transition-colors",
                           workloadsViewMode === 'table'
-                            ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                            ? "bg-[var(--bg-primary)] text-lava-600 shadow-sm"
                             : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                         )}
                         title="Table view (default)"
@@ -2132,7 +2132,7 @@ export default function Calculator() {
                         className={clsx(
                           "p-1.5 rounded-md transition-colors",
                           workloadsViewMode === 'cards'
-                            ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                            ? "bg-[var(--bg-primary)] text-lava-600 shadow-sm"
                             : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                         )}
                         title="Compact cards"
@@ -2144,7 +2144,7 @@ export default function Calculator() {
                         className={clsx(
                           "p-1.5 rounded-md transition-colors",
                           workloadsViewMode === 'expanded'
-                            ? "bg-[var(--bg-primary)] text-orange-500 shadow-sm"
+                            ? "bg-[var(--bg-primary)] text-lava-600 shadow-sm"
                             : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                         )}
                         title="Expanded cards with details"
@@ -2158,7 +2158,7 @@ export default function Calculator() {
                 {canAddWorkload && id && (
                   <button
                     onClick={() => setShowAddForm(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors shadow-sm"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-lava-600 hover:bg-lava-700 rounded-lg transition-colors shadow-sm"
                   >
                     <PlusIcon className="w-4 h-4" />
                     Add
@@ -2172,7 +2172,7 @@ export default function Calculator() {
                 {!canCreateEstimate ? (
                   <>
                     <p className="text-sm mb-2 text-[var(--text-muted)]">Complete required fields to create estimate</p>
-                    <p className="text-xs text-orange-500 mb-3">
+                    <p className="text-xs text-lava-600 mb-3">
                       Missing: {getMissingFields().join(', ')}
                     </p>
                   </>
@@ -2192,7 +2192,7 @@ export default function Calculator() {
               <div className="card p-8 text-center">
                 <div className="flex flex-col items-center gap-4">
                   <div className="relative">
-                    <div className="w-12 h-12 rounded-full border-4 border-[var(--border-primary)] border-t-orange-500 animate-spin"></div>
+                    <div className="w-12 h-12 rounded-full border-4 border-[var(--border-primary)] border-t-lava-600 animate-spin"></div>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-[var(--text-primary)]">Loading workloads...</p>
@@ -2213,7 +2213,7 @@ export default function Calculator() {
                             type="checkbox"
                             checked={selectedItems.size === lineItems.length && lineItems.length > 0}
                             onChange={toggleSelectAll}
-                            className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                            className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-lava-600 focus:ring-lava-600"
                           />
                         </div>
                       )}
@@ -2334,7 +2334,7 @@ export default function Calculator() {
                           <div 
                             className={clsx(
                               "grid grid-cols-12 gap-2 py-3 px-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-all",
-                              isSelected && isBulkSelectMode && "bg-orange-500/5",
+                              isSelected && isBulkSelectMode && "bg-lava-600/5",
                               isExpanded && "bg-[var(--bg-tertiary)]"
                             )}
                             onClick={() => toggleExpand(item.line_item_id)}
@@ -2346,7 +2346,7 @@ export default function Calculator() {
                                   type="checkbox"
                                   checked={isSelected}
                                   onChange={() => toggleItemSelection(item.line_item_id)}
-                                  className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-orange-500 focus:ring-orange-500"
+                                  className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-lava-600 focus:ring-lava-600"
                                 />
                               </div>
                             )}
@@ -2376,7 +2376,7 @@ export default function Calculator() {
                                       className={clsx(
                                         "px-1.5 py-0.5 rounded text-[10px] font-medium",
                                         badge.accent 
-                                          ? "bg-orange-500/10 text-orange-600 dark:text-orange-400" 
+                                          ? "bg-lava-600/10 text-lava-700 dark:text-lava-500" 
                                           : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
                                       )}
                                     >
@@ -2423,7 +2423,7 @@ export default function Calculator() {
                             <div className="col-span-7 sm:col-span-4 flex items-center justify-end gap-3">
                               {/* Cost */}
                               <div className="flex flex-col items-end justify-center">
-                                <span className="font-bold text-orange-500">{formatCurrency(costs.totalCost)}</span>
+                                <span className="font-bold text-lava-600">{formatCurrency(costs.totalCost)}</span>
                                 <span className="text-[10px] text-[var(--text-muted)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                               </div>
                               
@@ -2446,10 +2446,10 @@ export default function Calculator() {
                                 {/* Expand indicator */}
                                 <div className={clsx(
                                   "p-1 rounded transition-colors",
-                                  isExpanded ? "bg-orange-500/10" : "hover:bg-[var(--bg-tertiary)]"
+                                  isExpanded ? "bg-lava-600/10" : "hover:bg-[var(--bg-tertiary)]"
                                 )}>
                                   {isExpanded ? (
-                                    <ChevronUpIcon className="w-5 h-5 text-orange-500" />
+                                    <ChevronUpIcon className="w-5 h-5 text-lava-600" />
                                   ) : (
                                     <ChevronDownIcon className="w-5 h-5 text-[var(--text-muted)]" />
                                   )}
@@ -2468,7 +2468,7 @@ export default function Calculator() {
                                   className={clsx(
                                     "px-1.5 py-0.5 rounded text-[10px] font-medium",
                                     badge.accent 
-                                      ? "bg-orange-500/10 text-orange-600 dark:text-orange-400" 
+                                      ? "bg-lava-600/10 text-lava-700 dark:text-lava-500" 
                                       : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
                                   )}
                                 >
@@ -2569,7 +2569,7 @@ export default function Calculator() {
                               <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id) }}
-                                  className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] hover:text-orange-500 transition-colors group"
+                                  className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] hover:text-lava-600 transition-colors group"
                                 >
                                   <svg 
                                     className={`w-3 h-3 transition-transform ${formulaVisibleItems.has(item.line_item_id) ? 'rotate-90' : ''}`} 
@@ -2632,11 +2632,11 @@ export default function Calculator() {
                                             <span>×</span>
                                             <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                             <span>=</span>
-                                            <span className="text-orange-500 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                            <span className="text-lava-600 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                             <span>×</span>
                                             <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                             <span>=</span>
-                                            <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                            <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
                                           </div>
                                         </div>
                                       )
@@ -2671,11 +2671,11 @@ export default function Calculator() {
                                             </>
                                           )}
                                           <span>=</span>
-                                          <span className="text-orange-500 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-lava-600 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2718,11 +2718,11 @@ export default function Calculator() {
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
-                                          <span className="text-orange-500 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-lava-600 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2757,11 +2757,11 @@ export default function Calculator() {
                                           <span>×</span>
                                           <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
-                                          <span className="text-orange-500 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-lava-600 font-semibold">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2797,7 +2797,7 @@ export default function Calculator() {
                                             <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                           )}
                                           <span>=</span>
-                                          <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
                                           <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
@@ -2827,7 +2827,7 @@ export default function Calculator() {
                                             </>
                                           )}
                                           <span>=</span>
-                                          <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -2882,7 +2882,7 @@ export default function Calculator() {
                                         {isServerless ? (
                                           <>
                                             <span className="text-purple-500">{dbuPerHour.toFixed(2)} DBU/hr</span>
-                                            <span className="text-orange-400 text-[9px]">(Serverless{photonEnabled ? ' + Photon' : ''})</span>
+                                            <span className="text-lava-500 text-[9px]">(Serverless{photonEnabled ? ' + Photon' : ''})</span>
                                           </>
                                         ) : (
                                           <>
@@ -2896,7 +2896,7 @@ export default function Calculator() {
                                             {photonEnabled && (
                                               <>
                                                 <span>×</span>
-                                                <span className="text-orange-400">Photon</span>
+                                                <span className="text-lava-500">Photon</span>
                                               </>
                                             )}
                                             <span>=</span>
@@ -2906,7 +2906,7 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                         <span>=</span>
-                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
@@ -2942,7 +2942,7 @@ export default function Calculator() {
                                           </>
                                         )}
                                         <span>=</span>
-                                        <span className="text-orange-600 font-bold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-lava-700 font-bold">{formatCurrency(costs.totalCost)}</span>
                                       </div>
                                     </div>
                                   )
@@ -2953,7 +2953,7 @@ export default function Calculator() {
                           
                           {/* Expanded Form */}
                           {isExpanded && (
-                            <div className="bg-[var(--bg-secondary)] border-b-2 border-orange-500/20 p-4">
+                            <div className="bg-[var(--bg-secondary)] border-b-2 border-lava-600/20 p-4">
                               <WorkloadErrorBoundary
                                 onReset={() => {
                                   setExpandedItems(prev => {
@@ -3061,7 +3061,7 @@ export default function Calculator() {
                                 <span className="badge badge-teal">Serverless</span>
                               )}
                               {item.photon_enabled && (
-                                <span className="badge badge-orange">
+                                <span className="badge badge-lava">
                                   <BoltIcon className="w-3 h-3 mr-0.5" />
                                   Photon
                                 </span>
@@ -3086,7 +3086,7 @@ export default function Calculator() {
                               return (
                                 <>
                                   <p className={clsx(
-                                    "font-bold text-orange-500 transition-opacity",
+                                    "font-bold text-lava-600 transition-opacity",
                                     workloadsViewMode === 'cards' && !isExpanded ? "text-base" : "text-lg",
                                     showVMLoading && "opacity-60"
                                   )}>
@@ -3206,11 +3206,11 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
-                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3223,11 +3223,11 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-purple-500">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
                                         <span>=</span>
-                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3242,11 +3242,11 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
-                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3259,11 +3259,11 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
-                                        <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                        <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
                                         <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                        <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                       </>
                                     )
                                   }
@@ -3280,7 +3280,7 @@ export default function Calculator() {
                                       )}
                                       <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
                                       <span>=</span>
-                                      <span className="text-orange-500">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                      <span className="text-lava-600">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                       <span>×</span>
                                       <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
                                       {hasVMCost ? (
@@ -3294,7 +3294,7 @@ export default function Calculator() {
                                       ) : (
                                         <span>=</span>
                                       )}
-                                      <span className="text-orange-600 font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                      <span className="text-lava-700 font-semibold">{formatCurrency(costs.totalCost)}</span>
                                     </>
                                   )
                                 })()}
@@ -3359,7 +3359,7 @@ export default function Calculator() {
                 {/* Add New Workload Section */}
                 {!canAddWorkload ? (
                   <div className="p-4 rounded-xl border-2 border-dashed border-[var(--border-secondary)] bg-[var(--bg-tertiary)] text-center">
-                    <ExclamationTriangleIcon className="w-6 h-6 mx-auto mb-2 text-orange-500" />
+                    <ExclamationTriangleIcon className="w-6 h-6 mx-auto mb-2 text-lava-600" />
                     <p className="text-sm text-[var(--text-muted)]">
                       Please select a <span className="font-semibold text-[var(--text-secondary)]">Region</span> and <span className="font-semibold text-[var(--text-secondary)]">Databricks Tier</span> before adding workloads
                     </p>
@@ -3392,7 +3392,7 @@ export default function Calculator() {
                 ) : (
                   <button
                     onClick={() => setShowAddForm(true)}
-                    className="w-full p-4 rounded-xl border-2 border-dashed border-[var(--border-secondary)] hover:border-orange-500/50 hover:bg-orange-500/5 transition-all flex items-center justify-center gap-2 text-[var(--text-muted)] hover:text-orange-500"
+                    className="w-full p-4 rounded-xl border-2 border-dashed border-[var(--border-secondary)] hover:border-lava-600/50 hover:bg-lava-600/5 transition-all flex items-center justify-center gap-2 text-[var(--text-muted)] hover:text-lava-600"
                   >
                     <PlusIcon className="w-5 h-5" />
                     Add Workload
@@ -3410,15 +3410,15 @@ export default function Calculator() {
               {/* Header with Minimize Button */}
               <div className="flex items-center justify-between mb-4">
                 <h3 className="flex items-center gap-2">
-                  <CurrencyDollarIcon className="w-5 h-5 text-orange-500" />
+                  <CurrencyDollarIcon className="w-5 h-5 text-lava-600" />
                   <span className="font-semibold text-[var(--text-primary)]">Cost Summary</span>
                   {(isLoadingLineItems && !lineItemsLoaded) && (
-                    <div className="w-3 h-3 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />
+                    <div className="w-3 h-3 border-2 border-lava-600/30 border-t-lava-600 rounded-full animate-spin" />
                   )}
                 </h3>
                 <button
                   onClick={() => setIsCostSummaryCollapsed(true)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[var(--text-muted)] hover:text-orange-500 hover:bg-orange-500/10 border border-transparent hover:border-orange-500/20"
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[var(--text-muted)] hover:text-lava-600 hover:bg-lava-600/10 border border-transparent hover:border-lava-600/20"
                   title="Dock to bottom bar"
                 >
                   <ChevronDownIcon className="w-3.5 h-3.5" />
@@ -3428,7 +3428,7 @@ export default function Calculator() {
               
               {!canAddWorkload ? (
                 <div className="text-center py-8">
-                  <ExclamationTriangleIcon className="w-10 h-10 mx-auto mb-3 text-orange-500" />
+                  <ExclamationTriangleIcon className="w-10 h-10 mx-auto mb-3 text-lava-600" />
                   <p className="text-sm text-[var(--text-muted)]">Select region & tier to see estimates</p>
                 </div>
               ) : (isLoadingLineItems && !lineItemsLoaded) ? (
@@ -3439,10 +3439,10 @@ export default function Calculator() {
               ) : lineItems.length > 0 ? (
                 <div className="space-y-4">
                   {/* Monthly Total - Hero */}
-                  <div className="text-center py-4 px-3 bg-gradient-to-br from-orange-500/5 to-amber-500/5 rounded-xl border border-orange-500/10">
+                  <div className="text-center py-4 px-3 bg-gradient-to-br from-lava-600/5 to-amber-500/5 rounded-xl border border-lava-600/10">
                     <p className="text-xs text-[var(--text-muted)] mb-1">Monthly Estimate</p>
                     <p className={clsx(
-                      "text-3xl font-bold text-orange-500",
+                      "text-3xl font-bold text-lava-600",
                       isLoadingVMCosts && "opacity-60"
                     )}>
                       {formatCurrency(totalCosts.totalCost)}
@@ -3476,7 +3476,7 @@ export default function Calculator() {
                           .map(item => ({ item, costs: calculateItemCost(item) }))
                           .sort((a, b) => b.costs.totalCost - a.costs.totalCost)
                         
-                        const barColors = ['bg-orange-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500', 'bg-indigo-500']
+                        const barColors = ['bg-lava-600', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500', 'bg-indigo-500']
                         
                         return sortedItems.map(({ item, costs }, idx) => {
                           const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
@@ -3489,7 +3489,7 @@ export default function Calculator() {
                               title={`Click to view "${item.workload_name}"`}
                             >
                               <div className="flex items-center justify-between text-xs mb-1">
-                                <span className="text-[var(--text-secondary)] truncate max-w-[110px] group-hover:text-orange-500 transition-colors font-medium" title={item.workload_name}>
+                                <span className="text-[var(--text-secondary)] truncate max-w-[110px] group-hover:text-lava-600 transition-colors font-medium" title={item.workload_name}>
                                   {item.workload_name}
                                 </span>
                                 <div className="flex items-center gap-2">
@@ -3553,7 +3553,7 @@ export default function Calculator() {
                         .map(item => ({ item, costs: calculateItemCost(item) }))
                         .sort((a, b) => b.costs.totalCost - a.costs.totalCost)
                       
-                      const barColors = ['bg-orange-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500', 'bg-indigo-500']
+                      const barColors = ['bg-lava-600', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-cyan-500', 'bg-indigo-500']
                       
                       return sortedItems.map(({ item, costs }, idx) => {
                         const percent = totalCosts.totalCost > 0 ? (costs.totalCost / totalCosts.totalCost) * 100 : 0
@@ -3568,7 +3568,7 @@ export default function Calculator() {
                             className="w-full text-left p-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors group"
                           >
                             <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="font-medium text-[var(--text-primary)] truncate max-w-[200px] group-hover:text-orange-500" title={item.workload_name}>
+                              <span className="font-medium text-[var(--text-primary)] truncate max-w-[200px] group-hover:text-lava-600" title={item.workload_name}>
                                 {item.workload_name}
                               </span>
                               <div className="flex items-center gap-3 flex-shrink-0">
@@ -3597,7 +3597,7 @@ export default function Calculator() {
                 {/* Left side - Expand to sidebar panel button */}
                 <button
                   onClick={() => setIsCostSummaryCollapsed(false)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-orange-500 hover:bg-orange-500/10 text-sm transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[var(--text-muted)] hover:text-lava-600 hover:bg-lava-600/10 text-sm transition-colors"
                   title="Expand Cost Summary panel"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -3615,8 +3615,8 @@ export default function Calculator() {
                     className={clsx(
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all",
                       showCollapsedBreakdown 
-                        ? "bg-orange-500/10 border-orange-500/30 text-orange-500" 
-                        : "border-[var(--border-primary)] hover:border-orange-500/30 hover:bg-orange-500/5"
+                        ? "bg-lava-600/10 border-lava-600/30 text-lava-600" 
+                        : "border-[var(--border-primary)] hover:border-lava-600/30 hover:bg-lava-600/5"
                     )}
                   >
                     <ListBulletIcon className="w-4 h-4" />
@@ -3642,8 +3642,8 @@ export default function Calculator() {
                 
                 {/* Right side - Total cost */}
                 <div className="flex items-center">
-                  <div className="text-right px-3 py-1.5 bg-gradient-to-r from-orange-500/10 to-amber-500/10 rounded-lg border border-orange-500/20">
-                    <p className="text-lg sm:text-xl font-bold text-orange-500">
+                  <div className="text-right px-3 py-1.5 bg-gradient-to-r from-lava-600/10 to-amber-500/10 rounded-lg border border-lava-600/20">
+                    <p className="text-lg sm:text-xl font-bold text-lava-600">
                       {formatCurrency(totalCosts.totalCost)}
                       <span className="text-[10px] font-normal text-[var(--text-muted)] ml-1">/mo</span>
                     </p>

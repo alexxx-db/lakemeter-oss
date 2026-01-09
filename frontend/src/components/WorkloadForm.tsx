@@ -876,7 +876,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   if (isWorkloadTypesLoading) {
     return (
       <div className="p-8 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-orange-500 border-t-transparent mx-auto mb-4"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-lava-600 border-t-transparent mx-auto mb-4"></div>
         <p className="text-sm text-[var(--text-muted)]">Loading workload configuration...</p>
       </div>
     )
@@ -1050,18 +1050,18 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           <div className={clsx(
             "p-3 rounded-lg border transition-all",
             (form.photon_enabled || form.serverless_enabled)
-              ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700"
+              ? "bg-lava-600/5 dark:bg-lava-600/20 border-lava-400/30 dark:border-lava-600/50"
               : "bg-[var(--bg-tertiary)] border-[var(--border-primary)]"
           )}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <BoltIcon className={clsx(
                   "w-4 h-4",
-                  (form.photon_enabled || form.serverless_enabled) ? "text-orange-600 dark:text-orange-400" : "text-orange-600 dark:text-orange-500"
+                  (form.photon_enabled || form.serverless_enabled) ? "text-lava-700 dark:text-lava-500" : "text-lava-700 dark:text-lava-600"
                 )} />
                 <span className={clsx(
                   "text-sm",
-                  (form.photon_enabled || form.serverless_enabled) ? "text-orange-700 dark:text-orange-300 font-medium" : "text-[var(--text-secondary)]"
+                  (form.photon_enabled || form.serverless_enabled) ? "text-lava-700 dark:text-lava-400 font-medium" : "text-[var(--text-secondary)]"
                 )}>Photon</span>
                 {form.serverless_enabled && (
                   <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">Auto</span>
@@ -1084,7 +1084,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </button>
             </div>
             {(form.photon_enabled || form.serverless_enabled) && (
-              <p className="text-xs mt-2 text-orange-600 dark:text-orange-400">
+              <p className="text-xs mt-2 text-lava-700 dark:text-lava-500">
                 Photon acceleration enabled for faster query execution
               </p>
             )}
@@ -1897,7 +1897,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                   className={clsx(
                     "px-3 py-1 text-xs rounded-l-md border transition-colors",
                     !useDirectHours 
-                      ? "bg-orange-500 text-white border-orange-500" 
+                      ? "bg-lava-600 text-white border-lava-600" 
                       : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]"
                   )}
                 >
@@ -1909,7 +1909,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                   className={clsx(
                     "px-3 py-1 text-xs rounded-r-md border-y border-r transition-colors",
                     useDirectHours 
-                      ? "bg-orange-500 text-white border-orange-500" 
+                      ? "bg-lava-600 text-white border-lava-600" 
                       : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]"
                   )}
                 >
