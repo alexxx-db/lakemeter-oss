@@ -228,7 +228,7 @@ interface WorkloadCostDisplayProps {
   className?: string
 }
 
-const WorkloadCostDisplay: React.FC<WorkloadCostDisplayProps> = ({ 
+const WorkloadCostDisplay: React.FC<WorkloadCostDisplayProps> = React.memo(({ 
   costs, 
   size = 'md', 
   showDBUs = true,
@@ -242,19 +242,19 @@ const WorkloadCostDisplay: React.FC<WorkloadCostDisplayProps> = ({
   }
   
   return (
-    <div className={clsx("flex flex-col items-end justify-center", isLoading && "opacity-60", className)}>
-      <span className={clsx("font-medium text-[var(--text-primary)] transition-opacity", sizeClasses[size].cost)}>
+    <div className={clsx("flex flex-col items-end justify-center min-w-[80px]", isLoading && "opacity-60", className)}>
+      <span className={clsx("font-medium text-[var(--text-primary)] tabular-nums", sizeClasses[size].cost)}>
         {formatCurrency(costs.totalCost)}
         {isLoading && <span className="text-xs font-normal text-[var(--text-muted)] ml-1">...</span>}
       </span>
       {showDBUs && (
-        <span className={clsx("text-[var(--text-muted)]", sizeClasses[size].dbu)}>
+        <span className={clsx("text-[var(--text-muted)] tabular-nums", sizeClasses[size].dbu)}>
           {formatNumber(costs.monthlyDBUs)} DBUs/mo
         </span>
       )}
     </div>
   )
-}
+})
 
 // ============================================
 // END SHARED COMPONENTS
@@ -3773,6 +3773,41 @@ export default function Calculator() {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Floating Bulk Delete Action Bar - Shows when items are selected */}
+      {selectedItems.size > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 50 }}
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-xl rounded-xl px-4 py-3 flex items-center gap-4"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-[var(--text-primary)]">
+              {selectedItems.size} workload{selectedItems.size !== 1 ? 's' : ''} selected
+            </span>
+          </div>
+          
+          <div className="h-5 w-px bg-[var(--border-primary)]" />
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkDelete}
+              className="btn bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1.5"
+            >
+              <TrashIcon className="w-4 h-4" />
+              Delete
+            </button>
+            <button
+              onClick={exitBulkSelectMode}
+              className="btn btn-secondary text-sm px-3 py-1.5"
+            >
+              <XMarkIcon className="w-4 h-4" />
+              Cancel
+            </button>
+          </div>
+        </motion.div>
       )}
       
       {/* Delete Confirmation Modal */}

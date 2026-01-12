@@ -963,7 +963,7 @@ export function ChatPanel({
         )}
         
         {/* Text Input with Auto-expand - Submit button inside */}
-        <div className="relative">
+        <div className="relative flex items-end">
           <textarea
             ref={inputRef}
             value={inputValue}
@@ -981,12 +981,13 @@ export function ChatPanel({
             }}
           />
           
-          {/* Submit/Stop Button - Inside the input area */}
+          {/* Submit/Stop Button - Aligned to bottom of textarea */}
           <button
             onClick={isLoading ? stopGeneration : () => sendMessage()}
             disabled={!isLoading && !inputValue.trim()}
             className={clsx(
-              "absolute right-2 bottom-2 w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150",
+              "absolute right-2 w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150",
+              "bottom-[6px]", // Align with text baseline
               isLoading 
                 ? "bg-red-500 hover:bg-red-600 text-white"
                 : inputValue.trim()
@@ -1004,7 +1005,7 @@ export function ChatPanel({
           
           {/* Character count for long messages */}
           {inputValue.length > 100 && (
-            <span className="absolute right-12 bottom-3 text-[9px] text-[var(--text-muted)] bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded">
+            <span className="absolute right-12 bottom-[10px] text-[9px] text-[var(--text-muted)] bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded">
               {inputValue.length}
             </span>
           )}
