@@ -112,9 +112,11 @@ export function ChatPanel({
   const setPanelWidth = onWidthChange ?? setLocalPanelWidth
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const userScrolledRef = useRef(false) // Track if user manually scrolled
   
   // Calculate total cost from itemCosts - memoized for real-time updates
   const totalCost = useMemo(() => {
@@ -190,10 +192,29 @@ export function ChatPanel({
     ]
   }, [currentWorkloads])
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change - but only if user hasn't manually scrolled up
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (!userScrolledRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
+  
+  // Reset scroll tracking when loading starts (new message being sent)
+  useEffect(() => {
+    if (isLoading) {
+      userScrolledRef.current = false
+    }
+  }, [isLoading])
+  
+  // Handle manual scroll - detect if user scrolled up
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    
+    // Check if user is at the bottom (within 100px)
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100
+    userScrolledRef.current = !isAtBottom
+  }, [])
 
   // Focus input when panel opens
   useEffect(() => {
@@ -768,7 +789,11 @@ I can assist you with:
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+      <div 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-5"
+      >
         {messages.map((message) => (
           <div
             key={message.id}

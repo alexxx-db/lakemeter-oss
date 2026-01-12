@@ -467,12 +467,12 @@ export default function Calculator() {
     const ref = workloadRefs.current[lineItemId]
     if (ref) {
       ref.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      // Brief highlight effect
-      ref.classList.add('ring-2', 'ring-lava-600', 'ring-offset-2')
+      // Brief highlight effect - use background color instead of ring for better alignment
+      ref.style.backgroundColor = 'rgba(255, 54, 33, 0.1)'
+      ref.style.transition = 'background-color 0.3s ease'
       setTimeout(() => {
-        // Check ref still exists before removing classes
         if (workloadRefs.current[lineItemId]) {
-          workloadRefs.current[lineItemId]?.classList.remove('ring-2', 'ring-lava-600', 'ring-offset-2')
+          workloadRefs.current[lineItemId]!.style.backgroundColor = ''
         }
       }, 1500)
     }

@@ -1603,27 +1603,58 @@ class EstimateAgent:
                         follow_up_msg += f"\n*{result['pending_proposals']} pending proposal(s)*"
                     break
                 
-                # For analyze_estimate, format recommendations
+                # For analyze_estimate, format comprehensive recommendations
                 elif tool_name == "analyze_estimate" and not result.get("error"):
                     recommendations = result.get("recommendations", [])
+                    insights = result.get("insights", [])
+                    cost_breakdown = result.get("cost_breakdown", {})
                     
                     follow_up_msg = f"\n\n**Estimate Analysis**\n\n"
                     follow_up_msg += f"- **Total Monthly Cost**: {result.get('total_monthly_cost', '$0.00')}\n"
                     follow_up_msg += f"- **Total Annual Cost**: {result.get('total_annual_cost', '$0.00')}\n"
                     follow_up_msg += f"- **Workloads**: {result.get('workload_count', 0)}\n\n"
                     
+                    # Cost breakdown by type
+                    if cost_breakdown:
+                        follow_up_msg += "**Cost Breakdown by Type**:\n"
+                        for wtype, wcost in cost_breakdown.items():
+                            follow_up_msg += f"- {wtype}: {wcost}\n"
+                        follow_up_msg += "\n"
+                    
+                    # Summary insights
+                    if insights:
+                        follow_up_msg += "**Key Insights**:\n"
+                        for insight in insights:
+                            follow_up_msg += f"- {insight}\n"
+                        follow_up_msg += "\n"
+                    
+                    # Recommendations grouped by category
                     if recommendations:
-                        follow_up_msg += f"**Optimization Recommendations** ({len(recommendations)}):\n\n"
-                        for i, rec in enumerate(recommendations, 1):
-                            follow_up_msg += f"**{i}. {rec.get('workload', 'N/A')}** ({rec.get('type', 'general')})\n"
-                            follow_up_msg += f"   - {rec.get('suggestion', 'No suggestion')}\n"
-                            if rec.get('potential_savings'):
-                                follow_up_msg += f"   - *Potential savings*: {rec['potential_savings']}\n"
-                            if rec.get('consideration'):
-                                follow_up_msg += f"   - *Note*: {rec['consideration']}\n"
+                        # Group by category
+                        by_category: Dict[str, list] = {}
+                        for rec in recommendations:
+                            cat = rec.get("category", "General")
+                            if cat not in by_category:
+                                by_category[cat] = []
+                            by_category[cat].append(rec)
+                        
+                        follow_up_msg += f"**Optimization Recommendations** ({len(recommendations)} total):\n\n"
+                        
+                        for category, recs in by_category.items():
+                            follow_up_msg += f"**{category}**:\n"
+                            for rec in recs:
+                                follow_up_msg += f"- **{rec.get('workload', 'N/A')}**: {rec.get('suggestion', '')}\n"
+                                if rec.get('detail'):
+                                    follow_up_msg += f"  - {rec['detail']}\n"
+                                if rec.get('potential_savings'):
+                                    follow_up_msg += f"  - *Savings*: {rec['potential_savings']}\n"
+                                if rec.get('consideration'):
+                                    follow_up_msg += f"  - *Note*: {rec['consideration']}\n"
                             follow_up_msg += "\n"
                     else:
-                        follow_up_msg += "*No specific optimization recommendations at this time. Your estimate looks well-configured!*\n"
+                        follow_up_msg += "✅ **No specific optimizations needed!** Your estimate appears well-configured.\n"
+                    
+                    follow_up_msg += "\n*Need more details on any recommendation? Just ask!*"
                     break
             
             # If no specific message from tools, check for proposed workloads
@@ -3157,7 +3188,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
         }
     
     def _analyze_estimate(self, focus_area: str = "all") -> Dict[str, Any]:
-        """Analyze estimate using actual costs and provide recommendations."""
+        """Analyze estimate using actual costs and provide comprehensive recommendations."""
         if not self.current_estimate:
             return {"error": "No estimate loaded"}
         
@@ -3169,7 +3200,10 @@ Each workload needs to be confirmed individually. Review the configurations and 
         
         recommendations = []
         total_cost = 0
+        cost_by_type: Dict[str, float] = {}
+        workload_details = []
         
+        # Analyze each workload
         for workload in self.current_workloads:
             wtype = workload.get("workload_type", "")
             wname = workload.get("workload_name", "Unnamed")
@@ -3181,49 +3215,252 @@ Each workload needs to be confirmed individually. Review the configurations and 
             cost = float(cost) if cost else 0
             total_cost += cost
             
-            # Cost optimization recommendations
+            # Track cost by type
+            cost_by_type[wtype] = cost_by_type.get(wtype, 0) + cost
+            
+            # Store workload details for summary
+            workload_details.append({
+                "name": wname,
+                "type": wtype,
+                "cost": cost,
+                "serverless": workload.get("serverless_enabled", False),
+                "photon": workload.get("photon_enabled", False),
+                "hours": workload.get("hours_per_month", 0),
+                "worker_pricing": workload.get("worker_pricing_tier", "on_demand")
+            })
+            
+            # ============================================
+            # COST OPTIMIZATION RECOMMENDATIONS
+            # ============================================
             if focus_area in ["cost_optimization", "all"]:
-                if wtype == "JOBS" and workload.get("worker_pricing_tier") != "spot":
-                    recommendations.append({
-                        "workload": wname,
-                        "type": "cost",
-                        "current_cost": f"${cost:.2f}/month",
-                        "suggestion": "Consider using spot instances for workers",
-                        "potential_savings": "Up to 90% on worker costs",
-                        "consideration": "Only for fault-tolerant batch jobs"
-                    })
                 
-                if wtype in ["ALL_PURPOSE", "JOBS", "DLT"] and not workload.get("serverless_enabled"):
-                    hours = workload.get("hours_per_month", 730)
-                    if hours and hours < 200:
+                # JOBS recommendations
+                if wtype == "JOBS":
+                    # Spot instance recommendation
+                    if workload.get("worker_pricing_tier") != "spot":
                         recommendations.append({
                             "workload": wname,
                             "type": "cost",
+                            "category": "Spot Instances",
                             "current_cost": f"${cost:.2f}/month",
-                            "suggestion": "Consider serverless for this low-utilization workload",
-                            "current_hours": f"{hours} hours/month",
-                            "potential_savings": "Pay only for actual usage"
+                            "suggestion": "Use spot instances for worker nodes",
+                            "detail": "Spot instances offer 60-90% cost savings vs on-demand. Databricks automatically handles spot interruptions by migrating tasks.",
+                            "potential_savings": "60-90% on worker VM costs",
+                            "consideration": "Best for fault-tolerant batch ETL jobs. Not recommended for time-critical SLA workloads."
+                        })
+                    
+                    # Serverless recommendation for low utilization
+                    hours = workload.get("hours_per_month", 0)
+                    if not workload.get("serverless_enabled") and hours and hours < 150:
+                        recommendations.append({
+                            "workload": wname,
+                            "type": "cost",
+                            "category": "Serverless Compute",
+                            "current_cost": f"${cost:.2f}/month",
+                            "suggestion": "Switch to Serverless Jobs for low-utilization workloads",
+                            "detail": f"At {hours} hours/month, serverless offers instant startup and pay-per-second billing. No idle costs.",
+                            "potential_savings": "Significant for <150 hrs/month workloads",
+                            "consideration": "Serverless has ~30% DBU premium but no VM costs and instant startup."
+                        })
+                    
+                    # Autoscaling recommendation
+                    min_workers = workload.get("jobs_worker_min", 0)
+                    max_workers = workload.get("jobs_worker_max", 0)
+                    if min_workers == max_workers and max_workers > 1:
+                        recommendations.append({
+                            "workload": wname,
+                            "type": "cost",
+                            "category": "Autoscaling",
+                            "suggestion": "Enable autoscaling by setting different min/max workers",
+                            "detail": f"Currently fixed at {min_workers} workers. Setting min=1 allows cluster to scale down during lighter phases.",
+                            "potential_savings": "10-40% depending on workload variability"
                         })
                 
-                if wtype == "DBSQL" and workload.get("dbsql_warehouse_type") != "SERVERLESS":
+                # ALL_PURPOSE cluster recommendations
+                if wtype == "ALL_PURPOSE":
+                    hours = workload.get("hours_per_month", 730)
+                    if hours >= 600:  # High utilization
+                        if workload.get("worker_pricing_tier") != "reserved_1y":
+                            recommendations.append({
+                                "workload": wname,
+                                "type": "cost",
+                                "category": "Reserved Capacity",
+                                "current_cost": f"${cost:.2f}/month",
+                                "suggestion": "Consider 1-year reserved instances for this high-utilization cluster",
+                                "detail": f"At {hours} hours/month (~{hours/730*100:.0f}% utilization), reserved capacity offers significant savings.",
+                                "potential_savings": "Up to 40% vs on-demand",
+                                "consideration": "Requires commitment. Best for predictable, steady-state workloads."
+                            })
+                    elif hours < 200:
+                        if not workload.get("serverless_enabled"):
+                            recommendations.append({
+                                "workload": wname,
+                                "type": "cost",
+                                "category": "Serverless Compute",
+                                "current_cost": f"${cost:.2f}/month",
+                                "suggestion": "Consider serverless compute for this low-utilization cluster",
+                                "detail": f"At {hours} hours/month, you're paying for idle time. Serverless scales to zero.",
+                                "potential_savings": "Pay only for actual usage"
+                            })
+                
+                # DLT recommendations
+                if wtype == "DLT":
+                    dlt_edition = workload.get("dlt_edition", "CORE")
+                    if dlt_edition == "ADVANCED" and cost < 500:
+                        recommendations.append({
+                            "workload": wname,
+                            "type": "cost",
+                            "category": "DLT Edition",
+                            "current_cost": f"${cost:.2f}/month",
+                            "suggestion": "Review if ADVANCED edition features are needed",
+                            "detail": "ADVANCED edition includes data quality expectations. If not using these features, PRO or CORE may suffice.",
+                            "potential_savings": "PRO is ~15% cheaper, CORE is ~30% cheaper than ADVANCED"
+                        })
+                
+                # DBSQL recommendations
+                if wtype == "DBSQL":
+                    warehouse_type = workload.get("dbsql_warehouse_type", "")
+                    warehouse_size = workload.get("dbsql_warehouse_size", "")
+                    hours = workload.get("hours_per_month", 0)
+                    
+                    if warehouse_type != "SERVERLESS":
+                        recommendations.append({
+                            "workload": wname,
+                            "type": "cost",
+                            "category": "Serverless SQL",
+                            "current_cost": f"${cost:.2f}/month",
+                            "suggestion": "Migrate to Serverless SQL Warehouse",
+                            "detail": "Serverless offers instant startup (<5s vs 5-10 min), automatic scaling, and scales to zero when idle.",
+                            "potential_savings": "Scales to zero when idle, instant startup eliminates warm-up costs",
+                            "consideration": "Serverless has Predictive I/O for 5-10x faster selective queries."
+                        })
+                    
+                    # Check for oversized warehouse
+                    if warehouse_size in ["Large", "X-Large", "2X-Large", "3X-Large", "4X-Large"]:
+                        if hours < 100:
+                            recommendations.append({
+                                "workload": wname,
+                                "type": "cost",
+                                "category": "Warehouse Sizing",
+                                "suggestion": f"Review {warehouse_size} warehouse sizing",
+                                "detail": f"Large warehouse with only {hours} hours/month. Consider if a smaller size would suffice for your query patterns.",
+                                "potential_savings": "Smaller warehouse = lower hourly cost"
+                            })
+                
+                # MODEL_SERVING recommendations  
+                if wtype == "MODEL_SERVING" and cost > 500:
                     recommendations.append({
                         "workload": wname,
                         "type": "cost",
+                        "category": "Model Serving",
                         "current_cost": f"${cost:.2f}/month",
-                        "suggestion": "Consider DBSQL Serverless for automatic scaling",
-                        "potential_savings": "Scales to zero when idle"
+                        "suggestion": "Review model serving GPU utilization",
+                        "detail": "Model serving costs can be optimized by right-sizing GPU types and using scale-to-zero during off-peak hours.",
+                        "potential_savings": "Depends on traffic patterns"
                     })
+                
+                # VECTOR_SEARCH recommendations
+                if wtype == "VECTOR_SEARCH":
+                    endpoint_type = workload.get("vector_search_endpoint_type", "")
+                    if endpoint_type == "STANDARD":
+                        recommendations.append({
+                            "workload": wname,
+                            "type": "cost",
+                            "category": "Vector Search",
+                            "current_cost": f"${cost:.2f}/month",
+                            "suggestion": "Consider OPTIMIZED endpoint if latency requirements allow",
+                            "detail": "OPTIMIZED endpoints are 7x cheaper (~$0.07/hr vs $0.49/hr) with ~250ms latency vs <100ms.",
+                            "potential_savings": "Up to 85% cost reduction",
+                            "consideration": "Only if 250ms latency is acceptable for your use case."
+                        })
+                
+                # FMAPI recommendations
+                if wtype == "FMAPI":
+                    rate_type = workload.get("fmapi_rate_type", "")
+                    quantity = workload.get("fmapi_quantity", 0)
+                    if rate_type in ["input_token", "output_token"] and quantity > 100:
+                        recommendations.append({
+                            "workload": wname,
+                            "type": "cost",
+                            "category": "Foundation Models",
+                            "current_cost": f"${cost:.2f}/month",
+                            "suggestion": "Review token optimization strategies",
+                            "detail": f"At {quantity}M tokens/month, consider: prompt caching, shorter prompts, or Llama models for cost-sensitive use cases.",
+                            "potential_savings": "Llama models are ~5-10x cheaper than proprietary models"
+                        })
+                
+                # LAKEBASE recommendations
+                if wtype == "LAKEBASE":
+                    reads = workload.get("reads_per_sec", 0)
+                    writes = workload.get("bulk_writes_per_sec", 0)
+                    cus = workload.get("lakebase_cu", 1)
+                    if cus > 2 and (reads < 5000 and writes < 1000):
+                        recommendations.append({
+                            "workload": wname,
+                            "type": "cost",
+                            "category": "Lakebase Sizing",
+                            "suggestion": f"Review Lakebase CU sizing (currently {cus} CUs)",
+                            "detail": f"At {reads} reads/sec and {writes} writes/sec, you may be over-provisioned.",
+                            "potential_savings": "Each CU reduction saves ~$350/month"
+                        })
             
-            # Performance recommendations
+            # ============================================
+            # PERFORMANCE RECOMMENDATIONS
+            # ============================================
             if focus_area in ["performance", "all"]:
-                if wtype in ["JOBS", "ALL_PURPOSE", "DLT"] and not workload.get("photon_enabled"):
-                    recommendations.append({
-                        "workload": wname,
-                        "type": "performance",
-                        "suggestion": "Enable Photon for faster processing",
-                        "impact": "2-3x faster on compatible workloads",
-                        "consideration": "Slightly higher DBU cost but often net cheaper due to faster completion"
-                    })
+                # Photon recommendation
+                if wtype in ["JOBS", "ALL_PURPOSE", "DLT"]:
+                    if not workload.get("photon_enabled"):
+                        recommendations.append({
+                            "workload": wname,
+                            "type": "performance",
+                            "category": "Photon Acceleration",
+                            "suggestion": "Enable Photon for faster query execution",
+                            "detail": "Photon provides 2-3x faster performance for SQL and DataFrame operations. Often results in net cost savings despite higher DBU rate.",
+                            "impact": "2-3x faster execution, often lower total cost",
+                            "consideration": "Works best for SQL/DataFrame workloads. UDFs run on standard Spark."
+                        })
+                
+                # Instance type recommendations
+                if wtype in ["JOBS", "ALL_PURPOSE", "DLT"]:
+                    instance_type = workload.get("worker_node_type", "")
+                    if instance_type and "small" in instance_type.lower():
+                        recommendations.append({
+                            "workload": wname,
+                            "type": "performance",
+                            "category": "Instance Sizing",
+                            "suggestion": "Consider larger instance types for better price/performance",
+                            "detail": "Larger instances often provide better price/performance for data-intensive workloads due to better memory/CPU ratios.",
+                            "impact": "Faster job completion, potentially lower cost"
+                        })
+        
+        # ============================================
+        # SUMMARY INSIGHTS
+        # ============================================
+        insights = []
+        
+        # Top cost contributors
+        sorted_costs = sorted(cost_by_type.items(), key=lambda x: x[1], reverse=True)
+        if sorted_costs:
+            top_type = sorted_costs[0]
+            insights.append(f"**Top cost driver**: {top_type[0]} workloads account for ${top_type[1]:.2f}/month ({top_type[1]/total_cost*100:.1f}% of total)")
+        
+        # High-cost workloads
+        high_cost_workloads = [w for w in workload_details if w["cost"] > 1000]
+        if high_cost_workloads:
+            insights.append(f"**High-cost workloads**: {len(high_cost_workloads)} workloads cost >$1,000/month - prioritize these for optimization")
+        
+        # Serverless adoption
+        serverless_count = sum(1 for w in workload_details if w["serverless"])
+        compute_count = sum(1 for w in workload_details if w["type"] in ["JOBS", "ALL_PURPOSE", "DLT", "DBSQL"])
+        if compute_count > 0:
+            insights.append(f"**Serverless adoption**: {serverless_count}/{compute_count} compute workloads use serverless ({serverless_count/compute_count*100:.0f}%)")
+        
+        # Photon adoption
+        photon_count = sum(1 for w in workload_details if w["photon"])
+        photon_eligible = sum(1 for w in workload_details if w["type"] in ["JOBS", "ALL_PURPOSE", "DLT"])
+        if photon_eligible > 0:
+            insights.append(f"**Photon adoption**: {photon_count}/{photon_eligible} eligible workloads use Photon ({photon_count/photon_eligible*100:.0f}%)")
         
         return {
             "total_monthly_cost": f"${total_cost:.2f}",
@@ -3231,6 +3468,8 @@ Each workload needs to be confirmed individually. Review the configurations and 
             "workload_count": len(self.current_workloads),
             "recommendations": recommendations,
             "recommendation_count": len(recommendations),
+            "insights": insights,
+            "cost_breakdown": {k: f"${v:.2f}" for k, v in sorted_costs[:5]},
             "focus_area": focus_area
         }
 
