@@ -3781,32 +3781,28 @@ export default function Calculator() {
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 50 }}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-xl rounded-xl px-4 py-3 flex items-center gap-4"
+          className="fixed bottom-6 inset-x-0 mx-auto w-fit z-40 bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-2xl rounded-full px-5 py-2.5 flex items-center gap-3"
         >
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-[var(--text-primary)]">
-              {selectedItems.size} workload{selectedItems.size !== 1 ? 's' : ''} selected
-            </span>
-          </div>
+          <span className="text-sm font-medium text-[var(--text-primary)]">
+            {selectedItems.size} workload{selectedItems.size !== 1 ? 's' : ''} selected
+          </span>
           
-          <div className="h-5 w-px bg-[var(--border-primary)]" />
+          <div className="h-4 w-px bg-[var(--border-primary)]" />
           
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleBulkDelete}
-              className="btn bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1.5"
-            >
-              <TrashIcon className="w-4 h-4" />
-              Delete
-            </button>
-            <button
-              onClick={exitBulkSelectMode}
-              className="btn btn-secondary text-sm px-3 py-1.5"
-            >
-              <XMarkIcon className="w-4 h-4" />
-              Cancel
-            </button>
-          </div>
+          <button
+            onClick={handleBulkDelete}
+            className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-3 py-1.5 rounded-full transition-colors"
+          >
+            <TrashIcon className="w-4 h-4" />
+            Delete
+          </button>
+          <button
+            onClick={exitBulkSelectMode}
+            className="flex items-center gap-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] text-sm px-2 py-1.5 rounded-full transition-colors"
+          >
+            <XMarkIcon className="w-4 h-4" />
+            Cancel
+          </button>
         </motion.div>
       )}
       

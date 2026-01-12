@@ -205,14 +205,20 @@ export function ChatPanel({
   // Build welcome message content based on context
   const buildWelcomeContent = useCallback(() => {
     if (currentEstimate) {
-      let content = `How can I help you?\n`
-      content += `• 📊 **Analyze** your workloads and costs\n`
-      content += `• 💡 **Suggest optimizations** to save money\n`
-      content += `• ➕ **Add new workloads** to your estimate\n`
-      content += `• ❓ **Answer questions** about Databricks pricing`
-      return content
+      return `**How can I help you today?**
+
+I can assist you with:
+
+- 📊 **Analyze** your workloads and costs
+- 💡 **Optimize** spending with smart recommendations  
+- ➕ **Add workloads** based on your requirements
+- ❓ **Answer questions** about Databricks pricing
+
+*Try the quick actions below or ask me anything!*`
     } else {
-      return `Hi! I'm your Databricks pricing assistant.\n\n*Loading estimate details...*`
+      return `**Hi! I'm your Databricks pricing assistant.**
+
+*Loading estimate details...*`
     }
   }, [currentEstimate])
   

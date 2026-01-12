@@ -326,9 +326,9 @@ export default function Estimates() {
     setIsDeleting(true)
     try {
       await deleteEstimate(estimateToDelete.id)
-      toast.success('Estimate deleted')
-    } catch {
-      toast.error('Failed to delete')
+        toast.success('Estimate deleted')
+      } catch {
+        toast.error('Failed to delete')
     } finally {
       setIsDeleting(false)
       setShowDeleteConfirm(false)
@@ -1017,6 +1017,48 @@ export default function Estimates() {
             </div>
           </motion.div>
         </div>
+      )}
+      
+      {/* Floating Bulk Action Bar - Shows when estimates are selected */}
+      {selectedIds.size > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 50 }}
+          className="fixed bottom-6 inset-x-0 mx-auto w-fit z-40 bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-2xl rounded-full px-5 py-2.5 flex items-center gap-3"
+        >
+          <span className="text-sm font-medium text-[var(--text-primary)]">
+            {selectedIds.size} estimate{selectedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          
+          <div className="h-4 w-px bg-[var(--border-primary)]" />
+          
+          <button
+            onClick={handleBulkExport}
+            disabled={isBulkExporting}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1.5 rounded-full transition-colors disabled:opacity-50"
+          >
+            <ArrowDownTrayIcon className="w-4 h-4" />
+            Export
+          </button>
+          <button
+            onClick={handleBulkDelete}
+            className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-3 py-1.5 rounded-full transition-colors"
+          >
+            <TrashIcon className="w-4 h-4" />
+            Delete
+          </button>
+          <button
+            onClick={() => {
+              setSelectedIds(new Set())
+              setIsBulkMode(false)
+            }}
+            className="flex items-center gap-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] text-sm px-2 py-1.5 rounded-full transition-colors"
+          >
+            <XMarkIcon className="w-4 h-4" />
+            Cancel
+          </button>
+        </motion.div>
       )}
       
     </div>
