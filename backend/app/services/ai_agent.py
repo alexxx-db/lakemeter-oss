@@ -991,17 +991,18 @@ The user will review and confirm before it's added to the estimate.""",
                     "description": "Number of read replicas (0-2) for read scaling. Total instances = 1 primary + 0-2 read replicas (max 3 total). Each replica has same CU as primary and handles reads only. Writes always go to primary."
                 },
                 
-                # === Notes (DETAILED) ===
+                # === Notes (CONVERSATIONAL) ===
                 "reason": {
                     "type": "string",
                     "description": "Brief one-line summary of why this configuration was chosen"
                 },
                 "notes": {
                     "type": "string",
-                    "description": """OPTIONAL: You can leave this empty - comprehensive notes will be auto-generated.
-If you want to add custom notes, they will be REPLACED by auto-generated detailed notes covering:
-- Configuration rationale, sizing assumptions, cost considerations, usage assumptions, and trade-offs.
-Recommendation: Leave empty and let the system generate comprehensive notes automatically."""
+                    "description": """REQUIRED: Provide your conversational recommendation as notes. Include:
+- Why you recommend this configuration (serverless vs classic, warehouse size, etc.)
+- Key benefits (simpler management, pay-per-use, auto-scaling, etc.)
+- Configuration summary (data size, runtime estimate, runs per day, etc.)
+Format as bullet points. This will be displayed to the user as the configuration rationale."""
                 }
             },
             "required": ["workload_type", "workload_name", "reason"]
@@ -3086,11 +3087,17 @@ Each workload needs to be confirmed individually. Review the configurations and 
         else:
             generated_notes = ""
         
-        # Only use our comprehensive generated notes, not the LLM's brief summary
-        if generated_notes:
+        # Preserve AI-provided conversational notes if they exist and are meaningful
+        # Only use generated notes as fallback when AI didn't provide notes
+        ai_provided_notes = workload.get("notes", "")
+        if ai_provided_notes and len(ai_provided_notes.strip()) > 50:
+            # AI provided meaningful notes - keep them
+            # Just add a brief header
+            workload["notes"] = f"**{wtype} Configuration** (AI-generated)\n\n{ai_provided_notes}"
+        elif generated_notes:
+            # Fallback to generated technical notes if AI didn't provide meaningful notes
             workload["notes"] = generated_notes
         else:
-            # Fallback only if no notes were generated at all
             workload["notes"] = "Configuration proposal - details to be added."
         
         return workload
