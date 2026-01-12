@@ -813,10 +813,18 @@ I can assist you with:
                   <textarea
                     value={editingContent}
                     onChange={(e) => setEditingContent(e.target.value)}
-                    className="w-full min-w-[200px] p-3 text-[13px] rounded-xl border border-blue-400 bg-blue-50 dark:bg-blue-900/20 focus:outline-none focus:ring-2 focus:ring-blue-500 text-[var(--text-primary)]"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        saveEditMessage(message.id)
+                      }
+                    }}
+                    className="w-full min-w-[200px] p-3 text-[13px] rounded-xl border border-lava-400 bg-lava-50 dark:bg-lava-900/20 focus:outline-none focus:ring-2 focus:ring-lava-500 text-[var(--text-primary)]"
                     rows={3}
+                    placeholder="Press Enter to save, Shift+Enter for new line"
                   />
-                  <div className="flex gap-2 mt-2 justify-end">
+                  <div className="flex gap-2 mt-2 justify-end items-center">
+                    <span className="text-[10px] text-[var(--text-muted)]">Enter to save · Shift+Enter for new line</span>
                     <button
                       onClick={cancelEditMessage}
                       className="px-3 py-1.5 text-xs rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
@@ -825,7 +833,7 @@ I can assist you with:
                     </button>
                     <button
                       onClick={() => saveEditMessage(message.id)}
-                      className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1"
+                      className="px-3 py-1.5 text-xs rounded-lg bg-lava-600 text-white hover:bg-lava-700 flex items-center gap-1"
                     >
                       <CheckIcon className="w-3 h-3" />
                       Save
@@ -837,21 +845,18 @@ I can assist you with:
                   <div className={clsx(
                     'inline-block text-[13px] leading-[1.7]',
                     message.role === 'user'
-                      ? 'bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-md max-w-[85%] whitespace-pre-wrap text-left shadow-sm'
+                      ? 'bg-lava-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-md max-w-[85%] whitespace-pre-wrap text-left shadow-sm'
                       : message.role === 'system'
                       ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-4 py-2.5 rounded-xl border border-green-200 dark:border-green-800'
                       : 'text-[var(--text-primary)] max-w-full'
                   )}>
                     {(message.isStreaming || message.isThinking) && !message.content ? (
-                      <div className="flex items-center gap-3 px-2 py-2">
+                      <div className="flex items-center gap-2 px-2 py-2">
                         <div className="flex gap-1">
                           <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                           <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                           <span className="w-2 h-2 bg-lava-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                         </div>
-                        <span className="text-sm text-[var(--text-secondary)] italic">
-                          {message.isThinking ? 'AI is thinking...' : 'Generating response...'}
-                        </span>
                       </div>
                     ) : message.role === 'user' ? (
                       // User messages - plain text with preserved whitespace
@@ -953,7 +958,7 @@ I can assist you with:
                     {message.role === 'user' && message.id !== 'welcome' && !isLoading && (
                       <button
                         onClick={() => startEditMessage(message.id, message.content)}
-                        className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-400 hover:text-blue-600 transition-colors"
+                        className="p-1 rounded hover:bg-lava-100 dark:hover:bg-lava-900/30 text-lava-400 hover:text-lava-600 transition-colors"
                         title="Edit message"
                       >
                         <PencilIcon className="w-3.5 h-3.5" />
