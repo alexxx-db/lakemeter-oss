@@ -257,19 +257,48 @@ I can assist you with:
     setEditingContent('')
   }, [])
   
-  const saveEditMessage = useCallback((messageId: string) => {
+  // State for pending edit message - will be sent after state reset
+  const [pendingEditMessage, setPendingEditMessage] = useState<string | null>(null)
+  
+  const saveEditMessage = useCallback(async (messageId: string) => {
     if (!editingContent.trim()) return
     
-    // Update the message in place with edited flag
-    setMessages(prev => prev.map(m => 
-      m.id === messageId 
-        ? { ...m, content: editingContent.trim(), isEdited: true }
-        : m
-    ))
+    // Find the index of the message being edited
+    const messageIndex = messages.findIndex(m => m.id === messageId)
+    if (messageIndex === -1) return
+    
+    const editedContent = editingContent.trim()
+    
+    // Clear proposed workloads since they may have been created after this message
+    setProposedWorkloads([])
     
     setEditingMessageId(null)
     setEditingContent('')
-  }, [editingContent])
+    
+    // Clear the backend conversation to start fresh from the edit point
+    if (conversationId) {
+      try {
+        await fetch(`/api/v1/chat/${conversationId}`, { method: 'DELETE' })
+      } catch {
+        // Ignore errors - we'll start a new conversation anyway
+      }
+    }
+    
+    // Reset conversation state
+    setConversationId(null)
+    
+    // Keep only the welcome message
+    const welcomeMessage: Message = {
+      id: 'welcome',
+      role: 'assistant',
+      content: buildWelcomeContent(),
+      timestamp: new Date()
+    }
+    setMessages([welcomeMessage])
+    
+    // Set pending edit message to be sent after state reset
+    setPendingEditMessage(editedContent)
+  }, [editingContent, messages, conversationId, buildWelcomeContent])
   
   
   // Add welcome message on first open
@@ -455,6 +484,14 @@ I can assist you with:
       abortControllerRef.current = null
     }
   }, [inputValue, isLoading, conversationId, currentEstimate, currentWorkloads, draftEstimate, draftWorkloads, itemCosts])
+
+  // Effect to send pending edit message after state reset
+  useEffect(() => {
+    if (pendingEditMessage && !isLoading) {
+      sendMessage(pendingEditMessage)
+      setPendingEditMessage(null)
+    }
+  }, [pendingEditMessage, isLoading, sendMessage])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
