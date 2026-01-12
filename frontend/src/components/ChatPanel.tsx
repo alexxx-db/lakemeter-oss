@@ -819,7 +819,7 @@ I can assist you with:
                         saveEditMessage(message.id)
                       }
                     }}
-                    className="w-full min-w-[200px] p-3 text-[13px] rounded-xl border border-lava-400 bg-lava-50 dark:bg-lava-900/20 focus:outline-none focus:ring-2 focus:ring-lava-500 text-[var(--text-primary)]"
+                    className="w-full min-w-[200px] p-3 text-[13px] rounded-xl border border-blue-300 bg-[#d7edfe] dark:bg-blue-900/20 focus:outline-none focus:ring-2 focus:ring-blue-400 text-[var(--text-primary)]"
                     rows={3}
                     placeholder="Press Enter to save, Shift+Enter for new line"
                   />
@@ -833,7 +833,7 @@ I can assist you with:
                     </button>
                     <button
                       onClick={() => saveEditMessage(message.id)}
-                      className="px-3 py-1.5 text-xs rounded-lg bg-lava-600 text-white hover:bg-lava-700 flex items-center gap-1"
+                      className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1"
                     >
                       <CheckIcon className="w-3 h-3" />
                       Save
@@ -845,7 +845,7 @@ I can assist you with:
                   <div className={clsx(
                     'inline-block text-[13px] leading-[1.7]',
                     message.role === 'user'
-                      ? 'bg-lava-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-md max-w-[85%] whitespace-pre-wrap text-left shadow-sm'
+                      ? 'bg-[#d7edfe] text-[var(--text-primary)] px-4 py-2.5 rounded-2xl rounded-tr-md max-w-[85%] whitespace-pre-wrap text-left shadow-sm'
                       : message.role === 'system'
                       ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-4 py-2.5 rounded-xl border border-green-200 dark:border-green-800'
                       : 'text-[var(--text-primary)] max-w-full'
@@ -958,7 +958,7 @@ I can assist you with:
                     {message.role === 'user' && message.id !== 'welcome' && !isLoading && (
                       <button
                         onClick={() => startEditMessage(message.id, message.content)}
-                        className="p-1 rounded hover:bg-lava-100 dark:hover:bg-lava-900/30 text-lava-400 hover:text-lava-600 transition-colors"
+                        className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-400 hover:text-blue-600 transition-colors"
                         title="Edit message"
                       >
                         <PencilIcon className="w-3.5 h-3.5" />
