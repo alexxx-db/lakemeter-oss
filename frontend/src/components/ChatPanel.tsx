@@ -280,6 +280,7 @@ I can assist you with:
   
   // State for pending edit message - will be sent after state reset
   const [pendingEditMessage, setPendingEditMessage] = useState<string | null>(null)
+  const [pendingMessageIsEdited, setPendingMessageIsEdited] = useState(false)
   
   const saveEditMessage = useCallback(async (messageId: string) => {
     if (!editingContent.trim()) return
@@ -319,6 +320,7 @@ I can assist you with:
     
     // Set pending edit message to be sent after state reset
     setPendingEditMessage(editedContent)
+    setPendingMessageIsEdited(true)
   }, [editingContent, messages, conversationId, buildWelcomeContent])
   
   
@@ -348,7 +350,7 @@ I can assist you with:
     }
   }, [isOpen, currentEstimate, currentWorkloads, totalCost, buildWelcomeContent])
 
-  const sendMessage = useCallback(async (directMessage?: string) => {
+  const sendMessage = useCallback(async (directMessage?: string, isEdited?: boolean) => {
     const messageToSend = directMessage || inputValue.trim()
     if (!messageToSend || isLoading) return
 
@@ -356,7 +358,8 @@ I can assist you with:
       id: `user-${Date.now()}`,
       role: 'user',
       content: messageToSend,
-      timestamp: new Date()
+      timestamp: new Date(),
+      isEdited: isEdited || false
     }
 
     setMessages(prev => [...prev, userMessage])
@@ -509,10 +512,11 @@ I can assist you with:
   // Effect to send pending edit message after state reset
   useEffect(() => {
     if (pendingEditMessage && !isLoading) {
-      sendMessage(pendingEditMessage)
+      sendMessage(pendingEditMessage, pendingMessageIsEdited)
       setPendingEditMessage(null)
+      setPendingMessageIsEdited(false)
     }
-  }, [pendingEditMessage, isLoading, sendMessage])
+  }, [pendingEditMessage, pendingMessageIsEdited, isLoading, sendMessage])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

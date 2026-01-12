@@ -3189,10 +3189,16 @@ Each workload needs to be confirmed individually. Review the configurations and 
     
     def _analyze_estimate(self, focus_area: str = "all") -> Dict[str, Any]:
         """Analyze estimate using actual costs and provide comprehensive recommendations."""
+        log_info(f"_analyze_estimate called with focus_area={focus_area}")
+        log_info(f"current_estimate: {self.current_estimate is not None}")
+        log_info(f"current_workloads count: {len(self.current_workloads) if self.current_workloads else 0}")
+        
         if not self.current_estimate:
+            log_warning("No estimate loaded for analysis")
             return {"error": "No estimate loaded"}
         
         if not self.current_workloads:
+            log_warning("No workloads to analyze")
             return {
                 "error": "No workloads to analyze",
                 "suggestion": "Add some workloads first, then I can help optimize them."
