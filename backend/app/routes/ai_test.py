@@ -821,3 +821,251 @@ async def get_system_prompt():
         "tools": [{"name": t["name"], "description": t["description"], "parameters": t.get("input_schema", {})} for t in TOOLS],
         "tools_count": len(TOOLS)
     }
+
+
+# ============================================================================
+# Interactive Chat Testing - Multi-turn conversations with tools
+# ============================================================================
+
+# In-memory storage for test chat sessions
+_test_chat_sessions: Dict[str, Dict[str, Any]] = {}
+
+
+class InteractiveChatRequest(BaseModel):
+    """Request for interactive chat testing."""
+    session_id: str
+    message: str
+    model_id: str = "databricks-claude-sonnet-4-5"
+    enable_tools: bool = True
+
+
+class InteractiveChatResponse(BaseModel):
+    """Response from interactive chat."""
+    session_id: str
+    model: str
+    response: str
+    tool_calls: List[Dict[str, Any]] = []
+    latency_ms: float
+    message_count: int
+    total_tokens_estimate: int
+
+
+@router.post("/interactive/new-session")
+async def create_interactive_session(request: Request, model_id: str = "databricks-claude-sonnet-4-5"):
+    """Create a new interactive chat session for testing."""
+    import uuid
+    
+    token = get_user_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    if model_id not in MODEL_CONFIGS:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model_id}")
+    
+    session_id = str(uuid.uuid4())[:8]
+    model_config = MODEL_CONFIGS[model_id]
+    
+    # Initialize session with context
+    _test_chat_sessions[session_id] = {
+        "model_id": model_id,
+        "model_name": model_config["name"],
+        "messages": [],
+        "tool_calls_history": [],
+        "created_at": time.time(),
+        "context": SAMPLE_ESTIMATE_CONTEXT,
+        "workloads": SAMPLE_WORKLOADS,
+        "token_limits": {
+            "input": model_config["itpm_limit"],
+            "output": model_config["otpm_limit"]
+        }
+    }
+    
+    # Build initial context message
+    context = f"""You are testing the Lakemeter AI Assistant. Here's the current estimate context:
+
+**Estimate:** {SAMPLE_ESTIMATE_CONTEXT.get('estimate_name')}
+- Cloud: {SAMPLE_ESTIMATE_CONTEXT.get('cloud')}
+- Region: {SAMPLE_ESTIMATE_CONTEXT.get('region')}
+- Pricing Tier: {SAMPLE_ESTIMATE_CONTEXT.get('tier')}
+
+**Current Workloads ({len(SAMPLE_WORKLOADS)} total):**
+"""
+    for w in SAMPLE_WORKLOADS:
+        context += f"- **{w.get('workload_name')}** ({w.get('workload_type')}): ${w.get('total_cost', 0):,.2f}/mo\n"
+    
+    context += f"\n**Total Monthly Cost:** ${sum(w.get('total_cost', 0) for w in SAMPLE_WORKLOADS):,.2f}"
+    
+    return {
+        "session_id": session_id,
+        "model": model_config["name"],
+        "model_id": model_id,
+        "token_limits": {
+            "input": model_config["itpm_limit"],
+            "output": model_config["otpm_limit"]
+        },
+        "context_summary": context,
+        "tools_available": [t["name"] for t in TOOLS],
+        "message": f"Session created! You can now chat with {model_config['name']}. Ask questions about pricing, request workload recommendations, or test any AI Assistant features."
+    }
+
+
+@router.post("/interactive/chat")
+async def interactive_chat(request: Request, chat_request: InteractiveChatRequest):
+    """Send a message in an interactive chat session with tool support."""
+    try:
+        token = get_user_token(request)
+        if not token:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        
+        session_id = chat_request.session_id
+        if session_id not in _test_chat_sessions:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found. Create a new session first.")
+        
+        session = _test_chat_sessions[session_id]
+        model_id = chat_request.model_id or session["model_id"]
+        model_config = MODEL_CONFIGS.get(model_id, MODEL_CONFIGS["databricks-claude-sonnet-4-5"])
+        
+        # Create AI client
+        client = ClaudeAIClient(token=token, model=model_id)
+        
+        # Build context for the conversation
+        context = f"""Current estimate: {session['context'].get('estimate_name')}
+Cloud: {session['context'].get('cloud')}, Region: {session['context'].get('region')}, Tier: {session['context'].get('tier')}
+Current workloads: {len(session['workloads'])} total, ${sum(w.get('total_cost', 0) for w in session['workloads']):,.2f}/mo total"""
+        
+        # Add user message to history
+        session["messages"].append({
+            "role": "user",
+            "content": chat_request.message
+        })
+        
+        # Build messages for API call
+        api_messages = [
+            {"role": "system", "content": SYSTEM_PROMPT + f"\n\n---\n{context}"}
+        ]
+        api_messages.extend(session["messages"])
+        
+        start_time = time.time()
+        
+        # Make API call with or without tools
+        tools_to_use = TOOLS if chat_request.enable_tools else None
+        max_tokens = min(model_config["otpm_limit"], 4096)  # Cap at 4096 for reasonable responses
+        
+        response = await client.chat(
+            messages=api_messages,
+            tools=tools_to_use,
+            max_tokens=max_tokens,
+            temperature=0.7
+        )
+        
+        end_time = time.time()
+        latency_ms = round((end_time - start_time) * 1000, 2)
+        
+        # Extract response content and tool calls
+        content = response.get("content", "")
+        tool_calls = response.get("tool_calls", [])
+        
+        # Process tool calls if any
+        tool_results = []
+        if tool_calls:
+            for tc in tool_calls:
+                tool_name = tc.get("name", tc.get("function", {}).get("name", "unknown"))
+                tool_args = tc.get("input", tc.get("function", {}).get("arguments", {}))
+                if isinstance(tool_args, str):
+                    try:
+                        tool_args = json.loads(tool_args)
+                    except:
+                        pass
+                
+                tool_results.append({
+                    "tool": tool_name,
+                    "arguments": tool_args,
+                    "status": "captured (not executed in test mode)"
+                })
+                
+                session["tool_calls_history"].append({
+                    "tool": tool_name,
+                    "arguments": tool_args,
+                    "timestamp": time.time()
+                })
+        
+        # Add assistant response to history
+        session["messages"].append({
+            "role": "assistant",
+            "content": content,
+            "tool_calls": tool_results if tool_results else None
+        })
+        
+        # Estimate token usage (rough approximation)
+        total_chars = sum(len(m.get("content", "")) for m in session["messages"])
+        estimated_tokens = total_chars // 4  # Rough estimate: ~4 chars per token
+        
+        return {
+            "session_id": session_id,
+            "model": model_config["name"],
+            "model_id": model_id,
+            "response": content,
+            "tool_calls": tool_results,
+            "latency_ms": latency_ms,
+            "message_count": len(session["messages"]),
+            "estimated_tokens": estimated_tokens,
+            "token_limits": {
+                "input": model_config["itpm_limit"],
+                "output": model_config["otpm_limit"]
+            },
+            "tools_enabled": chat_request.enable_tools
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "session_id": chat_request.session_id
+        }
+
+
+@router.get("/interactive/session/{session_id}")
+async def get_session_history(session_id: str):
+    """Get the conversation history for a session."""
+    if session_id not in _test_chat_sessions:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    
+    session = _test_chat_sessions[session_id]
+    return {
+        "session_id": session_id,
+        "model": session["model_name"],
+        "messages": session["messages"],
+        "tool_calls_history": session["tool_calls_history"],
+        "context": session["context"],
+        "workloads_count": len(session["workloads"]),
+        "created_at": session["created_at"]
+    }
+
+
+@router.delete("/interactive/session/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a chat session."""
+    if session_id in _test_chat_sessions:
+        del _test_chat_sessions[session_id]
+        return {"message": f"Session {session_id} deleted"}
+    raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+
+@router.get("/interactive/sessions")
+async def list_sessions():
+    """List all active test sessions."""
+    return {
+        "sessions": [
+            {
+                "session_id": sid,
+                "model": s["model_name"],
+                "message_count": len(s["messages"]),
+                "tool_calls_count": len(s["tool_calls_history"]),
+                "created_at": s["created_at"]
+            }
+            for sid, s in _test_chat_sessions.items()
+        ],
+        "total": len(_test_chat_sessions)
+    }

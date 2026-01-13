@@ -131,7 +131,16 @@ export default function AIModelTest() {
   const [isAssistantComparing, setIsAssistantComparing] = useState(false)
   const [systemPromptInfo, setSystemPromptInfo] = useState<any>(null)
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
-  const [activeTab, setActiveTab] = useState<'assistant' | 'assistant-compare' | 'single' | 'compare' | 'stress'>('assistant-compare')
+  const [activeTab, setActiveTab] = useState<'interactive' | 'assistant' | 'assistant-compare' | 'single' | 'compare' | 'stress'>('interactive')
+  
+  // Interactive chat state
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null)
+  const [chatModel, setChatModel] = useState<string>('databricks-claude-sonnet-4-5')
+  const [chatMessages, setChatMessages] = useState<Array<{role: string, content: string, tool_calls?: any[], latency_ms?: number}>>([])
+  const [chatInput, setChatInput] = useState('')
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const [chatSessionInfo, setChatSessionInfo] = useState<any>(null)
+  const [enableTools, setEnableTools] = useState(true)
 
   useEffect(() => {
     loadModelsAndPrompts()
@@ -324,6 +333,100 @@ export default function AIModelTest() {
     }
   }
 
+  // Interactive Chat Functions
+  const startNewChatSession = async () => {
+    setIsChatLoading(true)
+    setChatMessages([])
+    setChatSessionInfo(null)
+    
+    try {
+      const response = await fetch(`/api/v1/ai-test/interactive/new-session?model_id=${chatModel}`, {
+        method: 'POST'
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setChatSessionId(data.session_id)
+        setChatSessionInfo(data)
+        setChatMessages([{
+          role: 'assistant',
+          content: `**Session Started!** 🚀\n\nYou're now chatting with **${data.model}**.\n\n${data.message}\n\n**Available Tools:** ${data.tools_available?.join(', ') || 'None'}\n\n**Context:**\n${data.context_summary}`
+        }])
+      } else {
+        const error = await response.text()
+        setChatMessages([{ role: 'assistant', content: `❌ Failed to start session: ${error}` }])
+      }
+    } catch (error) {
+      setChatMessages([{ role: 'assistant', content: `❌ Error: ${String(error)}` }])
+    } finally {
+      setIsChatLoading(false)
+    }
+  }
+
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !chatSessionId) return
+    
+    const userMessage = chatInput.trim()
+    setChatInput('')
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    setIsChatLoading(true)
+    
+    try {
+      const response = await fetch('/api/v1/ai-test/interactive/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: chatSessionId,
+          message: userMessage,
+          model_id: chatModel,
+          enable_tools: enableTools
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.error) {
+        setChatMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: `❌ Error: ${data.error}`,
+          latency_ms: data.latency_ms
+        }])
+      } else {
+        let content = data.response || 'No response'
+        
+        // Add tool call info if any
+        if (data.tool_calls && data.tool_calls.length > 0) {
+          content += '\n\n---\n**🔧 Tool Calls Detected:**\n'
+          data.tool_calls.forEach((tc: any) => {
+            content += `- **${tc.tool}**: ${JSON.stringify(tc.arguments)}\n`
+            content += `  *Status: ${tc.status}*\n`
+          })
+        }
+        
+        setChatMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content,
+          tool_calls: data.tool_calls,
+          latency_ms: data.latency_ms
+        }])
+        
+        // Update session info
+        setChatSessionInfo((prev: any) => ({
+          ...prev,
+          message_count: data.message_count,
+          estimated_tokens: data.estimated_tokens
+        }))
+      }
+    } catch (error) {
+      setChatMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: `❌ Error: ${String(error)}` 
+      }])
+    } finally {
+      setIsChatLoading(false)
+    }
+  }
+
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat().format(num)
   }
@@ -393,7 +496,8 @@ export default function AIModelTest() {
         {/* Tab Navigation */}
         <div className="flex flex-wrap gap-2 mb-6">
           {[
-            { id: 'assistant-compare', label: 'AI Assistant Compare', icon: ChatBubbleLeftRightIcon },
+            { id: 'interactive', label: '💬 Interactive Chat', icon: ChatBubbleLeftRightIcon },
+            { id: 'assistant-compare', label: 'AI Assistant Compare', icon: ChartBarIcon },
             { id: 'assistant', label: 'AI Assistant Single', icon: WrenchScrewdriverIcon },
             { id: 'compare', label: 'Raw API Compare', icon: ChartBarIcon },
             { id: 'single', label: 'Raw API Single', icon: PlayIcon },
@@ -414,6 +518,164 @@ export default function AIModelTest() {
             </button>
           ))}
         </div>
+
+        {/* Interactive Chat Tab */}
+        {activeTab === 'interactive' && (
+          <div className="space-y-4">
+            {/* Session Controls */}
+            <div className="card p-4">
+              <div className="flex flex-wrap items-center gap-4 mb-4">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-sm text-[var(--text-muted)] mb-1">Model</label>
+                  <select
+                    value={chatModel}
+                    onChange={(e) => setChatModel(e.target.value)}
+                    className="w-full p-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)]"
+                    disabled={!!chatSessionId}
+                  >
+                    <option value="databricks-claude-sonnet-4-5">Claude Sonnet 4.5 (50K/5K tokens)</option>
+                    <option value="databricks-claude-opus-4-5">Claude Opus 4.5 (200K/20K tokens)</option>
+                  </select>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="enableTools"
+                    checked={enableTools}
+                    onChange={(e) => setEnableTools(e.target.checked)}
+                    className="rounded"
+                  />
+                  <label htmlFor="enableTools" className="text-sm text-[var(--text-secondary)]">
+                    Enable Tools (propose_workload, ask_clarifying_questions, etc.)
+                  </label>
+                </div>
+                
+                <button
+                  onClick={startNewChatSession}
+                  disabled={isChatLoading}
+                  className="btn-primary px-4 py-2 flex items-center gap-2"
+                >
+                  {isChatLoading ? (
+                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <PlayIcon className="w-4 h-4" />
+                  )}
+                  {chatSessionId ? 'New Session' : 'Start Session'}
+                </button>
+              </div>
+              
+              {/* Session Info */}
+              {chatSessionInfo && (
+                <div className="flex flex-wrap gap-4 text-sm text-[var(--text-muted)] border-t border-[var(--border-primary)] pt-3">
+                  <span>Session: <code className="text-lava-600">{chatSessionId}</code></span>
+                  <span>Messages: <strong>{chatSessionInfo.message_count || chatMessages.length}</strong></span>
+                  <span>Est. Tokens: <strong>{formatNumber(chatSessionInfo.estimated_tokens || 0)}</strong></span>
+                  <span className={clsx(
+                    'px-2 py-0.5 rounded',
+                    chatModel.includes('sonnet') ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                  )}>
+                    {chatModel.includes('sonnet') ? 'Sonnet 4.5' : 'Opus 4.5'}
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            {/* Chat Messages */}
+            <div className="card p-4 min-h-[400px] max-h-[600px] overflow-y-auto flex flex-col gap-4">
+              {chatMessages.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-[var(--text-muted)]">
+                  <div className="text-center">
+                    <ChatBubbleLeftRightIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>Start a session to begin testing</p>
+                    <p className="text-sm mt-2">This interactive mode lets you have a full conversation with the AI Assistant, including tool calls.</p>
+                  </div>
+                </div>
+              ) : (
+                chatMessages.map((msg, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={clsx(
+                      'p-3 rounded-lg max-w-[85%]',
+                      msg.role === 'user' 
+                        ? 'bg-[#d7edfe] text-gray-800 self-end ml-auto' 
+                        : 'bg-[var(--bg-secondary)] self-start'
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-1 text-xs text-[var(--text-muted)]">
+                      <span className="font-medium">{msg.role === 'user' ? 'You' : 'AI Assistant'}</span>
+                      {msg.latency_ms && <span>• {formatLatency(msg.latency_ms)}</span>}
+                      {msg.tool_calls && msg.tool_calls.length > 0 && (
+                        <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">
+                          🔧 {msg.tool_calls.length} tool call(s)
+                        </span>
+                      )}
+                    </div>
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+              
+              {isChatLoading && (
+                <div className="flex items-center gap-2 text-[var(--text-muted)] p-3">
+                  <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                  <span>Thinking...</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Chat Input */}
+            {chatSessionId && (
+              <div className="card p-4">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendChatMessage()}
+                    placeholder="Type your message... (e.g., 'Analyze my workloads', 'Add a new Jobs workload', 'How can I reduce costs?')"
+                    className="flex-1 p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)]"
+                    disabled={isChatLoading}
+                  />
+                  <button
+                    onClick={sendChatMessage}
+                    disabled={isChatLoading || !chatInput.trim()}
+                    className="btn-primary px-6"
+                  >
+                    {isChatLoading ? (
+                      <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                    ) : (
+                      'Send'
+                    )}
+                  </button>
+                </div>
+                
+                {/* Quick Actions */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {[
+                    'Analyze my workloads and suggest optimizations',
+                    'Add a new ETL Jobs workload',
+                    'What\'s my total monthly cost?',
+                    'How can I reduce my Databricks spend?',
+                    'Compare serverless vs classic SQL',
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => setChatInput(suggestion)}
+                      className="text-xs px-3 py-1.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* AI Assistant Compare Tab */}
         {activeTab === 'assistant-compare' && (
