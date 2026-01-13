@@ -11,6 +11,7 @@ import traceback
 
 from app.services.ai_agent import EstimateAgent, SYSTEM_PROMPT, TOOLS
 from app.services.ai_client import ClaudeAIClient
+from app.external_api import get_user_token
 
 router = APIRouter(tags=["AI Testing"])
 
@@ -153,8 +154,7 @@ async def test_single_model(request: Request, test_request: TestRequest):
     test_config = TEST_PROMPTS[test_request.test_type]
     
     # Get token
-    token_manager = TokenManager()
-    token = token_manager.get_token()
+    token = get_user_token(request)
     
     if not token:
         raise HTTPException(status_code=401, detail="Failed to get authentication token")
@@ -253,8 +253,7 @@ async def compare_models(request: Request, compare_request: CompareRequest):
     test_config = TEST_PROMPTS[compare_request.test_type]
     
     # Get token
-    token_manager = TokenManager()
-    token = token_manager.get_token()
+    token = get_user_token(request)
     
     if not token:
         raise HTTPException(status_code=401, detail="Failed to get authentication token")
@@ -382,8 +381,7 @@ async def stress_test_tokens(request: Request, model_id: str, target_output_toke
             "adjusted_target": model_config["otpm_limit"]
         }
     
-    token_manager = TokenManager()
-    token = token_manager.get_token()
+    token = get_user_token(request)
     
     if not token:
         raise HTTPException(status_code=401, detail="Failed to get authentication token")
@@ -585,8 +583,6 @@ async def get_assistant_test_prompts():
 async def test_ai_assistant(request: Request, test_request: AIAssistantTestRequest):
     """Test the AI Assistant with full tools and system prompt."""
     try:
-        from app.auth.token_manager import LakebaseTokenManager as TokenManager
-        
         if test_request.model_id not in MODEL_CONFIGS:
             return {
                 "success": False,
@@ -690,7 +686,6 @@ async def test_ai_assistant(request: Request, test_request: AIAssistantTestReque
 async def compare_ai_assistant_models(request: Request, compare_request: AIAssistantCompareRequest):
     """Compare both models as AI Assistant backends."""
     try:
-        from app.auth.token_manager import LakebaseTokenManager as TokenManager
         # Get the prompt
         if compare_request.custom_prompt:
             prompt = compare_request.custom_prompt
@@ -705,13 +700,12 @@ async def compare_ai_assistant_models(request: Request, compare_request: AIAssis
                 "comparison": {}
             }
         
-        # Get token
-        token_manager = TokenManager()
-        token = token_manager.get_token()
+        # Get token from user session
+        token = get_user_token(request)
         
         if not token:
             return {
-                "error": "Failed to get authentication token",
+                "error": "Authentication required - please log in",
                 "results": {},
                 "comparison": {}
             }
