@@ -50,13 +50,16 @@ class RateLimitState:
 
 class ClaudeAIClient:
     """
-    Client for Databricks-hosted Claude Sonnet 4.5.
+    Client for Databricks-hosted Claude models.
     
     Uses OpenAI-compatible chat completions format.
+    Supports multiple models: databricks-claude-sonnet-4-5, databricks-claude-opus-4-5
     """
     
-    def __init__(self, token: Optional[str] = None):
+    def __init__(self, token: Optional[str] = None, model: Optional[str] = None):
         self._token = token
+        self._model = model or MODEL_ENDPOINT
+        self._endpoint = f"{DATABRICKS_HOST}/serving-endpoints/{self._model}/invocations"
         self._rate_limit_state = RateLimitState()
         self._http_client: Optional[httpx.AsyncClient] = None
     
@@ -218,7 +221,7 @@ class ClaudeAIClient:
         
         client = await self._get_http_client()
         
-        log_info(f"Sending request to Claude: {CLAUDE_ENDPOINT}")
+        log_info(f"Sending request to Claude: {self._endpoint}")
         log_info(f"Payload keys: {list(payload.keys())}, messages count: {len(formatted_messages)}")
         
         # Log message structure for debugging tool_use/tool_result issues
@@ -235,7 +238,7 @@ class ClaudeAIClient:
         
         try:
             response = await client.post(
-                CLAUDE_ENDPOINT,
+                self._endpoint,
                 json=payload,
                 headers={
                     "Authorization": f"Bearer {self._token}",
@@ -357,7 +360,7 @@ class ClaudeAIClient:
         
         client = await self._get_http_client()
         
-        log_info(f"Sending streaming request to Claude: {CLAUDE_ENDPOINT}")
+        log_info(f"Sending streaming request to Claude: {self._endpoint}")
         
         # Log message structure for debugging tool_use/tool_result issues (streaming)
         log_info(f"Streaming request - {len(formatted_messages)} formatted messages:")
@@ -375,7 +378,7 @@ class ClaudeAIClient:
         try:
             async with client.stream(
                 "POST",
-                CLAUDE_ENDPOINT,
+                self._endpoint,
                 json=payload,
                 headers={
                     "Authorization": f"Bearer {self._token}",

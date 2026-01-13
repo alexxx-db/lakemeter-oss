@@ -10,7 +10,7 @@ import httpx
 import traceback
 
 from app.services.ai_agent import EstimateAgent, SYSTEM_PROMPT, TOOLS
-from app.services.ai_client import ClaudeClient
+from app.services.ai_client import ClaudeAIClient
 
 router = APIRouter(tags=["AI Testing"])
 
@@ -612,7 +612,7 @@ async def test_ai_assistant(request: Request, test_request: AIAssistantTestReque
     
     try:
         # Create AI client with specified model
-        client = ClaudeClient(
+        client = ClaudeAIClient(
             token=token,
             model=test_request.model_id
         )
@@ -703,7 +703,7 @@ async def compare_ai_assistant_models(request: Request, compare_request: AIAssis
         start_time = time.time()
         try:
             # Create AI client with specified model
-            client = ClaudeClient(
+            client = ClaudeAIClient(
                 token=token,
                 model=model_id
             )
