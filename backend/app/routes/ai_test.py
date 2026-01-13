@@ -584,33 +584,44 @@ async def get_assistant_test_prompts():
 @router.post("/assistant/test")
 async def test_ai_assistant(request: Request, test_request: AIAssistantTestRequest):
     """Test the AI Assistant with full tools and system prompt."""
-    from app.auth.token_manager import TokenManager
-    
-    if test_request.model_id not in MODEL_CONFIGS:
-        raise HTTPException(status_code=400, detail=f"Unknown model: {test_request.model_id}")
-    
-    model_config = MODEL_CONFIGS[test_request.model_id]
-    
-    # Get the prompt
-    if test_request.custom_prompt:
-        prompt = test_request.custom_prompt
-        test_name = "Custom Prompt"
-    elif test_request.test_type in AI_ASSISTANT_TEST_PROMPTS:
-        prompt = AI_ASSISTANT_TEST_PROMPTS[test_request.test_type]["prompt"]
-        test_name = AI_ASSISTANT_TEST_PROMPTS[test_request.test_type]["name"]
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown test type: {test_request.test_type}")
-    
-    # Get token
-    token_manager = TokenManager()
-    token = token_manager.get_token()
-    
-    if not token:
-        raise HTTPException(status_code=401, detail="Failed to get authentication token")
-    
-    start_time = time.time()
-    
     try:
+        from app.auth.token_manager import TokenManager
+        
+        if test_request.model_id not in MODEL_CONFIGS:
+            return {
+                "success": False,
+                "error": f"Unknown model: {test_request.model_id}",
+                "model": test_request.model_id
+            }
+        
+        model_config = MODEL_CONFIGS[test_request.model_id]
+        
+        # Get the prompt
+        if test_request.custom_prompt:
+            prompt = test_request.custom_prompt
+            test_name = "Custom Prompt"
+        elif test_request.test_type in AI_ASSISTANT_TEST_PROMPTS:
+            prompt = AI_ASSISTANT_TEST_PROMPTS[test_request.test_type]["prompt"]
+            test_name = AI_ASSISTANT_TEST_PROMPTS[test_request.test_type]["name"]
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown test type: {test_request.test_type}",
+                "model": model_config["name"]
+            }
+        
+        # Get token
+        token_manager = TokenManager()
+        token = token_manager.get_token()
+        
+        if not token:
+            return {
+                "success": False,
+                "error": "Failed to get authentication token",
+                "model": model_config["name"]
+            }
+        
+        start_time = time.time()
         # Create AI client with specified model
         client = ClaudeAIClient(
             token=token,
@@ -668,19 +679,18 @@ async def test_ai_assistant(request: Request, test_request: AIAssistantTestReque
     except Exception as e:
         return {
             "success": False,
-            "model": model_config["name"],
+            "model": test_request.model_id if test_request else "unknown",
             "error": str(e),
             "traceback": traceback.format_exc(),
-            "latency_ms": (time.time() - start_time) * 1000
+            "latency_ms": (time.time() - start_time) * 1000 if 'start_time' in locals() else 0
         }
 
 
 @router.post("/assistant/compare")
 async def compare_ai_assistant_models(request: Request, compare_request: AIAssistantCompareRequest):
     """Compare both models as AI Assistant backends."""
-    from app.auth.token_manager import TokenManager
-    
     try:
+        from app.auth.token_manager import TokenManager
         # Get the prompt
         if compare_request.custom_prompt:
             prompt = compare_request.custom_prompt
