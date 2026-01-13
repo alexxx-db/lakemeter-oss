@@ -99,6 +99,8 @@ export function ChatPanel({
   const [draftEstimate, setDraftEstimate] = useState<DraftEstimate | null>(null)
   const [draftWorkloads, setDraftWorkloads] = useState<DraftWorkload[]>([])
   const [proposedWorkloads, setProposedWorkloads] = useState<ProposedWorkload[]>([])
+  const [processingProposals, setProcessingProposals] = useState<Set<string>>(new Set())
+  const [proposalsCollapsed, setProposalsCollapsed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isMinimized, setIsMinimized] = useState(false)
   const [localPanelWidth, setLocalPanelWidth] = useState(380)
@@ -553,6 +555,9 @@ I can assist you with:
   const handleConfirmWorkload = async (proposalId: string) => {
     if (!conversationId) return
     
+    // Immediately show processing state
+    setProcessingProposals(prev => new Set(prev).add(proposalId))
+    
     try {
       const response = await fetch(`/api/v1/chat/${conversationId}/confirm-workload`, {
         method: 'POST',
@@ -593,11 +598,21 @@ I can assist you with:
       
     } catch (err: any) {
       setError(err.message || 'Failed to confirm workload')
+    } finally {
+      // Clear processing state
+      setProcessingProposals(prev => {
+        const next = new Set(prev)
+        next.delete(proposalId)
+        return next
+      })
     }
   }
   
   const handleRejectWorkload = async (proposalId: string) => {
     if (!conversationId) return
+    
+    // Immediately show processing state
+    setProcessingProposals(prev => new Set(prev).add(proposalId))
     
     try {
       const response = await fetch(`/api/v1/chat/${conversationId}/confirm-workload`, {
@@ -622,6 +637,27 @@ I can assist you with:
       
     } catch (err: any) {
       setError(err.message || 'Failed to reject workload')
+    } finally {
+      // Clear processing state
+      setProcessingProposals(prev => {
+        const next = new Set(prev)
+        next.delete(proposalId)
+        return next
+      })
+    }
+  }
+  
+  // Batch accept all proposals
+  const handleAcceptAll = async () => {
+    for (const proposal of proposedWorkloads) {
+      await handleConfirmWorkload(proposal.proposal_id)
+    }
+  }
+  
+  // Batch reject all proposals
+  const handleRejectAll = async () => {
+    for (const proposal of proposedWorkloads) {
+      await handleRejectWorkload(proposal.proposal_id)
     }
   }
 
@@ -734,61 +770,128 @@ I can assist you with:
       
       {/* Proposed Workloads - Awaiting Confirmation */}
       {proposedWorkloads.length > 0 && (
-        <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
-          <div className="flex items-center gap-2 mb-3">
-            <ExclamationCircleIcon className="w-4 h-4 text-amber-600" />
-            <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
-              Proposed Workload{proposedWorkloads.length !== 1 ? 's' : ''} - Confirm to Add
-            </span>
-          </div>
-          <div className="space-y-2">
-            {proposedWorkloads.map((proposal) => (
-              <div 
-                key={proposal.proposal_id}
-                className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-200 dark:border-amber-700"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
-                        {proposal.workload_name}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
-                        {proposal.workload_type}
-                      </span>
-                    </div>
-                    {proposal.reason && (
-                      <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
-                        {proposal.reason}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                      {proposal.serverless_enabled && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">Serverless</span>}
-                      {proposal.photon_enabled && <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded">Photon</span>}
-                      {proposal.num_workers && <span>{proposal.num_workers} workers</span>}
-                      {proposal.dbsql_warehouse_size && <span>{proposal.dbsql_warehouse_size}</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => handleConfirmWorkload(proposal.proposal_id)}
-                      className="p-1.5 rounded-full bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-800/50 text-green-700 dark:text-green-400 transition-colors"
-                      title="Confirm & Add"
-                    >
-                      <CheckCircleIcon className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleRejectWorkload(proposal.proposal_id)}
-                      className="p-1.5 rounded-full bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-800/50 text-red-700 dark:text-red-400 transition-colors"
-                      title="Reject"
-                    >
-                      <XMarkIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+        <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+          {/* Collapsible header */}
+          <button
+            onClick={() => setProposalsCollapsed(!proposalsCollapsed)}
+            className="w-full flex items-center justify-between py-1"
+          >
+            <div className="flex items-center gap-2">
+              <ExclamationCircleIcon className="w-4 h-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                {proposedWorkloads.length} Proposed Workload{proposedWorkloads.length !== 1 ? 's' : ''} - Confirm to Add
+              </span>
+            </div>
+            {proposalsCollapsed ? (
+              <ChevronDownIcon className="w-4 h-4 text-amber-600" />
+            ) : (
+              <ChevronUpIcon className="w-4 h-4 text-amber-600" />
+            )}
+          </button>
+          
+          {/* Collapsible content */}
+          {!proposalsCollapsed && (
+            <>
+              {/* Batch action buttons */}
+              <div className="flex items-center gap-2 mt-2 mb-3">
+                <button
+                  onClick={handleAcceptAll}
+                  disabled={processingProposals.size > 0}
+                  className="text-xs px-2.5 py-1 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded transition-colors"
+                >
+                  Accept All ({proposedWorkloads.length})
+                </button>
+                <button
+                  onClick={handleRejectAll}
+                  disabled={processingProposals.size > 0}
+                  className="text-xs px-2.5 py-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition-colors"
+                >
+                  Reject All
+                </button>
               </div>
-            ))}
-          </div>
+              
+              {/* Proposals list with max height */}
+              <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                {proposedWorkloads.map((proposal) => {
+                  const isProcessing = processingProposals.has(proposal.proposal_id)
+                  
+                  return (
+                    <div 
+                      key={proposal.proposal_id}
+                      className={clsx(
+                        "bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-200 dark:border-amber-700 transition-opacity",
+                        isProcessing && "opacity-50"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                              {proposal.workload_name}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                              {proposal.workload_type}
+                            </span>
+                          </div>
+                          {proposal.reason && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-1.5">
+                              {proposal.reason}
+                            </p>
+                          )}
+                          {/* Enhanced config details */}
+                          <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
+                            {proposal.serverless_enabled && (
+                              <span className="px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded">Serverless</span>
+                            )}
+                            {proposal.photon_enabled && (
+                              <span className="px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded">Photon</span>
+                            )}
+                            {proposal.num_workers && <span>{proposal.num_workers} workers</span>}
+                            {proposal.worker_node_type && (
+                              <span className="font-mono text-[10px]">{proposal.worker_node_type}</span>
+                            )}
+                            {proposal.dbsql_warehouse_size && <span>{proposal.dbsql_warehouse_size}</span>}
+                            {proposal.hours_per_month && <span>{proposal.hours_per_month}h/mo</span>}
+                            {(proposal.runs_per_day && proposal.avg_runtime_minutes) && (
+                              <span>{proposal.runs_per_day}×{proposal.avg_runtime_minutes}min</span>
+                            )}
+                            {proposal.dlt_edition && <span>{proposal.dlt_edition}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {isProcessing ? (
+                            <div className="w-8 h-8 flex items-center justify-center">
+                              <svg className="animate-spin h-4 w-4 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                              </svg>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleConfirmWorkload(proposal.proposal_id)}
+                                className="p-1.5 rounded-full bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-800/50 text-green-700 dark:text-green-400 transition-colors"
+                                title="Confirm & Add"
+                              >
+                                <CheckCircleIcon className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleRejectWorkload(proposal.proposal_id)}
+                                className="p-1.5 rounded-full bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-800/50 text-red-700 dark:text-red-400 transition-colors"
+                                title="Reject"
+                              >
+                                <XMarkIcon className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
 
