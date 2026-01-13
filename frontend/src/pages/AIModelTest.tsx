@@ -71,11 +71,13 @@ interface ComparisonResult {
   test_name: string
   prompt_preview?: string
   prompt?: string
+  error?: string
+  traceback?: string
   results: Record<string, TestResult>
   comparison: {
-    faster_model: string
-    latency_difference_ms: number
-    latency_ratio: number
+    faster_model?: string
+    latency_difference_ms?: number
+    latency_ratio?: number
     sonnet_tokens_per_sec?: number
     opus_tokens_per_sec?: number
     sonnet_response_length?: number
@@ -290,10 +292,32 @@ export default function AIModelTest() {
         })
       })
       
+      // Check if response is OK
+      if (!response.ok) {
+        const text = await response.text()
+        setAssistantComparisonResult({
+          error: `HTTP ${response.status}: ${text || response.statusText}`,
+          results: {},
+          comparison: {} as any,
+          test_type: selectedAssistantTest,
+          test_name: 'Error',
+          prompt: ''
+        })
+        return
+      }
+      
       const data = await response.json()
       setAssistantComparisonResult(data)
     } catch (error) {
       console.error('Assistant comparison failed:', error)
+      setAssistantComparisonResult({
+        error: String(error),
+        results: {},
+        comparison: {} as any,
+        test_type: selectedAssistantTest,
+        test_name: 'Error',
+        prompt: ''
+      })
     } finally {
       setIsAssistantComparing(false)
     }
@@ -477,13 +501,33 @@ export default function AIModelTest() {
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-6"
               >
+                {/* Error Display */}
+                {(assistantComparisonResult as any).error && (
+                  <div className="card p-4 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700">
+                    <h4 className="font-medium text-red-700 dark:text-red-300 mb-2 flex items-center gap-2">
+                      <ExclamationTriangleIcon className="w-5 h-5" />
+                      Error
+                    </h4>
+                    <p className="text-sm text-red-600 dark:text-red-400 whitespace-pre-wrap">
+                      {(assistantComparisonResult as any).error}
+                    </p>
+                    {(assistantComparisonResult as any).traceback && (
+                      <pre className="mt-2 text-xs bg-red-100 dark:bg-red-900/40 p-2 rounded overflow-x-auto">
+                        {(assistantComparisonResult as any).traceback}
+                      </pre>
+                    )}
+                  </div>
+                )}
+
                 {/* Prompt Used */}
-                <div className="card p-4 bg-[var(--bg-secondary)]">
-                  <h4 className="font-medium text-[var(--text-primary)] mb-2">Prompt Tested:</h4>
-                  <p className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
-                    {assistantComparisonResult.prompt}
-                  </p>
-                </div>
+                {assistantComparisonResult.prompt && (
+                  <div className="card p-4 bg-[var(--bg-secondary)]">
+                    <h4 className="font-medium text-[var(--text-primary)] mb-2">Prompt Tested:</h4>
+                    <p className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
+                      {assistantComparisonResult.prompt}
+                    </p>
+                  </div>
+                )}
 
                 {/* Comparison Summary */}
                 {assistantComparisonResult.comparison && Object.keys(assistantComparisonResult.comparison).length > 0 && (
@@ -499,7 +543,7 @@ export default function AIModelTest() {
                       </div>
                       <div>
                         <span className="text-sm text-[var(--text-muted)]">Latency Difference</span>
-                        <p className="font-mono">{formatLatency(assistantComparisonResult.comparison.latency_difference_ms)}</p>
+                        <p className="font-mono">{formatLatency(assistantComparisonResult.comparison.latency_difference_ms || 0)}</p>
                       </div>
                       <div>
                         <span className="text-sm text-[var(--text-muted)]">Sonnet Response</span>
@@ -850,7 +894,7 @@ export default function AIModelTest() {
                       </div>
                       <div>
                         <span className="text-sm text-[var(--text-muted)]">Latency Difference</span>
-                        <p className="font-mono">{formatLatency(comparisonResult.comparison.latency_difference_ms)}</p>
+                        <p className="font-mono">{formatLatency(comparisonResult.comparison.latency_difference_ms || 0)}</p>
                       </div>
                       <div>
                         <span className="text-sm text-[var(--text-muted)]">Sonnet Speed</span>
