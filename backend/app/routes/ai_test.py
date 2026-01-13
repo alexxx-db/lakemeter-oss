@@ -141,7 +141,7 @@ async def get_test_prompts():
 @router.post("/test-single")
 async def test_single_model(request: Request, test_request: TestRequest):
     """Test a single model with a specific prompt."""
-    from app.auth.token_manager import TokenManager
+    from app.auth.token_manager import LakebaseTokenManager as TokenManager
     
     if test_request.model_id not in MODEL_CONFIGS:
         raise HTTPException(status_code=400, detail=f"Unknown model: {test_request.model_id}")
@@ -245,7 +245,7 @@ async def test_single_model(request: Request, test_request: TestRequest):
 @router.post("/compare")
 async def compare_models(request: Request, compare_request: CompareRequest):
     """Compare both models on the same prompt."""
-    from app.auth.token_manager import TokenManager
+    from app.auth.token_manager import LakebaseTokenManager as TokenManager
     
     if compare_request.test_type not in TEST_PROMPTS:
         raise HTTPException(status_code=400, detail=f"Unknown test type: {compare_request.test_type}")
@@ -368,7 +368,7 @@ async def compare_models(request: Request, compare_request: CompareRequest):
 @router.post("/stress-test")
 async def stress_test_tokens(request: Request, model_id: str, target_output_tokens: int = 4000):
     """Stress test a model's token generation capacity."""
-    from app.auth.token_manager import TokenManager
+    from app.auth.token_manager import LakebaseTokenManager as TokenManager
     
     if model_id not in MODEL_CONFIGS:
         raise HTTPException(status_code=400, detail=f"Unknown model: {model_id}")
@@ -585,7 +585,7 @@ async def get_assistant_test_prompts():
 async def test_ai_assistant(request: Request, test_request: AIAssistantTestRequest):
     """Test the AI Assistant with full tools and system prompt."""
     try:
-        from app.auth.token_manager import TokenManager
+        from app.auth.token_manager import LakebaseTokenManager as TokenManager
         
         if test_request.model_id not in MODEL_CONFIGS:
             return {
@@ -690,7 +690,7 @@ async def test_ai_assistant(request: Request, test_request: AIAssistantTestReque
 async def compare_ai_assistant_models(request: Request, compare_request: AIAssistantCompareRequest):
     """Compare both models as AI Assistant backends."""
     try:
-        from app.auth.token_manager import TokenManager
+        from app.auth.token_manager import LakebaseTokenManager as TokenManager
         # Get the prompt
         if compare_request.custom_prompt:
             prompt = compare_request.custom_prompt
