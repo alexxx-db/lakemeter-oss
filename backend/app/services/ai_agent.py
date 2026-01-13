@@ -3490,7 +3490,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
         }
 
 
-def create_agent(token: str, model: str = "databricks-claude-sonnet-4-5") -> EstimateAgent:
-    """Create a new agent instance with the given token and model."""
-    client = get_claude_client(token, model=model)
+def create_agent(token: str) -> EstimateAgent:
+    """Create a new agent instance with the given token."""
+    client = get_claude_client(token, model="databricks-claude-opus-4-5")
     return EstimateAgent(client)

@@ -106,7 +106,6 @@ export function ChatPanel({
   const [showQuickActions, setShowQuickActions] = useState(true) // Visible by default
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
-  const [selectedModel, setSelectedModel] = useState<string>('databricks-claude-sonnet-4-5')
   
   // Use controlled width if provided, otherwise use local state
   const panelWidth = controlledWidth ?? localPanelWidth
@@ -405,8 +404,7 @@ I can assist you with:
           conversation_id: conversationId,
           estimate_context: currentEstimate || draftEstimate,
           workloads_context: enrichedWorkloads,
-          stream: true,
-          model: selectedModel
+          stream: true
         }),
         signal: abortControllerRef.current.signal
       })
@@ -667,22 +665,6 @@ I can assist you with:
           {conversationId && (
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="Active session" />
           )}
-          {/* Model Selector */}
-          <select
-            value={selectedModel}
-            onChange={(e) => {
-              setSelectedModel(e.target.value)
-              // Clear conversation when model changes so new model is used
-              if (conversationId) {
-                clearConversation()
-              }
-            }}
-            className="text-xs px-2 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[var(--text-secondary)] cursor-pointer hover:border-lava-400 focus:outline-none focus:border-lava-500"
-            title="Select AI Model"
-          >
-            <option value="databricks-claude-sonnet-4-5">Sonnet 4.5</option>
-            <option value="databricks-claude-opus-4-5">Opus 4.5</option>
-          </select>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -1108,7 +1090,7 @@ I can assist you with:
         
         <div className="flex items-center justify-between mt-2 text-[9px] text-[var(--text-muted)]">
           <span>Shift+Enter for new line</span>
-          <span>Powered by Claude Sonnet 4.5</span>
+          <span>Powered by Claude Opus 4.5</span>
         </div>
       </div>
         </div>
