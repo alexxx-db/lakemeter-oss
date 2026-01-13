@@ -127,7 +127,7 @@ export default function SearchableSelect({
           }
         }}
         className={clsx(
-          "w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-colors",
+          "w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-sm cursor-pointer transition-colors",
           "bg-[var(--bg-secondary)] border-[var(--border-primary)]",
           "hover:border-[var(--border-secondary)]",
           isOpen && "border-lava-600 ring-1 ring-lava-600/30",
@@ -184,21 +184,21 @@ export default function SearchableSelect({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-lg max-h-72 overflow-auto">
+        <div className="absolute z-50 w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-md shadow-lg max-h-64 overflow-auto">
           {isLoading ? (
-            <div className="px-3 py-2 text-sm text-[var(--text-muted)]">Loading...</div>
+            <div className="px-2.5 py-1.5 text-sm text-[var(--text-muted)]">Loading...</div>
           ) : filteredOptions.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-[var(--text-muted)]">
+            <div className="px-2.5 py-1.5 text-sm text-[var(--text-muted)]">
               {search ? 'No results found' : 'No options available'}
             </div>
           ) : grouped && groupedOptions ? (
             <>
-              <div className="px-3 py-1.5 text-xs text-[var(--text-muted)] border-b border-[var(--border-primary)]">
+              <div className="px-2.5 py-1 text-xs text-[var(--text-muted)] border-b border-[var(--border-primary)]">
                 {filteredOptions.length} result{filteredOptions.length !== 1 ? 's' : ''}
               </div>
               {groupedOptions.map((group) => (
                 <div key={group.name}>
-                  <div className="px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] bg-[var(--bg-tertiary)] sticky top-0 border-b border-[var(--border-primary)]">
+                  <div className="px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)] bg-[var(--bg-tertiary)] sticky top-0 border-b border-[var(--border-primary)]">
                     {group.name}
                   </div>
                   {group.options.map((option) => (
@@ -206,7 +206,7 @@ export default function SearchableSelect({
                       key={option.value}
                       onClick={() => handleSelect(option.value)}
                       className={clsx(
-                        "px-3 py-2 text-sm cursor-pointer transition-colors",
+                        "px-2.5 py-1.5 text-sm cursor-pointer transition-colors",
                         option.value === value
                           ? "bg-lava-600/10 text-lava-600"
                           : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
@@ -220,7 +220,7 @@ export default function SearchableSelect({
             </>
           ) : (
             <>
-              <div className="px-3 py-1.5 text-xs text-[var(--text-muted)] border-b border-[var(--border-primary)]">
+              <div className="px-2.5 py-1 text-xs text-[var(--text-muted)] border-b border-[var(--border-primary)]">
                 {filteredOptions.length} result{filteredOptions.length !== 1 ? 's' : ''}
               </div>
               {filteredOptions.map((option) => (
@@ -228,7 +228,7 @@ export default function SearchableSelect({
                   key={option.value}
                   onClick={() => handleSelect(option.value)}
                   className={clsx(
-                    "px-3 py-2 text-sm cursor-pointer transition-colors",
+                    "px-2.5 py-1.5 text-sm cursor-pointer transition-colors",
                     option.value === value
                       ? "bg-lava-600/10 text-lava-600"
                       : "text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"

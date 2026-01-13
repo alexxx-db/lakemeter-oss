@@ -74,10 +74,11 @@ body {
 input, select, textarea {
   background-color: var(--bg-input);
   border: 1px solid var(--border-primary);
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.625rem;
   color: var(--text-primary);
   font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 0.875rem;
   transition: all 0.2s;
 }
 
@@ -108,10 +109,10 @@ select {
   appearance: none;
   background-repeat: no-repeat;
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238b95a5' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 0.75rem center;
-  background-size: 1.25em 1.25em;
-  padding-right: 2.5rem;
-  min-height: 2.5rem;
+  background-position: right 0.5rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2rem;
+  min-height: 2rem;
 }
 
 select option {

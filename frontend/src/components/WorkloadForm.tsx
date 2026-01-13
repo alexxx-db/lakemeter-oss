@@ -182,14 +182,14 @@ function CollapsibleNotes({ notes, onChange }: { notes: string; onChange: (value
   const [isExpanded, setIsExpanded] = useState(!!notes) // Expand if has content
   
   return (
-    <div className="border border-[var(--border-primary)] rounded-lg overflow-hidden">
+    <div className="border border-[var(--border-primary)] rounded-md overflow-hidden">
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-3 py-2 flex items-center justify-between bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors"
+        className="w-full px-2.5 py-1.5 flex items-center justify-between bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] transition-colors"
       >
         <span className="text-xs font-medium text-[var(--text-secondary)] flex items-center gap-1.5">
-          {isExpanded ? <ChevronDownIcon className="w-3.5 h-3.5" /> : <ChevronRightIcon className="w-3.5 h-3.5" />}
+          {isExpanded ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRightIcon className="w-3 h-3" />}
           Notes
           {notes && !isExpanded && (
             <span className="ml-1 text-[var(--text-muted)] font-normal truncate max-w-[200px]">
@@ -202,13 +202,13 @@ function CollapsibleNotes({ notes, onChange }: { notes: string; onChange: (value
         </span>
       </button>
       {isExpanded && (
-        <div className="p-3 bg-[var(--bg-primary)]">
+        <div className="p-2.5 bg-[var(--bg-primary)]">
           <textarea
             value={notes}
             onChange={(e) => onChange(e.target.value)}
             placeholder="Configuration rationale and assumptions...&#10;• Why this configuration was chosen&#10;• Sizing assumptions (data volume, users, etc.)&#10;• Cost optimization choices"
-            className="w-full text-sm min-h-[120px] resize-y border-0 bg-transparent p-0 focus:ring-0 whitespace-pre-wrap"
-            rows={6}
+            className="w-full text-sm min-h-[80px] resize-y border-0 bg-transparent p-0 focus:ring-0 whitespace-pre-wrap"
+            rows={4}
           />
         </div>
       )}
@@ -883,23 +883,23 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   }
   
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-3">
       {/* Basic Info */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>Workload Name *</label>
+          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Workload Name *</label>
           <input
             type="text"
             value={form.workload_name}
             onChange={(e) => setForm(f => ({ ...f, workload_name: e.target.value }))}
             placeholder="e.g., Daily ETL Pipeline"
-            className="w-full"
+            className="w-full text-sm"
             autoFocus={!lineItem}
           />
         </div>
         
         <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
             Workload Type
             {!isPricingBundleLoaded && (
               <span className="ml-2 text-[var(--text-muted)] text-xs animate-pulse">Loading...</span>
@@ -908,7 +908,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           <select
             value={form.workload_type}
             onChange={(e) => setForm(f => ({ ...f, workload_type: e.target.value, serverless_enabled: false, photon_enabled: false }))}
-            className={clsx("w-full", isWorkloadTypeInvalid && "border-red-500", isExistingWithUnavailableType && "border-yellow-500")}
+            className={clsx("w-full text-sm", isWorkloadTypeInvalid && "border-red-500", isExistingWithUnavailableType && "border-yellow-500")}
           >
             {/* Show existing workload's type first if it's not in the filtered list (for editing) */}
             {isExistingWithUnavailableType && (() => {
@@ -946,7 +946,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       
       
       {/* Feature Toggles Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {/* Serverless Toggle - left */}
         {selectedWorkloadType?.show_serverless_toggle && (() => {
           const serverlessAvailability = isWorkloadAvailableForTier(
@@ -958,7 +958,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           
           return (
           <div className={clsx(
-            "p-3 rounded-lg border transition-all",
+            "p-2.5 rounded-lg border transition-all",
             isServerlessDisabled && "opacity-60",
             form.serverless_enabled && !isServerlessDisabled
               ? "bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-700" 
@@ -1002,7 +1002,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             {/* Serverless Mode Dropdown - appears when serverless is enabled */}
             {/* Note: All-Purpose Serverless only supports Performance mode (no Standard option) */}
             {form.serverless_enabled && !isServerlessDisabled && (
-              <div className="mt-3 pt-3 border-t border-teal-200 dark:border-teal-700">
+              <div className="mt-2 pt-2 border-t border-teal-200 dark:border-teal-700">
                 {form.workload_type === 'ALL_PURPOSE' ? (
                   // All-Purpose Serverless: Performance mode only (shown as info, not a selector)
                   <div className="flex items-center gap-2">
@@ -1017,7 +1017,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 ) : (
                   // Jobs/DLT Serverless: Allow mode selection
                   <>
-                    <label className="block text-xs font-medium mb-1.5 text-teal-700 dark:text-teal-300">Serverless Mode</label>
+                    <label className="block text-xs font-medium mb-1 text-teal-700 dark:text-teal-300">Serverless Mode</label>
                     <select
                       value={form.serverless_mode}
                       onChange={(e) => setForm(f => ({ ...f, serverless_mode: e.target.value }))}
@@ -1048,7 +1048,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* Photon Toggle - right */}
         {selectedWorkloadType?.show_photon_toggle && (
           <div className={clsx(
-            "p-3 rounded-lg border transition-all",
+            "p-2.5 rounded-lg border transition-all",
             (form.photon_enabled || form.serverless_enabled)
               ? "bg-lava-600/5 dark:bg-lava-600/20 border-lava-400/30 dark:border-lava-600/50"
               : "bg-[var(--bg-tertiary)] border-[var(--border-primary)]"
@@ -1094,10 +1094,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       
       {/* VM Configuration - Driver & Worker Sections */}
       {showVMConfig && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {/* Serverless Note - explain VM nodes are for DBU estimation only */}
           {form.serverless_enabled && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2.5">
               <p className="text-xs text-blue-700 dark:text-blue-300">
                 <span className="font-semibold">ℹ️ Serverless Mode:</span> VM node types are used to estimate DBU consumption only. 
                 Actual VM costs are not included as serverless workloads are managed by Databricks.
@@ -1105,19 +1105,19 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             </div>
           )}
           
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* Driver Configuration Card */}
-            <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border-primary)]">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border-primary)]">
+              <div className="flex items-center gap-2 mb-2">
                 <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                 <h4 className="text-sm font-semibold text-[var(--text-primary)]">Driver Node</h4>
                 <span className="text-xs text-[var(--text-muted)]">(1 node)</span>
               </div>
               
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {/* Instance Type */}
                 <div>
-                  <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
+                  <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Instance Type</label>
                   <SearchableSelect
                     options={instanceTypes.map(it => ({
                       value: it.id,
@@ -1135,13 +1135,13 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 {/* Pricing Tier & Payment Option Row - Hide for serverless */}
                 {!form.serverless_enabled && (
                   <div className={clsx(
-                    "grid gap-3",
+                    "grid gap-2",
                     selectedCloud === 'aws' && form.driver_pricing_tier.startsWith('reserved') 
                       ? "grid-cols-2" 
                       : "grid-cols-1"
                   )}>
                     <div>
-                      <label className="flex items-center text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                      <label className="flex items-center text-xs font-medium mb-1 text-[var(--text-secondary)]">
                         Pricing Tier
                         <PricingTierTooltip tier={form.driver_pricing_tier} />
                       </label>
@@ -1158,7 +1158,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                     
                     {selectedCloud === 'aws' && form.driver_pricing_tier.startsWith('reserved') && (
                       <div>
-                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
+                        <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Payment Option</label>
                         <select
                           value={form.driver_payment_option}
                           onChange={(e) => setForm(f => ({ ...f, driver_payment_option: e.target.value }))}
@@ -1178,8 +1178,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             </div>
             
             {/* Worker Configuration Card */}
-            <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border-primary)]">
-              <div className="flex items-center justify-between mb-3">
+            <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border-primary)]">
+              <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
                   <h4 className="text-sm font-semibold text-[var(--text-primary)]">Worker Nodes</h4>
@@ -1209,11 +1209,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 </label>
               </div>
               
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {/* Instance Type & Count Row */}
                 <div className="flex gap-2">
                   <div className="flex-1 min-w-0">
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Instance Type</label>
+                    <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Instance Type</label>
                     <SearchableSelect
                       options={instanceTypes.map(it => ({
                         value: it.id,
@@ -1228,7 +1228,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                     />
                   </div>
                   <div className="w-14 flex-shrink-0">
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Count</label>
+                    <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Count</label>
                     <input
                       type="number"
                       min={1}
@@ -1243,13 +1243,13 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 {/* Pricing Tier & Payment Option Row - Hide for serverless */}
                 {!form.serverless_enabled && (
                   <div className={clsx(
-                    "grid gap-3",
+                    "grid gap-2",
                     selectedCloud === 'aws' && form.worker_pricing_tier.startsWith('reserved') 
                       ? "grid-cols-2" 
                       : "grid-cols-1"
                   )}>
                     <div>
-                      <label className="flex items-center text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                      <label className="flex items-center text-xs font-medium mb-1 text-[var(--text-secondary)]">
                         Pricing Tier
                         <PricingTierTooltip tier={form.worker_pricing_tier} />
                       </label>
@@ -1267,7 +1267,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                     
                     {selectedCloud === 'aws' && form.worker_pricing_tier.startsWith('reserved') && (
                       <div>
-                        <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Payment Option</label>
+                        <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Payment Option</label>
                         <select
                           value={form.worker_payment_option}
                           onChange={(e) => setForm(f => ({ ...f, worker_payment_option: e.target.value }))}
@@ -1290,7 +1290,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       )}
       
       {/* Other Configuration Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {/* Placeholder for grid alignment when VM config is shown */}
         {showVMConfig && (
           <></>
@@ -1299,7 +1299,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* DLT Config - hide when serverless is enabled (serverless DLT doesn't have edition selection) */}
         {selectedWorkloadType?.show_dlt_config && !form.serverless_enabled && (
           <div>
-            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">SDP Edition</label>
+            <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">SDP Edition</label>
             <select
               value={form.dlt_edition}
               onChange={(e) => setForm(f => ({ ...f, dlt_edition: e.target.value }))}
@@ -1322,10 +1322,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 const isDBSQLServerlessDisabled = !dbsqlServerlessAvailability.available
                 
                 return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {/* Serverless Toggle */}
                 <div className={clsx(
-                  "p-3 rounded-lg border transition-all",
+                  "p-2.5 rounded-lg border transition-all",
                   isDBSQLServerlessDisabled && "opacity-60",
                   form.dbsql_warehouse_type === 'SERVERLESS' && !isDBSQLServerlessDisabled
                     ? "bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-700" 
@@ -1377,8 +1377,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 
                 {/* Warehouse Type dropdown - only when not serverless */}
                 {(form.dbsql_warehouse_type !== 'SERVERLESS' || isDBSQLServerlessDisabled) && (
-                  <div className="p-3 rounded-lg border bg-[var(--bg-tertiary)] border-[var(--border-primary)]">
-                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Warehouse Type</label>
+                  <div className="p-2.5 rounded-lg border bg-[var(--bg-tertiary)] border-[var(--border-primary)]">
+                    <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Warehouse Type</label>
                     <select
                       value={form.dbsql_warehouse_type === 'SERVERLESS' && isDBSQLServerlessDisabled ? 'PRO' : form.dbsql_warehouse_type}
                       onChange={(e) => setForm(f => ({ ...f, dbsql_warehouse_type: e.target.value }))}
@@ -1395,7 +1395,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             </div>
             
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Size</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Size</label>
               <select
                 value={form.dbsql_warehouse_size}
                 onChange={(e) => setForm(f => ({ ...f, dbsql_warehouse_size: e.target.value }))}
@@ -1407,7 +1407,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Clusters</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Number of Clusters</label>
               <input
                 type="number"
                 min={1}
@@ -1557,7 +1557,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {selectedWorkloadType?.show_vector_search_mode && (
           <>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Vector Search Type</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Vector Search Type</label>
               <select
                 value={form.vector_search_mode}
                 onChange={(e) => setForm(f => ({ ...f, vector_search_mode: e.target.value }))}
@@ -1568,7 +1568,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Capacity (M vectors)</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Capacity (M vectors)</label>
               <input
                 type="number"
                 min={0.1}
@@ -1587,7 +1587,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {form.workload_type === 'MODEL_SERVING' && (
           <>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Endpoint Type</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Endpoint Type</label>
               <select
                 value={form.model_serving_gpu_type}
                 onChange={(e) => setForm(f => ({ ...f, model_serving_gpu_type: e.target.value }))}
@@ -1601,7 +1601,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Endpoints</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Number of Endpoints</label>
               <input
                 type="number"
                 min={1}
@@ -1619,7 +1619,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           <>
             {/* Row 1: Model | Rate Type */}
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Model</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Model</label>
               <select
                 value={form.fmapi_model}
                 onChange={(e) => setForm(f => ({ ...f, fmapi_model: e.target.value }))}
@@ -1638,7 +1638,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Rate Type</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Rate Type</label>
               <select
                 value={form.fmapi_rate_type}
                 onChange={(e) => setForm(f => ({ ...f, fmapi_rate_type: e.target.value }))}
@@ -1660,7 +1660,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             
             {/* Row 2: Quantity - different label based on rate type */}
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
                 {['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) 
                   ? 'Hours/Month' 
                   : 'Quantity (M tokens/month)'}
@@ -1701,7 +1701,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           <>
             {/* Row 1: Provider | Model */}
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Provider</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Provider</label>
               <select
                 value={form.fmapi_provider}
                 onChange={(e) => setForm(f => ({ 
@@ -1719,7 +1719,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Model</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Model</label>
               <select
                 value={form.fmapi_model}
                 onChange={(e) => {
@@ -1750,7 +1750,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             
             {/* Row 2: Endpoint Type | Context Length */}
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Endpoint Type</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Endpoint Type</label>
               <select
                 value={form.fmapi_endpoint_type}
                 onChange={(e) => setForm(f => ({ ...f, fmapi_endpoint_type: e.target.value }))}
@@ -1762,7 +1762,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Context Length</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Context Length</label>
               <select
                 value={form.fmapi_context_length}
                 onChange={(e) => setForm(f => ({ ...f, fmapi_context_length: e.target.value }))}
@@ -1792,7 +1792,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             
             {/* Row 3: Rate Type | Quantity */}
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Rate Type</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Rate Type</label>
               <select
                 value={form.fmapi_rate_type}
                 onChange={(e) => setForm(f => ({ ...f, fmapi_rate_type: e.target.value }))}
@@ -1830,7 +1830,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Quantity (M tokens/month)</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Quantity (M tokens/month)</label>
               <input
                 type="number"
                 min={0}
@@ -1859,7 +1859,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {selectedWorkloadType?.show_lakebase_config && (
           <>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Capacity Units (CU)</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Capacity Units (CU)</label>
               <input
                 type="number"
                 min={1}
@@ -1871,7 +1871,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               <span className="text-xs text-[var(--text-muted)]">1, 2, 4, or 8</span>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Number of Nodes</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Number of Nodes</label>
               <input
                 type="number"
                 min={1}
@@ -1926,7 +1926,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             {/* Usage - Runs (not for Lakebase, Vector Search, Model Serving, FMAPI which use hours_per_month directly) */}
             {selectedWorkloadType?.show_usage_runs && !selectedWorkloadType?.show_lakebase_config && !selectedWorkloadType?.show_vector_search_mode && !selectedWorkloadType?.show_fmapi_config && form.workload_type !== 'MODEL_SERVING' && (
               <div>
-                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Runs/Day</label>
+                <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Runs/Day</label>
                 <input
                   type="number"
                   min={0}
@@ -1940,7 +1940,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             {/* Avg Runtime - for Jobs, All Purpose, DLT, and SQL Warehouse */}
             {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
               <div>
-                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Avg Runtime (min)</label>
+                <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Avg Runtime (min)</label>
                 <input
                   type="number"
                   min={0}
@@ -1954,7 +1954,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             {/* Days per month - hide for FMAPI, Vector Search, Model Serving, Lakebase (they use hours_per_month directly) */}
             {!selectedWorkloadType?.show_fmapi_config && !selectedWorkloadType?.show_vector_search_mode && !selectedWorkloadType?.show_lakebase_config && form.workload_type !== 'MODEL_SERVING' && (
               <div>
-                <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Days/Month</label>
+                <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Days/Month</label>
                 <input
                   type="number"
                   min={1}
@@ -1971,7 +1971,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* Direct hours input */}
         {useDirectHours && (selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
           <div className="col-span-full md:col-span-1">
-            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Hours/Month</label>
+            <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Hours/Month</label>
             <input
               type="number"
               min={0}
@@ -1988,7 +1988,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* For Vector Search, Model Serving, and Lakebase - always show direct hours */}
         {(selectedWorkloadType?.show_vector_search_mode || form.workload_type === 'MODEL_SERVING' || selectedWorkloadType?.show_lakebase_config) && (
           <div>
-            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">Hours/Month</label>
+            <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Hours/Month</label>
             <input
               type="number"
               min={0}
