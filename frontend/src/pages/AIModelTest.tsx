@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import ReactMarkdown from 'react-markdown'
 import { 
   BeakerIcon, 
   PlayIcon, 
@@ -627,9 +628,10 @@ export default function AIModelTest() {
 
                             <div className="mt-4">
                               <span className="text-sm text-[var(--text-muted)]">Response:</span>
-                              <div className="mt-1 p-3 bg-[var(--bg-secondary)] rounded-lg text-sm max-h-60 overflow-y-auto whitespace-pre-wrap">
-                                {result.response?.substring(0, 1500)}
-                                {(result.response?.length || 0) > 1500 && '...'}
+                              <div className="mt-1 p-3 bg-[var(--bg-secondary)] rounded-lg text-sm max-h-80 overflow-y-auto prose prose-sm dark:prose-invert max-w-none">
+                                <ReactMarkdown>
+                                  {result.response || ''}
+                                </ReactMarkdown>
                               </div>
                             </div>
                           </>
@@ -800,8 +802,10 @@ export default function AIModelTest() {
 
                     <div>
                       <h5 className="font-medium mb-2">Full Response:</h5>
-                      <div className="p-4 bg-[var(--bg-secondary)] rounded-lg max-h-96 overflow-y-auto text-sm whitespace-pre-wrap">
-                        {assistantResult.response}
+                      <div className="p-4 bg-[var(--bg-secondary)] rounded-lg max-h-96 overflow-y-auto prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown>
+                          {assistantResult.response || ''}
+                        </ReactMarkdown>
                       </div>
                     </div>
                   </>
@@ -1070,8 +1074,10 @@ export default function AIModelTest() {
 
                     <div>
                       <h5 className="font-medium mb-2">Full Response:</h5>
-                      <div className="p-4 bg-[var(--bg-secondary)] rounded-lg max-h-96 overflow-y-auto text-sm whitespace-pre-wrap">
-                        {singleResult.content}
+                      <div className="p-4 bg-[var(--bg-secondary)] rounded-lg max-h-96 overflow-y-auto prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown>
+                          {singleResult.content || ''}
+                        </ReactMarkdown>
                       </div>
                     </div>
                   </>

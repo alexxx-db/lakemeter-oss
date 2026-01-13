@@ -721,31 +721,44 @@ async def compare_ai_assistant_models(request: Request, compare_request: AIAssis
                     model=model_id
                 )
                 
-                # Create agent
-                agent = EstimateAgent(client)
-                agent.set_context(SAMPLE_ESTIMATE_CONTEXT, SAMPLE_WORKLOADS)
+                # Build context message with sample workloads
+                context = f"""Current estimate context:
+- Estimate: {SAMPLE_ESTIMATE_CONTEXT.get('estimate_name')}
+- Cloud: {SAMPLE_ESTIMATE_CONTEXT.get('cloud')}
+- Region: {SAMPLE_ESTIMATE_CONTEXT.get('region')}
+- Tier: {SAMPLE_ESTIMATE_CONTEXT.get('tier')}
+
+Current workloads ({len(SAMPLE_WORKLOADS)} total):
+"""
+                for w in SAMPLE_WORKLOADS:
+                    context += f"- {w.get('workload_name')} ({w.get('workload_type')}): ${w.get('total_cost', 0):,.2f}/mo\n"
                 
-                # Get response
-                result = await agent.chat(prompt)
+                context += f"\nTotal: ${sum(w.get('total_cost', 0) for w in SAMPLE_WORKLOADS):,.2f}/mo"
+                
+                # Simple direct API call without agent tool complexity
+                messages = [
+                    {"role": "system", "content": SYSTEM_PROMPT[:4000]},  # Truncate system prompt for testing
+                    {"role": "user", "content": f"{context}\n\nUser request: {prompt}"}
+                ]
+                
+                response = await client.chat(
+                    messages=messages,
+                    tools=None,  # No tools for testing - just get response quality/speed
+                    max_tokens=4096,
+                    temperature=0.7
+                )
                 
                 end_time = time.time()
                 
-                # Collect tool calls
-                tool_calls_made = []
-                for msg in agent.conversation_history:
-                    if msg.get("role") == "assistant" and "[Actions:" in msg.get("content", ""):
-                        content = msg.get("content", "")
-                        if "[Actions:" in content:
-                            actions_part = content.split("[Actions:")[1].split("]")[0]
-                            tool_calls_made.append(actions_part.strip())
+                content = response.get("content", "")
                 
                 results[model_id] = {
                     "success": True,
                     "model": model_config["name"],
-                    "response": result.get("content", ""),
-                    "response_length": len(result.get("content", "")),
-                    "tool_calls_made": tool_calls_made,
-                    "proposed_workloads": len(agent.proposed_workloads),
+                    "response": content,
+                    "response_length": len(content),
+                    "tool_calls_made": [],
+                    "proposed_workloads": 0,
                     "metrics": {
                         "total_latency_ms": round((end_time - start_time) * 1000, 2),
                         "total_latency_seconds": round(end_time - start_time, 2)
