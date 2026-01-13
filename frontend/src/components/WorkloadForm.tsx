@@ -945,152 +945,88 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       </div>
       
       
-      {/* Feature Toggles Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {/* Serverless Toggle - left */}
-        {selectedWorkloadType?.show_serverless_toggle && (() => {
-          const serverlessAvailability = isWorkloadAvailableForTier(
-            form.workload_type, 
-            selectedTier, 
-            true // check serverless availability
-          )
-          const isServerlessDisabled = !serverlessAvailability.available
-          
-          return (
-          <div className={clsx(
-            "p-2.5 rounded-lg border transition-all",
-            isServerlessDisabled && "opacity-60",
-            form.serverless_enabled && !isServerlessDisabled
-              ? "bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-700" 
-              : "bg-[var(--bg-tertiary)] border-[var(--border-primary)]"
-          )}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CloudIcon className={clsx(
-                  "w-4 h-4",
-                  form.serverless_enabled ? "text-teal-600 dark:text-teal-400" : "text-teal-500 dark:text-teal-400"
-                )} />
+      {/* Feature Toggles - Compact inline design */}
+      {(selectedWorkloadType?.show_serverless_toggle || selectedWorkloadType?.show_photon_toggle) && (
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Serverless Toggle */}
+          {selectedWorkloadType?.show_serverless_toggle && (() => {
+            const serverlessAvailability = isWorkloadAvailableForTier(
+              form.workload_type, 
+              selectedTier, 
+              true
+            )
+            const isServerlessDisabled = !serverlessAvailability.available
+            
+            return (
+              <label className={clsx(
+                "flex items-center gap-2 cursor-pointer select-none",
+                isServerlessDisabled && "opacity-50 cursor-not-allowed"
+              )}>
+                <input
+                  type="checkbox"
+                  checked={form.serverless_enabled && !isServerlessDisabled}
+                  onChange={() => !isServerlessDisabled && setForm(f => {
+                    const newServerlessEnabled = !f.serverless_enabled
+                    const newServerlessMode = (f.workload_type === 'ALL_PURPOSE' && newServerlessEnabled) 
+                      ? 'performance' 
+                      : f.serverless_mode
+                    return { ...f, serverless_enabled: newServerlessEnabled, serverless_mode: newServerlessMode }
+                  })}
+                  disabled={isServerlessDisabled}
+                  className="w-4 h-4 rounded border-teal-400 text-teal-600 focus:ring-teal-500"
+                />
+                <CloudIcon className="w-4 h-4 text-teal-600" />
                 <span className={clsx(
                   "text-sm",
-                  form.serverless_enabled && !isServerlessDisabled ? "text-teal-700 dark:text-teal-300 font-medium" : "text-[var(--text-secondary)]"
+                  form.serverless_enabled ? "text-teal-700 dark:text-teal-400 font-medium" : "text-[var(--text-secondary)]"
                 )}>Serverless</span>
                 {isServerlessDisabled && (
-                  <span className="text-[10px] text-amber-600 dark:text-amber-400">(Premium+ only)</span>
+                  <span className="text-[10px] text-amber-600">(Premium+)</span>
                 )}
-              </div>
-              <button
-                type="button"
-                onClick={() => !isServerlessDisabled && setForm(f => {
-                  const newServerlessEnabled = !f.serverless_enabled
-                  // All-Purpose Serverless only supports Performance mode
-                  const newServerlessMode = (f.workload_type === 'ALL_PURPOSE' && newServerlessEnabled) 
-                    ? 'performance' 
-                    : f.serverless_mode
-                  return { ...f, serverless_enabled: newServerlessEnabled, serverless_mode: newServerlessMode }
-                })}
-                disabled={isServerlessDisabled}
-                className={clsx(
-                  'toggle', 
-                  form.serverless_enabled && !isServerlessDisabled ? 'toggle-checked' : 'toggle-unchecked',
-                  isServerlessDisabled && 'cursor-not-allowed'
+                {form.serverless_enabled && !isServerlessDisabled && form.workload_type !== 'ALL_PURPOSE' && (
+                  <select
+                    value={form.serverless_mode}
+                    onChange={(e) => { e.stopPropagation(); setForm(f => ({ ...f, serverless_mode: e.target.value })) }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="ml-1 text-xs py-0.5 px-1.5 rounded border-teal-300 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300"
+                  >
+                    {serverlessModeOptions.map(mode => (
+                      <option key={mode.id} value={mode.id}>{mode.name}</option>
+                    ))}
+                  </select>
                 )}
-              >
-                <span className={clsx('toggle-knob', form.serverless_enabled && !isServerlessDisabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
-              </button>
-            </div>
-            
-            {/* Serverless Mode Dropdown - appears when serverless is enabled */}
-            {/* Note: All-Purpose Serverless only supports Performance mode (no Standard option) */}
-            {form.serverless_enabled && !isServerlessDisabled && (
-              <div className="mt-2 pt-2 border-t border-teal-200 dark:border-teal-700">
-                {form.workload_type === 'ALL_PURPOSE' ? (
-                  // All-Purpose Serverless: Performance mode only (shown as info, not a selector)
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <span className="text-xs font-medium text-teal-700 dark:text-teal-300">Mode: </span>
-                      <span className="text-sm font-semibold text-teal-800 dark:text-teal-200">Performance</span>
-                    </div>
-                    <span className="text-xs px-2 py-0.5 bg-teal-100 dark:bg-teal-800 text-teal-700 dark:text-teal-300 rounded">
-                      Fixed
-                    </span>
-                  </div>
-                ) : (
-                  // Jobs/DLT Serverless: Allow mode selection
-                  <>
-                    <label className="block text-xs font-medium mb-1 text-teal-700 dark:text-teal-300">Serverless Mode</label>
-                    <select
-                      value={form.serverless_mode}
-                      onChange={(e) => setForm(f => ({ ...f, serverless_mode: e.target.value }))}
-                      className="w-full text-sm bg-white dark:bg-slate-800 border-teal-200 dark:border-teal-600"
-                    >
-                      {serverlessModeOptions.map(mode => (
-                        <option key={mode.id} value={mode.id}>{mode.name}</option>
-                      ))}
-                    </select>
-                    <p className="text-xs mt-1 text-teal-600 dark:text-teal-400">
-                      {serverlessModeOptions.find(m => m.id === form.serverless_mode)?.description}
-                    </p>
-                  </>
+                {form.serverless_enabled && form.workload_type === 'ALL_PURPOSE' && (
+                  <span className="text-[10px] text-teal-600 bg-teal-100 dark:bg-teal-900/30 px-1.5 py-0.5 rounded">Performance</span>
                 )}
-              </div>
-            )}
-            
-            {/* Warning for Standard tier */}
-            {isServerlessDisabled && (
-              <p className="text-xs mt-2 text-amber-600 dark:text-amber-400">
-                Serverless requires Premium or Enterprise tier
-              </p>
-            )}
-          </div>
-          )
-        })()}
-        
-        {/* Photon Toggle - right */}
-        {selectedWorkloadType?.show_photon_toggle && (
-          <div className={clsx(
-            "p-2.5 rounded-lg border transition-all",
-            (form.photon_enabled || form.serverless_enabled)
-              ? "bg-lava-600/5 dark:bg-lava-600/20 border-lava-400/30 dark:border-lava-600/50"
-              : "bg-[var(--bg-tertiary)] border-[var(--border-primary)]"
-          )}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BoltIcon className={clsx(
-                  "w-4 h-4",
-                  (form.photon_enabled || form.serverless_enabled) ? "text-lava-700 dark:text-lava-500" : "text-lava-700 dark:text-lava-600"
-                )} />
-                <span className={clsx(
-                  "text-sm",
-                  (form.photon_enabled || form.serverless_enabled) ? "text-lava-700 dark:text-lava-400 font-medium" : "text-[var(--text-secondary)]"
-                )}>Photon</span>
-                {form.serverless_enabled && (
-                  <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">Auto</span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => !form.serverless_enabled && setForm(f => ({ ...f, photon_enabled: !f.photon_enabled }))}
+              </label>
+            )
+          })()}
+          
+          {/* Photon Toggle */}
+          {selectedWorkloadType?.show_photon_toggle && (
+            <label className={clsx(
+              "flex items-center gap-2 cursor-pointer select-none",
+              form.serverless_enabled && "opacity-60"
+            )}>
+              <input
+                type="checkbox"
+                checked={form.photon_enabled || form.serverless_enabled}
+                onChange={() => !form.serverless_enabled && setForm(f => ({ ...f, photon_enabled: !f.photon_enabled }))}
                 disabled={form.serverless_enabled}
-                className={clsx(
-                  'toggle', 
-                  (form.photon_enabled || form.serverless_enabled) ? 'toggle-checked' : 'toggle-unchecked',
-                  form.serverless_enabled && 'opacity-60 cursor-not-allowed'
-                )}
-              >
-                <span className={clsx(
-                  'toggle-knob', 
-                  (form.photon_enabled || form.serverless_enabled) ? 'toggle-knob-checked' : 'toggle-knob-unchecked'
-                )} />
-              </button>
-            </div>
-            {(form.photon_enabled || form.serverless_enabled) && (
-              <p className="text-xs mt-2 text-lava-700 dark:text-lava-500">
-                Photon acceleration enabled for faster query execution
-              </p>
-            )}
-          </div>
-        )}
-      </div>
+                className="w-4 h-4 rounded border-lava-400 text-lava-600 focus:ring-lava-500"
+              />
+              <BoltIcon className="w-4 h-4 text-lava-600" />
+              <span className={clsx(
+                "text-sm",
+                (form.photon_enabled || form.serverless_enabled) ? "text-lava-700 dark:text-lava-400 font-medium" : "text-[var(--text-secondary)]"
+              )}>Photon</span>
+              {form.serverless_enabled && (
+                <span className="text-[10px] text-green-600 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">Auto</span>
+              )}
+            </label>
+          )}
+        </div>
+      )}
       
       {/* VM Configuration - Driver & Worker Sections */}
       {showVMConfig && (
