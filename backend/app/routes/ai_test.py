@@ -9,7 +9,7 @@ from pydantic import BaseModel
 import httpx
 import traceback
 
-from app.services.ai_agent import EstimateAgent, SYSTEM_PROMPT, TOOLS_ESTIMATE_DETAIL
+from app.services.ai_agent import EstimateAgent, SYSTEM_PROMPT, TOOLS
 from app.services.ai_client import ClaudeClient
 
 router = APIRouter(tags=["AI Testing"])
@@ -577,7 +577,7 @@ async def get_assistant_test_prompts():
             "total_cost": sum(w.get("total_cost", 0) for w in SAMPLE_WORKLOADS)
         },
         "system_prompt_preview": SYSTEM_PROMPT[:500] + "...",
-        "tools_count": len(TOOLS_ESTIMATE_DETAIL)
+        "tools_count": len(TOOLS)
     }
 
 
@@ -785,6 +785,6 @@ async def get_system_prompt():
     return {
         "system_prompt": SYSTEM_PROMPT,
         "system_prompt_length": len(SYSTEM_PROMPT),
-        "tools": [{"name": t["name"], "description": t["description"][:200]} for t in TOOLS_ESTIMATE_DETAIL],
-        "tools_count": len(TOOLS_ESTIMATE_DETAIL)
+        "tools": [{"name": t["name"], "description": t["description"][:200]} for t in TOOLS],
+        "tools_count": len(TOOLS)
     }
