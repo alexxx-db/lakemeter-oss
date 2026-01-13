@@ -27,10 +27,15 @@ SYSTEM_PROMPT = """You are Lakemeter AI, an expert Databricks pricing assistant.
 - When discussing costs, refer to the actual calculated costs provided in the context
 - Do not make up or estimate cost numbers yourself
 
+## IMPORTANT: Naming Convention
+When presenting workload types to users, ALWAYS use these names:
+- Use "SDP (Spark Declarative Pipelines)" NOT "DLT" - the internal value is DLT but users should see SDP
+- Always list FMAPI_DATABRICKS and FMAPI_PROPRIETARY as separate options (never combine into just "FMAPI")
+
 ## Workload Types You Can Configure
 - **JOBS (Lakeflow Jobs)**: Batch processing, ETL pipelines, scheduled tasks
 - **ALL_PURPOSE**: Interactive development, notebooks, exploration
-- **SDP (Spark Declarative Pipelines)**: Declarative ETL, CDC, materialized views, data quality
+- **SDP (Spark Declarative Pipelines)**: Declarative ETL, CDC, materialized views, data quality (internal type: DLT)
 - **DBSQL (Databricks SQL)**: SQL analytics, BI dashboards, ad-hoc queries
 - **MODEL_SERVING**: Real-time ML inference endpoints
 - **VECTOR_SEARCH**: Vector similarity search for AI applications
@@ -567,7 +572,7 @@ When the propose_workload tool returns a configuration (e.g., number of clusters
      - 10 users → 2 concurrent ops
      - 20 users → 4 concurrent ops
    
-   **Sizing: TPC-DI baseline × concurrent operations (shared cluster)**
+   **Sizing: TPC-DI baseline × concurrent operations (op(s)) (shared cluster)**
    
    | Dataset Size | 1 concurrent op | 2 concurrent ops | 3 concurrent ops | 4 concurrent ops |
    |--------------|-----------------|------------------|------------------|------------------|
@@ -692,9 +697,9 @@ Once you answer these, I'll propose each workload with the right configuration!
 ```
 
 ## Configuration Tips
-- For JOBS/DLT: Ask about base_table_size + runs_per_day for batch (runtime inferred from TPC-DI benchmarks), OR hours_per_month for continuous
+- For JOBS/SDP: Ask about base_table_size + runs_per_day for batch (runtime inferred from TPC-DI benchmarks), OR hours_per_month for continuous
 - For DBSQL: Ask about total users, concurrency %, data volume, and query selectivity to size warehouse
-- For serverless: No VM types needed, but ask about workload intensity for cost estimates
+- For serverless: STILL include driver_node_type, worker_node_type, and num_workers as these serve as cost estimation proxies
 - For reserved pricing: Only recommend for predictable, long-running workloads
 - For spot workers: Only for fault-tolerant batch jobs that can handle interruptions
 - ALWAYS use instance types appropriate for the estimate's cloud provider!
@@ -790,17 +795,17 @@ The user will review and confirm before it's added to the estimate.""",
                 "workload_type": {
                     "type": "string",
                     "enum": ["JOBS", "ALL_PURPOSE", "DLT", "DBSQL", "MODEL_SERVING", "VECTOR_SEARCH", "FMAPI_DATABRICKS", "FMAPI_PROPRIETARY", "LAKEBASE"],
-                    "description": "Type of Databricks workload"
+                    "description": "Type of Databricks workload. Note: Use DLT for SDP (Spark Declarative Pipelines) workloads - present as 'SDP' to users but use 'DLT' as the enum value."
                 },
                 "workload_name": {
                     "type": "string",
                     "description": "Descriptive name for this workload (e.g., 'Daily ETL Job', 'Analytics Warehouse')"
                 },
                 
-                # === Compute Configuration (Jobs, All Purpose, DLT) ===
+                # === Compute Configuration (Jobs, All Purpose, SDP) ===
                 "serverless_enabled": {
                     "type": "boolean",
-                    "description": "Use serverless compute (simpler, pay-per-use, auto-scaling). Recommended for variable workloads."
+                    "description": "Use serverless compute (simpler, pay-per-use, auto-scaling). Recommended for variable workloads. Note: Even for serverless, include driver_node_type, worker_node_type, and num_workers as cost estimation proxies."
                 },
                 "serverless_mode": {
                     "type": "string",
@@ -864,11 +869,11 @@ The user will review and confirm before it's added to the estimate.""",
                     "description": "AWS only: Payment option for reserved workers"
                 },
                 
-                # === DLT Specific ===
+                # === SDP (Spark Declarative Pipelines) Specific ===
                 "dlt_edition": {
                     "type": "string",
                     "enum": ["CORE", "PRO", "ADVANCED"],
-                    "description": "DLT edition: CORE (basic), PRO (CDC, SCD), ADVANCED (expectations, monitoring)"
+                    "description": "SDP edition: CORE (basic), PRO (CDC, SCD), ADVANCED (expectations, monitoring)"
                 },
                 
                 # === DBSQL Specific ===
@@ -1293,7 +1298,7 @@ class EstimateAgent:
             tools=tools,
             system=system,
             max_tokens=4096,
-            temperature=0.7
+            temperature=0
         )
         
         # Process tool calls if any
@@ -1342,7 +1347,7 @@ class EstimateAgent:
                 tools=tools,
                 system=system,
                 max_tokens=4096,
-                temperature=0.7
+                temperature=0
             )
             
             final_content = follow_up.get("content", "")
@@ -1408,7 +1413,7 @@ class EstimateAgent:
             tools=tools,
             system=system,
             max_tokens=4096,
-            temperature=0.7
+            temperature=0
         ):
             chunk_type = chunk.get("type")
             chunks_received += 1
@@ -1798,7 +1803,7 @@ The following fields MUST be set before workloads can be added:
                 if w.get('dbsql_warehouse_size'):
                     context += f"\n- Warehouse Size: {w.get('dbsql_warehouse_size')}"
                 if w.get('dlt_edition'):
-                    context += f"\n- DLT Edition: {w.get('dlt_edition')}"
+                    context += f"\n- SDP Edition: {w.get('dlt_edition')}"
             
             context += f"\n\n### Total Monthly Cost: ${total_cost:.2f}"
         else:
@@ -2238,11 +2243,14 @@ Each workload needs to be confirmed individually. Review the configurations and 
             # Photon - enable by default for performance
             photon_enabled = workload.setdefault("photon_enabled", True)
             
+            # ALWAYS set instance types and num_workers - even for serverless
+            # For serverless, these serve as a "proxy" for cost estimation
+            # (the UI uses them to estimate comparable serverless compute)
+            workload.setdefault("num_workers", 4)
+            workload.setdefault("driver_node_type", default_driver)
+            workload.setdefault("worker_node_type", default_instance)
+            
             if not is_serverless:
-                # Non-serverless: set instance types and worker pricing
-                workload.setdefault("num_workers", 4)
-                workload.setdefault("driver_node_type", default_driver)  # Driver doesn't need to be big
-                workload.setdefault("worker_node_type", default_instance)
                 
                 # DEFAULT TO SPOT WORKERS for cost savings
                 workload.setdefault("worker_pricing_tier", "spot")
@@ -2273,7 +2281,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 
                 notes_parts.append("")
                 notes_parts.append("**📊 TPC-DI ETL Benchmark Reference (MEDIUM Complexity Baseline):**")
-                notes_parts.append("(Same performance for Classic Jobs, Serverless Jobs, DLT all editions)")
+                notes_parts.append("(Same performance for Classic Jobs, Serverless Jobs, SDP all editions)")
                 notes_parts.append("")
                 if cloud == "aws":
                     notes_parts.append("| Data Scale | Driver         | Worker         | Workers | Runtime |")
@@ -2413,17 +2421,17 @@ Each workload needs to be confirmed individually. Review the configurations and 
             edition = workload.setdefault("dlt_edition", "PRO")
             notes_parts.append("")
             notes_parts.append("=" * 60)
-            notes_parts.append("**DELTA LIVE TABLES (DLT) CONFIGURATION**")
+            notes_parts.append("**SPARK DECLARATIVE PIPELINES (SDP) CONFIGURATION**")
             notes_parts.append("=" * 60)
             notes_parts.append("")
-            notes_parts.append(f"**📋 DLT Edition: {edition}**")
+            notes_parts.append(f"**📋 SDP Edition: {edition}**")
             notes_parts.append("")
             
             if edition == "CORE":
                 notes_parts.append("**CORE Edition Features:**")
                 notes_parts.append("• **Streaming + Batch**: Both real-time and batch data processing")
                 notes_parts.append("• **Bronze → Silver → Gold**: Standard medallion architecture")
-                notes_parts.append("• **Declarative Python/SQL**: Define tables, DLT handles orchestration")
+                notes_parts.append("• **Declarative Python/SQL**: Define tables, SDP handles orchestration")
                 notes_parts.append("• **Automatic retries**: Built-in fault tolerance")
                 notes_parts.append("• **Cost**: Lowest DBU rate")
                 notes_parts.append("")
@@ -2497,11 +2505,11 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("**💡 Consider Serverless for:** Incremental MV refresh, variable schedules")
             
             notes_parts.append("")
-            notes_parts.append("**🎯 DLT OPERATIONAL GUIDANCE:**")
+            notes_parts.append("**🎯 SDP OPERATIONAL GUIDANCE:**")
             notes_parts.append("• **Pipeline mode**: Choose 'Continuous' (streaming) or 'Triggered' (batch)")
             notes_parts.append("• **Development**: Use 'Development' mode for faster iteration (no optimizations)")
             notes_parts.append("• **Production**: Use 'Production' mode (automatic optimizations, stable performance)")
-            notes_parts.append("• **Monitoring**: Check DLT event log for pipeline metrics and data quality results")
+            notes_parts.append("• **Monitoring**: Check SDP event log for pipeline metrics and data quality results")
             notes_parts.append("• **Cost optimization**: Use 'Enhanced Autoscaling' to minimize idle compute")
         
         if wtype == "DBSQL":
@@ -3318,7 +3326,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
                         recommendations.append({
                             "workload": wname,
                             "type": "cost",
-                            "category": "DLT Edition",
+                            "category": "SDP Edition",
                             "current_cost": f"${cost:.2f}/month",
                             "suggestion": "Review if ADVANCED edition features are needed",
                             "detail": "ADVANCED edition includes data quality expectations. If not using these features, PRO or CORE may suffice.",

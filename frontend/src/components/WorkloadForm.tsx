@@ -1299,7 +1299,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* DLT Config - hide when serverless is enabled (serverless DLT doesn't have edition selection) */}
         {selectedWorkloadType?.show_dlt_config && !form.serverless_enabled && (
           <div>
-            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">DLT Edition</label>
+            <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">SDP Edition</label>
             <select
               value={form.dlt_edition}
               onChange={(e) => setForm(f => ({ ...f, dlt_edition: e.target.value }))}
