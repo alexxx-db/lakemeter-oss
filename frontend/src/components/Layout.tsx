@@ -9,7 +9,11 @@ import {
   ChevronDownIcon,
   UserCircleIcon,
   ExclamationTriangleIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  QuestionMarkCircleIcon,
+  DocumentTextIcon,
+  ChatBubbleLeftRightIcon,
+  BugAntIcon
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import { useState, useRef, useEffect, useCallback } from 'react'
@@ -72,11 +76,13 @@ export default function Layout() {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
+  const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [chatPanelWidth, setChatPanelWidth] = useState(380)
   const [showSessionExpired, setShowSessionExpired] = useState(false)
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const helpDropdownRef = useRef<HTMLDivElement>(null)
   
   const { 
     currentUser, 
@@ -151,6 +157,9 @@ export default function Layout() {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false)
+      }
+      if (helpDropdownRef.current && !helpDropdownRef.current.contains(event.target as Node)) {
+        setIsHelpOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -314,6 +323,84 @@ export default function Layout() {
                     })}
                   </div>
                 )}
+              </div>
+              
+              {/* Help Center Dropdown */}
+              <div className="relative" ref={helpDropdownRef}>
+                <button
+                  onClick={() => setIsHelpOpen(!isHelpOpen)}
+                  className={clsx(
+                    "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                    isHelpOpen
+                      ? "bg-lava-100 dark:bg-lava-900/30 text-lava-600"
+                      : "text-[var(--text-secondary)] hover:text-lava-600 hover:bg-[var(--bg-tertiary)]"
+                  )}
+                  title="Help & Feedback"
+                >
+                  <QuestionMarkCircleIcon className="w-5 h-5" />
+                </button>
+                
+                <AnimatePresence>
+                  {isHelpOpen && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 mt-2 w-56 rounded-xl shadow-lg py-2 z-50 border overflow-hidden"
+                      style={{ 
+                        backgroundColor: 'var(--bg-secondary)', 
+                        borderColor: 'var(--border-primary)' 
+                      }}
+                    >
+                      <div className="px-3 py-1.5 mb-1">
+                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Help & Resources</p>
+                      </div>
+                      
+                      <a
+                        href="https://docs.google.com/document/d/1ca8Nn-44ObcLnskQ0XsKwSS3CRe-jbqJNdiK3i-ItoA/edit?tab=t.0"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setIsHelpOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      >
+                        <DocumentTextIcon className="w-4 h-4 text-blue-500" />
+                        <div>
+                          <p className="font-medium">Documentation</p>
+                          <p className="text-xs text-[var(--text-muted)]">Beta release notes</p>
+                        </div>
+                      </a>
+                      
+                      <a
+                        href="https://docs.google.com/forms/d/e/1FAIpQLSc3bNU-Fm2mpsEWzLZxF1GvMxi4Iqw4bs8JXntWh9bLiLDiFQ/viewform"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setIsHelpOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      >
+                        <ChatBubbleLeftRightIcon className="w-4 h-4 text-green-500" />
+                        <div>
+                          <p className="font-medium">Share Feedback</p>
+                          <p className="text-xs text-[var(--text-muted)]">Tell us what you think</p>
+                        </div>
+                      </a>
+                      
+                      <a
+                        href="https://docs.google.com/spreadsheets/d/1U5tg73pPJBUEX7SsPAn3ybOhHuY0UNo76jtT9f0u2WA/edit?gid=0#gid=0"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setIsHelpOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      >
+                        <BugAntIcon className="w-4 h-4 text-amber-500" />
+                        <div>
+                          <p className="font-medium">Report a Bug</p>
+                          <p className="text-xs text-[var(--text-muted)]">Help us improve</p>
+                        </div>
+                      </a>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
               
               {/* AI Assistant Button - Only show on estimate detail pages */}

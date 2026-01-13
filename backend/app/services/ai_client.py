@@ -31,8 +31,8 @@ CLAUDE_ENDPOINT = f"{DATABRICKS_HOST}/serving-endpoints/{MODEL_ENDPOINT}/invocat
 
 # Rate limiting configuration
 MAX_QUERIES_PER_HOUR = 500
-MAX_INPUT_TOKENS_PER_MINUTE = 50000
-MAX_OUTPUT_TOKENS_PER_MINUTE = 5000
+MAX_INPUT_TOKENS_PER_MINUTE = 200000
+MAX_OUTPUT_TOKENS_PER_MINUTE = 20000
 
 
 @dataclass
@@ -139,7 +139,7 @@ class ClaudeAIClient:
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         max_tokens: int = 4096,
-        temperature: float = 0.7,
+        temperature: float = 0,
         system: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -279,7 +279,7 @@ class ClaudeAIClient:
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         max_tokens: int = 4096,
-        temperature: float = 0.7,
+        temperature: float = 0.0,
         system: Optional[str] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
