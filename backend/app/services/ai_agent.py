@@ -1261,6 +1261,9 @@ class EstimateAgent:
         """
         self.current_estimate = estimate
         self.current_workloads = workloads or []
+        log_info(f"set_context called - estimate: {bool(estimate)}, workloads: {len(self.current_workloads)}")
+        if self.current_workloads:
+            log_info(f"Workload names: {[w.get('workload_name') for w in self.current_workloads[:5]]}")
         
         # Filter out any proposals that have already been added to the estimate
         # (matching by workload_name to avoid duplicates showing in AI panel)
@@ -1407,6 +1410,7 @@ class EstimateAgent:
         chunks_received = 0
         
         log_info(f"Starting chat_stream with {len(self.conversation_history)} messages")
+        log_info(f"Context - estimate: {self.current_estimate is not None}, workloads: {len(self.current_workloads) if self.current_workloads else 0}")
         
         async for chunk in self.client.chat_stream(
             messages=self.conversation_history,
@@ -1611,7 +1615,17 @@ class EstimateAgent:
                     break
                 
                 # For analyze_estimate, format comprehensive recommendations
-                elif tool_name == "analyze_estimate" and not result.get("error"):
+                elif tool_name == "analyze_estimate":
+                    # Handle error case - show user-friendly message
+                    if result.get("error"):
+                        error_msg = result.get("error", "Unknown error")
+                        suggestion = result.get("suggestion", "")
+                        follow_up_msg = f"\n\n⚠️ **Unable to analyze estimate**: {error_msg}\n"
+                        if suggestion:
+                            follow_up_msg += f"\n{suggestion}\n"
+                        log_warning(f"analyze_estimate error: {error_msg}")
+                        break
+                    
                     recommendations = result.get("recommendations", [])
                     insights = result.get("insights", [])
                     cost_breakdown = result.get("cost_breakdown", {})
