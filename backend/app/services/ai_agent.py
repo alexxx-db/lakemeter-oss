@@ -3280,7 +3280,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
                         })
                     
                     # Serverless recommendation for low utilization
-                    hours = workload.get("hours_per_month", 0)
+                    hours = workload.get("hours_per_month") or 0
                     if not workload.get("serverless_enabled") and hours and hours < 150:
                         recommendations.append({
                             "workload": wname,
@@ -3294,9 +3294,9 @@ Each workload needs to be confirmed individually. Review the configurations and 
                         })
                     
                     # Autoscaling recommendation
-                    min_workers = workload.get("jobs_worker_min", 0)
-                    max_workers = workload.get("jobs_worker_max", 0)
-                    if min_workers == max_workers and max_workers > 1:
+                    min_workers = workload.get("jobs_worker_min") or 0
+                    max_workers = workload.get("jobs_worker_max") or 0
+                    if min_workers and max_workers and min_workers == max_workers and max_workers > 1:
                         recommendations.append({
                             "workload": wname,
                             "type": "cost",
@@ -3308,8 +3308,8 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 
                 # ALL_PURPOSE cluster recommendations
                 if wtype == "ALL_PURPOSE":
-                    hours = workload.get("hours_per_month", 730)
-                    if hours >= 600:  # High utilization
+                    hours = workload.get("hours_per_month") or 730
+                    if hours and hours >= 600:  # High utilization
                         if workload.get("worker_pricing_tier") != "reserved_1y":
                             recommendations.append({
                                 "workload": wname,
@@ -3321,7 +3321,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
                                 "potential_savings": "Up to 40% vs on-demand",
                                 "consideration": "Requires commitment. Best for predictable, steady-state workloads."
                             })
-                    elif hours < 200:
+                    elif hours and hours < 200:
                         if not workload.get("serverless_enabled"):
                             recommendations.append({
                                 "workload": wname,
@@ -3335,8 +3335,8 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 
                 # DLT recommendations
                 if wtype == "DLT":
-                    dlt_edition = workload.get("dlt_edition", "CORE")
-                    if dlt_edition == "ADVANCED" and cost < 500:
+                    dlt_edition = workload.get("dlt_edition") or "CORE"
+                    if dlt_edition == "ADVANCED" and cost and cost < 500:
                         recommendations.append({
                             "workload": wname,
                             "type": "cost",
@@ -3349,9 +3349,9 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 
                 # DBSQL recommendations
                 if wtype == "DBSQL":
-                    warehouse_type = workload.get("dbsql_warehouse_type", "")
-                    warehouse_size = workload.get("dbsql_warehouse_size", "")
-                    hours = workload.get("hours_per_month", 0)
+                    warehouse_type = workload.get("dbsql_warehouse_type") or ""
+                    warehouse_size = workload.get("dbsql_warehouse_size") or ""
+                    hours = workload.get("hours_per_month") or 0
                     
                     if warehouse_type != "SERVERLESS":
                         recommendations.append({
@@ -3367,7 +3367,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
                     
                     # Check for oversized warehouse
                     if warehouse_size in ["Large", "X-Large", "2X-Large", "3X-Large", "4X-Large"]:
-                        if hours < 100:
+                        if hours and hours < 100:
                             recommendations.append({
                                 "workload": wname,
                                 "type": "cost",
@@ -3378,7 +3378,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
                             })
                 
                 # MODEL_SERVING recommendations  
-                if wtype == "MODEL_SERVING" and cost > 500:
+                if wtype == "MODEL_SERVING" and cost and cost > 500:
                     recommendations.append({
                         "workload": wname,
                         "type": "cost",
@@ -3391,7 +3391,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 
                 # VECTOR_SEARCH recommendations
                 if wtype == "VECTOR_SEARCH":
-                    endpoint_type = workload.get("vector_search_endpoint_type", "")
+                    endpoint_type = workload.get("vector_search_endpoint_type") or ""
                     if endpoint_type == "STANDARD":
                         recommendations.append({
                             "workload": wname,
@@ -3406,9 +3406,9 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 
                 # FMAPI recommendations
                 if wtype == "FMAPI":
-                    rate_type = workload.get("fmapi_rate_type", "")
-                    quantity = workload.get("fmapi_quantity", 0)
-                    if rate_type in ["input_token", "output_token"] and quantity > 100:
+                    rate_type = workload.get("fmapi_rate_type") or ""
+                    quantity = workload.get("fmapi_quantity") or 0
+                    if rate_type in ["input_token", "output_token"] and quantity and quantity > 100:
                         recommendations.append({
                             "workload": wname,
                             "type": "cost",
@@ -3421,10 +3421,10 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 
                 # LAKEBASE recommendations
                 if wtype == "LAKEBASE":
-                    reads = workload.get("reads_per_sec", 0)
-                    writes = workload.get("bulk_writes_per_sec", 0)
-                    cus = workload.get("lakebase_cu", 1)
-                    if cus > 2 and (reads < 5000 and writes < 1000):
+                    reads = workload.get("reads_per_sec") or 0
+                    writes = workload.get("bulk_writes_per_sec") or 0
+                    cus = workload.get("lakebase_cu") or 1
+                    if cus and cus > 2 and (reads < 5000 and writes < 1000):
                         recommendations.append({
                             "workload": wname,
                             "type": "cost",
