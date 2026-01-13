@@ -2,13 +2,17 @@
 import time
 import json
 import asyncio
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import httpx
+import traceback
 
-router = Router = APIRouter(tags=["AI Testing"])
+from app.services.ai_agent import EstimateAgent, SYSTEM_PROMPT, TOOLS_ESTIMATE_DETAIL
+from app.services.ai_client import ClaudeClient
+
+router = APIRouter(tags=["AI Testing"])
 
 # Model configurations based on Databricks FMAPI limits
 # https://docs.databricks.com/aws/en/machine-learning/foundation-model-apis/limits
@@ -465,3 +469,322 @@ async def stress_test_tokens(request: Request, model_id: str, target_output_toke
                 "latency_ms": (time.time() - start_time) * 1000
             }
 
+
+# ============================================
+# AI ASSISTANT TESTING (with full tools/prompts)
+# ============================================
+
+# Sample estimate context for testing
+SAMPLE_ESTIMATE_CONTEXT = {
+    "estimate_id": "test-estimate-001",
+    "estimate_name": "AI Test Estimate",
+    "cloud": "AWS",
+    "region": "us-east-1",
+    "tier": "PREMIUM"
+}
+
+SAMPLE_WORKLOADS = [
+    {
+        "line_item_id": "test-workload-001",
+        "workload_name": "ETL Pipeline",
+        "workload_type": "JOBS",
+        "serverless_enabled": False,
+        "photon_enabled": True,
+        "driver_node_type": "m5.xlarge",
+        "worker_node_type": "m5.xlarge",
+        "num_workers": 4,
+        "hours_per_month": 200,
+        "total_cost": 1500.00
+    },
+    {
+        "line_item_id": "test-workload-002",
+        "workload_name": "Analytics Warehouse",
+        "workload_type": "DBSQL",
+        "dbsql_warehouse_type": "PRO",
+        "dbsql_warehouse_size": "Medium",
+        "hours_per_month": 400,
+        "total_cost": 2800.00
+    },
+    {
+        "line_item_id": "test-workload-003",
+        "workload_name": "Dev Cluster",
+        "workload_type": "ALL_PURPOSE",
+        "serverless_enabled": False,
+        "photon_enabled": False,
+        "driver_node_type": "m5.large",
+        "worker_node_type": "m5.large",
+        "num_workers": 2,
+        "hours_per_month": 160,
+        "total_cost": 800.00
+    }
+]
+
+# AI Assistant test prompts
+AI_ASSISTANT_TEST_PROMPTS = {
+    "analyze_costs": {
+        "name": "Analyze Costs",
+        "description": "Ask AI to analyze current workloads and suggest optimizations",
+        "prompt": "Analyze my workloads and suggest specific optimizations to reduce costs."
+    },
+    "get_summary": {
+        "name": "Get Summary",
+        "description": "Ask AI to provide estimate summary",
+        "prompt": "Give me a summary of my current estimate."
+    },
+    "add_workload": {
+        "name": "Add Workload",
+        "description": "Ask AI to propose a new workload",
+        "prompt": "I need to add a new ETL job that processes 100GB of data daily. It runs once per day during business hours and takes about 2 hours."
+    },
+    "pricing_question": {
+        "name": "Pricing Question",
+        "description": "Ask a question about Databricks pricing",
+        "prompt": "What's the difference between serverless and classic compute for jobs? Which is more cost effective?"
+    },
+    "complex_scenario": {
+        "name": "Complex Scenario",
+        "description": "Complex multi-part request",
+        "prompt": """I have 3 requirements:
+1. I need a DBSQL warehouse for 20 analysts doing ad-hoc queries on 500GB of data
+2. An ML training pipeline that runs weekly for model retraining
+3. A real-time streaming job that needs to run 24/7
+
+What configurations would you recommend for each? Consider cost optimization."""
+    }
+}
+
+
+class AIAssistantTestRequest(BaseModel):
+    model_id: str
+    test_type: str
+    custom_prompt: Optional[str] = None
+    include_sample_context: bool = True
+
+
+class AIAssistantCompareRequest(BaseModel):
+    test_type: str
+    custom_prompt: Optional[str] = None
+
+
+@router.get("/assistant/prompts")
+async def get_assistant_test_prompts():
+    """Get available AI Assistant test prompts."""
+    return {
+        "prompts": AI_ASSISTANT_TEST_PROMPTS,
+        "sample_context": {
+            "estimate": SAMPLE_ESTIMATE_CONTEXT,
+            "workloads_count": len(SAMPLE_WORKLOADS),
+            "total_cost": sum(w.get("total_cost", 0) for w in SAMPLE_WORKLOADS)
+        },
+        "system_prompt_preview": SYSTEM_PROMPT[:500] + "...",
+        "tools_count": len(TOOLS_ESTIMATE_DETAIL)
+    }
+
+
+@router.post("/assistant/test")
+async def test_ai_assistant(request: Request, test_request: AIAssistantTestRequest):
+    """Test the AI Assistant with full tools and system prompt."""
+    from app.auth.token_manager import TokenManager
+    
+    if test_request.model_id not in MODEL_CONFIGS:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {test_request.model_id}")
+    
+    model_config = MODEL_CONFIGS[test_request.model_id]
+    
+    # Get the prompt
+    if test_request.custom_prompt:
+        prompt = test_request.custom_prompt
+        test_name = "Custom Prompt"
+    elif test_request.test_type in AI_ASSISTANT_TEST_PROMPTS:
+        prompt = AI_ASSISTANT_TEST_PROMPTS[test_request.test_type]["prompt"]
+        test_name = AI_ASSISTANT_TEST_PROMPTS[test_request.test_type]["name"]
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown test type: {test_request.test_type}")
+    
+    # Get token
+    token_manager = TokenManager()
+    token = token_manager.get_token()
+    
+    if not token:
+        raise HTTPException(status_code=401, detail="Failed to get authentication token")
+    
+    start_time = time.time()
+    
+    try:
+        # Create AI client with specified model
+        client = ClaudeClient(
+            token=token,
+            model=test_request.model_id
+        )
+        
+        # Create agent
+        agent = EstimateAgent(client)
+        
+        # Set context if requested
+        if test_request.include_sample_context:
+            agent.set_context(SAMPLE_ESTIMATE_CONTEXT, SAMPLE_WORKLOADS)
+        
+        # Get response (non-streaming for testing)
+        result = await agent.chat(prompt)
+        
+        end_time = time.time()
+        
+        # Collect tool calls made
+        tool_calls_made = []
+        if agent.conversation_history:
+            for msg in agent.conversation_history:
+                if msg.get("role") == "assistant" and "[Actions:" in msg.get("content", ""):
+                    content = msg.get("content", "")
+                    if "[Actions:" in content:
+                        actions_part = content.split("[Actions:")[1].split("]")[0]
+                        tool_calls_made.append(actions_part.strip())
+        
+        return {
+            "success": True,
+            "model": model_config["name"],
+            "model_id": test_request.model_id,
+            "test_type": test_request.test_type,
+            "test_name": test_name,
+            "prompt": prompt,
+            "response": result.get("content", ""),
+            "response_length": len(result.get("content", "")),
+            "tool_calls_made": tool_calls_made,
+            "proposed_workloads": len(agent.proposed_workloads),
+            "metrics": {
+                "total_latency_ms": round((end_time - start_time) * 1000, 2),
+                "total_latency_seconds": round(end_time - start_time, 2)
+            },
+            "context": {
+                "estimate_loaded": agent.current_estimate is not None,
+                "workloads_count": len(agent.current_workloads) if agent.current_workloads else 0,
+                "conversation_length": len(agent.conversation_history)
+            },
+            "limits": {
+                "model_itpm_limit": model_config["itpm_limit"],
+                "model_otpm_limit": model_config["otpm_limit"]
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "model": model_config["name"],
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "latency_ms": (time.time() - start_time) * 1000
+        }
+
+
+@router.post("/assistant/compare")
+async def compare_ai_assistant_models(request: Request, compare_request: AIAssistantCompareRequest):
+    """Compare both models as AI Assistant backends."""
+    from app.auth.token_manager import TokenManager
+    
+    # Get the prompt
+    if compare_request.custom_prompt:
+        prompt = compare_request.custom_prompt
+        test_name = "Custom Prompt"
+    elif compare_request.test_type in AI_ASSISTANT_TEST_PROMPTS:
+        prompt = AI_ASSISTANT_TEST_PROMPTS[compare_request.test_type]["prompt"]
+        test_name = AI_ASSISTANT_TEST_PROMPTS[compare_request.test_type]["name"]
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown test type: {compare_request.test_type}")
+    
+    # Get token
+    token_manager = TokenManager()
+    token = token_manager.get_token()
+    
+    if not token:
+        raise HTTPException(status_code=401, detail="Failed to get authentication token")
+    
+    results = {}
+    
+    for model_id, model_config in MODEL_CONFIGS.items():
+        start_time = time.time()
+        try:
+            # Create AI client with specified model
+            client = ClaudeClient(
+                token=token,
+                model=model_id
+            )
+            
+            # Create agent
+            agent = EstimateAgent(client)
+            agent.set_context(SAMPLE_ESTIMATE_CONTEXT, SAMPLE_WORKLOADS)
+            
+            # Get response
+            result = await agent.chat(prompt)
+            
+            end_time = time.time()
+            
+            # Collect tool calls
+            tool_calls_made = []
+            for msg in agent.conversation_history:
+                if msg.get("role") == "assistant" and "[Actions:" in msg.get("content", ""):
+                    content = msg.get("content", "")
+                    if "[Actions:" in content:
+                        actions_part = content.split("[Actions:")[1].split("]")[0]
+                        tool_calls_made.append(actions_part.strip())
+            
+            results[model_id] = {
+                "success": True,
+                "model": model_config["name"],
+                "response": result.get("content", ""),
+                "response_length": len(result.get("content", "")),
+                "tool_calls_made": tool_calls_made,
+                "proposed_workloads": len(agent.proposed_workloads),
+                "metrics": {
+                    "total_latency_ms": round((end_time - start_time) * 1000, 2),
+                    "total_latency_seconds": round(end_time - start_time, 2)
+                }
+            }
+            
+        except Exception as e:
+            results[model_id] = {
+                "success": False,
+                "model": model_config["name"],
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+    
+    # Calculate comparison
+    comparison = {}
+    if all(r.get("success") for r in results.values()):
+        sonnet = results.get("databricks-claude-sonnet-4-5", {})
+        opus = results.get("databricks-claude-opus-4-5", {})
+        
+        sonnet_latency = sonnet.get("metrics", {}).get("total_latency_ms", 0)
+        opus_latency = opus.get("metrics", {}).get("total_latency_ms", 0)
+        
+        comparison = {
+            "faster_model": "Sonnet 4.5" if sonnet_latency < opus_latency else "Opus 4.5",
+            "latency_difference_ms": abs(sonnet_latency - opus_latency),
+            "latency_ratio": round(opus_latency / sonnet_latency, 2) if sonnet_latency > 0 else 0,
+            "sonnet_response_length": sonnet.get("response_length", 0),
+            "opus_response_length": opus.get("response_length", 0),
+            "sonnet_tools_used": len(sonnet.get("tool_calls_made", [])),
+            "opus_tools_used": len(opus.get("tool_calls_made", []))
+        }
+    
+    return {
+        "test_type": compare_request.test_type,
+        "test_name": test_name,
+        "prompt": prompt,
+        "results": results,
+        "comparison": comparison,
+        "sample_context": {
+            "estimate": SAMPLE_ESTIMATE_CONTEXT,
+            "workloads_count": len(SAMPLE_WORKLOADS)
+        }
+    }
+
+
+@router.get("/assistant/system-prompt")
+async def get_system_prompt():
+    """Get the full system prompt used by AI Assistant."""
+    return {
+        "system_prompt": SYSTEM_PROMPT,
+        "system_prompt_length": len(SYSTEM_PROMPT),
+        "tools": [{"name": t["name"], "description": t["description"][:200]} for t in TOOLS_ESTIMATE_DETAIL],
+        "tools_count": len(TOOLS_ESTIMATE_DETAIL)
+    }
