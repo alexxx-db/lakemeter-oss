@@ -983,22 +983,38 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 {isServerlessDisabled && (
                   <span className="text-[10px] text-amber-600">(Premium+)</span>
                 )}
-                {form.serverless_enabled && !isServerlessDisabled && form.workload_type !== 'ALL_PURPOSE' && (
-                  <select
-                    value={form.serverless_mode}
-                    onChange={(e) => { e.stopPropagation(); setForm(f => ({ ...f, serverless_mode: e.target.value })) }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="ml-1 text-xs py-0.5 px-1.5 rounded border-teal-300 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300"
-                  >
-                    {serverlessModeOptions.map(mode => (
-                      <option key={mode.id} value={mode.id}>{mode.name}</option>
-                    ))}
-                  </select>
-                )}
-                {form.serverless_enabled && form.workload_type === 'ALL_PURPOSE' && (
-                  <span className="text-[10px] text-teal-600 bg-teal-100 dark:bg-teal-900/30 px-1.5 py-0.5 rounded">Performance</span>
-                )}
               </label>
+            )
+          })()}
+          
+          {/* Serverless Mode dropdown - appears when serverless enabled (Jobs/DLT only) */}
+          {selectedWorkloadType?.show_serverless_toggle && form.serverless_enabled && (() => {
+            const serverlessAvailability = isWorkloadAvailableForTier(form.workload_type, selectedTier, true)
+            const isServerlessDisabled = !serverlessAvailability.available
+            
+            if (isServerlessDisabled) return null
+            
+            if (form.workload_type === 'ALL_PURPOSE') {
+              return (
+                <span className="text-xs text-teal-600 bg-teal-100 dark:bg-teal-900/30 px-2 py-1 rounded">
+                  Performance Mode
+                </span>
+              )
+            }
+            
+            return (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-[var(--text-secondary)]">Mode:</label>
+                <select
+                  value={form.serverless_mode}
+                  onChange={(e) => setForm(f => ({ ...f, serverless_mode: e.target.value }))}
+                  className="text-sm py-1 px-2"
+                >
+                  {serverlessModeOptions.map(mode => (
+                    <option key={mode.id} value={mode.id}>{mode.name}</option>
+                  ))}
+                </select>
+              </div>
             )
           })()}
           
@@ -1251,84 +1267,56 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* DBSQL Config */}
         {selectedWorkloadType?.show_dbsql_config && (
           <>
-            {/* Serverless Toggle for DBSQL - similar to Jobs/All Purpose */}
-            <div className="col-span-full">
-              {(() => {
-                const dbsqlServerlessAvailability = isWorkloadAvailableForTier('DBSQL', selectedTier, false, 'SERVERLESS')
-                const isDBSQLServerlessDisabled = !dbsqlServerlessAvailability.available
-                
-                return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {/* Serverless Toggle */}
-                <div className={clsx(
-                  "p-2.5 rounded-lg border transition-all",
-                  isDBSQLServerlessDisabled && "opacity-60",
-                  form.dbsql_warehouse_type === 'SERVERLESS' && !isDBSQLServerlessDisabled
-                    ? "bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-700" 
-                    : "bg-[var(--bg-tertiary)] border-[var(--border-primary)]"
-                )}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CloudIcon className={clsx(
-                        "w-4 h-4",
-                        form.dbsql_warehouse_type === 'SERVERLESS' && !isDBSQLServerlessDisabled ? "text-teal-600 dark:text-teal-400" : "text-teal-500 dark:text-teal-400"
-                      )} />
-                      <span className={clsx(
-                        "text-sm",
-                        form.dbsql_warehouse_type === 'SERVERLESS' && !isDBSQLServerlessDisabled ? "text-teal-700 dark:text-teal-300 font-medium" : "text-[var(--text-secondary)]"
-                      )}>Serverless</span>
-                      {isDBSQLServerlessDisabled && (
-                        <span className="text-[10px] text-amber-600 dark:text-amber-400">(Premium+ only)</span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => !isDBSQLServerlessDisabled && setForm(f => ({ 
+            {/* Serverless checkbox and Warehouse Type - compact inline */}
+            {(() => {
+              const dbsqlServerlessAvailability = isWorkloadAvailableForTier('DBSQL', selectedTier, false, 'SERVERLESS')
+              const isDBSQLServerlessDisabled = !dbsqlServerlessAvailability.available
+              const isServerless = form.dbsql_warehouse_type === 'SERVERLESS' && !isDBSQLServerlessDisabled
+              
+              return (
+                <div className="col-span-full flex flex-wrap items-center gap-4">
+                  {/* Serverless Checkbox */}
+                  <label className={clsx(
+                    "flex items-center gap-2 cursor-pointer select-none",
+                    isDBSQLServerlessDisabled && "opacity-50 cursor-not-allowed"
+                  )}>
+                    <input
+                      type="checkbox"
+                      checked={isServerless}
+                      onChange={() => !isDBSQLServerlessDisabled && setForm(f => ({ 
                         ...f, 
                         dbsql_warehouse_type: f.dbsql_warehouse_type === 'SERVERLESS' ? 'PRO' : 'SERVERLESS' 
                       }))}
                       disabled={isDBSQLServerlessDisabled}
-                      className={clsx(
-                        'toggle', 
-                        form.dbsql_warehouse_type === 'SERVERLESS' && !isDBSQLServerlessDisabled ? 'toggle-checked' : 'toggle-unchecked',
-                        isDBSQLServerlessDisabled && 'cursor-not-allowed'
-                      )}
-                    >
-                      <span className={clsx('toggle-knob', form.dbsql_warehouse_type === 'SERVERLESS' && !isDBSQLServerlessDisabled ? 'toggle-knob-checked' : 'toggle-knob-unchecked')} />
-                    </button>
-                  </div>
+                      className="w-4 h-4 rounded border-teal-400 text-teal-600 focus:ring-teal-500"
+                    />
+                    <CloudIcon className="w-4 h-4 text-teal-600" />
+                    <span className={clsx(
+                      "text-sm",
+                      isServerless ? "text-teal-700 dark:text-teal-400 font-medium" : "text-[var(--text-secondary)]"
+                    )}>Serverless</span>
+                    {isDBSQLServerlessDisabled && (
+                      <span className="text-[10px] text-amber-600">(Premium+)</span>
+                    )}
+                  </label>
                   
-                  {form.dbsql_warehouse_type === 'SERVERLESS' && !isDBSQLServerlessDisabled && (
-                    <p className="text-xs text-teal-600 dark:text-teal-400 mt-2">
-                      Fully managed SQL compute
-                    </p>
-                  )}
-                  
-                  {isDBSQLServerlessDisabled && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                      DBSQL Serverless requires Premium or Enterprise tier
-                    </p>
+                  {/* Warehouse Type dropdown - only when not serverless */}
+                  {!isServerless && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-[var(--text-secondary)]">Type:</label>
+                      <select
+                        value={form.dbsql_warehouse_type === 'SERVERLESS' ? 'PRO' : form.dbsql_warehouse_type}
+                        onChange={(e) => setForm(f => ({ ...f, dbsql_warehouse_type: e.target.value }))}
+                        className="text-sm py-1 px-2"
+                      >
+                        <option value="PRO">Pro</option>
+                        <option value="CLASSIC">Classic</option>
+                      </select>
+                    </div>
                   )}
                 </div>
-                
-                {/* Warehouse Type dropdown - only when not serverless */}
-                {(form.dbsql_warehouse_type !== 'SERVERLESS' || isDBSQLServerlessDisabled) && (
-                  <div className="p-2.5 rounded-lg border bg-[var(--bg-tertiary)] border-[var(--border-primary)]">
-                    <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Warehouse Type</label>
-                    <select
-                      value={form.dbsql_warehouse_type === 'SERVERLESS' && isDBSQLServerlessDisabled ? 'PRO' : form.dbsql_warehouse_type}
-                      onChange={(e) => setForm(f => ({ ...f, dbsql_warehouse_type: e.target.value }))}
-                      className="w-full text-sm"
-                    >
-                      <option value="PRO">Pro</option>
-                      <option value="CLASSIC">Classic</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-                )
-              })()}
-            </div>
+              )
+            })()}
             
             <div>
               <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Size</label>
