@@ -515,6 +515,6 @@ class ClaudeAIClient:
         return result
 
 
-def get_claude_client(token: str) -> ClaudeAIClient:
+def get_claude_client(token: str, model: str = "databricks-claude-sonnet-4-5") -> ClaudeAIClient:
     """Get a Claude client instance with the given token."""
-    return ClaudeAIClient(token=token)
+    return ClaudeAIClient(token=token, model=model)

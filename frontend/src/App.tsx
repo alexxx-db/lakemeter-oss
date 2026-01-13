@@ -4,7 +4,6 @@ import Estimates from './pages/Estimates'
 import Calculator from './pages/Calculator'
 import EstimateDetail from './pages/EstimateDetail'
 import TestCalculations from './pages/TestCalculations'
-import AIModelTest from './pages/AIModelTest'
 
 function App() {
   return (
@@ -15,7 +14,6 @@ function App() {
         <Route path="calculator/:id" element={<Calculator />} />
         <Route path="estimate/:id" element={<EstimateDetail />} />
         <Route path="test-calculations" element={<TestCalculations />} />
-        <Route path="ai-test" element={<AIModelTest />} />
       </Route>
     </Routes>
   )

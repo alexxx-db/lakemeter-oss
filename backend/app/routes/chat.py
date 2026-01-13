@@ -35,6 +35,7 @@ class ChatRequest(BaseModel):
     estimate_context: Optional[Dict[str, Any]] = None
     workloads_context: Optional[List[Dict[str, Any]]] = None
     stream: bool = True
+    model: str = "databricks-claude-sonnet-4-5"  # Model to use: sonnet-4-5 or opus-4-5
 
 
 class ChatResponse(BaseModel):
@@ -57,10 +58,10 @@ class ConfirmWorkloadRequest(BaseModel):
 _conversation_agents: Dict[str, EstimateAgent] = {}
 
 
-def _get_or_create_agent(conversation_id: str, token: str) -> EstimateAgent:
+def _get_or_create_agent(conversation_id: str, token: str, model: str = "databricks-claude-sonnet-4-5") -> EstimateAgent:
     """Get existing agent or create new one for a conversation."""
     if conversation_id not in _conversation_agents:
-        _conversation_agents[conversation_id] = create_agent(token)
+        _conversation_agents[conversation_id] = create_agent(token, model=model)
     else:
         # Update token for existing agent
         _conversation_agents[conversation_id].client.set_token(token)
@@ -102,7 +103,7 @@ async def chat(
     conversation_id = chat_request.conversation_id or str(uuid.uuid4())
     
     _cleanup_old_conversations()
-    agent = _get_or_create_agent(conversation_id, token)
+    agent = _get_or_create_agent(conversation_id, token, model=chat_request.model)
     
     # Set estimate context if provided (now includes workloads with their costs)
     if chat_request.estimate_context or chat_request.workloads_context:
@@ -164,7 +165,7 @@ async def chat_stream(
     conversation_id = chat_request.conversation_id or str(uuid.uuid4())
     
     _cleanup_old_conversations()
-    agent = _get_or_create_agent(conversation_id, token)
+    agent = _get_or_create_agent(conversation_id, token, model=chat_request.model)
     
     # Set estimate context if provided (now includes workloads with their costs)
     if chat_request.estimate_context or chat_request.workloads_context:
