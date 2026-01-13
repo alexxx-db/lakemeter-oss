@@ -531,7 +531,9 @@ When the propose_workload tool returns a configuration (e.g., number of clusters
    - Continuous: runs 24/7 for streaming data
 7. For batch jobs: How many runs per day? (e.g., 1 daily run, 24 hourly runs)
 8. How many days per month does it run? (22 = weekdays, 30 = daily)
-9. (Classic only) Is fault tolerance acceptable? (Yes = spot instances for 60-90% savings, No = on-demand)
+9. (Classic only) What's your priority: Cost-optimized or Reliability-optimized?
+    - **Cost-optimized**: Uses spot worker instances for 60-90% cost savings
+    - **Reliability-optimized**: Uses on-demand worker instances for maximum availability
 
 ### For Dashboarding/DBSQL:
 1. How many total dashboard users?
