@@ -23,6 +23,7 @@ from app.routes import (
     reference_router
 )
 from app.routes.chat import router as chat_router
+from app.routes.ai_test import router as ai_test_router
 
 # Initialize logging based on environment
 setup_logging()
@@ -62,6 +63,7 @@ app.include_router(salesforce_router, prefix="/api/v1")
 app.include_router(calculate_router, prefix="/api/v1")
 app.include_router(reference_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
+app.include_router(ai_test_router, prefix="/api/v1/ai-test")
 
 
 @app.get("/api")
