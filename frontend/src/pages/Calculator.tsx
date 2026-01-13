@@ -26,7 +26,8 @@ import {
   TableCellsIcon,
   Squares2X2Icon,
   ListBulletIcon,
-  XMarkIcon
+  XMarkIcon,
+  InformationCircleIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -2682,18 +2683,17 @@ export default function Calculator() {
                               <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id) }}
-                                  className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] hover:text-lava-600 transition-colors group"
+                                  className={clsx(
+                                    "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] transition-all",
+                                    formulaVisibleItems.has(item.line_item_id)
+                                      ? "bg-lava-100 dark:bg-lava-900/30 text-lava-600"
+                                      : "text-[var(--text-muted)] hover:text-lava-600 hover:bg-lava-50 dark:hover:bg-lava-900/20"
+                                  )}
+                                  title={formulaVisibleItems.has(item.line_item_id) ? 'Hide calculation breakdown' : 'Show calculation breakdown'}
                                 >
-                                  <svg 
-                                    className={`w-3 h-3 transition-transform ${formulaVisibleItems.has(item.line_item_id) ? 'rotate-90' : ''}`} 
-                                    fill="none" 
-                                    viewBox="0 0 24 24" 
-                                    stroke="currentColor"
-                                  >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                  </svg>
-                                  <span className="font-medium group-hover:underline">
-                                    {formulaVisibleItems.has(item.line_item_id) ? 'Hide calculations' : 'Show calculations'}
+                                  <InformationCircleIcon className="w-4 h-4" />
+                                  <span className="font-medium">
+                                    {formulaVisibleItems.has(item.line_item_id) ? 'Hide calculations' : 'View calculations'}
                                   </span>
                                 </button>
                                 
@@ -2726,28 +2726,28 @@ export default function Calculator() {
                                           {isRunBased && (
                                             <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
                                               <span className="text-gray-500 font-semibold">Hours:</span>
-                                              <span className="text-green-500">{runsPerDay} runs/day</span>
+                                              <span className="text-lava-600 font-medium">{runsPerDay} runs/day</span>
                                               <span>×</span>
-                                              <span className="text-green-500">({avgRuntimeMin}min ÷ 60)</span>
+                                              <span>(<span className="text-lava-600 font-medium">{avgRuntimeMin}min</span> ÷ 60)</span>
                                               <span>×</span>
-                                              <span className="text-green-500">{daysPerMonth} days/mo</span>
+                                              <span className="text-lava-600 font-medium">{daysPerMonth} days/mo</span>
                                               <span>=</span>
-                                              <span className="text-green-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
+                                              <span className="text-lava-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
                                             </div>
                                           )}
                                           <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
-                                            <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
-                                            <span className="text-blue-500">⌈{capacity}M vectors ÷ {divisor}M⌉</span>
+                                            <span className="text-blue-500 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded">DBU:</span>
+                                            <span>⌈<span className="text-lava-600 font-medium">{capacity}M</span> vectors ÷ {divisor}M⌉</span>
                                             <span>=</span>
-                                            <span className="text-blue-600 font-semibold">{unitsUsed} unit{unitsUsed !== 1 ? 's' : ''}</span>
+                                            <span className="text-[var(--text-secondary)] font-semibold">{unitsUsed} unit{unitsUsed !== 1 ? 's' : ''}</span>
                                             <span>×</span>
-                                            <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/hr/unit</span>
+                                            <span className="text-[var(--text-secondary)]">{dbuPerUnit.toFixed(2)} DBU/hr/unit</span>
                                             <span>×</span>
-                                            <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
+                                            <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                             <span>=</span>
-                                            <span className="text-[var(--text-secondary)] font-medium">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                            <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                             <span>×</span>
-                                            <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                            <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                             <span>=</span>
                                             <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                           </div>
@@ -2767,26 +2767,26 @@ export default function Calculator() {
                                     return (
                                       <div className="space-y-1">
                                         <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
-                                          <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
+                                          <span className="text-blue-500 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded">DBU:</span>
                                           {isProvisioned ? (
                                             <>
-                                              <span className="text-blue-500">{quantity} hours/mo</span>
+                                              <span className="text-lava-600 font-medium">{quantity} hours/mo</span>
                                               <span>×</span>
-                                              <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/hr</span>
+                                              <span className="text-[var(--text-secondary)]">{dbuPerUnit.toFixed(2)} DBU/hr</span>
                                               <span className="text-gray-400">({model})</span>
                                             </>
                                           ) : (
                                             <>
-                                              <span className="text-blue-500">{quantity}M tokens</span>
+                                              <span className="text-lava-600 font-medium">{quantity}M tokens</span>
                                               <span>×</span>
-                                              <span className="text-purple-500">{dbuPerUnit.toFixed(2)} DBU/M</span>
+                                              <span className="text-[var(--text-secondary)]">{dbuPerUnit.toFixed(2)} DBU/M</span>
                                               <span className="text-gray-400">({provider ? `${provider}/` : ''}{model})</span>
                                             </>
                                           )}
                                           <span>=</span>
-                                          <span className="text-[var(--text-secondary)] font-medium">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
-                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </div>
@@ -2806,34 +2806,34 @@ export default function Calculator() {
                                         {isRunBased && (
                                           <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
                                             <span className="text-gray-500 font-semibold">Hours:</span>
-                                            <span className="text-green-500">{runsPerDay} runs/day</span>
+                                            <span className="text-lava-600 font-medium">{runsPerDay} runs/day</span>
                                             <span>×</span>
-                                            <span className="text-green-500">({avgRuntimeMin}min ÷ 60)</span>
+                                            <span>(<span className="text-lava-600 font-medium">{avgRuntimeMin}min</span> ÷ 60)</span>
                                             <span>×</span>
-                                            <span className="text-green-500">{daysPerMonth} days/mo</span>
+                                            <span className="text-lava-600 font-medium">{daysPerMonth} days/mo</span>
                                             <span>=</span>
-                                            <span className="text-green-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
+                                            <span className="text-lava-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
                                           </div>
                                         )}
                                         <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
-                                          <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
-                                          <span className="text-blue-500">{cu} CU</span>
+                                          <span className="text-blue-500 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded">DBU:</span>
+                                          <span className="text-lava-600 font-medium">{cu} CU</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{baseDBUPerCU.toFixed(2)} DBU/hr/CU</span>
+                                          <span className="text-[var(--text-secondary)]">{baseDBUPerCU.toFixed(2)} DBU/hr/CU</span>
                                           {haNodes > 0 && (
                                             <>
                                               <span>×</span>
-                                              <span className="text-teal-500">(1 + {haNodes} HA nodes)</span>
+                                              <span>(1 + <span className="text-lava-600 font-medium">{haNodes}</span> HA nodes)</span>
                                               <span>=</span>
-                                              <span className="text-teal-600">×{totalMultiplier}</span>
+                                              <span className="text-[var(--text-secondary)]">×{totalMultiplier}</span>
                                             </>
                                           )}
                                           <span>×</span>
-                                          <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
+                                          <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
-                                          <span className="text-[var(--text-secondary)] font-medium">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
-                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </div>
@@ -2852,27 +2852,27 @@ export default function Calculator() {
                                         {isRunBased && (
                                           <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
                                             <span className="text-gray-500 font-semibold">Hours:</span>
-                                            <span className="text-green-500">{runsPerDay} runs/day</span>
+                                            <span className="text-lava-600 font-medium">{runsPerDay} runs/day</span>
                                             <span>×</span>
-                                            <span className="text-green-500">({avgRuntimeMin}min ÷ 60)</span>
+                                            <span>(<span className="text-lava-600 font-medium">{avgRuntimeMin}min</span> ÷ 60)</span>
                                             <span>×</span>
-                                            <span className="text-green-500">{daysPerMonth} days/mo</span>
+                                            <span className="text-lava-600 font-medium">{daysPerMonth} days/mo</span>
                                             <span>=</span>
-                                            <span className="text-green-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
+                                            <span className="text-lava-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
                                           </div>
                                         )}
                                         <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
-                                          <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
-                                          <span className="text-blue-500">{endpoints} endpoint{endpoints !== 1 ? 's' : ''}</span>
+                                          <span className="text-blue-500 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded">DBU:</span>
+                                          <span className="text-lava-600 font-medium">{endpoints} endpoint{endpoints !== 1 ? 's' : ''}</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{dbuPerEndpoint.toFixed(2)} DBU/hr</span>
+                                          <span className="text-[var(--text-secondary)]">{dbuPerEndpoint.toFixed(2)} DBU/hr</span>
                                           <span className="text-gray-400">({gpuType})</span>
                                           <span>×</span>
-                                          <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
+                                          <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
-                                          <span className="text-[var(--text-secondary)] font-medium">{formatNumber(costs.monthlyDBUs)} DBUs</span>
+                                          <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
-                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </div>
@@ -2890,29 +2890,39 @@ export default function Calculator() {
                                     
                                     return (
                                       <div className="space-y-1.5">
+                                        {/* Hours calculation (if run-based) */}
+                                        {isRunBased && (
+                                          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
+                                            <span className="text-gray-500 font-semibold">Hours:</span>
+                                            <span className="text-lava-600 font-medium">{runsPerDay} runs/day</span>
+                                            <span>×</span>
+                                            <span>(<span className="text-lava-600 font-medium">{avgRuntimeMin}min</span> ÷ 60)</span>
+                                            <span>×</span>
+                                            <span className="text-lava-600 font-medium">{daysPerMonth} days/mo</span>
+                                            <span>=</span>
+                                            <span className="text-lava-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
+                                          </div>
+                                        )}
+                                        
                                         {/* DBU Cost Line */}
                                         <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
                                           <span className="text-blue-500 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded">DBU:</span>
-                                          <span className="text-blue-500">{warehouseSize}</span>
+                                          <span className="text-lava-600 font-medium">{warehouseSize}</span>
                                           <span className="text-gray-400">({dbuPerWarehouse.toFixed(1)} DBU/hr)</span>
                                           {numClusters > 1 && (
                                             <>
                                               <span>×</span>
-                                              <span className="text-purple-500">{numClusters} clusters</span>
+                                              <span className="text-lava-600 font-medium">{numClusters} clusters</span>
                                             </>
                                           )}
                                           <span>×</span>
-                                          {isRunBased ? (
-                                            <span className="text-green-500" title={`${runsPerDay} runs × ${avgRuntimeMin}min ÷ 60 × ${daysPerMonth} days`}>
-                                              {hoursPerMonth.toFixed(1)}h
-                                            </span>
-                                          ) : (
-                                            <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
-                                          )}
+                                          <span className="text-lava-600 font-medium" title={isRunBased ? `${runsPerDay} runs × ${avgRuntimeMin}min ÷ 60 × ${daysPerMonth} days` : undefined}>
+                                            {hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h
+                                          </span>
                                           <span>=</span>
                                           <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
-                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
                                           <span className="text-blue-600 font-bold">{formatCurrency(costs.dbuCost)}</span>
                                         </div>
@@ -2921,9 +2931,9 @@ export default function Calculator() {
                                         {hasVMCost && (
                                           <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
                                             <span className="text-teal-500 font-semibold bg-teal-500/10 px-1.5 py-0.5 rounded">VM:</span>
-                                            <span className="text-teal-500">{warehouseType} warehouse VM costs</span>
+                                            <span className="text-[var(--text-secondary)]">{warehouseType} warehouse VM costs</span>
                                             <span>×</span>
-                                            <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                            <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                             <span>=</span>
                                             <span className="text-teal-600 font-bold">{formatCurrency(costs.vmCost)}</span>
                                           </div>
@@ -2979,13 +2989,13 @@ export default function Calculator() {
                                       {isRunBased && (
                                         <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
                                           <span className="text-gray-500 font-semibold">Hours:</span>
-                                          <span className="text-green-500">{runsPerDay} runs/day</span>
+                                          <span className="text-lava-600 font-medium">{runsPerDay} runs/day</span>
                                           <span>×</span>
-                                          <span className="text-green-500">({avgRuntimeMin}min ÷ 60)</span>
+                                          <span>(<span className="text-lava-600 font-medium">{avgRuntimeMin}min</span> ÷ 60)</span>
                                           <span>×</span>
-                                          <span className="text-green-500">{daysPerMonth} days/mo</span>
+                                          <span className="text-lava-600 font-medium">{daysPerMonth} days/mo</span>
                                           <span>=</span>
-                                          <span className="text-green-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
+                                          <span className="text-lava-600 font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
                                         </div>
                                       )}
                                       
@@ -2994,34 +3004,34 @@ export default function Calculator() {
                                         <span className="text-blue-500 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded">DBU:</span>
                                         {isServerless ? (
                                           <>
-                                            <span className="text-purple-500">{dbuPerHour.toFixed(2)} DBU/hr</span>
-                                            <span className="text-lava-500 text-[9px]">(Serverless{photonEnabled ? ' + Photon' : ''})</span>
+                                            <span className="text-[var(--text-secondary)]">{dbuPerHour.toFixed(2)} DBU/hr</span>
+                                            <span className="text-gray-400 text-[9px]">(Serverless{photonEnabled ? ' + Photon' : ''})</span>
                                           </>
                                         ) : (
                                           <>
                                             <span className="text-gray-400">(</span>
-                                            <span className="text-blue-500" title={driverNode}>{driverDBURate.toFixed(2)}</span>
+                                            <span className="text-[var(--text-secondary)]" title={driverNode}>{driverDBURate.toFixed(2)}</span>
                                             <span>+</span>
-                                            <span className="text-blue-500" title={workerNode}>{workerDBURate.toFixed(2)}</span>
+                                            <span className="text-[var(--text-secondary)]" title={workerNode}>{workerDBURate.toFixed(2)}</span>
                                             <span>×</span>
-                                            <span className="text-purple-500">{numWorkers}</span>
+                                            <span className="text-lava-600 font-medium">{numWorkers}</span>
                                             <span className="text-gray-400">)</span>
                                             {photonEnabled && (
                                               <>
                                                 <span>×</span>
-                                                <span className="text-lava-500">Photon</span>
+                                                <span className="text-gray-400">Photon</span>
                                               </>
                                             )}
                                             <span>=</span>
-                                            <span className="text-purple-600">{dbuPerHour.toFixed(2)} DBU/hr</span>
+                                            <span className="text-[var(--text-secondary)]">{dbuPerHour.toFixed(2)} DBU/hr</span>
                                           </>
                                         )}
                                         <span>×</span>
-                                        <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
+                                        <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                         <span>=</span>
                                         <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
-                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                        <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
                                         <span className="text-blue-600 font-bold">{formatCurrency(costs.dbuCost)}</span>
                                       </div>
@@ -3031,14 +3041,14 @@ export default function Calculator() {
                                         <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
                                           <span className="text-teal-500 font-semibold bg-teal-500/10 px-1.5 py-0.5 rounded">VM:</span>
                                           <span className="text-gray-400">(</span>
-                                          <span className="text-teal-500" title={driverNode}>${driverVMCost?.toFixed(4) || '0'}</span>
+                                          <span className="text-[var(--text-secondary)]" title={driverNode}>${driverVMCost?.toFixed(4) || '0'}</span>
                                           <span>+</span>
-                                          <span className="text-teal-500" title={workerNode}>${workerVMCost?.toFixed(4) || '0'}</span>
+                                          <span className="text-[var(--text-secondary)]" title={workerNode}>${workerVMCost?.toFixed(4) || '0'}</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{numWorkers}</span>
+                                          <span className="text-lava-600 font-medium">{numWorkers}</span>
                                           <span className="text-gray-400">)</span>
                                           <span>×</span>
-                                          <span className="text-green-500">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
+                                          <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
                                           <span className="text-teal-600 font-bold">{formatCurrency(costs.vmCost)}</span>
                                         </div>
@@ -3290,24 +3300,23 @@ export default function Calculator() {
                             <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
                               <button
                                 onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id) }}
-                                className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] hover:text-lava-600 transition-colors group"
+                                className={clsx(
+                                  "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] transition-all",
+                                  formulaVisibleItems.has(item.line_item_id)
+                                    ? "bg-lava-100 dark:bg-lava-900/30 text-lava-600"
+                                    : "text-[var(--text-muted)] hover:text-lava-600 hover:bg-lava-50 dark:hover:bg-lava-900/20"
+                                )}
+                                title={formulaVisibleItems.has(item.line_item_id) ? 'Hide calculation breakdown' : 'Show calculation breakdown'}
                               >
-                                <svg 
-                                  className={`w-3 h-3 transition-transform ${formulaVisibleItems.has(item.line_item_id) ? 'rotate-90' : ''}`} 
-                                  fill="none" 
-                                  viewBox="0 0 24 24" 
-                                  stroke="currentColor"
-                                >
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                                <span className="font-medium group-hover:underline">
-                                  {formulaVisibleItems.has(item.line_item_id) ? 'Hide calculations' : 'Show calculations'}
+                                <InformationCircleIcon className="w-4 h-4" />
+                                <span className="font-medium">
+                                  {formulaVisibleItems.has(item.line_item_id) ? 'Hide calculations' : 'View calculations'}
                                 </span>
                               </button>
                               
                               {formulaVisibleItems.has(item.line_item_id) && (
                                 <div className="mt-2 flex items-center gap-1 text-[10px] font-mono text-[var(--text-muted)] flex-wrap">
-                                  <span className="text-[var(--text-secondary)] font-semibold">Formula:</span>
+                                  <span className="text-blue-500 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded">DBU:</span>
                                   {(() => {
                                     const hoursPerMonth = item.hours_per_month || 
                                       (item.runs_per_day && item.avg_runtime_minutes 
@@ -3319,15 +3328,15 @@ export default function Calculator() {
                                     if (item.workload_type === 'VECTOR_SEARCH') {
                                       return (
                                         <>
-                                          <span className="text-blue-500">{costs.unitsUsed || 1} units</span>
+                                          <span className="text-lava-600 font-medium">{costs.unitsUsed || 1} units</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '4.00'} DBU/hr</span>
+                                          <span className="text-[var(--text-secondary)]">{costs.dbuPerHour?.toFixed(2) || '4.00'} DBU/hr</span>
                                           <span>×</span>
-                                          <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                          <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
-                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </>
@@ -3338,13 +3347,13 @@ export default function Calculator() {
                                     if (item.workload_type === 'FMAPI_DATABRICKS' || item.workload_type === 'FMAPI_PROPRIETARY') {
                                       return (
                                         <>
-                                          <span className="text-blue-500">{item.fmapi_quantity || 0}M tokens</span>
+                                          <span className="text-lava-600 font-medium">{item.fmapi_quantity || 0}M tokens</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
+                                          <span className="text-[var(--text-secondary)]">{(costs.monthlyDBUs / (item.fmapi_quantity || 1)).toFixed(2)} DBU/M</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
-                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </>
@@ -3355,15 +3364,15 @@ export default function Calculator() {
                                     if (item.workload_type === 'LAKEBASE') {
                                       return (
                                         <>
-                                          <span className="text-blue-500">{item.lakebase_cu || 1} CU</span>
+                                          <span className="text-lava-600 font-medium">{item.lakebase_cu || 1} CU</span>
                                           <span>×</span>
-                                          <span className="text-purple-500">{item.lakebase_ha_nodes || 1} nodes</span>
+                                          <span className="text-lava-600 font-medium">{item.lakebase_ha_nodes || 1} nodes</span>
                                           <span>×</span>
-                                          <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                          <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
-                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </>
@@ -3374,13 +3383,13 @@ export default function Calculator() {
                                     if (item.workload_type === 'MODEL_SERVING') {
                                       return (
                                         <>
-                                          <span className="text-purple-500">{costs.dbuPerHour?.toFixed(2) || '2.00'} DBU/hr</span>
+                                          <span className="text-[var(--text-secondary)]">{costs.dbuPerHour?.toFixed(2) || '2.00'} DBU/hr</span>
                                           <span>×</span>
-                                          <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                          <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                           <span>×</span>
-                                          <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                          <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
                                           <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </>
@@ -3393,15 +3402,15 @@ export default function Calculator() {
                                       <>
                                         {costs.dbuPerHour && costs.dbuPerHour > 0 && (
                                           <>
-                                            <span className="text-purple-500">{costs.dbuPerHour.toFixed(2)} DBU/hr</span>
+                                            <span className="text-[var(--text-secondary)]">{costs.dbuPerHour.toFixed(2)} DBU/hr</span>
                                             <span>×</span>
                                           </>
                                         )}
-                                        <span className="text-green-500">{hoursPerMonth.toFixed(0)}h</span>
+                                        <span className="text-lava-600 font-medium">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
                                         <span className="text-[var(--text-secondary)]">{formatNumber(costs.monthlyDBUs)} DBUs</span>
                                         <span>×</span>
-                                        <span className="text-pink-500">${dbuPriceDisplay}/DBU</span>
+                                        <span className="text-[var(--text-secondary)]">${dbuPriceDisplay}/DBU</span>
                                         {hasVMCost ? (
                                           <>
                                             <span className="mx-1">|</span>
