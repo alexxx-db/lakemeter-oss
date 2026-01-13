@@ -680,103 +680,119 @@ async def compare_ai_assistant_models(request: Request, compare_request: AIAssis
     """Compare both models as AI Assistant backends."""
     from app.auth.token_manager import TokenManager
     
-    # Get the prompt
-    if compare_request.custom_prompt:
-        prompt = compare_request.custom_prompt
-        test_name = "Custom Prompt"
-    elif compare_request.test_type in AI_ASSISTANT_TEST_PROMPTS:
-        prompt = AI_ASSISTANT_TEST_PROMPTS[compare_request.test_type]["prompt"]
-        test_name = AI_ASSISTANT_TEST_PROMPTS[compare_request.test_type]["name"]
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown test type: {compare_request.test_type}")
-    
-    # Get token
-    token_manager = TokenManager()
-    token = token_manager.get_token()
-    
-    if not token:
-        raise HTTPException(status_code=401, detail="Failed to get authentication token")
-    
-    results = {}
-    
-    for model_id, model_config in MODEL_CONFIGS.items():
-        start_time = time.time()
-        try:
-            # Create AI client with specified model
-            client = ClaudeAIClient(
-                token=token,
-                model=model_id
-            )
-            
-            # Create agent
-            agent = EstimateAgent(client)
-            agent.set_context(SAMPLE_ESTIMATE_CONTEXT, SAMPLE_WORKLOADS)
-            
-            # Get response
-            result = await agent.chat(prompt)
-            
-            end_time = time.time()
-            
-            # Collect tool calls
-            tool_calls_made = []
-            for msg in agent.conversation_history:
-                if msg.get("role") == "assistant" and "[Actions:" in msg.get("content", ""):
-                    content = msg.get("content", "")
-                    if "[Actions:" in content:
-                        actions_part = content.split("[Actions:")[1].split("]")[0]
-                        tool_calls_made.append(actions_part.strip())
-            
-            results[model_id] = {
-                "success": True,
-                "model": model_config["name"],
-                "response": result.get("content", ""),
-                "response_length": len(result.get("content", "")),
-                "tool_calls_made": tool_calls_made,
-                "proposed_workloads": len(agent.proposed_workloads),
-                "metrics": {
-                    "total_latency_ms": round((end_time - start_time) * 1000, 2),
-                    "total_latency_seconds": round(end_time - start_time, 2)
+    try:
+        # Get the prompt
+        if compare_request.custom_prompt:
+            prompt = compare_request.custom_prompt
+            test_name = "Custom Prompt"
+        elif compare_request.test_type in AI_ASSISTANT_TEST_PROMPTS:
+            prompt = AI_ASSISTANT_TEST_PROMPTS[compare_request.test_type]["prompt"]
+            test_name = AI_ASSISTANT_TEST_PROMPTS[compare_request.test_type]["name"]
+        else:
+            return {
+                "error": f"Unknown test type: {compare_request.test_type}",
+                "results": {},
+                "comparison": {}
+            }
+        
+        # Get token
+        token_manager = TokenManager()
+        token = token_manager.get_token()
+        
+        if not token:
+            return {
+                "error": "Failed to get authentication token",
+                "results": {},
+                "comparison": {}
+            }
+        
+        results = {}
+        
+        for model_id, model_config in MODEL_CONFIGS.items():
+            start_time = time.time()
+            try:
+                # Create AI client with specified model
+                client = ClaudeAIClient(
+                    token=token,
+                    model=model_id
+                )
+                
+                # Create agent
+                agent = EstimateAgent(client)
+                agent.set_context(SAMPLE_ESTIMATE_CONTEXT, SAMPLE_WORKLOADS)
+                
+                # Get response
+                result = await agent.chat(prompt)
+                
+                end_time = time.time()
+                
+                # Collect tool calls
+                tool_calls_made = []
+                for msg in agent.conversation_history:
+                    if msg.get("role") == "assistant" and "[Actions:" in msg.get("content", ""):
+                        content = msg.get("content", "")
+                        if "[Actions:" in content:
+                            actions_part = content.split("[Actions:")[1].split("]")[0]
+                            tool_calls_made.append(actions_part.strip())
+                
+                results[model_id] = {
+                    "success": True,
+                    "model": model_config["name"],
+                    "response": result.get("content", ""),
+                    "response_length": len(result.get("content", "")),
+                    "tool_calls_made": tool_calls_made,
+                    "proposed_workloads": len(agent.proposed_workloads),
+                    "metrics": {
+                        "total_latency_ms": round((end_time - start_time) * 1000, 2),
+                        "total_latency_seconds": round(end_time - start_time, 2)
+                    }
                 }
-            }
+                
+            except Exception as e:
+                results[model_id] = {
+                    "success": False,
+                    "model": model_config["name"],
+                    "error": str(e),
+                    "traceback": traceback.format_exc()
+                }
+        
+        # Calculate comparison
+        comparison = {}
+        if results and all(r.get("success") for r in results.values()):
+            sonnet = results.get("databricks-claude-sonnet-4-5", {})
+            opus = results.get("databricks-claude-opus-4-5", {})
             
-        except Exception as e:
-            results[model_id] = {
-                "success": False,
-                "model": model_config["name"],
-                "error": str(e),
-                "traceback": traceback.format_exc()
+            sonnet_latency = sonnet.get("metrics", {}).get("total_latency_ms", 0)
+            opus_latency = opus.get("metrics", {}).get("total_latency_ms", 0)
+            
+            comparison = {
+                "faster_model": "Sonnet 4.5" if sonnet_latency < opus_latency else "Opus 4.5",
+                "latency_difference_ms": abs(sonnet_latency - opus_latency),
+                "latency_ratio": round(opus_latency / sonnet_latency, 2) if sonnet_latency > 0 else 0,
+                "sonnet_response_length": sonnet.get("response_length", 0),
+                "opus_response_length": opus.get("response_length", 0),
+                "sonnet_tools_used": len(sonnet.get("tool_calls_made", [])),
+                "opus_tools_used": len(opus.get("tool_calls_made", []))
             }
-    
-    # Calculate comparison
-    comparison = {}
-    if all(r.get("success") for r in results.values()):
-        sonnet = results.get("databricks-claude-sonnet-4-5", {})
-        opus = results.get("databricks-claude-opus-4-5", {})
         
-        sonnet_latency = sonnet.get("metrics", {}).get("total_latency_ms", 0)
-        opus_latency = opus.get("metrics", {}).get("total_latency_ms", 0)
-        
-        comparison = {
-            "faster_model": "Sonnet 4.5" if sonnet_latency < opus_latency else "Opus 4.5",
-            "latency_difference_ms": abs(sonnet_latency - opus_latency),
-            "latency_ratio": round(opus_latency / sonnet_latency, 2) if sonnet_latency > 0 else 0,
-            "sonnet_response_length": sonnet.get("response_length", 0),
-            "opus_response_length": opus.get("response_length", 0),
-            "sonnet_tools_used": len(sonnet.get("tool_calls_made", [])),
-            "opus_tools_used": len(opus.get("tool_calls_made", []))
+        return {
+            "test_type": compare_request.test_type,
+            "test_name": test_name,
+            "prompt": prompt,
+            "results": results,
+            "comparison": comparison,
+            "sample_context": {
+                "estimate": SAMPLE_ESTIMATE_CONTEXT,
+                "workloads_count": len(SAMPLE_WORKLOADS)
+            }
         }
-    
-    return {
-        "test_type": compare_request.test_type,
-        "test_name": test_name,
-        "prompt": prompt,
-        "results": results,
-        "comparison": comparison,
-        "sample_context": {
-            "estimate": SAMPLE_ESTIMATE_CONTEXT,
-            "workloads_count": len(SAMPLE_WORKLOADS)
+    except Exception as e:
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "results": {},
+            "comparison": {}
         }
-    }
 
 
 @router.get("/assistant/system-prompt")
@@ -785,6 +801,6 @@ async def get_system_prompt():
     return {
         "system_prompt": SYSTEM_PROMPT,
         "system_prompt_length": len(SYSTEM_PROMPT),
-        "tools": [{"name": t["name"], "description": t["description"][:200]} for t in TOOLS],
+        "tools": [{"name": t["name"], "description": t["description"], "parameters": t.get("input_schema", {})} for t in TOOLS],
         "tools_count": len(TOOLS)
     }

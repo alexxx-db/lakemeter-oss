@@ -1213,7 +1213,7 @@ export default function AIModelTest() {
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-[var(--bg-primary)] rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+              className="bg-[var(--bg-primary)] rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden"
             >
               <div className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center">
                 <h3 className="font-semibold text-[var(--text-primary)]">
@@ -1226,20 +1226,35 @@ export default function AIModelTest() {
                   <XCircleIcon className="w-6 h-6" />
                 </button>
               </div>
-              <div className="p-4 overflow-y-auto max-h-[calc(80vh-80px)]">
+              <div className="p-4 overflow-y-auto max-h-[calc(90vh-80px)]">
                 <div className="mb-4">
                   <span className="text-sm text-[var(--text-muted)]">
                     System Prompt Length: {formatNumber(systemPromptInfo.system_prompt_length)} characters
                   </span>
                 </div>
                 
-                <h4 className="font-medium text-[var(--text-primary)] mb-2">Available Tools ({systemPromptInfo.tools_count}):</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
+                <h4 className="font-medium text-[var(--text-primary)] mb-3">Available Tools ({systemPromptInfo.tools_count}):</h4>
+                <div className="space-y-3 mb-6">
                   {systemPromptInfo.tools?.map((tool: any, idx: number) => (
-                    <div key={idx} className="p-2 bg-[var(--bg-secondary)] rounded text-sm">
-                      <span className="font-medium text-lava-600">{tool.name}</span>
-                      <p className="text-[var(--text-muted)] text-xs mt-1 line-clamp-2">{tool.description}</p>
-                    </div>
+                    <details key={idx} className="bg-[var(--bg-secondary)] rounded-lg overflow-hidden">
+                      <summary className="p-3 cursor-pointer hover:bg-[var(--bg-tertiary)] flex items-center gap-2">
+                        <span className="font-semibold text-lava-600">{tool.name}</span>
+                      </summary>
+                      <div className="p-3 pt-0 border-t border-[var(--border-primary)]">
+                        <div className="mb-2">
+                          <span className="text-xs font-medium text-[var(--text-muted)]">Description:</span>
+                          <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap mt-1">{tool.description}</p>
+                        </div>
+                        {tool.parameters && Object.keys(tool.parameters).length > 0 && (
+                          <div>
+                            <span className="text-xs font-medium text-[var(--text-muted)]">Parameters:</span>
+                            <pre className="text-xs bg-[var(--bg-primary)] p-2 rounded mt-1 overflow-x-auto">
+                              {JSON.stringify(tool.parameters, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    </details>
                   ))}
                 </div>
 
