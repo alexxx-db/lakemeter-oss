@@ -109,7 +109,7 @@ When presenting workload types to users, ALWAYS use these names:
 ### For Model Serving:
 **FIRST, determine if Model Serving is the right choice:**
 - Custom/fine-tuned models → Model Serving ✓
-- Off-the-shelf LLMs (GPT, Claude, Llama) → Use **FMAPI** instead (simpler, pay-per-token)
+- Off-the-shelf LLMs (GPT-5, Claude Sonnet/Opus, Gemini, Llama) → Use **FMAPI** instead (simpler, pay-per-token)
 
 **Then ask these questions:**
 
@@ -187,13 +187,46 @@ When presenting workload types to users, ALWAYS use these names:
    - Code generation → **Very high** (codebase context grows quickly)
    - Embeddings → Input only, no output tokens
 
-2. Which model?
-   | Model | Best For |
-   |-------|----------|
-   | Llama 3.x | Open, customizable, good balance |
-   | Claude | Coding, long context (200K), reasoning |
-   | GPT-5+ | General purpose, multimodal |
-   | Gemini | General purpose, multimodal |
+2. Which model? **IMPORTANT: Use exact model IDs when proposing workloads**
+
+   **FMAPI_PROPRIETARY (Anthropic, OpenAI, Google):**
+   | Provider | Model ID | Display Name | Best For |
+   |----------|----------|--------------|----------|
+   | anthropic | claude-sonnet-4-5 | Claude Sonnet 4.5 | General purpose, coding, reasoning |
+   | anthropic | claude-sonnet-4-1 | Claude Sonnet 4.1 | Balanced performance |
+   | anthropic | claude-sonnet-4 | Claude Sonnet 4 | Cost-effective |
+   | anthropic | claude-sonnet-3-7 | Claude Sonnet 3.7 | Legacy support |
+   | anthropic | claude-opus-4-5 | Claude Opus 4.5 | **Most capable**, complex reasoning |
+   | anthropic | claude-opus-4-1 | Claude Opus 4.1 | Advanced reasoning |
+   | anthropic | claude-opus-4 | Claude Opus 4 | Complex tasks |
+   | anthropic | claude-haiku-4-5 | Claude Haiku 4.5 | **Fastest**, simple tasks |
+   | openai | gpt-5 | GPT-5 | General purpose, multimodal |
+   | openai | gpt-5-1 | GPT-5.1 | Latest OpenAI model |
+   | openai | gpt-5-mini | GPT-5 Mini | Cost-effective |
+   | openai | gpt-5-nano | GPT-5 Nano | Lightest, fastest |
+   | google | gemini-2-5-pro | Gemini 2.5 Pro | Complex reasoning, multimodal |
+   | google | gemini-2-5-flash | Gemini 2.5 Flash | Fast, cost-effective |
+
+   **FMAPI_DATABRICKS (Databricks-hosted open models):**
+   | Provider | Model ID | Display Name | Best For |
+   |----------|----------|--------------|----------|
+   | meta | llama-4-maverick | Llama 4 Maverick | Latest Llama, general purpose |
+   | meta | llama-3-3-70b | Llama 3.3 70B | Large, capable |
+   | meta | llama-3-1-8b | Llama 3.1 8B | Efficient, fast |
+   | meta | llama-3-2-3b | Llama 3.2 3B | Lightweight |
+   | meta | llama-3-2-1b | Llama 3.2 1B | Smallest, edge deployment |
+   | databricks | gpt-oss-120b | GPT-OSS 120B | Large open model |
+   | databricks | gpt-oss-20b | GPT-OSS 20B | Medium open model |
+   | databricks | gemma-3-12b | Gemma 3 12B | Efficient Google model |
+   | databricks | bge-large | BGE Large | **Embeddings only** |
+   | databricks | gte | GTE | **Embeddings only** |
+
+   **Model recommendations by use case:**
+   - **Best overall**: claude-sonnet-4-5 or gpt-5-1
+   - **Cost-sensitive**: claude-haiku-4-5, gpt-5-mini, or llama-3-1-8b
+   - **Complex reasoning**: claude-opus-4-5 or gemini-2-5-pro
+   - **Open source preference**: llama-4-maverick or llama-3-3-70b
+   - **Embeddings**: bge-large or gte (FMAPI_DATABRICKS only)
 
 3. Expected volume?
    - Calculate: Users/day × Requests/user × Avg tokens/request
@@ -215,6 +248,13 @@ When presenting workload types to users, ALWAYS use these names:
      - PT makes sense at **1,000+ tokens/sec sustained** (~2.6B tokens/month)
      - Guarantees throughput (tokens/sec)
      - Committed capacity = lower per-token cost
+
+**CRITICAL for FMAPI workloads:**
+- ALWAYS specify fmapi_quantity (token quantity in millions per month)
+- ALWAYS specify fmapi_rate_type (input_token or output_token)
+- Create SEPARATE workloads for input and output tokens
+- Use fmapi_endpoint_type: "global" (default) or "in_geo" (regional)
+- Use fmapi_context_length: "all" (default), "short", or "long"
 
 ### For Lakebase:
 1. What are your expected reads per second? (e.g., 50,000 lookups/sec)
@@ -264,7 +304,7 @@ A typical RAG (Retrieval-Augmented Generation) chatbot requires MULTIPLE workloa
 
 ### Code Assistant
 1. **Foundation Model**: Code generation/completion
-   - Models: Claude Sonnet, GPT-5, or CodeLlama
+   - Models: claude-sonnet-4-5, gpt-5-1, or llama-4-maverick
    - Moderate input (code context), moderate output (completions)
 
 When user mentions: "chatbot", "RAG", "knowledge base", "document Q&A", "assistant" - 
@@ -626,7 +666,8 @@ When the propose_workload tool returns a configuration (e.g., number of clusters
      - No → On-demand workers
 
 ### For GenAI/Chatbots:
-1. What model preference? (Claude, GPT, Llama, etc.)
+1. What model preference? (Anthropic Claude, OpenAI GPT, Google Gemini, Meta Llama, etc.)
+   - Recommend specific models: claude-sonnet-4-5, gpt-5-1, gemini-2-5-pro, llama-4-maverick
 2. How many users and questions per day?
 3. What's the knowledge base size? (number of documents)
 4. How often is content updated? (for data prep sizing)
@@ -690,7 +731,8 @@ I can help you set up all of these! To configure them optimally, I need a few de
 4. Simple dashboard queries or complex aggregations?
 
 **For GenAI chatbot (10 users):**
-5. What model do you prefer? (Claude, GPT, Llama)
+5. What model do you prefer? (Anthropic Claude, OpenAI GPT, Google Gemini, Meta Llama)
+   - Recommend: claude-sonnet-4-5 (balanced), claude-haiku-4-5 (fast/cheap), claude-opus-4-5 (most capable)
 6. How many documents in your knowledge base?
 
 Once you answer these, I'll propose each workload with the right configuration!
@@ -954,7 +996,7 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 "fmapi_model": {
                     "type": "string",
-                    "description": "Model name (e.g., 'claude-sonnet-4', 'gpt-5', 'llama-3-3-70b', 'dbrx-instruct')"
+                    "description": "Model ID. Use EXACT IDs: Anthropic (claude-sonnet-4-5, claude-sonnet-4-1, claude-opus-4-5, claude-haiku-4-5), OpenAI (gpt-5, gpt-5-1, gpt-5-mini), Google (gemini-2-5-pro, gemini-2-5-flash), Meta (llama-4-maverick, llama-3-3-70b, llama-3-1-8b), Databricks (bge-large, gte for embeddings)"
                 },
                 "fmapi_endpoint_type": {
                     "type": "string",
@@ -1088,8 +1130,8 @@ This will propose all necessary workloads (data prep, vector search, foundation 
                 },
                 "model_preference": {
                     "type": "string",
-                    "enum": ["claude", "gpt", "llama", "dbrx", "no_preference"],
-                    "description": "User's preferred foundation model family"
+                    "enum": ["claude", "gpt", "gemini", "llama", "dbrx", "no_preference"],
+                    "description": "User's preferred foundation model family. claude=Anthropic (claude-sonnet-4-5), gpt=OpenAI (gpt-5-1), gemini=Google (gemini-2-5-pro), llama=Meta (llama-4-maverick), dbrx=Databricks"
                 },
                 "expected_conversations_per_day": {
                     "type": "integer",
@@ -1956,19 +1998,22 @@ The following fields MUST be set before workloads can be added:
         # Determine model based on preference
         if model_preference == "claude":
             provider = "anthropic"
-            model = "claude-sonnet-4"
+            model = "claude-sonnet-4-5"
         elif model_preference == "gpt":
             provider = "openai"
-            model = "gpt-5"
+            model = "gpt-5-1"
+        elif model_preference == "gemini":
+            provider = "google"
+            model = "gemini-2-5-pro"
         elif model_preference == "llama":
             provider = "meta"
-            model = "llama-3-3-70b"
+            model = "llama-4-maverick"
         elif model_preference == "dbrx":
             provider = "databricks"
-            model = "dbrx-instruct"
+            model = "gpt-oss-20b"
         else:
             provider = "anthropic"
-            model = "claude-sonnet-4"
+            model = "claude-sonnet-4-5"
         
         # 1. Data Preparation Job (for RAG-like use cases)
         if use_case in ["rag_chatbot", "document_processing", "customer_support"]:
@@ -3104,6 +3149,96 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append(f"• **Billable Storage**: {billable_storage_gb} GB")
                 notes_parts.append(f"• **Storage Cost**: ${storage_cost:.2f}/month ($0.023/GB/month)")
         
+        if wtype in ["FMAPI_PROPRIETARY", "FMAPI_DATABRICKS"]:
+            # Get FMAPI-specific fields
+            provider = workload.get("fmapi_provider", "")
+            model = workload.get("fmapi_model", "")
+            rate_type = workload.get("fmapi_rate_type", "")
+            quantity = workload.get("fmapi_quantity", 0)
+            endpoint_type = workload.get("fmapi_endpoint_type", "global")
+            context_length = workload.get("fmapi_context_length", "all")
+            
+            # Set defaults if not provided
+            if not provider:
+                if wtype == "FMAPI_PROPRIETARY":
+                    provider = "anthropic"
+                else:
+                    provider = "meta"
+                workload["fmapi_provider"] = provider
+            
+            if not model:
+                # Default model based on provider
+                model_defaults = {
+                    "anthropic": "claude-sonnet-4-5",
+                    "openai": "gpt-5-1",
+                    "google": "gemini-2-5-pro",
+                    "meta": "llama-4-maverick",
+                    "databricks": "bge-large"
+                }
+                model = model_defaults.get(provider, "claude-sonnet-4-5")
+                workload["fmapi_model"] = model
+            
+            if not rate_type:
+                rate_type = "input_token"
+                workload["fmapi_rate_type"] = rate_type
+            
+            if not quantity or quantity == 0:
+                # Default to 1M tokens/month as a starting point
+                quantity = 1.0
+                workload["fmapi_quantity"] = quantity
+            
+            if not endpoint_type:
+                endpoint_type = "global"
+                workload["fmapi_endpoint_type"] = endpoint_type
+            
+            if not context_length:
+                context_length = "all"
+                workload["fmapi_context_length"] = context_length
+            
+            # FMAPI runs continuously - set hours to 730
+            workload["hours_per_month"] = 730
+            
+            notes_parts.append("")
+            notes_parts.append("=" * 60)
+            notes_parts.append(f"**FOUNDATION MODEL API ({wtype}) CONFIGURATION**")
+            notes_parts.append("=" * 60)
+            notes_parts.append("")
+            notes_parts.append(f"**🤖 Model Configuration:**")
+            notes_parts.append(f"• **Provider**: {provider.title()}")
+            notes_parts.append(f"• **Model**: {model}")
+            notes_parts.append(f"• **Endpoint Type**: {endpoint_type.title()} (Multi-region)" if endpoint_type == "global" else f"• **Endpoint Type**: In-Geo (Regional)")
+            notes_parts.append(f"• **Context Length**: {context_length.title()}")
+            notes_parts.append("")
+            
+            notes_parts.append(f"**📊 Token Configuration:**")
+            notes_parts.append(f"• **Rate Type**: {rate_type.replace('_', ' ').title()}")
+            notes_parts.append(f"• **Quantity**: {quantity}M tokens/month ({quantity * 1_000_000:,.0f} tokens)")
+            notes_parts.append("")
+            
+            # Add provider-specific guidance
+            if wtype == "FMAPI_PROPRIETARY":
+                notes_parts.append("**💡 Proprietary Model Benefits:**")
+                notes_parts.append("• **Data Security**: All requests stay within Databricks security perimeter")
+                notes_parts.append("• **No API Keys**: Uses Databricks authentication")
+                notes_parts.append("• **Unified Billing**: Charged through Databricks account")
+                notes_parts.append("• **Governance**: Full audit logging and access control")
+            else:
+                notes_parts.append("**💡 Databricks-Hosted Model Benefits:**")
+                notes_parts.append("• **Open Source**: No vendor lock-in, model transparency")
+                notes_parts.append("• **Cost Effective**: Typically 5-10x cheaper than proprietary models")
+                notes_parts.append("• **Customizable**: Can fine-tune on your data")
+                notes_parts.append("• **Provisioned Throughput**: Available for guaranteed capacity")
+            
+            notes_parts.append("")
+            notes_parts.append("**⚠️ IMPORTANT:**")
+            notes_parts.append("• Create SEPARATE workloads for input and output tokens")
+            notes_parts.append("• Output tokens are typically 3-5x more expensive than input")
+            notes_parts.append("• Consider prompt optimization to reduce token usage")
+            if rate_type == "input_token":
+                notes_parts.append("• 💡 Remember to add a matching OUTPUT token workload")
+            elif rate_type == "output_token":
+                notes_parts.append("• 💡 Remember to add a matching INPUT token workload")
+        
         # IGNORE any brief notes provided by LLM - we generate comprehensive ones
         # existing_notes = workload.get("notes", "")  # DON'T use LLM's brief notes
         
@@ -3161,6 +3296,15 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 footer_parts.append(f"• **Endpoint Type**: {endpoint_type}")
                 footer_parts.append(f"• **Total Vectors**: {total_vectors:,} vectors")
                 footer_parts.append(f"• **Dimensions**: {dimensions}d")
+            elif wtype in ["FMAPI_PROPRIETARY", "FMAPI_DATABRICKS"]:
+                provider = workload.get("fmapi_provider", "")
+                model = workload.get("fmapi_model", "")
+                rate_type = workload.get("fmapi_rate_type", "")
+                quantity = workload.get("fmapi_quantity", 0)
+                footer_parts.append(f"• **Provider**: {provider.title()}")
+                footer_parts.append(f"• **Model**: {model}")
+                footer_parts.append(f"• **Rate Type**: {rate_type.replace('_', ' ').title()}")
+                footer_parts.append(f"• **Quantity**: {quantity}M tokens/month")
             
             footer_parts.append("")
             footer_parts.append("**⚠️ IMPORTANT REMINDERS:**")
