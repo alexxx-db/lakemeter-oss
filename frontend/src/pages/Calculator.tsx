@@ -2701,10 +2701,14 @@ export default function Calculator() {
                               {/* Formula display (toggle via calculator button in action bar) */}
                               {formulaVisibleItems.has(item.line_item_id) && (
                               <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
-                                <div className="flex items-center gap-1.5 text-[11px] text-lava-600 mb-2">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id) }}
+                                  className="flex items-center gap-1.5 text-[11px] text-lava-600 mb-2 hover:text-lava-700 transition-colors group"
+                                >
                                   <CalculatorIcon className="w-3.5 h-3.5" />
                                   <span className="font-medium">Cost Calculation</span>
-                                </div>
+                                  <ChevronUpIcon className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </button>
                                 <div className="mt-2">
                                 {(() => {
                                   // Determine if using run-based or direct hours
@@ -3322,10 +3326,14 @@ export default function Calculator() {
                             {/* Formula display - toggle is in the action buttons now */}
                             {formulaVisibleItems.has(item.line_item_id) && (
                             <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
-                              <div className="flex items-center gap-1.5 text-[11px] text-lava-600 mb-2">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id) }}
+                                className="flex items-center gap-1.5 text-[11px] text-lava-600 mb-2 hover:text-lava-700 transition-colors group"
+                              >
                                 <CalculatorIcon className="w-3.5 h-3.5" />
                                 <span className="font-medium">Cost Calculation</span>
-                              </div>
+                                <ChevronUpIcon className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
                               {(() => {
                                 // Use effectiveItem for real-time preview
                                 const wType = effectiveItem.workload_type || ''
