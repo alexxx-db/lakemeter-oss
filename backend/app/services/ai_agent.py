@@ -1867,8 +1867,16 @@ The following fields MUST be set before workloads can be added:
         Format clarifying questions to ask the user.
         This is a "soft" tool - it just formats questions for the AI to present naturally.
         """
-        # Number the questions for clarity
-        formatted_questions = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions)])
+        import re
+        # Number the questions for clarity, but skip if already numbered
+        formatted_lines = []
+        for i, q in enumerate(questions):
+            # Check if question already starts with a number (e.g., "1.", "1)", "1:")
+            if re.match(r'^\d+[\.\)\:]', q.strip()):
+                formatted_lines.append(q)  # Already numbered, use as-is
+            else:
+                formatted_lines.append(f"{i+1}. {q}")
+        formatted_questions = "\n".join(formatted_lines)
         
         return {
             "success": True,

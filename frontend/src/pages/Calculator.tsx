@@ -3878,14 +3878,14 @@ export default function Calculator() {
                   </div>
                   
                   {/* Cost Breakdown Grid - DBU + VM only */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="text-center p-3 rounded-xl bg-gradient-to-br from-blue-500/5 to-blue-500/10 border border-blue-500/20">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="text-center p-2 sm:p-3 rounded-xl bg-gradient-to-br from-blue-500/5 to-blue-500/10 border border-blue-500/20">
                       <p className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider font-medium mb-1">DBU Cost</p>
-                      <p className="text-lg font-bold text-[var(--text-primary)]">{formatCurrency(totalCosts.totalDBUCost)}</p>
+                      <p className="text-sm sm:text-lg font-bold text-[var(--text-primary)] truncate">{formatCurrency(totalCosts.totalDBUCost)}</p>
                     </div>
-                    <div className="text-center p-3 rounded-xl bg-gradient-to-br from-purple-500/5 to-purple-500/10 border border-purple-500/20">
+                    <div className="text-center p-2 sm:p-3 rounded-xl bg-gradient-to-br from-purple-500/5 to-purple-500/10 border border-purple-500/20">
                       <p className="text-[10px] text-purple-600 dark:text-purple-400 uppercase tracking-wider font-medium mb-1">VM Cost</p>
-                      <p className="text-lg font-bold text-[var(--text-primary)]">{isLoadingVMCosts ? '...' : formatCurrency(totalCosts.totalVMCost)}</p>
+                      <p className="text-sm sm:text-lg font-bold text-[var(--text-primary)] truncate">{isLoadingVMCosts ? '...' : formatCurrency(totalCosts.totalVMCost)}</p>
                     </div>
                   </div>
                   
@@ -4033,12 +4033,12 @@ export default function Calculator() {
                 </button>
                 
                 {/* Center - Stats with colored labels */}
-                <div className="flex items-center gap-3 sm:gap-5 text-sm">
+                <div className="flex items-center gap-2 sm:gap-4 text-sm flex-shrink min-w-0">
                   {/* Workload count - clearly styled as expandable */}
                   <button
                     onClick={() => setShowCollapsedBreakdown(!showCollapsedBreakdown)}
                     className={clsx(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all",
+                      "flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border transition-all flex-shrink-0",
                       showCollapsedBreakdown 
                         ? "bg-lava-600/10 border-lava-600/30 text-lava-600" 
                         : "border-[var(--border-primary)] hover:border-lava-600/30 hover:bg-lava-600/5"
@@ -4050,18 +4050,18 @@ export default function Calculator() {
                     <ChevronUpIcon className={clsx("w-3 h-3 transition-transform", showCollapsedBreakdown ? "rotate-180" : "")} />
                   </button>
                   
-                  <div className="h-4 w-px bg-[var(--border-primary)] hidden sm:block" />
+                  <div className="h-4 w-px bg-[var(--border-primary)] hidden md:block" />
                   
-                  {/* DBU Cost - blue label, larger text */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-blue-600 dark:text-blue-400 font-semibold text-sm">DBU:</span>
-                    <span className="font-bold text-[var(--text-primary)] text-base">{formatCurrency(totalCosts.totalDBUCost)}</span>
+                  {/* DBU Cost - blue label, responsive text */}
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="text-blue-600 dark:text-blue-400 font-semibold text-xs sm:text-sm flex-shrink-0">DBU:</span>
+                    <span className="font-bold text-[var(--text-primary)] text-xs sm:text-sm md:text-base truncate">{formatCurrency(totalCosts.totalDBUCost)}</span>
                   </div>
                   
-                  {/* VM Cost - purple label, larger text */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-purple-600 dark:text-purple-400 font-semibold text-sm">VM:</span>
-                    <span className="font-bold text-[var(--text-primary)] text-base">{formatCurrency(totalCosts.totalVMCost)}</span>
+                  {/* VM Cost - purple label, responsive text */}
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="text-purple-600 dark:text-purple-400 font-semibold text-xs sm:text-sm flex-shrink-0">VM:</span>
+                    <span className="font-bold text-[var(--text-primary)] text-xs sm:text-sm md:text-base truncate">{formatCurrency(totalCosts.totalVMCost)}</span>
                   </div>
                 </div>
                 
