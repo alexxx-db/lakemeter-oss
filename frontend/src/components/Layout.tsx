@@ -452,37 +452,6 @@ export default function Layout() {
                 </AnimatePresence>
               </div>
               
-              {/* AI Assistant Button - Only show on estimate detail pages */}
-              {isEstimateDetailPage && (
-                <motion.button
-                  onClick={handleToggleChat}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={clsx(
-                    "relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300 group",
-                    isChatOpen 
-                      ? "bg-gradient-to-br from-lava-600 via-amber-500 to-yellow-500 text-white shadow-lg shadow-lava-600/30" 
-                      : "text-lava-600 hover:text-white hover:bg-gradient-to-br hover:from-lava-600 hover:via-amber-500 hover:to-yellow-500 hover:shadow-lg hover:shadow-lava-600/30"
-                  )}
-                  title={isChatOpen ? "Close AI Assistant" : "Open AI Assistant"}
-                >
-                  <motion.div
-                    className="group-hover:animate-pulse"
-                    animate={isChatOpen ? {} : {}}
-                  >
-                    <SparklesIcon className="w-5 h-5" />
-                  </motion.div>
-                  {/* Glow effect on hover */}
-                  <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-lava-500 to-amber-400 opacity-0 group-hover:opacity-20 blur-md transition-opacity duration-300" />
-                  {/* Pulsing badge for first-time users */}
-                  {!hasUsedAIAssistant && !isChatOpen && (
-                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-                    </span>
-                  )}
-                </motion.button>
-              )}
             </div>
           </div>
         </div>
@@ -546,31 +515,30 @@ export default function Layout() {
         />
       )}
       
-      {/* Floating AI Assistant Button - Shows when chat is closed on estimate detail pages */}
-      <AnimatePresence>
-        {isEstimateDetailPage && !isChatOpen && (
-          <motion.button
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleToggleChat}
-            className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 pl-4 pr-5 py-3 rounded-full bg-gradient-to-r from-lava-600 via-amber-500 to-yellow-500 text-white shadow-lg shadow-lava-600/25 hover:shadow-xl hover:shadow-lava-600/35 transition-shadow group"
-            title="Open AI Assistant"
-          >
-            {/* Icon */}
-            <SparklesIcon className="w-5 h-5 group-hover:animate-pulse" />
-            {/* Label */}
-            <span className="text-sm font-semibold whitespace-nowrap">AI Assistant</span>
-            {/* Subtle pulse ring for attention (only for first-time users) */}
-            {!hasUsedAIAssistant && (
-              <span className="absolute inset-0 rounded-full bg-gradient-to-r from-lava-500 to-amber-400 animate-ping opacity-20" />
-            )}
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {/* Floating AI Assistant Button - Always visible on estimate detail pages */}
+      {isEstimateDetailPage && (
+        <button
+          onClick={handleToggleChat}
+          className={clsx(
+            "fixed bottom-6 right-6 z-40 flex items-center gap-2.5 pl-4 pr-5 py-3 rounded-full text-white shadow-lg transition-all duration-200 hover:shadow-xl",
+            isChatOpen
+              ? "bg-gray-700 hover:bg-gray-600 shadow-gray-700/25 hover:shadow-gray-600/35"
+              : "bg-gradient-to-r from-lava-600 via-amber-500 to-yellow-500 shadow-lava-600/25 hover:shadow-lava-600/35"
+          )}
+          title={isChatOpen ? "Close AI Assistant" : "Open AI Assistant"}
+        >
+          {/* Icon */}
+          <SparklesIcon className="w-5 h-5" />
+          {/* Label */}
+          <span className="text-sm font-semibold whitespace-nowrap">
+            {isChatOpen ? "Close" : "AI Assistant"}
+          </span>
+          {/* Subtle pulse ring for attention (only for first-time users when closed) */}
+          {!hasUsedAIAssistant && !isChatOpen && (
+            <span className="absolute inset-0 rounded-full bg-gradient-to-r from-lava-500 to-amber-400 animate-ping opacity-20" />
+          )}
+        </button>
+      )}
       
       {/* Session Expired Modal */}
       <AnimatePresence>
