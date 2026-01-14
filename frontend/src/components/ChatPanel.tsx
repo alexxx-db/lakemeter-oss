@@ -248,20 +248,23 @@ export function ChatPanel({
 
   // Build welcome message content based on context
   const buildWelcomeContent = useCallback(() => {
-    // Home page mode - Q&A only
+    // Home page mode - Q&A only (advisory mode)
     if (mode === 'home') {
-      return `**Hi! I'm your Databricks pricing assistant.**
+      return `**👋 Welcome! I'm your Databricks pricing advisor.**
 
-I can help you with:
+I'm here to help you **learn and plan** before you dive in:
 
-- 📚 **Learn** about Databricks workload types and pricing
-- 💰 **Understand** cost factors and optimization strategies
-- 🏗️ **Plan** your architecture before creating an estimate
-- ❓ **Answer questions** about best practices
+- 📚 **Explore** workload types (Jobs, SQL, ML, GenAI, etc.)
+- 💰 **Understand** pricing factors and DBU costs
+- 🏗️ **Get guidance** on architecture decisions
+- 💡 **Learn** cost optimization best practices
 
-*To add workloads and calculate costs, create or select an estimate first.*
+---
 
-*Try the quick actions below or ask me anything!*`
+**Ready to build an estimate?**
+Click **"+ New Estimate"** above to create one, then I can help you add workloads and calculate costs!
+
+*Ask me anything using the quick actions below* 👇`
     }
     
     // Estimate page mode - full features
