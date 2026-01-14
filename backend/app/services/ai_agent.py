@@ -249,12 +249,33 @@ When presenting workload types to users, ALWAYS use these names:
      - Guarantees throughput (tokens/sec)
      - Committed capacity = lower per-token cost
 
-**CRITICAL for FMAPI workloads:**
-- ALWAYS specify fmapi_quantity (token quantity in millions per month)
-- ALWAYS specify fmapi_rate_type (input_token or output_token)
-- Create SEPARATE workloads for input and output tokens
-- Use fmapi_endpoint_type: "global" (default) or "in_geo" (regional)
-- Use fmapi_context_length: "all" (default), "short", or "long"
+**CRITICAL for FMAPI workloads - CALCULATE, don't use defaults:**
+
+1. **ALWAYS calculate fmapi_quantity** based on user's actual usage:
+   - Formula: (users × requests/user/day × 30 days × tokens/request) / 1,000,000
+   - Example: 100 users × 5 questions/day × 30 × 3000 tokens = 45M → fmapi_quantity: 45
+   
+2. **Token estimation by use case:**
+   | Use Case | Input Tokens | Output Tokens |
+   |----------|--------------|---------------|
+   | Simple Q&A | ~100-300 | ~200-400 |
+   | Chat with context | ~500-1000 | ~300-500 |
+   | RAG/Knowledge base | ~2000-4000 | ~500-800 |
+   | Document summarization | ~3000-10000 | ~500-1500 |
+   | Code generation | ~5000-20000 | ~1000-3000 |
+
+3. **ALWAYS create SEPARATE workloads for input and output tokens:**
+   - Chatbot: 1 workload for input_token, 1 for output_token
+   - Never default both to input_token!
+
+4. **Ask users for specifics if not provided:**
+   - How many users?
+   - How many requests per user per day?
+   - What's the average query/context size?
+   
+5. Other settings:
+   - fmapi_endpoint_type: "global" (default) or "in_geo" (regional)
+   - fmapi_context_length: "all" (most common), "short", or "long"
 
 ### For Lakebase:
 1. What are your expected reads per second? (e.g., 50,000 lookups/sec)
@@ -1005,17 +1026,17 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 "fmapi_context_length": {
                     "type": "string",
-                    "enum": ["all", "8k", "16k", "32k", "128k", "200k"],
-                    "description": "Context length tier for the model"
+                    "enum": ["all", "short", "long"],
+                    "description": "Context length tier: 'all' (any context), 'short' (up to 8K tokens), 'long' (up to 200K tokens). Use 'long' for RAG/document processing."
                 },
                 "fmapi_rate_type": {
                     "type": "string",
                     "enum": ["input_token", "output_token", "cache_read", "cache_write"],
-                    "description": "Token type for billing. Create separate workloads for input and output tokens."
+                    "description": "REQUIRED for FMAPI. Token billing type. ALWAYS create SEPARATE workloads for input_token and output_token. Chatbots need BOTH input (prompts/context) AND output (responses) workloads."
                 },
                 "fmapi_quantity": {
                     "type": "number",
-                    "description": "Token quantity in millions per month (e.g., 2.5 = 2.5M tokens/month)"
+                    "description": "REQUIRED for FMAPI. Token quantity in MILLIONS per month. CALCULATE based on usage: (users × requests_per_user_per_day × 30 days × tokens_per_request) / 1,000,000. Example: 100 users × 5 questions/day × 30 × 3000 tokens = 45M input tokens → pass 45. For chatbots: input ~3000 tokens/query (context+question), output ~500 tokens/response."
                 },
                 
                 # === Lakebase Specific ===
@@ -3150,15 +3171,15 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append(f"• **Storage Cost**: ${storage_cost:.2f}/month ($0.023/GB/month)")
         
         if wtype in ["FMAPI_PROPRIETARY", "FMAPI_DATABRICKS"]:
-            # Get FMAPI-specific fields
+            # Get FMAPI-specific fields - these should be PROVIDED by the AI, not defaulted
             provider = workload.get("fmapi_provider", "")
             model = workload.get("fmapi_model", "")
             rate_type = workload.get("fmapi_rate_type", "")
             quantity = workload.get("fmapi_quantity", 0)
-            endpoint_type = workload.get("fmapi_endpoint_type", "global")
-            context_length = workload.get("fmapi_context_length", "all")
+            endpoint_type = workload.get("fmapi_endpoint_type", "")
+            context_length = workload.get("fmapi_context_length", "")
             
-            # Set defaults if not provided
+            # Provider defaults (acceptable fallback)
             if not provider:
                 if wtype == "FMAPI_PROPRIETARY":
                     provider = "anthropic"
@@ -3166,8 +3187,8 @@ Each workload needs to be confirmed individually. Review the configurations and 
                     provider = "meta"
                 workload["fmapi_provider"] = provider
             
+            # Model defaults based on provider (acceptable fallback)
             if not model:
-                # Default model based on provider
                 model_defaults = {
                     "anthropic": "claude-sonnet-4-5",
                     "openai": "gpt-5-1",
@@ -3178,15 +3199,23 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 model = model_defaults.get(provider, "claude-sonnet-4-5")
                 workload["fmapi_model"] = model
             
+            # Rate type - CRITICAL: AI should specify this, but we need a fallback
+            # Add a warning note if defaulted
             if not rate_type:
                 rate_type = "input_token"
                 workload["fmapi_rate_type"] = rate_type
+                # Flag that this was defaulted
+                workload["_rate_type_defaulted"] = True
             
+            # Quantity - CRITICAL: AI should calculate this based on user's usage
+            # Only set a minimal fallback if absolutely needed
             if not quantity or quantity == 0:
-                # Default to 1M tokens/month as a starting point
-                quantity = 1.0
+                quantity = 1.0  # Minimal placeholder - AI should have calculated this
                 workload["fmapi_quantity"] = quantity
+                # Flag that this was defaulted
+                workload["_quantity_defaulted"] = True
             
+            # Non-critical defaults
             if not endpoint_type:
                 endpoint_type = "global"
                 workload["fmapi_endpoint_type"] = endpoint_type
@@ -3203,6 +3232,18 @@ Each workload needs to be confirmed individually. Review the configurations and 
             notes_parts.append(f"**FOUNDATION MODEL API ({wtype}) CONFIGURATION**")
             notes_parts.append("=" * 60)
             notes_parts.append("")
+            
+            # Add warnings if values were defaulted
+            if workload.get("_quantity_defaulted") or workload.get("_rate_type_defaulted"):
+                notes_parts.append("**⚠️ REVIEW REQUIRED:**")
+                if workload.get("_quantity_defaulted"):
+                    notes_parts.append("• Token quantity was not calculated - please update based on your actual usage")
+                    notes_parts.append("  Formula: (users × requests/day × 30 × tokens/request) / 1,000,000")
+                if workload.get("_rate_type_defaulted"):
+                    notes_parts.append("• Rate type defaulted to input_token - verify this is correct")
+                    notes_parts.append("  Remember: Chatbots need BOTH input AND output token workloads")
+                notes_parts.append("")
+            
             notes_parts.append(f"**🤖 Model Configuration:**")
             notes_parts.append(f"• **Provider**: {provider.title()}")
             notes_parts.append(f"• **Model**: {model}")
