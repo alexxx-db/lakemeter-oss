@@ -1535,24 +1535,26 @@ export default function Calculator() {
     const newExpanded = new Set(expandedItems)
     if (newExpanded.has(itemId)) {
       newExpanded.delete(itemId)
+      // Also hide formula when collapsing
+      setFormulaVisibleItems(prev => {
+        const next = new Set(prev)
+        next.delete(itemId)
+        return next
+      })
     } else {
       newExpanded.add(itemId)
+      // Auto-show formula when expanding (subtle guidance to discover the feature)
+      setFormulaVisibleItems(prev => new Set(prev).add(itemId))
     }
     setExpandedItems(newExpanded)
   }
   
-  const toggleFormula = (itemId: string, alsoExpand: boolean = false) => {
+  const toggleFormula = (itemId: string) => {
     const newVisible = new Set(formulaVisibleItems)
     if (newVisible.has(itemId)) {
       newVisible.delete(itemId)
     } else {
       newVisible.add(itemId)
-      // Also expand the item if requested
-      if (alsoExpand && !expandedItems.has(itemId)) {
-        const newExpanded = new Set(expandedItems)
-        newExpanded.add(itemId)
-        setExpandedItems(newExpanded)
-      }
     }
     setFormulaVisibleItems(newVisible)
   }
@@ -2549,19 +2551,6 @@ export default function Calculator() {
                               
                               {/* Actions */}
                               <div className="flex items-center gap-0.5">
-                                {/* Calculator button - show/hide calculation */}
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id, true) }}
-                                  className={clsx(
-                                    "p-1.5 rounded transition-colors",
-                                    formulaVisibleItems.has(item.line_item_id)
-                                      ? "text-lava-600 bg-lava-500/10"
-                                      : "text-[var(--text-muted)] hover:text-lava-600 hover:bg-lava-500/10"
-                                  )}
-                                  title={formulaVisibleItems.has(item.line_item_id) ? "Hide calculation" : "Show calculation"}
-                                >
-                                  <CalculatorIcon className="w-4 h-4" />
-                                </button>
                                 <button
                                   onClick={(e) => handleCloneWorkload(e, item)}
                                   className="p-1.5 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
@@ -3226,19 +3215,6 @@ export default function Calculator() {
                           
                           {/* Actions */}
                           <div className="flex items-center gap-1">
-                            {/* Show calculation button - always visible, also expands row */}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id, true) }}
-                              className={clsx(
-                                "p-1.5 rounded-md transition-colors",
-                                formulaVisibleItems.has(item.line_item_id)
-                                  ? "text-lava-600 bg-lava-500/10"
-                                  : "text-[var(--text-muted)] hover:text-lava-600 hover:bg-lava-500/10"
-                              )}
-                              title={formulaVisibleItems.has(item.line_item_id) ? "Hide calculation" : "Show calculation"}
-                            >
-                              <CalculatorIcon className="w-4 h-4" />
-                            </button>
                             <button
                               onClick={(e) => handleCloneWorkload(e, item)}
                               className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
