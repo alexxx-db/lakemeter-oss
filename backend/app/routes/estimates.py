@@ -348,6 +348,7 @@ def duplicate_estimate(
             # Vector Search
             vector_search_mode=original_item.vector_search_mode,
             vector_capacity_millions=original_item.vector_capacity_millions,
+            vector_search_storage_gb=original_item.vector_search_storage_gb,
             # Model Serving
             model_serving_gpu_type=original_item.model_serving_gpu_type,
             # FMAPI
@@ -446,6 +447,7 @@ def clone_estimate(
             # Vector Search
             vector_search_mode=original_item.vector_search_mode,
             vector_capacity_millions=original_item.vector_capacity_millions,
+            vector_search_storage_gb=original_item.vector_search_storage_gb,
             # Model Serving
             model_serving_gpu_type=original_item.model_serving_gpu_type,
             # FMAPI

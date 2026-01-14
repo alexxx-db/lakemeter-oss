@@ -36,6 +36,7 @@ class LineItemBase(BaseModel):
     # Vector Search Configuration
     vector_search_mode: Optional[str] = None
     vector_capacity_millions: Optional[int] = None
+    vector_search_storage_gb: Optional[int] = None
     
     # Model Serving Configuration
     model_serving_gpu_type: Optional[str] = None
@@ -106,6 +107,7 @@ class LineItemUpdate(BaseModel):
     # Vector Search Configuration
     vector_search_mode: Optional[str] = None
     vector_capacity_millions: Optional[int] = None
+    vector_search_storage_gb: Optional[int] = None
     
     # Model Serving Configuration
     model_serving_gpu_type: Optional[str] = None

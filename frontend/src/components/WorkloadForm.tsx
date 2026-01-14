@@ -413,10 +413,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     dbsql_worker_payment_option: 'NA',
     vector_search_mode: 'standard',
     vector_capacity_millions: 1,
+    vector_search_storage_gb: 0,
     model_serving_gpu_type: 'cpu',
     model_serving_num_endpoints: 1,
     lakebase_cu: 1,
-    lakebase_storage_gb: 100,
+    lakebase_storage_gb: 0,
     lakebase_ha_nodes: 1,
     lakebase_backup_retention_days: 7,
     fmapi_provider: 'anthropic',
@@ -457,10 +458,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     dbsql_worker_payment_option: 'NA',
     vector_search_mode: 'standard',
     vector_capacity_millions: 1,
+    vector_search_storage_gb: 0,
     model_serving_gpu_type: 'cpu',
     model_serving_num_endpoints: 1,
     lakebase_cu: 1,
-    lakebase_storage_gb: 100,
+    lakebase_storage_gb: 0,
     lakebase_ha_nodes: 1,
     lakebase_backup_retention_days: 7,
     fmapi_provider: 'anthropic',
@@ -503,10 +505,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         dbsql_worker_payment_option: lineItem.dbsql_worker_payment_option || lineItem.worker_payment_option || 'NA',
         vector_search_mode: lineItem.vector_search_mode || 'standard',
         vector_capacity_millions: lineItem.vector_capacity_millions || 1,
+        vector_search_storage_gb: lineItem.vector_search_storage_gb || 0,
         model_serving_gpu_type: lineItem.model_serving_gpu_type || 'cpu',
         model_serving_num_endpoints: 1,
         lakebase_cu: lineItem.lakebase_cu || 1,
-        lakebase_storage_gb: lineItem.lakebase_storage_gb || 100,
+        lakebase_storage_gb: lineItem.lakebase_storage_gb || 0,
         lakebase_ha_nodes: lineItem.lakebase_ha_nodes || 1,
         lakebase_backup_retention_days: lineItem.lakebase_backup_retention_days || 7,
         fmapi_provider: lineItem.fmapi_provider || 'anthropic',
@@ -646,8 +649,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       dbsql_worker_payment_option: form.dbsql_worker_payment_option,
       vector_search_mode: form.vector_search_mode,
       vector_capacity_millions: form.vector_capacity_millions,
+      vector_search_storage_gb: form.vector_search_storage_gb,
       model_serving_gpu_type: form.model_serving_gpu_type,
       lakebase_cu: form.lakebase_cu,
+      lakebase_storage_gb: form.lakebase_storage_gb,
       lakebase_ha_nodes: form.lakebase_ha_nodes,
       fmapi_provider: form.fmapi_provider,
       fmapi_model: form.fmapi_model,
@@ -763,9 +768,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       if (selectedWorkloadType?.show_vector_search_mode) {
         data.vector_search_mode = form.vector_search_mode
         data.vector_capacity_millions = form.vector_capacity_millions
+        data.vector_search_storage_gb = form.vector_search_storage_gb || 0
       } else {
         data.vector_search_mode = null
         data.vector_capacity_millions = null
+        data.vector_search_storage_gb = null
       }
       
       // Model Serving config
@@ -778,7 +785,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       // Lakebase config
       if (selectedWorkloadType?.show_lakebase_config) {
         data.lakebase_cu = form.lakebase_cu
-        data.lakebase_storage_gb = null  // Storage is not used for Lakebase pricing
+        data.lakebase_storage_gb = form.lakebase_storage_gb || 0
         data.lakebase_ha_nodes = form.lakebase_ha_nodes
         data.lakebase_backup_retention_days = form.lakebase_backup_retention_days
       } else {
@@ -1504,6 +1511,21 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 placeholder="e.g., 1.5"
               />
             </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Storage (GB)</label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={form.vector_search_storage_gb}
+                onChange={(e) => setForm(f => ({ ...f, vector_search_storage_gb: parseInt(e.target.value) || 0 }))}
+                className="w-full text-sm"
+                placeholder="e.g., 100"
+              />
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                Free: {Math.ceil((form.vector_capacity_millions || 1) / (form.vector_search_mode === 'storage_optimized' ? 64 : 2)) * 20} GB (20 GB/unit). Charged at $0.023/GB/mo above free tier.
+              </p>
+            </div>
           </>
         )}
         
@@ -1784,27 +1806,44 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           <>
             <div>
               <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Capacity Units (CU)</label>
-              <input
-                type="number"
-                min={1}
-                max={8}
+              <select
                 value={form.lakebase_cu}
                 onChange={(e) => setForm(f => ({ ...f, lakebase_cu: parseInt(e.target.value) || 1 }))}
                 className="w-full text-sm"
-              />
-              <span className="text-xs text-[var(--text-muted)]">1, 2, 4, or 8</span>
+              >
+                <option value={1}>1 CU</option>
+                <option value={2}>2 CU</option>
+                <option value={4}>4 CU</option>
+                <option value={8}>8 CU</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Number of Nodes</label>
-              <input
-                type="number"
-                min={1}
-                max={3}
+              <select
                 value={form.lakebase_ha_nodes}
                 onChange={(e) => setForm(f => ({ ...f, lakebase_ha_nodes: parseInt(e.target.value) || 1 }))}
                 className="w-full text-sm"
+              >
+                <option value={1}>1 Node</option>
+                <option value={2}>2 Nodes (HA)</option>
+                <option value={3}>3 Nodes (HA)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Storage (GB)</label>
+              <input
+                type="number"
+                min={0}
+                max={8192}
+                step={1}
+                value={form.lakebase_storage_gb}
+                onChange={(e) => setForm(f => ({ ...f, lakebase_storage_gb: Math.min(parseInt(e.target.value) || 0, 8192) }))}
+                className="w-full text-sm"
+                placeholder="e.g., 500"
               />
-              <span className="text-xs text-[var(--text-muted)]">1-3 (HA requires 2+)</span>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                0 - 8,192 GB (8 TB max). Each GB uses 15 DSU at $0.023/DSU/mo.
+              </p>
             </div>
           </>
         )}
@@ -1949,3 +1988,4 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     </form>
   )
 }
+

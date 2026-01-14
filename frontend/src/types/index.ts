@@ -90,6 +90,7 @@ export interface LineItem {
   // Vector Search Configuration
   vector_search_mode?: string | null
   vector_capacity_millions?: number | null
+  vector_search_storage_gb?: number | null
   
   // Model Serving Configuration
   model_serving_gpu_type?: string | null

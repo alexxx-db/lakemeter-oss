@@ -60,6 +60,17 @@ export interface CostBreakdown {
   unitsUsed?: number  // Vector Search units
   dbuPerHour?: number // DBU per hour for display
   dbuPrice?: number   // $/DBU rate for display
+  // Storage costs for Vector Search and Lakebase
+  storageCost?: number
+  storageDetails?: {
+    totalStorageGB: number
+    freeStorageGB?: number  // Vector Search only
+    billableStorageGB: number
+    pricePerGB?: number     // Vector Search
+    dsuPerGB?: number       // Lakebase
+    totalDSU?: number       // Lakebase
+    pricePerDSU?: number    // Lakebase
+  }
 }
 
 export interface DBSQLWarehouseConfig {
@@ -230,6 +241,8 @@ export function calculateWorkloadCost(
   let monthlyDBUs = 0
   let vmCost = 0
   let unitsUsed: number | undefined = undefined  // For Vector Search
+  let storageCost: number | undefined = undefined  // For Vector Search and Lakebase
+  let storageDetails: CostBreakdown['storageDetails'] = undefined
   
   // Get instance DBU rates - try pricing bundle function first, then fetched instanceTypes
   let driverDBURate = 0.5 // Fallback
@@ -412,6 +425,26 @@ export function calculateWorkloadCost(
       // DBU/Hour = units_used × mode_dbu_rate
       dbuPerHour = vectorUnitsUsed * vectorModeDBURate
       monthlyDBUs = dbuPerHour * hoursPerMonth
+      
+      // Storage calculation for Vector Search
+      // Free Storage = units_used × 20 GB
+      // Billable Storage = MAX(0, storage_gb - free_storage_gb)
+      // Storage Cost = billable_storage_gb × price_per_gb_per_month ($0.023/GB/month)
+      const vectorStorageGB = item.vector_search_storage_gb || 0
+      const vectorFreeStorageGB = vectorUnitsUsed * 20
+      const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
+      const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
+      const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
+      
+      if (vectorStorageGB > 0) {
+        storageCost = vectorStorageCost
+        storageDetails = {
+          totalStorageGB: vectorStorageGB,
+          freeStorageGB: vectorFreeStorageGB,
+          billableStorageGB: vectorBillableStorageGB,
+          pricePerGB: vectorStoragePricePerGB
+        }
+      }
       break
     
     case 'MODEL_SERVING':
@@ -429,6 +462,27 @@ export function calculateWorkloadCost(
       
       dbuPerHour = lakebaseCU * lakebaseNodes
       monthlyDBUs = dbuPerHour * hoursPerMonth
+      
+      // Storage calculation for Lakebase
+      // Total DSU = storage_gb × 15 (each GB consumes 15 DSU)
+      // Storage Cost = Total DSU × price_per_dsu ($0.023/DSU/month)
+      // Max storage: 8192 GB (8 TB)
+      const lakebaseStorageGB = Math.min(item.lakebase_storage_gb || 0, 8192)
+      const lakebaseDSUPerGB = 15
+      const lakebaseTotalDSU = lakebaseStorageGB * lakebaseDSUPerGB
+      const lakebasePricePerDSU = 0.023  // $0.023 per DSU per month
+      const lakebaseStorageCost = lakebaseTotalDSU * lakebasePricePerDSU
+      
+      if (lakebaseStorageGB > 0) {
+        storageCost = lakebaseStorageCost
+        storageDetails = {
+          totalStorageGB: lakebaseStorageGB,
+          billableStorageGB: lakebaseStorageGB,  // No free tier for Lakebase
+          dsuPerGB: lakebaseDSUPerGB,
+          totalDSU: lakebaseTotalDSU,
+          pricePerDSU: lakebasePricePerDSU
+        }
+      }
       break
     
     case 'FMAPI_DATABRICKS':
@@ -488,7 +542,8 @@ export function calculateWorkloadCost(
   // Step 4: Calculate final costs with NaN guards
   // ========================================
   const rawDbuCost = monthlyDBUs * dbuPrice
-  const rawTotalCost = rawDbuCost + vmCost
+  const safeStorageCost = storageCost !== undefined && !isNaN(storageCost) ? storageCost : 0
+  const rawTotalCost = rawDbuCost + vmCost + safeStorageCost
   
   // NaN guards - ensure we never return NaN values
   const safeDbuCost = isNaN(rawDbuCost) ? 0 : rawDbuCost
@@ -505,7 +560,9 @@ export function calculateWorkloadCost(
     totalCost: safeTotalCost,
     unitsUsed,  // For Vector Search
     dbuPerHour: safeDbuPerHour, // For display
-    dbuPrice: safeDbuPrice    // $/DBU rate for display
+    dbuPrice: safeDbuPrice,    // $/DBU rate for display
+    storageCost: safeStorageCost > 0 ? safeStorageCost : undefined,
+    storageDetails
   }
 }
 

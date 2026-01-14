@@ -268,6 +268,7 @@ def clone_line_item(
         # Vector Search
         vector_search_mode=original.vector_search_mode,
         vector_capacity_millions=original.vector_capacity_millions,
+        vector_search_storage_gb=original.vector_search_storage_gb,
         # Model Serving
         model_serving_gpu_type=original.model_serving_gpu_type,
         # FMAPI

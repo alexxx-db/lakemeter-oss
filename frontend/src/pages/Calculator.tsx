@@ -339,6 +339,17 @@ interface CostBreakdown {
   unitsUsed?: number  // Vector Search units
   dbuPerHour?: number // DBU per hour for display
   dbuPrice?: number   // $/DBU rate for display
+  // Storage costs for Vector Search and Lakebase
+  storageCost?: number
+  storageDetails?: {
+    totalStorageGB: number
+    freeStorageGB?: number  // Vector Search only
+    billableStorageGB: number
+    pricePerGB?: number     // Vector Search
+    dsuPerGB?: number       // Lakebase
+    totalDSU?: number       // Lakebase
+    pricePerDSU?: number    // Lakebase
+  }
 }
 
 export default function Calculator() {
@@ -920,6 +931,8 @@ export default function Calculator() {
     let monthlyDBUs = 0
     let vmCost = 0
     let unitsUsed: number | undefined = undefined  // For Vector Search
+    let storageCost: number | undefined = undefined  // For Vector Search and Lakebase
+    let storageDetails: CostBreakdown['storageDetails'] = undefined
     
     // Get instance DBU rates - try pricing bundle first, then fetched instanceTypes
     let driverDBURate = 0.5 // Fallback
@@ -1160,6 +1173,26 @@ export default function Calculator() {
         // DBU/Hour = units_used × mode_dbu_rate
         dbuPerHour = vectorUnitsUsed * vectorModeDBURate
         monthlyDBUs = dbuPerHour * hoursPerMonth
+        
+        // Storage calculation for Vector Search
+        // Free Storage = units_used × 20 GB
+        // Billable Storage = MAX(0, storage_gb - free_storage_gb)
+        // Storage Cost = billable_storage_gb × price_per_gb_per_month ($0.023/GB/month)
+        const vectorStorageGB = effectiveItem.vector_search_storage_gb || 0
+        const vectorFreeStorageGB = vectorUnitsUsed * 20
+        const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
+        const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
+        const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
+        
+        if (vectorStorageGB > 0) {
+          storageCost = vectorStorageCost
+          storageDetails = {
+            totalStorageGB: vectorStorageGB,
+            freeStorageGB: vectorFreeStorageGB,
+            billableStorageGB: vectorBillableStorageGB,
+            pricePerGB: vectorStoragePricePerGB
+          }
+        }
         break
       
       case 'MODEL_SERVING':
@@ -1196,6 +1229,27 @@ export default function Calculator() {
         
         dbuPerHour = lakebaseCU * lakebaseNodes
         monthlyDBUs = dbuPerHour * hoursPerMonth
+        
+        // Storage calculation for Lakebase
+        // Total DSU = storage_gb × 15 (each GB consumes 15 DSU)
+        // Storage Cost = Total DSU × price_per_dsu ($0.023/DSU/month)
+        // Max storage: 8192 GB (8 TB)
+        const lakebaseStorageGB = Math.min(effectiveItem.lakebase_storage_gb || 0, 8192)
+        const lakebaseDSUPerGB = 15
+        const lakebaseTotalDSU = lakebaseStorageGB * lakebaseDSUPerGB
+        const lakebasePricePerDSU = 0.023  // $0.023 per DSU per month
+        const lakebaseStorageCost = lakebaseTotalDSU * lakebasePricePerDSU
+        
+        if (lakebaseStorageGB > 0) {
+          storageCost = lakebaseStorageCost
+          storageDetails = {
+            totalStorageGB: lakebaseStorageGB,
+            billableStorageGB: lakebaseStorageGB,  // No free tier for Lakebase
+            dsuPerGB: lakebaseDSUPerGB,
+            totalDSU: lakebaseTotalDSU,
+            pricePerDSU: lakebasePricePerDSU
+          }
+        }
         break
       
       case 'FMAPI_DATABRICKS':
@@ -1300,9 +1354,10 @@ export default function Calculator() {
     const safeDbuPrice = isNaN(dbuPrice) || dbuPrice === undefined ? 0 : dbuPrice
     const safeMonthlyDBUs = isNaN(monthlyDBUs) || monthlyDBUs === undefined ? 0 : monthlyDBUs
     const safeVmCost = isNaN(vmCost) || vmCost === undefined ? 0 : vmCost
+    const safeStorageCost = storageCost !== undefined && !isNaN(storageCost) ? storageCost : 0
     
     const dbuCost = safeMonthlyDBUs * safeDbuPrice
-    const totalCost = dbuCost + safeVmCost
+    const totalCost = dbuCost + safeVmCost + safeStorageCost
     
     return { 
       monthlyDBUs: safeMonthlyDBUs, 
@@ -1311,7 +1366,9 @@ export default function Calculator() {
       totalCost: isNaN(totalCost) ? 0 : totalCost,
       unitsUsed,  // For Vector Search
       dbuPerHour, // For display
-      dbuPrice: safeDbuPrice  // $/DBU rate for display
+      dbuPrice: safeDbuPrice,  // $/DBU rate for display
+      storageCost: safeStorageCost > 0 ? safeStorageCost : undefined,
+      storageDetails
     }
   }
   
@@ -2739,6 +2796,11 @@ export default function Calculator() {
                                       const divisor = mode === 'storage_optimized' ? 64 : 2
                                       const unitsUsed = Math.ceil(capacity / divisor)
                                       const dbuPerUnit = mode === 'storage_optimized' ? 18.29 : 4
+                                      const storageGB = effectiveItem.vector_search_storage_gb || 0
+                                      const freeStorageGB = unitsUsed * 20
+                                      const billableStorageGB = Math.max(0, storageGB - freeStorageGB)
+                                      const storagePricePerGB = 0.023
+                                      const localStorageCost = billableStorageGB * storagePricePerGB
                                       return (
                                         <div className="space-y-1">
                                           {/* Hours calculation (if run-based) */}
@@ -2768,7 +2830,31 @@ export default function Calculator() {
                                             <span>×</span>
                                             <span>${dbuPriceDisplay}/DBU</span>
                                             <span>=</span>
-                                            <span className="font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                            <span className="text-blue-500 font-semibold">{formatCurrency(costs.dbuCost)}</span>
+                                          </div>
+                                          {storageGB > 0 && (
+                                            <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+                                              <span className="text-purple-600 font-semibold">Storage:</span>
+                                              <span>max(0, <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{storageGB} GB</span> - {freeStorageGB} GB free)</span>
+                                              <span>=</span>
+                                              <span className="font-semibold">{billableStorageGB} GB</span>
+                                              <span>×</span>
+                                              <span>${storagePricePerGB}/GB/mo</span>
+                                              <span>=</span>
+                                              <span className="text-purple-500 font-semibold">{formatCurrency(localStorageCost)}</span>
+                                            </div>
+                                          )}
+                                          <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
+                                            <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
+                                            <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                            {storageGB > 0 && (
+                                              <>
+                                                <span>+</span>
+                                                <span className="text-purple-500">{formatCurrency(localStorageCost)}</span>
+                                              </>
+                                            )}
+                                            <span>=</span>
+                                            <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                           </div>
                                         </div>
                                       )
@@ -2816,9 +2902,12 @@ export default function Calculator() {
                                   // Lakebase formula
                                   if (wType === 'LAKEBASE') {
                                     const cu = effectiveItem.lakebase_cu || 1
-                                    const haNodes = effectiveItem.lakebase_ha_nodes || 0
-                                    const baseDBUPerCU = 2 // Base rate per CU
-                                    const totalMultiplier = 1 + haNodes
+                                    const haNodes = effectiveItem.lakebase_ha_nodes || 1
+                                    const storageGB = effectiveItem.lakebase_storage_gb || 0
+                                    const dsuPerGB = 15
+                                    const totalDSU = storageGB * dsuPerGB
+                                    const pricePerDSU = 0.023
+                                    const localStorageCost = totalDSU * pricePerDSU
                                     return (
                                       <div className="space-y-1">
                                         {/* Hours calculation (if run-based) */}
@@ -2838,15 +2927,7 @@ export default function Calculator() {
                                           <span className="text-blue-600 font-semibold">DBU:</span>
                                           <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{cu} CU</span>
                                           <span>×</span>
-                                          <span>{baseDBUPerCU.toFixed(2)} DBU/hr/CU</span>
-                                          {haNodes > 0 && (
-                                            <>
-                                              <span>×</span>
-                                              <span>(1 + <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{haNodes}</span> HA nodes)</span>
-                                              <span>=</span>
-                                              <span>×{totalMultiplier}</span>
-                                            </>
-                                          )}
+                                          <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{haNodes} nodes</span>
                                           <span>×</span>
                                           <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
@@ -2854,7 +2935,33 @@ export default function Calculator() {
                                           <span>×</span>
                                           <span>${dbuPriceDisplay}/DBU</span>
                                           <span>=</span>
-                                          <span className="font-semibold">{formatCurrency(costs.totalCost)}</span>
+                                          <span className="text-blue-500 font-semibold">{formatCurrency(costs.dbuCost)}</span>
+                                        </div>
+                                        {storageGB > 0 && (
+                                          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+                                            <span className="text-purple-600 font-semibold">Storage:</span>
+                                            <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{storageGB} GB</span>
+                                            <span>×</span>
+                                            <span>{dsuPerGB} DSU/GB</span>
+                                            <span>=</span>
+                                            <span className="font-semibold">{formatNumber(totalDSU)} DSU</span>
+                                            <span>×</span>
+                                            <span>${pricePerDSU}/DSU/mo</span>
+                                            <span>=</span>
+                                            <span className="text-purple-500 font-semibold">{formatCurrency(localStorageCost)}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
+                                          <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
+                                          <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                          {storageGB > 0 && (
+                                            <>
+                                              <span>+</span>
+                                              <span className="text-purple-500">{formatCurrency(localStorageCost)}</span>
+                                            </>
+                                          )}
+                                          <span>=</span>
+                                          <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                         </div>
                                       </div>
                                     )
@@ -3374,6 +3481,11 @@ export default function Calculator() {
                                   const divisor = mode === 'storage_optimized' ? 64 : 2
                                   const unitsUsed = Math.ceil(capacity / divisor)
                                   const dbuPerUnit = mode === 'storage_optimized' ? 18.29 : 4
+                                  const storageGB = effectiveItem.vector_search_storage_gb || 0
+                                  const freeStorageGB = unitsUsed * 20
+                                  const billableStorageGB = Math.max(0, storageGB - freeStorageGB)
+                                  const storagePricePerGB = 0.023
+                                  const localStorageCost = billableStorageGB * storagePricePerGB
                                   return (
                                     <div className="space-y-1">
                                       <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
@@ -3385,11 +3497,29 @@ export default function Calculator() {
                                         <span>=</span>
                                         <span>{formatNumber(costs.monthlyDBUs)} DBUs × ${dbuPriceDisplay}</span>
                                         <span>=</span>
-                                        <span className="text-blue-600 font-semibold">{formatCurrency(costs.dbuCost)}</span>
+                                        <span className="text-blue-500 font-semibold">{formatCurrency(costs.dbuCost)}</span>
                                       </div>
+                                      {storageGB > 0 && (
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+                                          <span className="text-purple-600 font-semibold">Storage:</span>
+                                          <span>max(0, <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{storageGB} GB</span> - {freeStorageGB} GB free)</span>
+                                          <span>=</span>
+                                          <span className="font-semibold">{billableStorageGB} GB</span>
+                                          <span>×</span>
+                                          <span>${storagePricePerGB}/GB/mo</span>
+                                          <span>=</span>
+                                          <span className="text-purple-500 font-semibold">{formatCurrency(localStorageCost)}</span>
+                                        </div>
+                                      )}
                                       <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
                                         <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
                                         <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                        {storageGB > 0 && (
+                                          <>
+                                            <span>+</span>
+                                            <span className="text-purple-500">{formatCurrency(localStorageCost)}</span>
+                                          </>
+                                        )}
                                         <span>=</span>
                                         <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                       </div>
@@ -3427,6 +3557,11 @@ export default function Calculator() {
                                 if (wType === 'LAKEBASE') {
                                   const cu = effectiveItem.lakebase_cu || 1
                                   const nodes = effectiveItem.lakebase_ha_nodes || 1
+                                  const storageGB = effectiveItem.lakebase_storage_gb || 0
+                                  const dsuPerGB = 15
+                                  const totalDSU = storageGB * dsuPerGB
+                                  const pricePerDSU = 0.023
+                                  const localStorageCost = totalDSU * pricePerDSU
                                   return (
                                     <div className="space-y-1">
                                       <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
@@ -3441,11 +3576,31 @@ export default function Calculator() {
                                         <span>×</span>
                                         <span>${dbuPriceDisplay}/DBU</span>
                                         <span>=</span>
-                                        <span className="text-blue-600 font-semibold">{formatCurrency(costs.dbuCost)}</span>
+                                        <span className="text-blue-500 font-semibold">{formatCurrency(costs.dbuCost)}</span>
                                       </div>
+                                      {storageGB > 0 && (
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+                                          <span className="text-purple-600 font-semibold">Storage:</span>
+                                          <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{storageGB} GB</span>
+                                          <span>×</span>
+                                          <span>{dsuPerGB} DSU/GB</span>
+                                          <span>=</span>
+                                          <span className="font-semibold">{formatNumber(totalDSU)} DSU</span>
+                                          <span>×</span>
+                                          <span>${pricePerDSU}/DSU/mo</span>
+                                          <span>=</span>
+                                          <span className="text-purple-500 font-semibold">{formatCurrency(localStorageCost)}</span>
+                                        </div>
+                                      )}
                                       <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
                                         <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
                                         <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                        {storageGB > 0 && (
+                                          <>
+                                            <span>+</span>
+                                            <span className="text-purple-500">{formatCurrency(localStorageCost)}</span>
+                                          </>
+                                        )}
                                         <span>=</span>
                                         <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                       </div>

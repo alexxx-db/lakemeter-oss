@@ -941,6 +941,10 @@ The user will review and confirm before it's added to the estimate.""",
                     "type": "integer",
                     "description": "REQUIRED for VECTOR_SEARCH. Capacity in millions. Calculate: docs × pages × 1.2 × (dimensions÷768). Example: 1M docs × 1000 pages × 1.2 × (1024÷768) = 1600M → pass 1600"
                 },
+                "vector_search_storage_gb": {
+                    "type": "integer",
+                    "description": "Storage in GB for Vector Search. Free tier: 20 GB per unit used. Billable storage = max(0, storage_gb - free_storage_gb). Cost: $0.023/GB/month for storage above free tier."
+                },
                 
                 # === Foundation Model API Specific ===
                 "fmapi_provider": {
@@ -996,6 +1000,10 @@ The user will review and confirm before it's added to the estimate.""",
                 "lakebase_num_read_replicas": {
                     "type": "integer",
                     "description": "Number of read replicas (0-2) for read scaling. Total instances = 1 primary + 0-2 read replicas (max 3 total). Each replica has same CU as primary and handles reads only. Writes always go to primary."
+                },
+                "lakebase_storage_gb": {
+                    "type": "integer",
+                    "description": "Storage in GB for Lakebase (0-8192 GB, 8TB max). Each GB consumes 15 DSU at $0.023/DSU/month. No free tier. Example: 500GB = 7500 DSU = $172.50/month storage cost."
                 },
                 
                 # === Notes (CONVERSATIONAL) ===
@@ -2966,6 +2974,22 @@ Each workload needs to be confirmed individually. Review the configurations and 
             notes_parts.append("  - Bulk writes: Use for initial loads, full refreshes (faster: 15K rows/sec/CU)")
             notes_parts.append("                    - Incremental writes: Use for updates/inserts (slower due to scanning: 1.2K rows/sec/CU)")
             notes_parts.append("  - Reads: Can distribute across replicas for horizontal scaling")
+            
+            # Storage cost info
+            storage_gb = workload.get("lakebase_storage_gb", 0)
+            if storage_gb > 0:
+                storage_gb = min(storage_gb, 8192)  # Cap at 8TB max
+                dsu_per_gb = 15
+                total_dsu = storage_gb * dsu_per_gb
+                price_per_dsu = 0.023
+                storage_cost = total_dsu * price_per_dsu
+                notes_parts.append("")
+                notes_parts.append(f"**💾 Storage Configuration:**")
+                notes_parts.append(f"• **Total Storage**: {storage_gb} GB")
+                notes_parts.append(f"• **DSU Consumption**: {storage_gb} GB × 15 DSU/GB = {total_dsu:,} DSU")
+                notes_parts.append(f"• **Storage Cost**: ${storage_cost:.2f}/month (${price_per_dsu}/DSU/month)")
+                notes_parts.append(f"• **Max Storage**: 8,192 GB (8 TB)")
+                workload["lakebase_storage_gb"] = storage_gb
         
         if wtype == "VECTOR_SEARCH":
             # Get LLM-calculated values (LLM calculates and passes these directly)
@@ -3056,6 +3080,21 @@ Each workload needs to be confirmed individually. Review the configurations and 
             notes_parts.append("  - Monitor p50/p95/p99 latencies, not just average")
             notes_parts.append("  - Pre-filter large indexes using metadata before vector search")
             notes_parts.append("  - Consider approximate nearest neighbor (ANN) algorithms for ultra-scale")
+            
+            # Storage cost info
+            storage_gb = workload.get("vector_search_storage_gb", 0)
+            if storage_gb > 0:
+                divisor = 64 if mode == "storage_optimized" else 2
+                units_used = (capacity_millions + divisor - 1) // divisor  # ceiling division
+                free_storage_gb = units_used * 20
+                billable_storage_gb = max(0, storage_gb - free_storage_gb)
+                storage_cost = billable_storage_gb * 0.023
+                notes_parts.append("")
+                notes_parts.append("**💾 Storage Configuration:**")
+                notes_parts.append(f"• **Total Storage**: {storage_gb} GB")
+                notes_parts.append(f"• **Free Storage**: {free_storage_gb} GB ({units_used} units × 20 GB/unit)")
+                notes_parts.append(f"• **Billable Storage**: {billable_storage_gb} GB")
+                notes_parts.append(f"• **Storage Cost**: ${storage_cost:.2f}/month ($0.023/GB/month)")
         
         # IGNORE any brief notes provided by LLM - we generate comprehensive ones
         # existing_notes = workload.get("notes", "")  # DON'T use LLM's brief notes
