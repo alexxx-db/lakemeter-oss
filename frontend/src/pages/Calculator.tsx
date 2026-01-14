@@ -2608,7 +2608,16 @@ export default function Calculator() {
                             {/* Cost + Actions - Combined for tighter spacing */}
                             <div className="col-span-7 sm:col-span-4 flex items-center justify-end gap-3">
                               {/* Cost - Using shared component */}
-                              <WorkloadCostDisplay costs={costs} size="sm" />
+                              <WorkloadCostDisplay 
+                                costs={costs} 
+                                size="sm"
+                                isLoading={(() => {
+                                  const needsVMCosts = !effectiveItem.serverless_enabled && 
+                                    ['JOBS', 'ALL_PURPOSE', 'DLT'].includes(wType) ||
+                                    (wType === 'DBSQL' && effectiveItem.dbsql_warehouse_type !== 'SERVERLESS')
+                                  return isLoadingVMCosts && needsVMCosts && costs.vmCost === 0
+                                })()}
+                              />
                               
                               {/* Actions */}
                               <div className="flex items-center gap-0.5">
