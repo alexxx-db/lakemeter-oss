@@ -1185,7 +1185,7 @@ I can assist you with:
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder={isLoading ? "Type your next question while waiting..." : "Ask about pricing, workloads, or optimization..."}
+            placeholder="Ask about pricing, workloads, or optimization..."
             rows={1}
             className="w-full resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] pl-4 pr-12 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-lava-500 dark:focus:border-lava-600 placeholder:text-[var(--text-muted)] shadow-sm transition-colors"
             style={{ 

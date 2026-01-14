@@ -3895,7 +3895,7 @@ export default function Calculator() {
                       <span>Workloads ({lineItems.length})</span>
                       <span className="text-[10px] italic">Click to view</span>
                     </p>
-                    <div className="space-y-2">
+                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                       {(() => {
                         const sortedItems = [...lineItems]
                           .map(item => ({ item, costs: calculateItemCost(item) }))
