@@ -1535,26 +1535,24 @@ export default function Calculator() {
     const newExpanded = new Set(expandedItems)
     if (newExpanded.has(itemId)) {
       newExpanded.delete(itemId)
-      // Also hide formula when collapsing
-      setFormulaVisibleItems(prev => {
-        const next = new Set(prev)
-        next.delete(itemId)
-        return next
-      })
     } else {
       newExpanded.add(itemId)
-      // Auto-show formula when expanding (subtle guidance to discover the feature)
-      setFormulaVisibleItems(prev => new Set(prev).add(itemId))
     }
     setExpandedItems(newExpanded)
   }
   
-  const toggleFormula = (itemId: string) => {
+  const toggleFormula = (itemId: string, alsoExpand: boolean = false) => {
     const newVisible = new Set(formulaVisibleItems)
     if (newVisible.has(itemId)) {
       newVisible.delete(itemId)
     } else {
       newVisible.add(itemId)
+      // Also expand the item if requested
+      if (alsoExpand && !expandedItems.has(itemId)) {
+        const newExpanded = new Set(expandedItems)
+        newExpanded.add(itemId)
+        setExpandedItems(newExpanded)
+      }
     }
     setFormulaVisibleItems(newVisible)
   }
@@ -2551,6 +2549,19 @@ export default function Calculator() {
                               
                               {/* Actions */}
                               <div className="flex items-center gap-0.5">
+                                {/* Calculator button - show/hide calculation */}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id, true) }}
+                                  className={clsx(
+                                    "p-1.5 rounded transition-colors",
+                                    formulaVisibleItems.has(item.line_item_id)
+                                      ? "text-lava-600 bg-lava-500/10"
+                                      : "text-[var(--text-muted)] hover:text-lava-600 hover:bg-lava-500/10"
+                                  )}
+                                  title={formulaVisibleItems.has(item.line_item_id) ? "Hide calculation" : "Show calculation"}
+                                >
+                                  <CalculatorIcon className="w-4 h-4" />
+                                </button>
                                 <button
                                   onClick={(e) => handleCloneWorkload(e, item)}
                                   className="p-1.5 rounded text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
@@ -2687,17 +2698,23 @@ export default function Calculator() {
                                 )}
                               </div>
                               
-                              {/* Formula display (toggle via calculator button in action bar) */}
-                              {formulaVisibleItems.has(item.line_item_id) && (
+                              {/* Formula toggle and display */}
                               <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id) }}
-                                  className="flex items-center gap-1.5 text-[11px] text-lava-600 mb-2 hover:text-lava-700 transition-colors group"
+                                  className="flex items-center gap-1.5 text-[11px] text-lava-600 hover:text-lava-700 transition-colors group"
                                 >
                                   <CalculatorIcon className="w-3.5 h-3.5" />
-                                  <span className="font-medium">Cost Calculation</span>
-                                  <ChevronUpIcon className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  <span className="font-medium group-hover:underline">
+                                    {formulaVisibleItems.has(item.line_item_id) ? 'Hide Cost Calculation' : 'Show Cost Calculation'}
+                                  </span>
+                                  {formulaVisibleItems.has(item.line_item_id) ? (
+                                    <ChevronUpIcon className="w-3 h-3" />
+                                  ) : (
+                                    <ChevronDownIcon className="w-3 h-3" />
+                                  )}
                                 </button>
+                              {formulaVisibleItems.has(item.line_item_id) && (
                                 <div className="mt-2">
                                 {(() => {
                                   // Determine if using run-based or direct hours
@@ -3073,8 +3090,8 @@ export default function Calculator() {
                                   )
                                 })()}
                               </div>
-                            </div>
                               )}
+                            </div>
                             </div>
                           )}
                           
@@ -3215,6 +3232,19 @@ export default function Calculator() {
                           
                           {/* Actions */}
                           <div className="flex items-center gap-1">
+                            {/* Show calculation button - always visible, also expands row */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id, true) }}
+                              className={clsx(
+                                "p-1.5 rounded-md transition-colors",
+                                formulaVisibleItems.has(item.line_item_id)
+                                  ? "text-lava-600 bg-lava-500/10"
+                                  : "text-[var(--text-muted)] hover:text-lava-600 hover:bg-lava-500/10"
+                              )}
+                              title={formulaVisibleItems.has(item.line_item_id) ? "Hide calculation" : "Show calculation"}
+                            >
+                              <CalculatorIcon className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={(e) => handleCloneWorkload(e, item)}
                               className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-blue-500 hover:bg-blue-500/10"
@@ -3299,17 +3329,24 @@ export default function Calculator() {
                               )}
                             </div>
                             
-                            {/* Formula display - toggle is in the action buttons now */}
-                            {formulaVisibleItems.has(item.line_item_id) && (
+                            {/* Formula toggle and display */}
                             <div className="mt-2 pt-2 border-t border-dashed border-[var(--border-primary)]">
                               <button 
                                 onClick={(e) => { e.stopPropagation(); toggleFormula(item.line_item_id) }}
-                                className="flex items-center gap-1.5 text-[11px] text-lava-600 mb-2 hover:text-lava-700 transition-colors group"
+                                className="flex items-center gap-1.5 text-[11px] text-lava-600 hover:text-lava-700 transition-colors group"
                               >
                                 <CalculatorIcon className="w-3.5 h-3.5" />
-                                <span className="font-medium">Cost Calculation</span>
-                                <ChevronUpIcon className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <span className="font-medium group-hover:underline">
+                                  {formulaVisibleItems.has(item.line_item_id) ? 'Hide Cost Calculation' : 'Show Cost Calculation'}
+                                </span>
+                                {formulaVisibleItems.has(item.line_item_id) ? (
+                                  <ChevronUpIcon className="w-3 h-3" />
+                                ) : (
+                                  <ChevronDownIcon className="w-3 h-3" />
+                                )}
                               </button>
+                            {formulaVisibleItems.has(item.line_item_id) && (
+                              <div className="mt-2">
                               {(() => {
                                 // Use effectiveItem for real-time preview
                                 const wType = effectiveItem.workload_type || ''
@@ -3553,8 +3590,9 @@ export default function Calculator() {
                                   </div>
                                 )
                               })()}
-                            </div>
+                              </div>
                             )}
+                            </div>
                           </>
                         )}
                       </div>
