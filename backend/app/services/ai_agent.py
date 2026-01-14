@@ -844,6 +844,55 @@ Note: All three types support Unity Catalog, auto-scaling, scale to zero, and pa
 **When in doubt:** If user mentions filtering by date ranges, user IDs, specific categories, or "drill-down" queries, assume moderate selectivity (5%) and recommend Pro/Serverless for datasets >10GB."""
 
 
+# Home mode system prompt (Q&A only, no workload creation)
+HOME_MODE_SYSTEM_PROMPT = """You are Lakemeter AI, an expert Databricks pricing assistant.
+
+## Your Role (Home Page - Q&A Mode)
+You are on the home page where users can learn about Databricks pricing and workloads BEFORE creating an estimate.
+
+## What You CAN Do
+- Explain Databricks workload types and when to use each
+- Explain pricing concepts (DBUs, compute costs, serverless vs classic)
+- Share best practices for cost optimization
+- Help users plan their architecture
+- Answer general questions about Databricks
+
+## What You CANNOT Do in This Mode
+- Create or propose workloads (users need to create/select an estimate first)
+- Analyze specific estimates (no estimate context available)
+- Calculate costs (no pricing context without an estimate)
+
+## Important Guidelines
+1. When users ask to add workloads or get pricing estimates:
+   - Politely explain they need to create or select an estimate first
+   - Say: "To add workloads and calculate costs, please click 'New Estimate' in the navigation or select an existing estimate from the Estimates page."
+
+2. Be helpful and educational:
+   - Explain workload types: Jobs, All-Purpose, SDP (DLT), DBSQL, Model Serving, Vector Search, FMAPI, Lakebase
+   - Share the key pricing factors for each workload type
+   - Provide architecture guidance based on their described use case
+
+3. Keep responses conversational and helpful - you're helping users learn before they dive in.
+
+## Workload Types Overview
+- **JOBS (Lakeflow Jobs)**: Batch processing, ETL pipelines, scheduled tasks
+- **ALL_PURPOSE**: Interactive development, notebooks, exploration
+- **SDP (Spark Declarative Pipelines)**: Declarative ETL, CDC, materialized views
+- **DBSQL (Databricks SQL)**: SQL analytics, BI dashboards, ad-hoc queries
+- **MODEL_SERVING**: Real-time ML inference endpoints
+- **VECTOR_SEARCH**: Vector similarity search for AI applications
+- **FMAPI_DATABRICKS**: Foundation Model APIs (Databricks-hosted open models)
+- **FMAPI_PROPRIETARY**: Foundation Model APIs (GPT, Claude, Gemini via Databricks)
+- **LAKEBASE**: PostgreSQL-compatible database
+
+## Key Pricing Concepts to Explain
+- **DBUs (Databricks Units)**: Standard unit of compute capacity
+- **Serverless**: Pay-per-use, no cluster management, instant startup
+- **Classic**: More control, instance types, spot pricing available
+- **Photon**: Vectorized query engine, 2-3x faster for SQL/DataFrame
+- **Spot Instances**: Up to 90% savings for fault-tolerant workloads"""
+
+
 # Tool definitions for the AI assistant
 TOOLS = [
     {
@@ -1192,19 +1241,24 @@ class EstimateAgent:
     Maintains conversation state and handles tool execution.
     Does NOT perform cost calculations - uses costs from context.
     
-    The AI assistant is only available on the estimate calculator page,
-    when a user has selected/created an estimate with required configuration
-    (cloud provider, region, Databricks tier).
+    Supports two modes:
+    - 'estimate': Full features on estimate detail page (workload creation, analysis)
+    - 'home': Q&A only on home page (no workload creation)
     """
     
-    def __init__(self, claude_client: ClaudeAIClient):
+    def __init__(self, claude_client: ClaudeAIClient, mode: str = "estimate"):
         self.client = claude_client
+        self.mode = mode  # 'estimate' or 'home'
         self.conversation_history: List[Dict[str, Any]] = []
         self.current_estimate: Optional[Dict[str, Any]] = None
         self.current_workloads: List[Dict[str, Any]] = []  # Actual workloads with costs
         self.proposed_workloads: List[Dict[str, Any]] = []  # Pending workload confirmations
         self.conversation_summary: str = ""  # Summarized context from older messages
         self._executed_tool_ids: set = set()  # Track executed tools to prevent duplicates
+    
+    def set_mode(self, mode: str):
+        """Set the operating mode ('estimate' or 'home')."""
+        self.mode = mode
     
     def reset(self):
         """Reset the agent state for a new conversation."""
@@ -1303,6 +1357,10 @@ class EstimateAgent:
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the AI assistant, including any conversation summary."""
+        # Use different prompt based on mode
+        if self.mode == "home":
+            return HOME_MODE_SYSTEM_PROMPT
+        
         prompt = SYSTEM_PROMPT
         
         # Add conversation summary if we have one
@@ -1318,6 +1376,9 @@ class EstimateAgent:
     
     def _get_tools(self) -> List[Dict[str, Any]]:
         """Get the available tools for the AI assistant."""
+        # In home mode, no tools are available (Q&A only)
+        if self.mode == "home":
+            return []
         return TOOLS
     
     def set_context(self, estimate: Dict[str, Any], workloads: List[Dict[str, Any]] = None):
@@ -3736,7 +3797,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
         }
 
 
-def create_agent(token: str) -> EstimateAgent:
-    """Create a new agent instance with the given token."""
+def create_agent(token: str, mode: str = "estimate") -> EstimateAgent:
+    """Create a new agent instance with the given token and mode."""
     client = get_claude_client(token, model="databricks-claude-opus-4-5")
-    return EstimateAgent(client)
+    return EstimateAgent(client, mode=mode)

@@ -114,8 +114,10 @@ export default function Layout() {
     isPricingBundleLoaded
   } = useStore()
   
-  // Determine if we're on an estimate detail page (AI assistant only available there)
+  // Determine page type for AI assistant mode
   const isEstimateDetailPage = location.pathname.startsWith('/calculator/') && location.pathname !== '/calculator'
+  const isHomePage = location.pathname === '/'
+  const showAIAssistant = isEstimateDetailPage || isHomePage
   
   // Handle page refresh
   const handleRefreshPage = useCallback(() => {
@@ -140,13 +142,13 @@ export default function Layout() {
     }
   }, [setSessionExpired])
   
-  // Smart first-time AI Assistant: Open by default for first-time users on estimate detail page
+  // Smart first-time AI Assistant: Open by default for first-time users
   useEffect(() => {
-    if (isEstimateDetailPage && !hasUsedAIAssistant) {
-      // First time on estimate detail page - open AI assistant
+    if (showAIAssistant && !hasUsedAIAssistant) {
+      // First time seeing AI assistant - open it
       setIsChatOpen(true)
     }
-  }, [isEstimateDetailPage, hasUsedAIAssistant])
+  }, [showAIAssistant, hasUsedAIAssistant])
   
   // Track when user interacts with AI assistant
   const handleToggleChat = useCallback(() => {
@@ -170,12 +172,12 @@ export default function Layout() {
     }
   }, [isHelpOpen, hasClickedHelp])
   
-  // Close chat when navigating away from estimate detail page
+  // Close chat when navigating away from pages with AI assistant
   useEffect(() => {
-    if (!isEstimateDetailPage && isChatOpen) {
+    if (!showAIAssistant && isChatOpen) {
       setIsChatOpen(false)
     }
-  }, [isEstimateDetailPage, isChatOpen])
+  }, [showAIAssistant, isChatOpen])
   
   // Fetch current user on mount
   useEffect(() => {
@@ -460,7 +462,7 @@ export default function Layout() {
       {/* Main content - shifts left when chat is open */}
       <main 
         className="flex-1"
-        style={isChatOpen && isEstimateDetailPage ? { marginRight: `${chatPanelWidth}px` } : undefined}
+        style={isChatOpen && showAIAssistant ? { marginRight: `${chatPanelWidth}px` } : undefined}
       >
         <motion.div
           key={location.pathname}
@@ -477,7 +479,7 @@ export default function Layout() {
         className="border-t py-4 mt-auto"
         style={{ 
           borderColor: 'var(--border-primary)',
-          ...(isChatOpen && isEstimateDetailPage ? { marginRight: `${chatPanelWidth}px` } : {})
+          ...(isChatOpen && showAIAssistant ? { marginRight: `${chatPanelWidth}px` } : {})
         }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -487,15 +489,16 @@ export default function Layout() {
         </div>
       </footer>
       
-      {/* AI Chat Panel - Only on estimate detail pages */}
-      {isEstimateDetailPage && (
+      {/* AI Chat Panel - Available on home page (Q&A mode) and estimate detail pages (full mode) */}
+      {showAIAssistant && (
         <ChatPanel
           isOpen={isChatOpen}
           onClose={() => setIsChatOpen(false)}
-          currentEstimate={currentEstimate}
-          currentWorkloads={lineItems}
-          itemCosts={localCalculatedCosts}
-          onWorkloadConfirmed={async (workloadConfig) => {
+          currentEstimate={isEstimateDetailPage ? currentEstimate : undefined}
+          currentWorkloads={isEstimateDetailPage ? lineItems : undefined}
+          itemCosts={isEstimateDetailPage ? localCalculatedCosts : undefined}
+          mode={isHomePage ? 'home' : 'estimate'}
+          onWorkloadConfirmed={isEstimateDetailPage ? async (workloadConfig) => {
             if (currentEstimate?.estimate_id) {
               try {
                 await createLineItem({
@@ -509,14 +512,14 @@ export default function Layout() {
                 throw err  // Re-throw so ChatPanel can show error
               }
             }
-          }}
+          } : undefined}
           onWidthChange={setChatPanelWidth}
           panelWidth={chatPanelWidth}
         />
       )}
       
       {/* Floating AI Assistant Button - Shows when chat is closed for discovery */}
-      {isEstimateDetailPage && !isChatOpen && (
+      {showAIAssistant && !isChatOpen && (
         <button
           onClick={handleToggleChat}
           className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 pl-4 pr-5 py-3 rounded-full text-white shadow-lg transition-all duration-200 hover:shadow-xl bg-gradient-to-r from-lava-600 via-amber-500 to-yellow-500 shadow-lava-600/25 hover:shadow-lava-600/35"

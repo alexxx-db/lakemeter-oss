@@ -83,6 +83,8 @@ interface ChatPanelProps {
   // Controlled panel width for push layout
   panelWidth?: number
   onWidthChange?: (width: number) => void
+  // Mode: 'estimate' for full features, 'home' for Q&A only
+  mode?: 'estimate' | 'home'
 }
 
 export function ChatPanel({
@@ -94,7 +96,8 @@ export function ChatPanel({
   currentWorkloads,
   itemCosts,
   panelWidth: controlledWidth,
-  onWidthChange
+  onWidthChange,
+  mode = 'estimate'
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
@@ -184,6 +187,17 @@ export function ChatPanel({
   
   // Quick action chips - context-aware suggestions with explicit tool-triggering prompts
   const quickActions = useMemo(() => {
+    // Home page mode - Q&A focused actions
+    if (mode === 'home') {
+      return [
+        { label: '📚 Workload types', action: 'Explain the different Databricks workload types and when to use each one.' },
+        { label: '💰 Pricing guide', action: 'How does Databricks pricing work? Explain DBUs, compute costs, and key pricing factors.' },
+        { label: '🏗️ Architecture help', action: 'I need help planning a data architecture. What questions should I consider?' },
+        { label: '💡 Best practices', action: 'What are the best practices for optimizing Databricks costs?' },
+      ]
+    }
+    
+    // Estimate page mode - full actions
     const hasWorkloads = (currentWorkloads?.length || 0) > 0
     if (!hasWorkloads) {
       return [
@@ -199,7 +213,7 @@ export function ChatPanel({
       { label: '➕ Add workload', action: 'Propose a new workload for my existing estimate. Ask me what type I need.' },
       { label: '❓ Pricing', action: 'Explain how Databricks pricing works for the workload types I have.' },
     ]
-  }, [currentWorkloads])
+  }, [currentWorkloads, mode])
 
   // Scroll to bottom when messages change - but only if user hasn't manually scrolled up
   useEffect(() => {
@@ -234,6 +248,23 @@ export function ChatPanel({
 
   // Build welcome message content based on context
   const buildWelcomeContent = useCallback(() => {
+    // Home page mode - Q&A only
+    if (mode === 'home') {
+      return `**Hi! I'm your Databricks pricing assistant.**
+
+I can help you with:
+
+- 📚 **Learn** about Databricks workload types and pricing
+- 💰 **Understand** cost factors and optimization strategies
+- 🏗️ **Plan** your architecture before creating an estimate
+- ❓ **Answer questions** about best practices
+
+*To add workloads and calculate costs, create or select an estimate first.*
+
+*Try the quick actions below or ask me anything!*`
+    }
+    
+    // Estimate page mode - full features
     if (currentEstimate) {
       return `**How can I help you today?**
 
@@ -250,7 +281,7 @@ I can assist you with:
 
 *Loading estimate details...*`
     }
-  }, [currentEstimate])
+  }, [currentEstimate, mode])
   
   // Stop/cancel generation
   const stopGeneration = useCallback(() => {
@@ -423,8 +454,9 @@ I can assist you with:
         body: JSON.stringify({
           message: userMessage.content,
           conversation_id: conversationId,
-          estimate_context: currentEstimate || draftEstimate,
-          workloads_context: enrichedWorkloads,
+          estimate_context: mode === 'home' ? null : (currentEstimate || draftEstimate),
+          workloads_context: mode === 'home' ? [] : enrichedWorkloads,
+          mode: mode,
           stream: true
         }),
         signal: abortControllerRef.current.signal
@@ -745,24 +777,17 @@ I can assist you with:
             <TrashIcon className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setIsMinimized(true)}
+            onClick={onClose}
             className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] transition-colors"
             title="Minimize"
           >
             <MinusIcon className="w-4 h-4" />
           </button>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] transition-colors"
-            title="Close"
-          >
-            <XMarkIcon className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
-      {/* Current Estimate Context - Shows the estimate being worked on */}
-      {currentEstimate && (
+      {/* Current Estimate Context - Shows the estimate being worked on (only in estimate mode) */}
+      {mode === 'estimate' && currentEstimate && (
         <div className="px-4 py-2.5 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-900/50 border-b border-[var(--border-primary)]">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0 flex-1">
