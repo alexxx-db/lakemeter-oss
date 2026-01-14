@@ -72,6 +72,12 @@ const themeOptions: { value: Theme; label: string; icon: typeof SunIcon }[] = [
   { value: 'system', label: 'System', icon: ComputerDesktopIcon },
 ]
 
+// LocalStorage keys for first-time user experience
+const STORAGE_KEYS = {
+  AI_ASSISTANT_OPENED: 'lakemeter_ai_assistant_opened',
+  HELP_ICON_CLICKED: 'lakemeter_help_icon_clicked'
+}
+
 export default function Layout() {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
@@ -81,6 +87,12 @@ export default function Layout() {
   const [chatPanelWidth, setChatPanelWidth] = useState(380)
   const [showSessionExpired, setShowSessionExpired] = useState(false)
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState('')
+  const [hasUsedAIAssistant, setHasUsedAIAssistant] = useState(() => {
+    return localStorage.getItem(STORAGE_KEYS.AI_ASSISTANT_OPENED) === 'true'
+  })
+  const [hasClickedHelp, setHasClickedHelp] = useState(() => {
+    return localStorage.getItem(STORAGE_KEYS.HELP_ICON_CLICKED) === 'true'
+  })
   const dropdownRef = useRef<HTMLDivElement>(null)
   const helpDropdownRef = useRef<HTMLDivElement>(null)
   
@@ -127,6 +139,36 @@ export default function Layout() {
       window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired as EventListener)
     }
   }, [setSessionExpired])
+  
+  // Smart first-time AI Assistant: Open by default for first-time users on estimate detail page
+  useEffect(() => {
+    if (isEstimateDetailPage && !hasUsedAIAssistant) {
+      // First time on estimate detail page - open AI assistant
+      setIsChatOpen(true)
+    }
+  }, [isEstimateDetailPage, hasUsedAIAssistant])
+  
+  // Track when user interacts with AI assistant
+  const handleToggleChat = useCallback(() => {
+    const newState = !isChatOpen
+    setIsChatOpen(newState)
+    
+    // Mark as "used" once they've interacted (opened or closed)
+    if (!hasUsedAIAssistant) {
+      localStorage.setItem(STORAGE_KEYS.AI_ASSISTANT_OPENED, 'true')
+      setHasUsedAIAssistant(true)
+    }
+  }, [isChatOpen, hasUsedAIAssistant])
+  
+  // Track when user clicks help icon
+  const handleOpenHelp = useCallback(() => {
+    setIsHelpOpen(!isHelpOpen)
+    
+    if (!hasClickedHelp) {
+      localStorage.setItem(STORAGE_KEYS.HELP_ICON_CLICKED, 'true')
+      setHasClickedHelp(true)
+    }
+  }, [isHelpOpen, hasClickedHelp])
   
   // Close chat when navigating away from estimate detail page
   useEffect(() => {
@@ -328,9 +370,9 @@ export default function Layout() {
               {/* Help Center Dropdown */}
               <div className="relative" ref={helpDropdownRef}>
                 <button
-                  onClick={() => setIsHelpOpen(!isHelpOpen)}
+                  onClick={handleOpenHelp}
                   className={clsx(
-                    "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                    "relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
                     isHelpOpen
                       ? "bg-lava-100 dark:bg-lava-900/30 text-lava-600"
                       : "text-[var(--text-secondary)] hover:text-lava-600 hover:bg-[var(--bg-tertiary)]"
@@ -338,6 +380,13 @@ export default function Layout() {
                   title="Help & Feedback"
                 >
                   <QuestionMarkCircleIcon className="w-5 h-5" />
+                  {/* Pulsing badge for first-time users */}
+                  {!hasClickedHelp && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-lava-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-lava-500"></span>
+                    </span>
+                  )}
                 </button>
                 
                 <AnimatePresence>
@@ -406,7 +455,7 @@ export default function Layout() {
               {/* AI Assistant Button - Only show on estimate detail pages */}
               {isEstimateDetailPage && (
                 <motion.button
-                  onClick={() => setIsChatOpen(!isChatOpen)}
+                  onClick={handleToggleChat}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className={clsx(
@@ -425,6 +474,13 @@ export default function Layout() {
                   </motion.div>
                   {/* Glow effect on hover */}
                   <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-lava-500 to-amber-400 opacity-0 group-hover:opacity-20 blur-md transition-opacity duration-300" />
+                  {/* Pulsing badge for first-time users */}
+                  {!hasUsedAIAssistant && !isChatOpen && (
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                    </span>
+                  )}
                 </motion.button>
               )}
             </div>
