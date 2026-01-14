@@ -456,8 +456,8 @@ export default function Calculator() {
     tier: ''  // No default - must be selected
   })
   
-  // Configuration panel collapsed state
-  const [isConfigCollapsed, setIsConfigCollapsed] = useState(false)
+  // Configuration panel collapsed state - auto-collapse for saved estimates
+  const [isConfigCollapsed, setIsConfigCollapsed] = useState(!!id)
   
   // Cost summary panel collapsed state
   const [isCostSummaryCollapsed, setIsCostSummaryCollapsed] = useState(false)
@@ -1932,16 +1932,16 @@ export default function Calculator() {
           >
             {/* Header - Always visible, clickable to expand/collapse */}
             <div 
-              className="p-4 cursor-pointer hover:bg-[var(--bg-tertiary)]/50 transition-colors flex items-center justify-between"
+              className="px-4 py-3 cursor-pointer hover:bg-[var(--bg-tertiary)]/50 transition-colors flex items-center justify-between"
               onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}
             >
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-lava-600/10">
-                  <CpuChipIcon className="w-5 h-5 text-lava-600" />
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-lava-600/10">
+                  <CpuChipIcon className="w-4 h-4 text-lava-600" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-[var(--text-primary)]">Configuration</h3>
-                  <p className="text-xs text-[var(--text-muted)] truncate">
+                  <h3 className="font-semibold text-sm text-[var(--text-primary)]">Configuration</h3>
+                  <p className="text-[11px] text-[var(--text-muted)] truncate">
                     {formData.cloud.toUpperCase()} • {formData.region || 'No region'} • {formData.tier ? formData.tier.charAt(0).toUpperCase() + formData.tier.slice(1) : 'No tier'}
                     {formData.customer_name && ` • ${formData.customer_name}`}
                   </p>
@@ -1949,18 +1949,18 @@ export default function Calculator() {
               </div>
               <button className="p-1 rounded hover:bg-[var(--bg-tertiary)] transition-colors flex-shrink-0 ml-2">
                 {isConfigCollapsed ? (
-                  <ChevronDownIcon className="w-5 h-5 text-[var(--text-muted)]" />
+                  <ChevronDownIcon className="w-4 h-4 text-[var(--text-muted)]" />
                 ) : (
-                  <ChevronUpIcon className="w-5 h-5 text-[var(--text-muted)]" />
+                  <ChevronUpIcon className="w-4 h-4 text-[var(--text-muted)]" />
                 )}
               </button>
             </div>
             
             {/* Collapsible content */}
             {!isConfigCollapsed && (
-              <div className="px-4 pb-4 space-y-5 border-t border-[var(--border-primary)]">
+              <div className="px-4 pb-3 space-y-3 border-t border-[var(--border-primary)]">
                 {/* Cloud Selection + Region + Tier */}
-                <div className="pt-4 space-y-4">
+                <div className="pt-3 space-y-3">
                   <div>
                     <label className="block text-xs font-medium mb-2 text-[var(--text-secondary)]">Cloud Provider</label>
                     {isLoadingEstimate && id ? (
@@ -1968,9 +1968,9 @@ export default function Calculator() {
                         {[1, 2, 3].map(i => (
                           <div
                             key={i}
-                            className="p-4 rounded-xl border-2 border-dashed border-[var(--border-secondary)]"
+                            className="py-2.5 px-3 rounded-lg border-2 border-dashed border-[var(--border-secondary)]"
                           >
-                            <div className="h-6 w-16 mx-auto bg-[var(--bg-tertiary)] rounded animate-pulse" />
+                            <div className="h-5 w-14 mx-auto bg-[var(--bg-tertiary)] rounded animate-pulse" />
                           </div>
                         ))}
                       </div>
@@ -2002,7 +2002,7 @@ export default function Calculator() {
                                   markAsChanged()
                                 }}
                                 className={clsx(
-                                  'relative p-4 rounded-xl border-2 transition-all text-center',
+                                  'relative py-2.5 px-3 rounded-lg border-2 transition-all text-center',
                                   formData.cloud === cloud.id
                                     ? 'border-lava-600 bg-lava-600/10'
                                     : 'border-dashed border-[var(--border-secondary)]',
@@ -2013,14 +2013,14 @@ export default function Calculator() {
                                 title={isLocked ? 'Remove all workloads to change cloud provider' : undefined}
                               >
                                 <div className={clsx(
-                                  'text-lg font-semibold',
+                                  'text-sm font-semibold',
                                   formData.cloud === cloud.id ? 'text-lava-600' : 'text-[var(--text-primary)]'
                                 )}>
                                   {cloud.name}
                                 </div>
                                 {formData.cloud === cloud.id && (
-                                  <div className="absolute top-2 right-2">
-                                    <CheckIcon className="w-4 h-4 text-lava-600" />
+                                  <div className="absolute top-1.5 right-1.5">
+                                    <CheckIcon className="w-3.5 h-3.5 text-lava-600" />
                                   </div>
                                 )}
                               </button>

@@ -457,7 +457,7 @@ export default function Layout() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-            <span className="text-lava-600">Databricks</span> Pricing Calculator • Powered by Lakebase
+            <span className="text-lava-600">Databricks</span> Pricing Calculator • Powered by Apps & Lakebase
           </p>
         </div>
       </footer>

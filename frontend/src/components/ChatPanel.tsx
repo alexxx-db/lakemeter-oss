@@ -14,6 +14,8 @@ import {
   SparklesIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
   ArrowPathIcon,
   DocumentPlusIcon,
   TrashIcon,
@@ -718,6 +720,21 @@ I can assist you with:
           {conversationId && (
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="Active session" />
           )}
+          {/* Info tooltip for AI disclaimer */}
+          <div className="relative group">
+            <button
+              className="p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+              title="AI-generated estimates are for planning purposes only. Always review and validate configurations before deployment."
+            >
+              <InformationCircleIcon className="w-4 h-4" />
+            </button>
+            <div className="absolute left-0 top-full mt-1 w-64 p-2.5 text-[11px] leading-relaxed bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <div className="flex items-start gap-2">
+                <ExclamationTriangleIcon className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <span className="text-[var(--text-secondary)]">AI-generated estimates are for planning purposes only. Always review and validate configurations before deployment.</span>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -1229,18 +1246,6 @@ I can assist you with:
         <div className="flex items-center justify-between mt-2 text-[9px] text-[var(--text-muted)]">
           <span>Shift+Enter for new line</span>
           <span>Powered by Claude Opus 4.5</span>
-        </div>
-        
-        {/* AI Disclaimer */}
-        <div className="mt-2 pt-2 border-t border-[var(--border-primary)]">
-          <p className="text-[9px] text-[var(--text-muted)] text-center leading-relaxed">
-            <span className="inline-flex items-center gap-1">
-              <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              AI-generated estimates are for planning purposes only. Always review and validate configurations before deployment.
-            </span>
-          </p>
         </div>
       </div>
         </div>
