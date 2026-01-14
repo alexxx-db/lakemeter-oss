@@ -147,7 +147,9 @@ export function ChatPanel({
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return
       const newWidth = window.innerWidth - e.clientX
-      setPanelWidth(Math.min(Math.max(320, newWidth), 700))
+      // Min 320px, max 90% of viewport width for maximum flexibility
+      const maxWidth = Math.floor(window.innerWidth * 0.9)
+      setPanelWidth(Math.min(Math.max(320, newWidth), maxWidth))
     }
     
     const handleMouseUp = () => {
@@ -1183,10 +1185,9 @@ I can assist you with:
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about pricing, workloads, or optimization..."
-            disabled={isLoading}
+            placeholder={isLoading ? "Type your next question while waiting..." : "Ask about pricing, workloads, or optimization..."}
             rows={1}
-            className="w-full resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] pl-4 pr-12 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-lava-500 dark:focus:border-lava-600 disabled:opacity-50 placeholder:text-[var(--text-muted)] shadow-sm transition-colors"
+            className="w-full resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--bg-primary)] pl-4 pr-12 py-3 text-[13px] leading-relaxed focus:outline-none focus:ring-0 focus:border-lava-500 dark:focus:border-lava-600 placeholder:text-[var(--text-muted)] shadow-sm transition-colors"
             style={{ 
               minHeight: '44px', 
               maxHeight: '150px',
@@ -1228,6 +1229,18 @@ I can assist you with:
         <div className="flex items-center justify-between mt-2 text-[9px] text-[var(--text-muted)]">
           <span>Shift+Enter for new line</span>
           <span>Powered by Claude Opus 4.5</span>
+        </div>
+        
+        {/* AI Disclaimer */}
+        <div className="mt-2 pt-2 border-t border-[var(--border-primary)]">
+          <p className="text-[9px] text-[var(--text-muted)] text-center leading-relaxed">
+            <span className="inline-flex items-center gap-1">
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              AI-generated estimates are for planning purposes only. Always review and validate configurations before deployment.
+            </span>
+          </p>
         </div>
       </div>
         </div>
