@@ -1674,6 +1674,9 @@ export default function Calculator() {
         if (item.lakebase_ha_nodes) {
           details.push({ label: 'Nodes', value: `${item.lakebase_ha_nodes}${item.lakebase_ha_nodes > 1 ? ' (HA)' : ''}` })
         }
+        if (item.lakebase_storage_gb && item.lakebase_storage_gb > 0) {
+          details.push({ label: 'Storage', value: `${item.lakebase_storage_gb.toLocaleString()} GB` })
+        }
         break
         
       case 'FMAPI_DATABRICKS':
@@ -2498,6 +2501,9 @@ export default function Calculator() {
                           if (effectiveItem.lakebase_ha_nodes && effectiveItem.lakebase_ha_nodes > 0) {
                             config.badges.push({ text: `HA ×${effectiveItem.lakebase_ha_nodes}` })
                           }
+                          if (effectiveItem.lakebase_storage_gb && effectiveItem.lakebase_storage_gb > 0) {
+                            config.details.push(`${effectiveItem.lakebase_storage_gb.toLocaleString()} GB`)
+                          }
                         }
                         
                         return config
@@ -2709,6 +2715,14 @@ export default function Calculator() {
                                   <div>
                                     <span className="text-[var(--text-muted)]">VM Cost</span>
                                     <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
+                                  </div>
+                                )}
+                                
+                                {/* Lakebase: Storage Cost */}
+                                {wType === 'LAKEBASE' && costs.storageCost !== undefined && costs.storageCost > 0 && (
+                                  <div>
+                                    <span className="text-[var(--text-muted)]">Storage Cost</span>
+                                    <p className="font-semibold text-purple-600 dark:text-purple-400">{formatCurrency(costs.storageCost)}</p>
                                   </div>
                                 )}
                                 
@@ -3367,6 +3381,14 @@ export default function Calculator() {
                                 <div>
                                   <span className="text-[var(--text-muted)]">VM Cost</span>
                                   <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
+                                </div>
+                              )}
+                              
+                              {/* Lakebase: Storage Cost */}
+                              {item.workload_type === 'LAKEBASE' && costs.storageCost !== undefined && costs.storageCost > 0 && (
+                                <div>
+                                  <span className="text-[var(--text-muted)]">Storage Cost</span>
+                                  <p className="font-semibold text-purple-600 dark:text-purple-400">{formatCurrency(costs.storageCost)}</p>
                                 </div>
                               )}
                               

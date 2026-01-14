@@ -1843,9 +1843,6 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 className="w-full text-sm"
                 placeholder="e.g., 500"
               />
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                0 - 8,192 GB (8 TB max). Each GB uses 15 DSU at $0.023/DSU/mo.
-              </p>
             </div>
           </>
         )}
