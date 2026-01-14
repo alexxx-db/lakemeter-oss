@@ -515,26 +515,19 @@ export default function Layout() {
         />
       )}
       
-      {/* Floating AI Assistant Button - Always visible on estimate detail pages */}
-      {isEstimateDetailPage && (
+      {/* Floating AI Assistant Button - Shows when chat is closed for discovery */}
+      {isEstimateDetailPage && !isChatOpen && (
         <button
           onClick={handleToggleChat}
-          className={clsx(
-            "fixed bottom-6 right-6 z-40 flex items-center gap-2.5 pl-4 pr-5 py-3 rounded-full text-white shadow-lg transition-all duration-200 hover:shadow-xl",
-            isChatOpen
-              ? "bg-gray-700 hover:bg-gray-600 shadow-gray-700/25 hover:shadow-gray-600/35"
-              : "bg-gradient-to-r from-lava-600 via-amber-500 to-yellow-500 shadow-lava-600/25 hover:shadow-lava-600/35"
-          )}
-          title={isChatOpen ? "Close AI Assistant" : "Open AI Assistant"}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 pl-4 pr-5 py-3 rounded-full text-white shadow-lg transition-all duration-200 hover:shadow-xl bg-gradient-to-r from-lava-600 via-amber-500 to-yellow-500 shadow-lava-600/25 hover:shadow-lava-600/35"
+          title="Open AI Assistant"
         >
           {/* Icon */}
           <SparklesIcon className="w-5 h-5" />
           {/* Label */}
-          <span className="text-sm font-semibold whitespace-nowrap">
-            {isChatOpen ? "Close" : "AI Assistant"}
-          </span>
-          {/* Subtle pulse ring for attention (only for first-time users when closed) */}
-          {!hasUsedAIAssistant && !isChatOpen && (
+          <span className="text-sm font-semibold whitespace-nowrap">AI Assistant</span>
+          {/* Subtle pulse ring for attention (only for first-time users) */}
+          {!hasUsedAIAssistant && (
             <span className="absolute inset-0 rounded-full bg-gradient-to-r from-lava-500 to-amber-400 animate-ping opacity-20" />
           )}
         </button>
