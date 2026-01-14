@@ -391,50 +391,102 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   const fmapiProprietaryModels = fmapiProprietaryConfig || defaultFmapiProprietaryConfig
   
   const [isSaving, setIsSaving] = useState(false)
-  const [useDirectHours, setUseDirectHours] = useState(false)  // Toggle between run-based and hours-based input
-  // Note: isFormInitialized state was removed as it was only used for auto-update which caused unnecessary recalculations
-  const [form, setForm] = useState({
-    workload_name: '',
-    workload_type: 'JOBS',
-    serverless_enabled: false,
-    serverless_mode: 'standard',
-    driver_node_type: '',
-    worker_node_type: '',
-    num_workers: 2,
-    photon_enabled: false,
-    dlt_edition: 'PRO',
-    dbsql_warehouse_type: 'SERVERLESS',
-    dbsql_warehouse_size: 'Small',
-    dbsql_num_clusters: 1,
-    // Separate driver and worker pricing for DBSQL Pro/Classic
-    dbsql_driver_pricing_tier: 'on_demand',
-    dbsql_driver_payment_option: 'no_upfront',
-    dbsql_worker_pricing_tier: 'spot',
-    dbsql_worker_payment_option: 'NA',
-    vector_search_mode: 'standard',
-    vector_capacity_millions: 1,
-    // vector_search_storage_gb: 0,  // TODO: Add column to database first
-    model_serving_gpu_type: 'cpu',
-    model_serving_num_endpoints: 1,
-    lakebase_cu: 1,
-    lakebase_storage_gb: 0,
-    lakebase_ha_nodes: 1,
-    lakebase_backup_retention_days: 7,
-    fmapi_provider: 'anthropic',
-    fmapi_model: 'llama-3-3-70b',
-    fmapi_endpoint_type: 'global',  // global, in_geo (for proprietary)
-    fmapi_context_length: 'long',  // 'long' is more commonly available than 'all'
-    fmapi_rate_type: 'input_token',  // input_token, output_token, cache_read, cache_write
-    fmapi_quantity: 0,  // quantity in millions (M)
-    runs_per_day: 1,
-    avg_runtime_minutes: 30,
-    days_per_month: 22,
-    hours_per_month: 0,
-    driver_pricing_tier: 'on_demand',
-    worker_pricing_tier: 'spot',
-    driver_payment_option: 'no_upfront',
-    worker_payment_option: 'no_upfront',
-    notes: ''
+  // Initialize useDirectHours from lineItem if available to prevent flash
+  const [useDirectHours, setUseDirectHours] = useState(() => {
+    if (lineItem) {
+      return Boolean(lineItem.hours_per_month && lineItem.hours_per_month > 0 && !lineItem.runs_per_day)
+    }
+    return false
+  })
+  
+  // Initialize form state directly from lineItem to prevent flash on expand
+  // This eliminates the visual jitter where defaults show briefly before real values
+  const [form, setForm] = useState(() => {
+    if (lineItem) {
+      return {
+        workload_name: lineItem.workload_name || '',
+        workload_type: lineItem.workload_type || 'JOBS',
+        serverless_enabled: lineItem.serverless_enabled || false,
+        serverless_mode: lineItem.serverless_mode || 'standard',
+        driver_node_type: lineItem.driver_node_type || '',
+        worker_node_type: lineItem.worker_node_type || '',
+        num_workers: lineItem.num_workers || 2,
+        photon_enabled: lineItem.photon_enabled || false,
+        dlt_edition: lineItem.dlt_edition || 'PRO',
+        dbsql_warehouse_type: lineItem.dbsql_warehouse_type || 'SERVERLESS',
+        dbsql_warehouse_size: lineItem.dbsql_warehouse_size || 'Small',
+        dbsql_num_clusters: lineItem.dbsql_num_clusters || 1,
+        dbsql_driver_pricing_tier: lineItem.dbsql_driver_pricing_tier || lineItem.driver_pricing_tier || 'on_demand',
+        dbsql_driver_payment_option: lineItem.dbsql_driver_payment_option || lineItem.driver_payment_option || 'no_upfront',
+        dbsql_worker_pricing_tier: lineItem.dbsql_worker_pricing_tier || lineItem.worker_pricing_tier || 'spot',
+        dbsql_worker_payment_option: lineItem.dbsql_worker_payment_option || lineItem.worker_payment_option || 'NA',
+        vector_search_mode: lineItem.vector_search_mode || 'standard',
+        vector_capacity_millions: lineItem.vector_capacity_millions || 1,
+        model_serving_gpu_type: lineItem.model_serving_gpu_type || 'cpu',
+        model_serving_num_endpoints: 1,
+        lakebase_cu: lineItem.lakebase_cu || 1,
+        lakebase_storage_gb: lineItem.lakebase_storage_gb || 0,
+        lakebase_ha_nodes: lineItem.lakebase_ha_nodes || 1,
+        lakebase_backup_retention_days: lineItem.lakebase_backup_retention_days || 7,
+        fmapi_provider: lineItem.fmapi_provider || 'anthropic',
+        fmapi_model: lineItem.fmapi_model || 'llama-3-3-70b',
+        fmapi_endpoint_type: lineItem.fmapi_endpoint_type || 'global',
+        fmapi_context_length: lineItem.fmapi_context_length || 'long',
+        fmapi_rate_type: lineItem.fmapi_rate_type || 'input_token',
+        fmapi_quantity: lineItem.fmapi_quantity || 0,
+        runs_per_day: lineItem.runs_per_day || 1,
+        avg_runtime_minutes: lineItem.avg_runtime_minutes || 30,
+        days_per_month: lineItem.days_per_month || 22,
+        hours_per_month: lineItem.hours_per_month || 0,
+        driver_pricing_tier: lineItem.driver_pricing_tier || 'on_demand',
+        worker_pricing_tier: lineItem.worker_pricing_tier || 'spot',
+        driver_payment_option: lineItem.driver_payment_option || 'NA',
+        worker_payment_option: lineItem.worker_payment_option || 'NA',
+        notes: lineItem.notes || ''
+      }
+    }
+    // Default values for new workloads
+    return {
+      workload_name: '',
+      workload_type: 'JOBS',
+      serverless_enabled: false,
+      serverless_mode: 'standard',
+      driver_node_type: '',
+      worker_node_type: '',
+      num_workers: 2,
+      photon_enabled: false,
+      dlt_edition: 'PRO',
+      dbsql_warehouse_type: 'SERVERLESS',
+      dbsql_warehouse_size: 'Small',
+      dbsql_num_clusters: 1,
+      dbsql_driver_pricing_tier: 'on_demand',
+      dbsql_driver_payment_option: 'no_upfront',
+      dbsql_worker_pricing_tier: 'spot',
+      dbsql_worker_payment_option: 'NA',
+      vector_search_mode: 'standard',
+      vector_capacity_millions: 1,
+      model_serving_gpu_type: 'cpu',
+      model_serving_num_endpoints: 1,
+      lakebase_cu: 1,
+      lakebase_storage_gb: 0,
+      lakebase_ha_nodes: 1,
+      lakebase_backup_retention_days: 7,
+      fmapi_provider: 'anthropic',
+      fmapi_model: 'llama-3-3-70b',
+      fmapi_endpoint_type: 'global',
+      fmapi_context_length: 'long',
+      fmapi_rate_type: 'input_token',
+      fmapi_quantity: 0,
+      runs_per_day: 1,
+      avg_runtime_minutes: 30,
+      days_per_month: 22,
+      hours_per_month: 0,
+      driver_pricing_tier: 'on_demand',
+      worker_pricing_tier: 'spot',
+      driver_payment_option: 'no_upfront',
+      worker_payment_option: 'no_upfront',
+      notes: ''
+    }
   })
   
   // Default form values for new workloads
