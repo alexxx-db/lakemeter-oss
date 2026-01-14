@@ -426,25 +426,25 @@ export function calculateWorkloadCost(
       dbuPerHour = vectorUnitsUsed * vectorModeDBURate
       monthlyDBUs = dbuPerHour * hoursPerMonth
       
-      // Storage calculation for Vector Search
+      // TODO: Storage calculation for Vector Search - waiting for database column
       // Free Storage = units_used × 20 GB
       // Billable Storage = MAX(0, storage_gb - free_storage_gb)
       // Storage Cost = billable_storage_gb × price_per_gb_per_month ($0.023/GB/month)
-      const vectorStorageGB = item.vector_search_storage_gb || 0
-      const vectorFreeStorageGB = vectorUnitsUsed * 20
-      const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
-      const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
-      const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
-      
-      if (vectorStorageGB > 0) {
-        storageCost = vectorStorageCost
-        storageDetails = {
-          totalStorageGB: vectorStorageGB,
-          freeStorageGB: vectorFreeStorageGB,
-          billableStorageGB: vectorBillableStorageGB,
-          pricePerGB: vectorStoragePricePerGB
-        }
-      }
+      // const vectorStorageGB = item.vector_search_storage_gb || 0
+      // const vectorFreeStorageGB = vectorUnitsUsed * 20
+      // const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
+      // const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
+      // const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
+      // 
+      // if (vectorStorageGB > 0) {
+      //   storageCost = vectorStorageCost
+      //   storageDetails = {
+      //     totalStorageGB: vectorStorageGB,
+      //     freeStorageGB: vectorFreeStorageGB,
+      //     billableStorageGB: vectorBillableStorageGB,
+      //     pricePerGB: vectorStoragePricePerGB
+      //   }
+      // }
       break
     
     case 'MODEL_SERVING':

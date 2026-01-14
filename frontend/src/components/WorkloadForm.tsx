@@ -413,7 +413,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     dbsql_worker_payment_option: 'NA',
     vector_search_mode: 'standard',
     vector_capacity_millions: 1,
-    vector_search_storage_gb: 0,
+    // vector_search_storage_gb: 0,  // TODO: Add column to database first
     model_serving_gpu_type: 'cpu',
     model_serving_num_endpoints: 1,
     lakebase_cu: 1,
@@ -458,7 +458,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     dbsql_worker_payment_option: 'NA',
     vector_search_mode: 'standard',
     vector_capacity_millions: 1,
-    vector_search_storage_gb: 0,
+    // vector_search_storage_gb: 0,  // TODO: Add column to database first
     model_serving_gpu_type: 'cpu',
     model_serving_num_endpoints: 1,
     lakebase_cu: 1,
@@ -505,7 +505,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         dbsql_worker_payment_option: lineItem.dbsql_worker_payment_option || lineItem.worker_payment_option || 'NA',
         vector_search_mode: lineItem.vector_search_mode || 'standard',
         vector_capacity_millions: lineItem.vector_capacity_millions || 1,
-        vector_search_storage_gb: lineItem.vector_search_storage_gb || 0,
+        // vector_search_storage_gb: lineItem.vector_search_storage_gb || 0,  // TODO: Add column to database first
         model_serving_gpu_type: lineItem.model_serving_gpu_type || 'cpu',
         model_serving_num_endpoints: 1,
         lakebase_cu: lineItem.lakebase_cu || 1,
@@ -649,7 +649,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       dbsql_worker_payment_option: form.dbsql_worker_payment_option,
       vector_search_mode: form.vector_search_mode,
       vector_capacity_millions: form.vector_capacity_millions,
-      vector_search_storage_gb: form.vector_search_storage_gb,
+      // vector_search_storage_gb: form.vector_search_storage_gb,  // TODO: Add column to database first
       model_serving_gpu_type: form.model_serving_gpu_type,
       lakebase_cu: form.lakebase_cu,
       lakebase_storage_gb: form.lakebase_storage_gb,
@@ -768,11 +768,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       if (selectedWorkloadType?.show_vector_search_mode) {
         data.vector_search_mode = form.vector_search_mode
         data.vector_capacity_millions = form.vector_capacity_millions
-        data.vector_search_storage_gb = form.vector_search_storage_gb || 0
+        // data.vector_search_storage_gb = form.vector_search_storage_gb || 0  // TODO: Add column to database first
       } else {
         data.vector_search_mode = null
         data.vector_capacity_millions = null
-        data.vector_search_storage_gb = null
+        // data.vector_search_storage_gb = null  // TODO: Add column to database first
       }
       
       // Model Serving config
@@ -1511,6 +1511,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 placeholder="e.g., 1.5"
               />
             </div>
+            {/* TODO: Vector Search Storage field - waiting for database column
             <div>
               <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Storage (GB)</label>
               <input
@@ -1526,6 +1527,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 Free: {Math.ceil((form.vector_capacity_millions || 1) / (form.vector_search_mode === 'storage_optimized' ? 64 : 2)) * 20} GB (20 GB/unit). Charged at $0.023/GB/mo above free tier.
               </p>
             </div>
+            */}
           </>
         )}
         
