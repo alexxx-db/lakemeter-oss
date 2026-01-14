@@ -22,7 +22,9 @@ import {
   ChevronDownIcon,
   StopIcon,
   PencilIcon,
-  CheckIcon
+  CheckIcon,
+  ClipboardIcon,
+  ClipboardDocumentCheckIcon
 } from '@heroicons/react/24/outline'
 // AI Chat Panel uses fetch directly - no store needed
 
@@ -108,6 +110,7 @@ export function ChatPanel({
   const [showQuickActions, setShowQuickActions] = useState(true) // Visible by default
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   
   // Use controlled width if provided, otherwise use local state
   const panelWidth = controlledWidth ?? localPanelWidth
@@ -278,6 +281,18 @@ I can assist you with:
   const cancelEditMessage = useCallback(() => {
     setEditingMessageId(null)
     setEditingContent('')
+  }, [])
+  
+  // Copy message to clipboard
+  const copyMessageToClipboard = useCallback(async (messageId: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedMessageId(messageId)
+      // Reset copied state after 2 seconds
+      setTimeout(() => setCopiedMessageId(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
   }, [])
   
   // State for pending edit message - will be sent after state reset
@@ -1049,7 +1064,7 @@ I can assist you with:
                     </div>
                   )}
 
-                  {/* Timestamp, Edited tag, and Edit Button */}
+                  {/* Timestamp, Edited tag, and Action Buttons */}
                   <div className={clsx(
                     'flex items-center gap-2 mt-1.5',
                     message.role === 'user' ? 'justify-end' : 'justify-start'
@@ -1061,6 +1076,25 @@ I can assist you with:
                     <span className="text-[10px] text-[var(--text-muted)]">
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
+                    {/* Copy button for user and assistant messages */}
+                    {(message.role === 'user' || message.role === 'assistant') && message.id !== 'welcome' && message.content && (
+                      <button
+                        onClick={() => copyMessageToClipboard(message.id, message.content)}
+                        className={clsx(
+                          "p-1 rounded transition-colors",
+                          copiedMessageId === message.id
+                            ? "text-green-500"
+                            : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
+                        )}
+                        title={copiedMessageId === message.id ? "Copied!" : "Copy message"}
+                      >
+                        {copiedMessageId === message.id ? (
+                          <ClipboardDocumentCheckIcon className="w-3.5 h-3.5" />
+                        ) : (
+                          <ClipboardIcon className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
                     {/* Edit button for user messages - always visible */}
                     {message.role === 'user' && message.id !== 'welcome' && !isLoading && (
                       <button
