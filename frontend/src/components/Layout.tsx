@@ -374,15 +374,15 @@ export default function Layout() {
                 <button
                   onClick={handleOpenHelp}
                   className={clsx(
-                    "relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-sm font-medium",
+                    "relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-sm border border-transparent hover:border-current",
                     isHelpOpen
-                      ? "bg-lava-100 dark:bg-lava-900/30 text-lava-600"
-                      : "text-[var(--text-secondary)] hover:text-lava-600 hover:bg-[var(--bg-tertiary)]"
+                      ? "text-lava-600 border-lava-600"
+                      : "text-[var(--text-secondary)] hover:text-lava-600"
                   )}
                   title="Help & Feedback"
                 >
                   <QuestionMarkCircleIcon className="w-4 h-4" />
-                  <span>Help</span>
+                  <span className="hidden sm:inline">Help</span>
                   {/* Pulsing badge for first-time users */}
                   {!hasClickedHelp && (
                     <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
@@ -494,7 +494,7 @@ export default function Layout() {
                 href="https://docs.google.com/document/d/1ca8Nn-44ObcLnskQ0XsKwSS3CRe-jbqJNdiK3i-ItoA/edit?tab=t.0"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[var(--text-muted)] hover:text-blue-500 transition-colors"
+                className="text-lava-600 hover:text-lava-700 transition-colors hover:underline"
               >
                 Docs
               </a>
@@ -502,7 +502,7 @@ export default function Layout() {
                 href="https://docs.google.com/forms/d/e/1FAIpQLSde1O7LKq2emPUr1jQ7vNDJMJuC51JKz_HS26drIBHatyGy7Q/viewform"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[var(--text-muted)] hover:text-green-500 transition-colors"
+                className="text-lava-600 hover:text-lava-700 transition-colors hover:underline"
               >
                 Feedback
               </a>
@@ -510,7 +510,7 @@ export default function Layout() {
                 href="https://docs.google.com/forms/d/e/1FAIpQLScCB3n4nIkZ1wgZlkzWnCgXGxXC4_qP_8Fgf3k6_C3Y4N5CkQ/viewform"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[var(--text-muted)] hover:text-amber-500 transition-colors"
+                className="text-lava-600 hover:text-lava-700 transition-colors hover:underline"
               >
                 Report Bug
               </a>
