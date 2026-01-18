@@ -374,14 +374,15 @@ export default function Layout() {
                 <button
                   onClick={handleOpenHelp}
                   className={clsx(
-                    "relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                    "relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-sm font-medium",
                     isHelpOpen
                       ? "bg-lava-100 dark:bg-lava-900/30 text-lava-600"
                       : "text-[var(--text-secondary)] hover:text-lava-600 hover:bg-[var(--bg-tertiary)]"
                   )}
                   title="Help & Feedback"
                 >
-                  <QuestionMarkCircleIcon className="w-5 h-5" />
+                  <QuestionMarkCircleIcon className="w-4 h-4" />
+                  <span>Help</span>
                   {/* Pulsing badge for first-time users */}
                   {!hasClickedHelp && (
                     <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
@@ -483,9 +484,38 @@ export default function Layout() {
         }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-            <span className="text-lava-600">Databricks</span> Pricing Calculator • Powered by Apps & Lakebase
-          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              <span className="text-lava-600">Databricks</span> Pricing Calculator • Powered by Apps & Lakebase
+            </p>
+            <span className="hidden sm:inline text-[var(--text-muted)]">•</span>
+            <div className="flex items-center gap-3 text-xs">
+              <a 
+                href="https://docs.google.com/document/d/1ca8Nn-44ObcLnskQ0XsKwSS3CRe-jbqJNdiK3i-ItoA/edit?tab=t.0"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--text-muted)] hover:text-blue-500 transition-colors"
+              >
+                Docs
+              </a>
+              <a 
+                href="https://docs.google.com/forms/d/e/1FAIpQLSde1O7LKq2emPUr1jQ7vNDJMJuC51JKz_HS26drIBHatyGy7Q/viewform"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--text-muted)] hover:text-green-500 transition-colors"
+              >
+                Feedback
+              </a>
+              <a 
+                href="https://docs.google.com/forms/d/e/1FAIpQLScCB3n4nIkZ1wgZlkzWnCgXGxXC4_qP_8Fgf3k6_C3Y4N5CkQ/viewform"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--text-muted)] hover:text-amber-500 transition-colors"
+              >
+                Report Bug
+              </a>
+            </div>
+          </div>
         </div>
       </footer>
       
