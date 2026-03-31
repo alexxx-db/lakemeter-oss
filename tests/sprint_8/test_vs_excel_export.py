@@ -4,12 +4,9 @@ AC-9 to AC-14: Compute formula, storage sub-row, SKU, storage cost, totals.
 """
 import math
 import os
-import sys
 import tempfile
 import pytest
 import openpyxl
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'))
 
 from tests.sprint_8.conftest import make_line_item
 from tests.sprint_8.vs_calc_helpers import calc_dbu_per_hour, calc_storage_gb

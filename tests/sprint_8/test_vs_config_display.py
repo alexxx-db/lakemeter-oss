@@ -2,11 +2,7 @@
 
 Verifies the workload type definition and config detail output.
 """
-import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'))
 
 from tests.sprint_8.conftest import make_line_item
 from app.routes.export.helpers import (

@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["backend"]
 
 [tool.coverage.run]
 source = ["backend/app"]

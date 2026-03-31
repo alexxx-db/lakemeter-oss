@@ -103,7 +103,7 @@ def _calc_dbsql_dbu(item, warnings):
 
 def _calc_vector_search_dbu(item, cloud, warnings):
     """Calculate DBU/hr for Vector Search workloads."""
-    capacity = float(item.vector_capacity_millions or 0)
+    capacity = max(float(item.vector_capacity_millions or 0), 0)
     if capacity == 0:
         warnings.append("Vector capacity not specified, using 0")
     mode = item.vector_search_mode or 'standard'

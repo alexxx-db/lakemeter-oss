@@ -2,11 +2,7 @@
 
 AC-1 to AC-5: Unit calculation, DBU rates, monthly DBUs, all clouds, zero cap.
 """
-import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'))
 
 from tests.sprint_8.conftest import make_line_item
 from tests.sprint_8.vs_calc_helpers import (

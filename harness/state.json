@@ -9,69 +9,98 @@
   "remaining_spec_items": [
     "Sprint 10: Full Combined Estimate (All 9 Types + Excel)"
   ],
-  "last_action": "Sprint 8 BUILD iter 1: Vector Search — 112 new tests (DBU calc, SKU/pricing, Excel export, edge cases, config display). 1036 total tests, 0 failures. All 20 acceptance criteria covered. Ready for Visual QA → Evaluator.",
+  "last_action": "Sprint 8 BUILD iter 2: Fixed negative capacity bug (clamp to 0), added 6 negative capacity tests, removed sys.path.insert boilerplate (added __init__.py + pythonpath config). 118 sprint tests, 1042 total, 0 failures. Ready for Visual QA \u2192 Evaluator.",
   "sprints_completed": [
     {
       "sprint": 1,
       "score": 7.9,
       "debt": true,
-      "trajectory": [7.9, 7.9, 7.9, 7.9],
+      "trajectory": [
+        7.9,
+        7.9,
+        7.9,
+        7.9
+      ],
       "iterations": 4
     },
     {
       "sprint": 2,
       "score": 9.1,
       "debt": false,
-      "trajectory": [9.1],
+      "trajectory": [
+        9.1
+      ],
       "iterations": 1
     },
     {
       "sprint": 3,
       "score": 9.0,
       "debt": false,
-      "trajectory": [8.05, 8.6, 8.88, 8.85, 9.0],
+      "trajectory": [
+        8.05,
+        8.6,
+        8.88,
+        8.85,
+        9.0
+      ],
       "iterations": 5
     },
     {
       "sprint": 4,
       "score": 9.0,
       "debt": false,
-      "trajectory": [9.0],
+      "trajectory": [
+        9.0
+      ],
       "iterations": 1
     },
     {
       "sprint": 3,
       "score": 0.0,
       "debt": true,
-      "trajectory": [0.0, 0.0, 0.0, 0.0],
+      "trajectory": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "iterations": 4
     },
     {
       "sprint": 4,
       "score": 9.1,
       "debt": false,
-      "trajectory": [9.1],
+      "trajectory": [
+        9.1
+      ],
       "iterations": 1
     },
     {
       "sprint": 5,
       "score": 9.38,
       "debt": false,
-      "trajectory": [9.38],
+      "trajectory": [
+        9.38
+      ],
       "iterations": 1
     },
     {
       "sprint": 6,
       "score": 9.14,
       "debt": false,
-      "trajectory": [9.14],
+      "trajectory": [
+        9.14
+      ],
       "iterations": 1
     },
     {
       "sprint": 7,
       "score": 9.0,
       "debt": false,
-      "trajectory": [4.69, 9.0],
+      "trajectory": [
+        4.69,
+        9.0
+      ],
       "iterations": 2
     }
   ],
@@ -81,12 +110,14 @@
   "last_install_test": 6,
   "last_integration_test": 6,
   "context_resets": 0,
-  "current_iteration": 1,
+  "current_iteration": 2,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
-  "dev_server_command": "N/A — testing live app at https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
+  "dev_server_command": "N/A \u2014 testing live app at https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "test_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "mode": "TESTING_ONLY",
-  "last_updated": "2026-03-31T23:30:00",
-  "score_trajectory": []
+  "last_updated": "2026-03-31T23:10:00",
+  "score_trajectory": [
+    9.3
+  ]
 }

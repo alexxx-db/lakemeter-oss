@@ -2,11 +2,7 @@
 
 AC-6 to AC-8: SKU = VECTOR_SEARCH_ENDPOINT, $/DBU, serverless.
 """
-import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'))
 
 from tests.sprint_8.conftest import make_line_item
 from app.routes.export.pricing import _get_sku_type, _get_dbu_price

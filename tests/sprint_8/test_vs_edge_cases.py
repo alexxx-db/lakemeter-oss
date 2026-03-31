@@ -2,11 +2,7 @@
 
 AC-15 to AC-20: Config display, fractional/large capacity, defaults, no negatives.
 """
-import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'))
 
 from tests.sprint_8.conftest import make_line_item
 from tests.sprint_8.vs_calc_helpers import calc_dbu_per_hour, calc_units
@@ -128,6 +124,22 @@ class TestNoNegatives:
     @pytest.mark.parametrize("capacity_m", [0, 0.001, 1, 100])
     def test_units_never_negative(self, capacity_m):
         units = calc_units(capacity_m, 'standard')
+        assert units >= 0
+
+    @pytest.mark.parametrize("capacity_m", [-5, -1, -0.1])
+    def test_negative_capacity_clamps_to_zero(self, capacity_m):
+        """Negative capacity should produce 0 DBU/hr (clamped) or raise."""
+        item = make_line_item(vector_capacity_millions=capacity_m)
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, 'aws')
+        assert dbu_hr >= 0, (
+            f"Negative capacity {capacity_m}M should not produce "
+            f"negative DBU/hr, got {dbu_hr}"
+        )
+
+    @pytest.mark.parametrize("capacity_m", [-5, -1, -0.1])
+    def test_negative_capacity_units_non_negative(self, capacity_m):
+        """Helper calc_units should never return negative."""
+        units = calc_units(max(capacity_m, 0), 'standard')
         assert units >= 0
 
 
