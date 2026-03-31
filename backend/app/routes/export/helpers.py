@@ -104,6 +104,7 @@ MODEL_SERVING_GPU_NAMES = {
     'gpu_xlarge_a100_80gb_1x': 'XLarge (A100 80GB 1x)',
     'gpu_2xlarge_a100_80gb_2x': '2XLarge (A100 80GB 2x)',
     'gpu_4xlarge_a100_80gb_4x': '4XLarge (A100 80GB 4x)',
+    'gpu_medium_g2_standard_8': 'Medium (G2 Standard 8)',
 }
 
 
