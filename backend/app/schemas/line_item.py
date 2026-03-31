@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Dict, Any
 from uuid import UUID
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class LineItemBase(BaseModel):
@@ -50,7 +50,7 @@ class LineItemBase(BaseModel):
     fmapi_quantity: Optional[Decimal] = None  # quantity in millions (M)
     
     # Lakebase Configuration
-    lakebase_cu: Optional[int] = None
+    lakebase_cu: Optional[float] = None
     lakebase_storage_gb: Optional[int] = None
     lakebase_ha_nodes: Optional[int] = None
     lakebase_backup_retention_days: Optional[int] = None
@@ -121,7 +121,7 @@ class LineItemUpdate(BaseModel):
     fmapi_quantity: Optional[Decimal] = None
     
     # Lakebase Configuration
-    lakebase_cu: Optional[int] = None
+    lakebase_cu: Optional[float] = None
     lakebase_storage_gb: Optional[int] = None
     lakebase_ha_nodes: Optional[int] = None
     lakebase_backup_retention_days: Optional[int] = None
@@ -150,5 +150,4 @@ class LineItemResponse(LineItemBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

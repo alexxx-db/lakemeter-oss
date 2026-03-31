@@ -2,6 +2,7 @@
 import os
 import logging
 from urllib.parse import quote_plus
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 from typing import List, Optional
 
@@ -67,10 +68,7 @@ class Settings(BaseSettings):
         """Check if running in local development."""
         return self.environment.lower() == "local"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-        extra = "ignore"
+    model_config = ConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
 
 settings = Settings()

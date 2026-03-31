@@ -9,6 +9,7 @@ BUG-S1-5: Serverless photon 2x mismatch → FIXED (serverless always applies pho
 BUG-S1-6: Lakebase DBU formula discrepancy → FIXED (removed erroneous *2)
 BUG-S1-12: num_workers default discrepancy → FIXED (or 1 → or 0 in calculations.py:70)
 BUG-S1-13: Hours fallback discrepancy → FIXED (11 hrs → 0 in calculations.py:22)
+BUG-S1-15: Deprecation warnings → FIXED (Pydantic V2 ConfigDict + SQLAlchemy orm import)
 """
 import os
 import sys
@@ -317,3 +318,43 @@ class TestBugS1_13_HoursFallbackFixed:
         assert be["hours_per_month"] == pytest.approx(0.0), "Backend: 0 hours"
         assert fe["dbu_cost"] == pytest.approx(0.0), "Frontend: $0 cost"
         assert be["dbu_cost"] == pytest.approx(0.0), "Backend: $0 cost"
+
+
+class TestBugS1_15_DeprecationWarningsFixed:
+    """BUG-S1-15: 11 deprecation warnings emitted during test collection.
+    - Pydantic V2: class Config → model_config = ConfigDict(...)
+    - SQLAlchemy: sqlalchemy.ext.declarative → sqlalchemy.orm
+    FIXED: All schemas use ConfigDict, database.py uses sqlalchemy.orm.
+    Regression: verify no deprecated patterns remain.
+    """
+
+    def test_no_pydantic_class_config_in_schemas(self):
+        """All schema files use model_config = ConfigDict, not class Config."""
+        schema_dir = os.path.join(BACKEND_DIR, 'app', 'schemas')
+        for filename in os.listdir(schema_dir):
+            if filename.endswith('.py') and filename != '__init__.py':
+                filepath = os.path.join(schema_dir, filename)
+                with open(filepath) as f:
+                    content = f.read()
+                assert 'class Config:' not in content, \
+                    f"{filename} still uses deprecated 'class Config:' — use model_config = ConfigDict(...)"
+
+    def test_no_deprecated_declarative_base_import(self):
+        """database.py uses sqlalchemy.orm.declarative_base, not sqlalchemy.ext.declarative."""
+        db_path = os.path.join(BACKEND_DIR, 'app', 'database.py')
+        with open(db_path) as f:
+            content = f.read()
+        assert 'sqlalchemy.ext.declarative' not in content, \
+            "database.py still imports from deprecated sqlalchemy.ext.declarative"
+        assert 'from sqlalchemy.orm import declarative_base' in content, \
+            "database.py should import declarative_base from sqlalchemy.orm"
+
+    def test_config_py_uses_configdict(self):
+        """config.py Settings uses model_config = ConfigDict, not class Config."""
+        config_path = os.path.join(BACKEND_DIR, 'app', 'config.py')
+        with open(config_path) as f:
+            content = f.read()
+        assert 'class Config:' not in content, \
+            "config.py still uses deprecated 'class Config:'"
+        assert 'model_config' in content, \
+            "config.py should use model_config = ConfigDict(...)"

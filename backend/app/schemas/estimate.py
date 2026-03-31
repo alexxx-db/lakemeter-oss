@@ -2,16 +2,12 @@
 from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class EstimateBase(BaseModel):
     """Base estimate schema."""
     estimate_name: str
-    sfdc_account_id: Optional[str] = None  # Salesforce Account ID
-    customer_name: Optional[str] = None
-    opportunity_id: Optional[str] = None  # Salesforce Opportunity ID
-    uco_id: Optional[str] = None  # Salesforce Use Case ID
     cloud: Optional[str] = None
     region: Optional[str] = None
     tier: Optional[str] = None
@@ -27,10 +23,6 @@ class EstimateCreate(EstimateBase):
 class EstimateUpdate(BaseModel):
     """Schema for updating an estimate."""
     estimate_name: Optional[str] = None
-    sfdc_account_id: Optional[str] = None
-    customer_name: Optional[str] = None
-    opportunity_id: Optional[str] = None
-    uco_id: Optional[str] = None
     cloud: Optional[str] = None
     region: Optional[str] = None
     tier: Optional[str] = None
@@ -43,9 +35,8 @@ class LineItemSummary(BaseModel):
     workload_name: str
     workload_type: Optional[str] = None
     display_order: int
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EstimateResponse(EstimateBase):
@@ -60,19 +51,14 @@ class EstimateResponse(EstimateBase):
     updated_at: datetime
     updated_by: Optional[UUID] = None
     line_items: List[LineItemSummary] = []
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EstimateListResponse(BaseModel):
     """Schema for listing estimates."""
     estimate_id: UUID
     estimate_name: str
-    customer_name: Optional[str] = None
-    sfdc_account_id: Optional[str] = None
-    opportunity_id: Optional[str] = None
-    uco_id: Optional[str] = None
     cloud: Optional[str] = None
     region: Optional[str] = None
     tier: Optional[str] = None
@@ -81,9 +67,8 @@ class EstimateListResponse(BaseModel):
     line_item_count: int = 0
     created_at: datetime
     updated_at: datetime
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EstimateWithLineItemsResponse(EstimateBase):
@@ -97,7 +82,5 @@ class EstimateWithLineItemsResponse(EstimateBase):
     created_at: datetime
     updated_at: datetime
     updated_by: Optional[UUID] = None
-    # Full line items are passed separately, not as nested response
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)

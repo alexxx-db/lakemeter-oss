@@ -1,6 +1,6 @@
 """Workload Type schemas - matches the CSV schema."""
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class WorkloadTypeResponse(BaseModel):
@@ -32,5 +32,4 @@ class WorkloadTypeResponse(BaseModel):
     
     display_order: int = 0
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
