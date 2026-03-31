@@ -1,36 +1,21 @@
-"""
-Sprint 3: DLT E2E Excel — Formula Verification Tests
-
-Split from test_dlt_excel_e2e.py (BUG-S3-E3-1).
+"""Sprint 3: DLT E2E Excel — Formula Verification Tests.
 Generates real .xlsx with DLT items, verifies formula cells and NaN guards.
 """
-import math
-import os
-import sys
-import tempfile
-import pytest
-import openpyxl
+import math, os, sys, tempfile
+import pytest, openpyxl
 
-BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'backend')
-sys.path.insert(0, BACKEND_DIR)
-
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'))
 from tests.sprint_3.conftest import make_line_item
 from app.routes.export import build_estimate_excel
 
 
-def _make_estimate(**kwargs):
-    """Create a mock estimate object."""
+def _make_estimate(**kw):
     from types import SimpleNamespace
     from datetime import datetime
-    defaults = {
-        'estimate_name': 'DLT E2E Test Estimate',
-        'status': 'draft',
-        'version': 1,
-        'created_at': datetime(2026, 3, 31),
-        'updated_at': datetime(2026, 3, 31),
-    }
-    defaults.update(kwargs)
-    return SimpleNamespace(**defaults)
+    d = dict(estimate_name='DLT E2E Test', status='draft', version=1,
+             created_at=datetime(2026, 3, 31), updated_at=datetime(2026, 3, 31))
+    d.update(kw)
+    return SimpleNamespace(**d)
 
 
 def _generate_xlsx(line_items, cloud='aws', region='us-east-1', tier='PREMIUM'):
@@ -196,17 +181,12 @@ class TestDLTExcelE2EFormulas:
         """No NaN values in any computed cell for valid DLT configs."""
         ws = dlt_workbook['Databricks Estimate']
         start = _find_data_start_row(ws)
-        computed_cols = [
-            COL_DBUS_MO, COL_DBU_RATE_D, COL_DBU_COST_L,
-            COL_DBU_COST_D, COL_TOTAL_L, COL_TOTAL_D,
-        ]
+        cols = [COL_DBUS_MO, COL_DBU_RATE_D, COL_DBU_COST_L,
+                COL_DBU_COST_D, COL_TOTAL_L, COL_TOTAL_D]
         for offset in range(2):
-            for col in computed_cols:
-                cell = ws.cell(row=start + offset, column=col)
-                val = cell.value
+            for col in cols:
+                val = ws.cell(row=start + offset, column=col).value
                 if isinstance(val, float):
-                    assert not math.isnan(val), \
-                        f"Row {start + offset}, Col {col}: NaN found"
+                    assert not math.isnan(val), f"R{start+offset},C{col}: NaN"
                 if isinstance(val, str):
-                    assert 'nan' not in val.lower(), \
-                        f"Row {start + offset}, Col {col}: NaN string found"
+                    assert 'nan' not in val.lower(), f"R{start+offset},C{col}: NaN str"

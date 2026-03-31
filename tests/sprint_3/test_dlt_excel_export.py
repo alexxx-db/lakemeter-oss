@@ -1,42 +1,20 @@
-"""
-Sprint 3: DLT Excel Export Column/Formula Verification Tests
-
-Tests the row writing logic for DLT workloads by verifying
-that the excel_row_writer correctly handles:
-- Classic DLT rows with VM costs
-- Serverless DLT rows without VM costs
-- Correct formula references in computed cells
-- Configuration column displays DLT edition and photon info
-"""
-import os
-import sys
+"""Sprint 3: DLT Excel Export — display names, config details, full pipeline, edition matrix."""
+import os, sys
 import pytest
 
-BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'backend')
-sys.path.insert(0, BACKEND_DIR)
-
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'))
 from tests.sprint_3.conftest import make_line_item
-
 from app.routes.export import (
-    _get_sku_type,
-    _calculate_dbu_per_hour,
-    _calculate_hours_per_month,
-    _is_serverless_workload,
-    _get_dbu_price,
-    _get_workload_display_name,
-    _get_workload_config_details,
+    _get_sku_type, _calculate_dbu_per_hour, _calculate_hours_per_month,
+    _is_serverless_workload, _get_dbu_price,
+    _get_workload_display_name, _get_workload_config_details,
 )
 
-
-# ============================================================
-# Test: Display Names and Config Details
-# ============================================================
 
 class TestDLTDisplayFormatting:
     """Verify DLT display name and config details for Excel."""
 
     def test_display_name(self):
-        """DLT workload type shows 'Lakeflow Spark Declarative Pipelines'."""
         assert _get_workload_display_name("DLT") == "Lakeflow Spark Declarative Pipelines"
 
     def test_config_details_core_no_photon(self):
@@ -71,15 +49,10 @@ class TestDLTDisplayFormatting:
         assert "Mode: Standard" in details
 
 
-# ============================================================
-# Test: Full Calculation Pipeline (hours -> DBU -> cost)
-# ============================================================
-
 class TestDLTFullCalculationPipeline:
     """Test the full export calculation pipeline for DLT workloads."""
 
     def test_core_classic_full_pipeline(self):
-        """DLT Core Classic: hours -> DBU/hr -> monthly DBUs -> cost."""
         item = make_line_item(
             dlt_edition="CORE",
             driver_node_type="i3.xlarge",
@@ -167,10 +140,6 @@ class TestDLTFullCalculationPipeline:
         monthly_dbus = dbu_hr * hours
         assert monthly_dbus == pytest.approx(expected_dbu_hr * 720)
 
-
-# ============================================================
-# Test: All Editions x All Modes Matrix
-# ============================================================
 
 class TestDLTEditionModeMatrix:
     """Comprehensive matrix: 3 editions x 4 modes (classic, photon, sl-std, sl-perf)."""
