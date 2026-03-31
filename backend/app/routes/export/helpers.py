@@ -126,12 +126,16 @@ def _fmapi_details(item) -> list:
         rate_type_display = {
             'input_token': 'Input Tokens',
             'output_token': 'Output Tokens',
+            'cache_read': 'Cache Read',
+            'cache_write': 'Cache Write',
+            'batch_inference': 'Batch Inference',
             'provisioned_scaling': 'Provisioned Scaling',
             'provisioned_entry': 'Provisioned Entry',
         }
         details.append(f"Rate: {rate_type_display.get(item.fmapi_rate_type, item.fmapi_rate_type)}")
     if item.fmapi_quantity:
-        if item.fmapi_rate_type in ('input_token', 'output_token'):
+        token_types = ('input_token', 'output_token', 'cache_read', 'cache_write')
+        if item.fmapi_rate_type in token_types:
             details.append(f"Tokens: {float(item.fmapi_quantity):.1f}M/mo")
         else:
             details.append(f"Hours: {item.fmapi_quantity}")

@@ -3,78 +3,113 @@
   "app_name": "lakemeter-e2e-testing",
   "workspace_dir": "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app",
   "quality_target": 9.0,
-  "current_phase": "BUILD_AGENT",
-  "current_sprint": 6,
+  "current_phase": "VISUAL_QA",
+  "current_sprint": 7,
   "planned_sprints": 10,
   "remaining_spec_items": [
-    "Sprint 8: Vector Search (Standard + Storage Optimized)",
     "Sprint 9: Lakebase (CU Sizes, HA Nodes, Storage)",
     "Sprint 10: Full Combined Estimate (All 9 Types + Excel)"
   ],
-  "last_action": "Sprint 6 BUILD iter 1: FMAPI Databricks — 135 tests across token-based (input/output) and provisioned (scaling/entry) rate types, 10 models × 3 clouds. 844 total tests, 0 failures. All 34 acceptance criteria PASS. Ready for Visual QA → Evaluator.",
+  "last_action": "Sprint 7 BUILD iter 2: FMAPI Proprietary — fixed 6 bugs (BUG-S7-1 through S7-6), created 80 new tests. 924 total tests, 0 failures. All 6 acceptance criteria PASS. Ready for Visual QA → Evaluator.",
   "sprints_completed": [
     {
       "sprint": 1,
       "score": 7.9,
       "debt": true,
-      "trajectory": [7.9, 7.9, 7.9, 7.9],
+      "trajectory": [
+        7.9,
+        7.9,
+        7.9,
+        7.9
+      ],
       "iterations": 4
     },
     {
       "sprint": 2,
       "score": 9.1,
       "debt": false,
-      "trajectory": [9.1],
+      "trajectory": [
+        9.1
+      ],
       "iterations": 1
     },
     {
       "sprint": 3,
       "score": 9.0,
       "debt": false,
-      "trajectory": [8.05, 8.6, 8.88, 8.85, 9.0],
+      "trajectory": [
+        8.05,
+        8.6,
+        8.88,
+        8.85,
+        9.0
+      ],
       "iterations": 5
     },
     {
       "sprint": 4,
       "score": 9.0,
       "debt": false,
-      "trajectory": [9.0],
+      "trajectory": [
+        9.0
+      ],
       "iterations": 1
     },
     {
       "sprint": 3,
       "score": 0.0,
       "debt": true,
-      "trajectory": [0.0, 0.0, 0.0, 0.0],
+      "trajectory": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "iterations": 4
     },
     {
       "sprint": 4,
       "score": 9.1,
       "debt": false,
-      "trajectory": [9.1],
+      "trajectory": [
+        9.1
+      ],
       "iterations": 1
     },
     {
       "sprint": 5,
       "score": 9.38,
       "debt": false,
-      "trajectory": [9.38],
+      "trajectory": [
+        9.38
+      ],
+      "iterations": 1
+    },
+    {
+      "sprint": 6,
+      "score": 9.14,
+      "debt": false,
+      "trajectory": [
+        9.14
+      ],
       "iterations": 1
     }
   ],
   "dynamically_added_sprints": [],
-  "feature_sprints_since_doc_sprint": 3,
-  "last_doc_sprint": 3,
-  "last_install_test": 3,
-  "last_integration_test": 3,
+  "feature_sprints_since_doc_sprint": 0,
+  "last_doc_sprint": 6,
+  "last_install_test": 6,
+  "last_integration_test": 6,
   "context_resets": 0,
-  "current_iteration": 1,
+  "current_iteration": 2,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
-  "dev_server_command": "N/A — testing live app at https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
+  "dev_server_command": "N/A \u2014 testing live app at https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "test_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "mode": "TESTING_ONLY",
-  "last_updated": "2026-03-31T22:45:00",
-  "score_trajectory": []
+  "last_updated": "2026-03-31T23:30:00",
+  "score_trajectory": [
+    4.69,
+    null
+  ]
 }

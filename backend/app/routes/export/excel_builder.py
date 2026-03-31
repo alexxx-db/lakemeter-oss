@@ -11,17 +11,13 @@ from .excel_sections import (
     write_totals, write_cost_summary, write_dbu_summary,
     write_legend, write_assumptions, write_footer,
 )
-from .pricing import (
-    _get_dbu_price, _get_sku_type, _get_fmapi_dbu_per_million,
-)
+from .pricing import _get_dbu_price, _get_sku_type
 from .helpers import (
     _get_workload_display_name, _get_workload_config_details,
     _get_pricing_tier_display,
 )
-from .calculations import (
-    _calculate_hours_per_month, _calculate_dbu_per_hour,
-    _is_serverless_workload,
-)
+from .calculations import _calculate_dbu_per_hour, _is_serverless_workload
+from .excel_item_helpers import calc_item_values, write_storage_subrow
 
 
 def build_estimate_excel(estimate, line_items, cloud, region, tier):
@@ -129,15 +125,16 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier):
     is_serverless = _is_serverless_workload(item)
     is_fmapi = wt in ('FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY')
     is_fmapi_token = is_fmapi and item.fmapi_rate_type in (
-        'input_token', 'output_token', 'input', 'output')
+        'input_token', 'output_token', 'input', 'output',
+        'cache_read', 'cache_write')
     is_fmapi_provisioned = is_fmapi and item.fmapi_rate_type in (
-        'provisioned_scaling', 'provisioned_entry')
+        'provisioned_scaling', 'provisioned_entry', 'batch_inference')
 
     auto_notes = list(dbu_warnings)
     if not dbu_rate_found:
         auto_notes.append(f"DBU rate not found for {sku}, using fallback ${dbu_rate:.2f}")
 
-    hours, token_qty, dbu_per_m, total_dbus, token_type = _calc_item_values(
+    hours, token_qty, dbu_per_m, total_dbus, token_type = calc_item_values(
         item, is_fmapi_token, is_fmapi_provisioned, dbu_per_hour, cloud, auto_notes)
 
     num_workers = int(item.num_workers or 0)
@@ -179,68 +176,11 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier):
     row += 1
 
     if wt == 'LAKEBASE':
-        row = _write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
-                                    'Lakebase (Storage)', 'lakebase_storage_gb')
+        row = write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
+                                   'Lakebase (Storage)', 'lakebase_storage_gb')
     if wt == 'VECTOR_SEARCH':
-        row = _write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
-                                    'Vector Search (Storage)', 'vector_capacity_millions')
+        row = write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
+                                   'Vector Search (Storage)', 'vector_capacity_millions')
     return row
 
 
-def _calc_item_values(item, is_fmapi_token, is_fmapi_provisioned, dbu_per_hour,
-                      cloud, auto_notes):
-    """Calculate hours, tokens, DBUs for a line item."""
-    if is_fmapi_token:
-        token_qty = float(item.fmapi_quantity or 0)
-        dbu_per_m, found = _get_fmapi_dbu_per_million(item, cloud)
-        if not found:
-            auto_notes.append(f"FMAPI rate not found for {item.fmapi_model or 'unknown model'}")
-        token_type = 'Input' if item.fmapi_rate_type in ('input_token', 'input') else 'Output'
-        return 0, token_qty, dbu_per_m, token_qty * dbu_per_m, token_type
-    elif is_fmapi_provisioned:
-        hours = float(item.fmapi_quantity or 0)
-        dbu_hr, found = _get_fmapi_dbu_per_million(item, cloud)
-        if not found:
-            auto_notes.append(f"FMAPI rate not found for {item.fmapi_model or 'unknown model'}")
-        return hours, 0, 0, dbu_hr * hours, ''
-    else:
-        hours = _calculate_hours_per_month(item)
-        return hours, 0, 0, dbu_per_hour * hours, ''
-
-
-def _write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
-                          type_display, size_attr):
-    """Write a storage sub-row for Lakebase or Vector Search."""
-    if size_attr == 'lakebase_storage_gb':
-        storage_gb = float(item.lakebase_storage_gb or 0)
-        config = f'Storage: {storage_gb:.0f} GB'
-    else:
-        capacity_m = float(item.vector_capacity_millions or 1)
-        storage_gb = capacity_m
-        config = f'Storage: ~{storage_gb:.1f} GB ({capacity_m:.0f}M vectors)'
-
-    storage_rate, _ = _get_dbu_price(cloud, region, tier, 'DATABRICKS_STORAGE')
-    storage_cost = storage_gb * storage_rate
-    notes = f'${storage_rate}/GB/month × {"~" if size_attr != "lakebase_storage_gb" else ""}{storage_gb:.{"1" if size_attr != "lakebase_storage_gb" else "0"}f} GB'
-
-    storage_row = {
-        'idx': '',
-        'name': _get_val(item, 'workload_name', f'Workload {idx + 1}'),
-        'type_display': type_display,
-        'config': config,
-        'sku': 'DATABRICKS_STORAGE',
-        'driver_node': '-', 'worker_node': '-',
-        'num_workers': 0,
-        'driver_tier': '-', 'worker_tier': '-',
-        'hours_per_month': 0,
-        'token_type': '', 'token_quantity_millions': 0,
-        'dbu_per_million': 0, 'dbu_per_hour': 0,
-        'total_dbus_month': 0,
-        'dbu_rate': storage_rate,
-        'discount_pct': 0.0,
-        'driver_vm_cost_per_hour': 0, 'worker_vm_cost_per_hour': 0,
-        'notes': notes,
-        'storage_cost_monthly': storage_cost,
-    }
-    write_data_row(sheet, row, storage_row, False, True, fmt, is_storage_row=True)
-    return row + 1

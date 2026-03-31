@@ -111,7 +111,8 @@ def _get_fmapi_sku(item, cloud: str) -> str:
     elif wt == 'FMAPI_PROPRIETARY':
         provider = item.fmapi_provider or ''
         endpoint = getattr(item, 'fmapi_endpoint_type', 'global') or 'global'
-        context = getattr(item, 'fmapi_context_length', 'all') or 'all'
+        default_ctx = 'long' if provider == 'google' else 'all'
+        context = getattr(item, 'fmapi_context_length', default_ctx) or default_ctx
         key = f"{cloud}:{provider}:{model}:{endpoint}:{context}:{rate_type}"
         info = FMAPI_PROP_RATES.get(key, {})
         return info.get('sku_product_type', 'OPENAI_MODEL_SERVING')
@@ -140,7 +141,8 @@ def _get_fmapi_dbu_per_million(item, cloud: str) -> tuple:
     elif wt == 'FMAPI_PROPRIETARY':
         provider = item.fmapi_provider or ''
         endpoint = getattr(item, 'fmapi_endpoint_type', 'global') or 'global'
-        context = getattr(item, 'fmapi_context_length', 'all') or 'all'
+        default_ctx = 'long' if provider == 'google' else 'all'
+        context = getattr(item, 'fmapi_context_length', default_ctx) or default_ctx
         key = f"{cloud}:{provider}:{model}:{endpoint}:{context}:{rate_type}"
         info = FMAPI_PROP_RATES.get(key, {})
         if 'dbu_rate' in info:
@@ -156,4 +158,4 @@ def _get_fmapi_dbu_per_million(item, cloud: str) -> tuple:
 def _is_fmapi_hourly(item, cloud: str) -> bool:
     """Check if FMAPI rate is hourly (provisioned) vs token-based."""
     rate_type = item.fmapi_rate_type or 'input_token'
-    return rate_type in ('provisioned_scaling', 'provisioned_entry')
+    return rate_type in ('provisioned_scaling', 'provisioned_entry', 'batch_inference')
