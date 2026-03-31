@@ -253,11 +253,41 @@ class TestExportEndpointMultipleJobs:
         wb.close()
 
     def test_serverless_rows_have_zero_vm(self):
-        """Verify serverless rows in real export have $0 VM costs."""
+        """Verify serverless rows in real export have $0 VM costs.
+
+        Column layout (0-indexed):
+          3  = Mode ("Serverless" or "Classic")
+          22 = Driver VM $/Hr
+          23 = Worker VM $/Hr
+          24 = Driver VM Cost (formula or value)
+          25 = Worker VM Cost (formula or value)
+          26 = Total VM Cost (formula or value)
+        """
         wb = _download_excel(self.client)
         sheet = wb.active
-        # Find rows with "Serverless" mode and check VM cost columns
-        # This is a structural check — not exact column positions since
-        # the real export may have header rows offset
+
+        serverless_rows_checked = 0
+        for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, values_only=False):
+            mode_cell = row[3] if len(row) > 3 else None
+            if mode_cell and isinstance(mode_cell.value, str) and mode_cell.value == "Serverless":
+                serverless_rows_checked += 1
+                # Driver VM $/Hr (col 22) and Worker VM $/Hr (col 23) should be 0
+                driver_vm_hr = row[22].value if len(row) > 22 else None
+                worker_vm_hr = row[23].value if len(row) > 23 else None
+                assert driver_vm_hr == 0 or driver_vm_hr is None, \
+                    f"Row {mode_cell.row}: Driver VM $/Hr should be 0, got {driver_vm_hr}"
+                assert worker_vm_hr == 0 or worker_vm_hr is None, \
+                    f"Row {mode_cell.row}: Worker VM $/Hr should be 0, got {worker_vm_hr}"
+
+                # Total VM Cost (col 26) — could be a formula like "=Y+Z" that evaluates to 0
+                # With data_only=False, formulas appear as strings. Static 0 is also acceptable.
+                total_vm = row[26].value if len(row) > 26 else None
+                if isinstance(total_vm, (int, float)):
+                    assert total_vm == 0, \
+                        f"Row {mode_cell.row}: Total VM Cost should be 0, got {total_vm}"
+                # If it's a formula string, the underlying cached value should be 0
+                # (openpyxl doesn't evaluate formulas, but we verified the inputs are 0)
+
+        assert serverless_rows_checked >= 2, \
+            f"Expected at least 2 serverless rows, found {serverless_rows_checked}"
         wb.close()
-        # Passes as structural validation — detailed column checks are in unit tests

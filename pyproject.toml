@@ -1,0 +1,18 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["backend/app"]
+
+[tool.coverage.paths]
+source = [
+    "backend/app",
+    "app",
+]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+]
