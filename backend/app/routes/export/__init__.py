@@ -25,15 +25,19 @@ from .pricing import (
     DBSQL_RATES,
 )
 
-# Calculation functions (used by tests)
-from .calculations import (
+# Helper functions (access control, display names)
+from .helpers import (
     _check_estimate_access,
     _get_workload_display_name,
     _get_workload_config_details,
+    _get_pricing_tier_display,
+)
+
+# Calculation functions (used by tests)
+from .calculations import (
     _calculate_hours_per_month,
     _calculate_dbu_per_hour,
     _is_serverless_workload,
-    _get_pricing_tier_display,
 )
 
 # Excel builder (used internally)

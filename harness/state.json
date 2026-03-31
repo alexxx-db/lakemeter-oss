@@ -16,13 +16,18 @@
     "Sprint 9: Lakebase (CU Sizes, HA Nodes, Storage)",
     "Sprint 10: Full Combined Estimate (All 9 Types + Excel)"
   ],
-  "last_action": "Sprint 2 BUILD iteration 3: Refactored export.py (1,209 lines) into export/ package with 8 modular files (max 258 lines). Addresses BUG-S2-2 file size debt. All 250 tests passing. Ready for Visual QA.",
+  "last_action": "Sprint 2 BUILD iteration 4: Fixed BUG-S2-3 (FE fallback pricing $0.40→$0.55), BUG-S2-4 (split calculations.py 258→139 lines, excel_row_writer.py 253→184 lines into helpers.py + excel_columns.py). All 253 tests passing. Ready for Visual QA.",
   "sprints_completed": [
     {
       "sprint": 1,
       "score": 7.9,
       "debt": true,
-      "trajectory": [7.43, 7.8, 8.05, 7.9],
+      "trajectory": [
+        7.43,
+        7.8,
+        8.05,
+        7.9
+      ],
       "iterations": 4
     }
   ],
@@ -32,12 +37,17 @@
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 3,
+  "current_iteration": 4,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
-  "dev_server_command": "N/A — testing live app at https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
+  "dev_server_command": "N/A \u2014 testing live app at https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "test_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "mode": "TESTING_ONLY",
-  "last_updated": "2026-03-31T17:30:00",
-  "score_trajectory": [0.0, 8.93]
+  "last_updated": "2026-03-31T18:30:00",
+  "score_trajectory": [
+    0.0,
+    8.93,
+    8.95,
+    0.0
+  ]
 }

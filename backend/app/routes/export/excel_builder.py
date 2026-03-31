@@ -14,10 +14,13 @@ from .excel_sections import (
 from .pricing import (
     _get_dbu_price, _get_sku_type, _get_fmapi_dbu_per_million,
 )
-from .calculations import (
+from .helpers import (
     _get_workload_display_name, _get_workload_config_details,
+    _get_pricing_tier_display,
+)
+from .calculations import (
     _calculate_hours_per_month, _calculate_dbu_per_hour,
-    _is_serverless_workload, _get_pricing_tier_display,
+    _is_serverless_workload,
 )
 
 

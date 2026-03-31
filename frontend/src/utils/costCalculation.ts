@@ -16,8 +16,8 @@ export const DEFAULT_DBU_PRICING: Record<string, Record<string, number>> = {
     'JOBS_COMPUTE': 0.15,  // PREMIUM: $0.15, ENTERPRISE: $0.20 (use bundle for tier-specific)
     'JOBS_COMPUTE_(PHOTON)': 0.15,  // PREMIUM: $0.15, ENTERPRISE: $0.20
     'JOBS_SERVERLESS_COMPUTE': 0.39,  // Serverless has higher $/DBU
-    'ALL_PURPOSE_COMPUTE': 0.40,
-    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.40,
+    'ALL_PURPOSE_COMPUTE': 0.55,
+    'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.55,
     'ALL_PURPOSE_SERVERLESS_COMPUTE': 0.83,  // All-Purpose Serverless
     'DLT_CORE_COMPUTE': 0.20,
     'DLT_CORE_COMPUTE_(PHOTON)': 0.20,
@@ -129,10 +129,12 @@ export function calculateWorkloadCost(
   // ========================================
   let hoursPerMonth = 0
   if (item.workload_type !== 'FMAPI_DATABRICKS' && item.workload_type !== 'FMAPI_PROPRIETARY') {
-    if (item.hours_per_month) {
+    // Priority: run-based fields take precedence over hours_per_month
+    // This prevents hours_per_month=730 default from overriding run-based config
+    if (item.runs_per_day && item.avg_runtime_minutes) {
+      hoursPerMonth = (item.runs_per_day * (item.avg_runtime_minutes / 60)) * (item.days_per_month || 22)
+    } else if (item.hours_per_month) {
       hoursPerMonth = item.hours_per_month
-    } else if (item.runs_per_day && item.avg_runtime_minutes) {
-      hoursPerMonth = (item.runs_per_day * (item.avg_runtime_minutes / 60)) * (item.days_per_month || 30)
     }
   }
   

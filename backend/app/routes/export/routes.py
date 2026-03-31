@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models import Estimate, User
 from app.models.sharing import Sharing
 from app.auth import get_current_user
-from .calculations import _check_estimate_access
+from .helpers import _check_estimate_access
 from .excel_builder import build_estimate_excel
 
 router = APIRouter(prefix="/export", tags=["export"])
