@@ -113,13 +113,14 @@ def backend_calc_jobs(
     nw = num_workers if num_workers else 1  # Backend quirk
     base_dbu = driver_dbu_rate + (worker_dbu_rate * nw)
 
-    if photon_enabled:
-        base_dbu *= 2
-
     if serverless_enabled:
+        # Serverless always has photon built-in (2x)
+        base_dbu *= 2
         mode_mult = 2 if serverless_mode == "performance" else 1
         dbu_per_hour = base_dbu * mode_mult
     else:
+        if photon_enabled:
+            base_dbu *= 2
         dbu_per_hour = base_dbu
 
     monthly_dbus = dbu_per_hour * hours
@@ -431,13 +432,13 @@ class TestFrontendVsBackendDiscrepancies:
         assert fe["monthly_dbus"] == pytest.approx(be["monthly_dbus"])
         assert fe["sku"] == be["sku"]
 
-    def test_serverless_standard_discrepancy_photon(self):
+    def test_serverless_standard_photon_aligned(self):
         """
-        KNOWN DISCREPANCY: Frontend always applies photon (2x) for serverless,
-        but backend only applies photon if photon_enabled flag is True.
+        BUG-S1-5 FIXED: Frontend and backend now both always apply photon (2x)
+        for serverless, regardless of photon_enabled flag.
 
         Frontend: base × 2 (always) × 1 (standard) = 6.0
-        Backend (photon_enabled=False): base × 1 × 1 = 3.0
+        Backend: base × 2 (always) × 1 (standard) = 6.0
         """
         fe = frontend_calc_jobs(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
@@ -449,12 +450,11 @@ class TestFrontendVsBackendDiscrepancies:
             photon_enabled=False, serverless_enabled=True,
             serverless_mode="standard", hours_per_month=110,
         )
-        # Document the discrepancy
         assert fe["dbu_per_hour"] == pytest.approx(6.0), "Frontend: always photon for serverless"
-        assert be["dbu_per_hour"] == pytest.approx(3.0), "Backend: no photon unless flag set"
-        # These DO NOT match — this is the known discrepancy
-        assert fe["dbu_per_hour"] != pytest.approx(be["dbu_per_hour"]), \
-            "DISCREPANCY: FE applies photon always for serverless, BE only if photon_enabled=True"
+        assert be["dbu_per_hour"] == pytest.approx(6.0), "Backend: now always photon for serverless"
+        # FE and BE should now match
+        assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"]), \
+            "BUG-S1-5 fixed: FE and BE both apply photon always for serverless"
 
     def test_serverless_with_photon_flag_match(self):
         """When photon_enabled=True on serverless, both FE and BE should agree."""

@@ -5,8 +5,8 @@ BUG-S1-1: make_line_item duplicated in 3 files → FIXED (extracted to conftest.
 BUG-S1-2: No Visual QA report → N/A for Build Agent (Visual QA Agent responsibility)
 BUG-S1-3: No integration test → FIXED (test_jobs_export_integration.py)
 BUG-S1-4: No coverage report → FIXED (run with --cov)
-BUG-S1-5: Serverless photon 2x mismatch (pre-existing, documented)
-BUG-S1-6: Lakebase DBU formula discrepancy (pre-existing, documented)
+BUG-S1-5: Serverless photon 2x mismatch → FIXED (serverless always applies photon)
+BUG-S1-6: Lakebase DBU formula discrepancy → FIXED (removed erroneous *2)
 """
 import os
 import sys
@@ -86,48 +86,115 @@ class TestBugS1_3_IntegrationTestExists:
             "Integration test must call the real export endpoint"
 
 
-class TestBugS1_5_ServerlessPhotonDiscrepancy:
-    """BUG-S1-5: Frontend always applies photon 2x for serverless,
-    backend only if photon_enabled=True.
-    This is pre-existing and documented — regression test ensures the
-    discrepancy is detected (not silently hidden).
+class TestBugS1_5_ServerlessPhotonFixed:
+    """BUG-S1-5: Frontend always applies photon 2x for serverless.
+    Backend previously only applied photon when photon_enabled=True.
+    FIXED: Backend now always applies photon 2x for serverless (built-in).
+    Regression: verify serverless always gets photon regardless of flag.
     """
 
-    def test_discrepancy_still_exists_in_backend(self):
-        """Backend without photon flag produces lower DBU/hr than with it."""
+    def test_serverless_always_applies_photon(self):
+        """Backend serverless applies photon 2x regardless of photon_enabled flag."""
         from app.routes.export import _calculate_dbu_per_hour
 
-        without_photon = make_line_item(
+        without_flag = make_line_item(
             workload_type="JOBS", driver_node_type="i3.xlarge",
             worker_node_type="i3.xlarge", num_workers=2,
             photon_enabled=False, serverless_enabled=True,
             serverless_mode="standard",
         )
-        with_photon = make_line_item(
+        with_flag = make_line_item(
             workload_type="JOBS", driver_node_type="i3.xlarge",
             worker_node_type="i3.xlarge", num_workers=2,
             photon_enabled=True, serverless_enabled=True,
             serverless_mode="standard",
         )
-        dbu_without, _ = _calculate_dbu_per_hour(without_photon, "aws")
-        dbu_with, _ = _calculate_dbu_per_hour(with_photon, "aws")
-        # Backend: without photon=3.0, with photon=6.0 (2x difference)
-        assert dbu_with == pytest.approx(dbu_without * 2), \
-            "Backend serverless photon discrepancy: photon flag doubles DBU/hr"
+        dbu_without, _ = _calculate_dbu_per_hour(without_flag, "aws")
+        dbu_with, _ = _calculate_dbu_per_hour(with_flag, "aws")
+        # Serverless always has photon built-in — both should produce the same result
+        assert dbu_with == pytest.approx(dbu_without), \
+            f"Serverless photon should be identical regardless of flag: {dbu_with} vs {dbu_without}"
+
+    def test_serverless_dbu_includes_photon_2x(self):
+        """Verify serverless DBU/hr includes 2x photon multiplier."""
+        from app.routes.export import _calculate_dbu_per_hour
+
+        # Classic without photon as baseline
+        classic_item = make_line_item(
+            workload_type="JOBS", driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge", num_workers=2,
+            photon_enabled=False, serverless_enabled=False,
+        )
+        serverless_item = make_line_item(
+            workload_type="JOBS", driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge", num_workers=2,
+            photon_enabled=False, serverless_enabled=True,
+            serverless_mode="standard",
+        )
+        classic_dbu, _ = _calculate_dbu_per_hour(classic_item, "aws")
+        serverless_dbu, _ = _calculate_dbu_per_hour(serverless_item, "aws")
+        # Serverless standard = base × 2 (photon) × 1 (standard mode)
+        assert serverless_dbu == pytest.approx(classic_dbu * 2), \
+            f"Serverless should be 2x classic (photon built-in): {serverless_dbu} vs {classic_dbu}"
+
+    def test_classic_without_photon_no_multiplier(self):
+        """Classic without photon_enabled should NOT get 2x multiplier."""
+        from app.routes.export import _calculate_dbu_per_hour
+
+        classic_no_photon = make_line_item(
+            workload_type="JOBS", driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge", num_workers=2,
+            photon_enabled=False, serverless_enabled=False,
+        )
+        classic_with_photon = make_line_item(
+            workload_type="JOBS", driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge", num_workers=2,
+            photon_enabled=True, serverless_enabled=False,
+        )
+        dbu_no, _ = _calculate_dbu_per_hour(classic_no_photon, "aws")
+        dbu_yes, _ = _calculate_dbu_per_hour(classic_with_photon, "aws")
+        # Classic with photon should be exactly 2x classic without
+        assert dbu_yes == pytest.approx(dbu_no * 2), \
+            f"Classic photon should be 2x base: {dbu_yes} vs {dbu_no}"
+        # And without photon should be less than with
+        assert dbu_no < dbu_yes, "Classic without photon should have lower DBU/hr"
 
 
-class TestBugS1_6_LakebaseDBUFormula:
-    """BUG-S1-6: Backend uses cu × nodes × 2, frontend uses cu × nodes.
-    Regression test to document and detect this discrepancy.
+class TestBugS1_6_LakebaseDBUFormulaFixed:
+    """BUG-S1-6: Backend previously used cu × nodes × 2, frontend uses cu × nodes.
+    FIXED: Backend now uses cu × nodes (matching frontend and Databricks docs).
+    Regression: verify formula is cu × nodes without the erroneous ×2.
     """
 
-    def test_backend_lakebase_uses_times_2(self):
+    def test_backend_lakebase_uses_cu_times_nodes(self):
         from app.routes.export import _calculate_dbu_per_hour
 
         item = make_line_item(
             workload_type="LAKEBASE", lakebase_cu=4, lakebase_ha_nodes=2,
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # Backend formula: cu × nodes × 2 = 4 × 2 × 2 = 16
-        assert dbu_hr == pytest.approx(16.0), \
-            f"Backend Lakebase DBU/hr should be cu×nodes×2, got {dbu_hr}"
+        # Correct formula: cu × nodes = 4 × 2 = 8
+        assert dbu_hr == pytest.approx(8.0), \
+            f"Lakebase DBU/hr should be cu×nodes=8.0, got {dbu_hr}"
+
+    def test_lakebase_single_node(self):
+        from app.routes.export import _calculate_dbu_per_hour
+
+        item = make_line_item(
+            workload_type="LAKEBASE", lakebase_cu=0.5, lakebase_ha_nodes=1,
+        )
+        dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
+        # 0.5 × 1 = 0.5
+        assert dbu_hr == pytest.approx(0.5), \
+            f"Lakebase 0.5CU × 1 node should be 0.5, got {dbu_hr}"
+
+    def test_lakebase_max_config(self):
+        from app.routes.export import _calculate_dbu_per_hour
+
+        item = make_line_item(
+            workload_type="LAKEBASE", lakebase_cu=112, lakebase_ha_nodes=3,
+        )
+        dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
+        # 112 × 3 = 336
+        assert dbu_hr == pytest.approx(336.0), \
+            f"Lakebase 112CU × 3 nodes should be 336.0, got {dbu_hr}"

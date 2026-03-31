@@ -271,26 +271,26 @@ class TestNoNaNOrZeroCosts:
 # ============================================================
 
 class TestLakebaseDBUFormula:
-    """Spec flagged: frontend uses cu×nodes, backend uses cu×nodes×2.
-    Verify backend behavior for documentation.
+    """Lakebase DBU/hr = CU × HA nodes.
+    BUG-S1-6 fixed: backend previously used cu×nodes×2, now aligned with frontend.
     """
 
     def test_lakebase_backend_formula(self):
-        """Backend: DBU/hr = CU × nodes × 2 (export.py line 381)."""
+        """Backend: DBU/hr = CU × nodes (fixed — was cu×nodes×2)."""
         item = make_line_item(
             workload_type="LAKEBASE",
             lakebase_cu=4, lakebase_ha_nodes=2, lakebase_storage_gb=100,
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # Backend: 4 × 2 × 2 = 16
-        assert dbu_hr == pytest.approx(16.0), \
-            f"Backend Lakebase DBU/hr should be cu×nodes×2 = 16, got {dbu_hr}"
+        # Correct formula: 4 × 2 = 8
+        assert dbu_hr == pytest.approx(8.0), \
+            f"Backend Lakebase DBU/hr should be cu×nodes = 8, got {dbu_hr}"
 
     def test_lakebase_single_node(self):
-        """0.5 CU × 1 node × 2 = 1.0 DBU/hr."""
+        """0.5 CU × 1 node = 0.5 DBU/hr."""
         item = make_line_item(
             workload_type="LAKEBASE",
             lakebase_cu=0.5, lakebase_ha_nodes=1,
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(1.0)
+        assert dbu_hr == pytest.approx(0.5)

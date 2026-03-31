@@ -89,8 +89,8 @@ class TestCalculateDBUPerHour:
 
     def test_serverless_standard_no_photon_flag(self):
         """
-        Backend quirk: serverless without photon_enabled flag.
-        Backend: base(3.0) × 1 (no photon applied) × 1 (standard) = 3.0
+        Serverless always has photon built-in (BUG-S1-5 fix).
+        Backend: base(3.0) × 2 (photon always) × 1 (standard) = 6.0
         """
         item = make_line_item(
             workload_type="JOBS",
@@ -102,7 +102,7 @@ class TestCalculateDBUPerHour:
             serverless_mode="standard",
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(3.0)
+        assert dbu_hr == pytest.approx(6.0)
 
     def test_serverless_standard_with_photon_flag(self):
         """
@@ -122,7 +122,7 @@ class TestCalculateDBUPerHour:
         assert dbu_hr == pytest.approx(6.0)
 
     def test_serverless_performance(self):
-        """Serverless performance: base(3.0) × 2 (performance) = 6.0 (no photon flag)."""
+        """Serverless performance: base(3.0) × 2 (photon always) × 2 (performance) = 12.0."""
         item = make_line_item(
             workload_type="JOBS",
             driver_node_type="i3.xlarge",
@@ -133,7 +133,7 @@ class TestCalculateDBUPerHour:
             serverless_mode="performance",
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(6.0)
+        assert dbu_hr == pytest.approx(12.0)
 
     def test_serverless_performance_with_photon(self):
         """Serverless performance + photon: base(3.0) × 2 × 2 = 12.0."""

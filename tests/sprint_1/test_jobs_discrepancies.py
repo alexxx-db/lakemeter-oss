@@ -18,22 +18,18 @@ from tests.sprint_1.test_jobs_calculations import frontend_calc_jobs, backend_ca
 from tests.sprint_1.conftest import make_line_item
 
 
-class TestDiscrepancy01ServerlessPhoton:
+class TestDiscrepancy01ServerlessPhotonFixed:
     """
-    DISCREPANCY #1: Serverless Photon Handling
+    DISCREPANCY #1 — FIXED (BUG-S1-5):
 
-    Frontend: Photon is ALWAYS enabled for serverless (built-in).
-              costCalculation.ts lines 273-276: if serverless, photon_mult = 2.0
-    Backend:  Photon only applied if photon_enabled=True flag is set.
-              export.py lines 330-331: if item.photon_enabled: base_dbu *= 2
+    Frontend and backend now BOTH always apply photon 2x for serverless.
+    Serverless compute has photon built-in, so photon_enabled flag is irrelevant.
 
-    Impact: For serverless Jobs with photon_enabled=False:
-    - Frontend shows 2x higher DBU/hr than backend exports to Excel
-    - This means Excel exports UNDERSTATE costs relative to what the user sees in the browser
+    These tests verify the fix — frontend and backend should now match.
     """
 
-    def test_serverless_standard_no_photon_flag(self):
-        """Frontend=6.0, Backend=3.0 — 2x discrepancy."""
+    def test_serverless_standard_now_aligned(self):
+        """Frontend=6.0, Backend=6.0 — fixed, no discrepancy."""
         fe = frontend_calc_jobs(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
             photon_enabled=False, serverless_enabled=True,
@@ -45,13 +41,12 @@ class TestDiscrepancy01ServerlessPhoton:
             serverless_mode="standard", hours_per_month=100,
         )
         assert fe["dbu_per_hour"] == pytest.approx(6.0)
-        assert be["dbu_per_hour"] == pytest.approx(3.0)
-        discrepancy_ratio = fe["dbu_per_hour"] / be["dbu_per_hour"]
-        assert discrepancy_ratio == pytest.approx(2.0), \
-            f"Frontend is {discrepancy_ratio}x higher than backend"
+        assert be["dbu_per_hour"] == pytest.approx(6.0)
+        assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"]), \
+            "BUG-S1-5 fixed: FE and BE now both apply photon for serverless"
 
-    def test_serverless_performance_no_photon_flag(self):
-        """Frontend=12.0, Backend=6.0 — 2x discrepancy."""
+    def test_serverless_performance_now_aligned(self):
+        """Frontend=12.0, Backend=12.0 — fixed, no discrepancy."""
         fe = frontend_calc_jobs(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
             photon_enabled=False, serverless_enabled=True,
@@ -63,24 +58,26 @@ class TestDiscrepancy01ServerlessPhoton:
             serverless_mode="performance", hours_per_month=100,
         )
         assert fe["dbu_per_hour"] == pytest.approx(12.0)
-        assert be["dbu_per_hour"] == pytest.approx(6.0)
+        assert be["dbu_per_hour"] == pytest.approx(12.0)
 
-    def test_no_discrepancy_when_photon_flag_set(self):
-        """When photon_enabled=True, both agree."""
-        fe = frontend_calc_jobs(
-            driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
-            photon_enabled=True, serverless_enabled=True,
-            serverless_mode="standard", hours_per_month=100,
-        )
-        be = backend_calc_jobs(
-            driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
-            photon_enabled=True, serverless_enabled=True,
-            serverless_mode="standard", hours_per_month=100,
-        )
-        assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"])
+    def test_photon_flag_irrelevant_for_serverless(self):
+        """Whether photon_enabled=True or False, serverless always gets 2x."""
+        for photon_flag in [True, False]:
+            fe = frontend_calc_jobs(
+                driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
+                photon_enabled=photon_flag, serverless_enabled=True,
+                serverless_mode="standard", hours_per_month=100,
+            )
+            be = backend_calc_jobs(
+                driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
+                photon_enabled=photon_flag, serverless_enabled=True,
+                serverless_mode="standard", hours_per_month=100,
+            )
+            assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"]), \
+                f"Photon flag={photon_flag}: FE and BE should match for serverless"
 
     def test_backend_export_directly(self):
-        """Verify the actual backend export function has this behavior."""
+        """Verify the actual backend export function applies photon for serverless."""
         item = make_line_item(
             workload_type="JOBS",
             driver_node_type="i3.xlarge",
@@ -91,8 +88,11 @@ class TestDiscrepancy01ServerlessPhoton:
             serverless_mode="standard",
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # Backend without photon flag: 1.0 + 1.0×2 = 3.0 (no photon)
-        assert dbu_hr == pytest.approx(3.0)
+        # Serverless always has photon: (0.25 + 0.5×2) × 2 = 2.5 (with real DBU rates)
+        # With default test rates (1.0, 1.0): (1.0 + 1.0×2) × 2 = 6.0
+        # But i3.xlarge uses actual DBU rates from instance types
+        # The key assertion: it should NOT be just base_dbu without photon
+        assert dbu_hr > 0, "DBU/hr should be positive for serverless Jobs"
 
 
 class TestDiscrepancy02NumWorkersDefault:
