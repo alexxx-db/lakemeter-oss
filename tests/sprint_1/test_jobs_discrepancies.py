@@ -15,7 +15,7 @@ sys.path.insert(0, BACKEND_DIR)
 
 from app.routes.export import _calculate_dbu_per_hour, _get_sku_type
 from tests.sprint_1.test_jobs_calculations import frontend_calc_jobs, backend_calc_jobs
-from tests.sprint_1.test_jobs_export import make_line_item
+from tests.sprint_1.conftest import make_line_item
 
 
 class TestDiscrepancy01ServerlessPhoton:

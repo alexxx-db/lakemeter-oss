@@ -18,7 +18,7 @@
     "Sprint 9: Lakebase (CU Sizes, HA Nodes, Storage)",
     "Sprint 10: Full Combined Estimate (All 9 Types + Excel)"
   ],
-  "last_action": "Sprint 1 BUILD iteration 2 complete. 120 tests passing (55 new: Excel formula validation, VM costs, notes/NaN regression, Lakebase formula). All acceptance criteria met. Handing off to Visual QA.",
+  "last_action": "Sprint 1 BUILD iteration 2: Fixed all eval bugs (BUG-S1-1 through S1-6). 135 tests passing. Shared fixtures, integration test, regression tests, coverage report all added. Ready for Visual QA.",
   "sprints_completed": [],
   "dynamically_added_sprints": [],
   "feature_sprints_since_doc_sprint": 0,
@@ -32,5 +32,8 @@
   "dev_server_command": "N/A — testing live app at https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "test_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "mode": "TESTING_ONLY",
-  "last_updated": "2026-03-31T15:30:00"
+  "last_updated": "2026-03-31T15:30:00",
+  "score_trajectory": [
+    7.43
+  ]
 }
