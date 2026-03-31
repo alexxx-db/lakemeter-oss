@@ -128,7 +128,7 @@ def _write_vm_costs(sheet, row, r, row_data, is_serverless, is_storage_row, fmt)
     driver_vm_hr = row_data.get('driver_vm_cost_per_hour', 0)
     worker_vm_hr = row_data.get('worker_vm_cost_per_hour', 0)
     hours = row_data.get('hours_per_month', 0)
-    nw = row_data.get('num_workers', 1)
+    nw = row_data.get('num_workers', 0)
 
     if is_serverless or is_storage_row:
         for c in range(22, 27):
@@ -151,7 +151,7 @@ def _write_total_costs(sheet, row, r, row_data, is_serverless, is_storage_row, f
     driver_vm_hr = row_data.get('driver_vm_cost_per_hour', 0)
     worker_vm_hr = row_data.get('worker_vm_cost_per_hour', 0)
     hours = row_data.get('hours_per_month', 0)
-    nw = row_data.get('num_workers', 1)
+    nw = row_data.get('num_workers', 0)
     dbu_rate = row_data['dbu_rate']
     discount_pct = row_data['discount_pct']
     total_dbus_month = row_data.get('total_dbus_month', 0)

@@ -7,9 +7,10 @@ BUG-S1-3: No integration test → FIXED (test_jobs_export_integration.py)
 BUG-S1-4: No coverage report → FIXED (run with --cov)
 BUG-S1-5: Serverless photon 2x mismatch → FIXED (serverless always applies photon)
 BUG-S1-6: Lakebase DBU formula discrepancy → FIXED (removed erroneous *2)
-BUG-S1-12: num_workers default discrepancy → FIXED (or 1 → or 0 in calculations.py:70)
+BUG-S1-12: num_workers default discrepancy → FIXED (or 1 → or 0 in calculations.py:70 + excel_row_writer.py defaults)
 BUG-S1-13: Hours fallback discrepancy → FIXED (11 hrs → 0 in calculations.py:22)
 BUG-S1-15: Deprecation warnings → FIXED (Pydantic V2 ConfigDict + SQLAlchemy orm import)
+BUG-S1-12b: excel_row_writer.py num_workers defaults → FIXED (default=1 → default=0 in _write_vm_costs and _write_total_costs)
 """
 import os
 import sys
@@ -318,6 +319,45 @@ class TestBugS1_13_HoursFallbackFixed:
         assert be["hours_per_month"] == pytest.approx(0.0), "Backend: 0 hours"
         assert fe["dbu_cost"] == pytest.approx(0.0), "Frontend: $0 cost"
         assert be["dbu_cost"] == pytest.approx(0.0), "Backend: $0 cost"
+
+
+class TestBugS1_12b_ExcelRowWriterNumWorkersDefault:
+    """BUG-S1-12b: excel_row_writer.py had `nw = row_data.get('num_workers', 1)`
+    in both _write_vm_costs and _write_total_costs. The default fallback of 1
+    would inflate VM costs if row_data lacked num_workers key.
+    FIXED: Changed default to 0 to match frontend behavior.
+    Regression: verify no `'num_workers', 1)` patterns remain in excel_row_writer.py.
+    """
+
+    def test_no_num_workers_default_one_in_row_writer(self):
+        """excel_row_writer.py should not default num_workers to 1."""
+        row_writer_path = os.path.join(
+            BACKEND_DIR, 'app', 'routes', 'export', 'excel_row_writer.py'
+        )
+        with open(row_writer_path) as f:
+            content = f.read()
+        assert "'num_workers', 1)" not in content, \
+            "excel_row_writer.py still has num_workers default=1 fallback"
+
+    def test_no_num_workers_default_one_in_export_modules(self):
+        """No export module should default num_workers to 1."""
+        export_dir = os.path.join(BACKEND_DIR, 'app', 'routes', 'export')
+        for filename in os.listdir(export_dir):
+            if filename.endswith('.py'):
+                filepath = os.path.join(export_dir, filename)
+                with open(filepath) as f:
+                    content = f.read()
+                # Check for the specific pattern: or 1) with num_workers context
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if 'num_workers' in line and 'or 1)' in line:
+                        pytest.fail(
+                            f"{filename}:{i+1} has num_workers 'or 1)' fallback: {line.strip()}"
+                        )
+                    if 'num_workers' in line and ", 1)" in line and "get(" in line:
+                        pytest.fail(
+                            f"{filename}:{i+1} has num_workers default=1 in get(): {line.strip()}"
+                        )
 
 
 class TestBugS1_15_DeprecationWarningsFixed:
