@@ -90,11 +90,15 @@ def _calc_dbsql_dbu(item, warnings):
         '2X-Small': 4, 'X-Small': 6, 'Small': 12, 'Medium': 24,
         'Large': 40, 'X-Large': 80, '2X-Large': 144, '3X-Large': 272, '4X-Large': 528
     }
-    wh_size = item.dbsql_warehouse_size or 'Small'
+    wh_size = item.dbsql_warehouse_size
+    if not wh_size or wh_size.strip() == '':
+        wh_size = 'Small'
+        warnings.append("Empty warehouse size, defaulting to Small")
     if wh_size not in size_dbu:
         warnings.append(f"Unknown DBSQL warehouse size '{wh_size}', using Small (12 DBU)")
         wh_size = 'Small'
-    return float(size_dbu[wh_size] * int(item.dbsql_num_clusters or 1)), warnings
+    num_clusters = max(1, int(item.dbsql_num_clusters or 1))
+    return float(size_dbu[wh_size] * num_clusters), warnings
 
 
 def _calc_vector_search_dbu(item, cloud, warnings):

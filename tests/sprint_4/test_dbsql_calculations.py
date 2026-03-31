@@ -96,6 +96,22 @@ class TestHoursCalculation:
         assert result['hours_per_month'] == 0
         assert result['monthly_dbus'] == 0
 
+    def test_run_based_hours(self):
+        """10 runs/day × 30 min / 60 × 22 days = 110 hrs."""
+        result = frontend_calc_dbsql(
+            runs_per_day=10, avg_runtime_minutes=30, days_per_month=22,
+            hours_per_month=0,
+        )
+        assert result['hours_per_month'] == pytest.approx(110)
+
+    def test_run_based_hours_backend(self):
+        """Same run-based calculation via backend helper."""
+        result = backend_calc_dbsql(
+            runs_per_day=10, avg_runtime_minutes=30, days_per_month=22,
+            hours_per_month=0,
+        )
+        assert result['hours_per_month'] == pytest.approx(110)
+
 
 class TestSKUDetermination:
     """Classic→SQL_COMPUTE, Pro→SQL_PRO_COMPUTE, Serverless→SERVERLESS_SQL_COMPUTE."""

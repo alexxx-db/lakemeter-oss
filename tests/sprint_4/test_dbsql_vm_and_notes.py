@@ -89,11 +89,11 @@ class TestDBSQLEdgeCases:
         assert any("Unknown DBSQL warehouse size" in w for w in warnings)
 
     def test_empty_string_size(self):
-        """Empty string is falsy → `'' or 'Small'` = 'Small'. No warning."""
+        """Empty string defaults to Small with warning (BUG-S4-2 fix)."""
         item = make_line_item(dbsql_warehouse_size='')
         dbu, warnings = _calc_dbsql_dbu(item, [])
         assert dbu == pytest.approx(12)
-        assert len(warnings) == 0  # '' is falsy, defaults to 'Small' via `or`
+        assert any("Empty warehouse size" in w for w in warnings)
 
     def test_zero_clusters_treated_as_1(self):
         """0 clusters → int(0 or 1) = 1."""
@@ -103,11 +103,10 @@ class TestDBSQLEdgeCases:
         assert dbu == pytest.approx(24)
 
     def test_negative_clusters(self):
-        """Negative clusters — backend doesn't guard against this."""
+        """Negative clusters clamped to 1 (BUG-S4-1 fix)."""
         item = make_line_item(dbsql_warehouse_size='Small', dbsql_num_clusters=-1)
         dbu, _ = _calc_dbsql_dbu(item, [])
-        # int(-1 or 1) = int(-1) = -1 (truthy), so dbu = 12 * -1 = -12
-        assert dbu == pytest.approx(-12)
+        assert dbu == pytest.approx(12)  # max(1, -1) = 1, so 12 * 1 = 12
 
     def test_none_warehouse_type_sku(self):
         item = make_line_item(dbsql_warehouse_type=None)

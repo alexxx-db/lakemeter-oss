@@ -1,46 +1,36 @@
-# Sprint 4 Handoff: DBSQL (Classic, Pro, Serverless — All Sizes)
+# Sprint 4 Handoff: DBSQL (Classic, Pro, Serverless — All Sizes) — Iteration 2
 
-## What Was Built
+## What Was Built (Iteration 2 Fixes)
 
-144 new tests covering DBSQL workload calculations, export pipeline, Excel formula verification, and frontend/backend alignment.
+Fixed 2 bugs from Sprint 4 evaluation + added missing run-based hours test.
 
-### Test Files Created
-- `tests/sprint_4/conftest.py` — `make_line_item()` factory with DBSQL defaults
-- `tests/sprint_4/dbsql_calc_helpers.py` — Frontend + backend calculation replicas
-- `tests/sprint_4/test_dbsql_calculations.py` — 9 warehouse sizes, cluster multiplier, hours, SKU, pricing
-- `tests/sprint_4/test_dbsql_export.py` — Backend `_calc_dbsql_dbu`, `_get_sku_type`, `_is_serverless_workload`
-- `tests/sprint_4/test_dbsql_excel_export.py` — Excel formula cells, mode column, multi-type SKU presence
-- `tests/sprint_4/test_dbsql_export_integration.py` — Single Serverless endpoint integration
-- `tests/sprint_4/test_dbsql_integration_multi.py` — Classic + Pro + Serverless multi-type endpoint integration
-- `tests/sprint_4/test_dbsql_discrepancies.py` — FE vs BE alignment (size, SKU, DBUs, pricing, cost)
-- `tests/sprint_4/test_dbsql_vm_and_notes.py` — VM costs, display name, config details, edge cases
+### Bug Fixes
+- **BUG-S4-1**: `_calc_dbsql_dbu` now clamps negative/zero cluster counts to 1 via `max(1, int(...))` — previously negative clusters produced negative DBU values
+- **BUG-S4-2**: Empty or whitespace-only warehouse size now triggers a warning ("Empty warehouse size, defaulting to Small") instead of silently defaulting
+
+### New Tests
+- `tests/regression/test_sprint_4_bugs.py` — 8 regression tests for BUG-S4-1 and BUG-S4-2
+- `tests/sprint_4/test_dbsql_calculations.py` — 2 new run-based hours tests (10 runs/day × 30 min × 22 days = 110 hrs, verified FE + BE)
+
+### Updated Tests
+- `tests/sprint_4/test_dbsql_vm_and_notes.py` — Updated `test_empty_string_size` and `test_negative_clusters` to match new behavior
 
 ## How to Test
-- Run: `python3 -m pytest tests/sprint_4/ -v`
+- Run: `python3 -m pytest tests/ -v`
 - Live app: https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com
-- Navigate to Calculator → add DBSQL line items with Classic/Pro/Serverless types
+- Navigate to Calculator → add DBSQL line items (Classic Small, Pro Medium 2-cluster, Serverless Large, Serverless 4X-Large)
 
 ## Test Results
 - `pytest` exit code: 0
-- Tests: 563 total (144 new + 419 existing), 0 failures
-- All files under 200 lines (max: 198 lines)
-
-## Key Findings
-- All 9 warehouse sizes correctly map to DBU/hr (2X-Small=4 through 4X-Large=528)
-- Cluster multiplier works: DBU/hr = size_dbu × num_clusters
-- SKU mapping correct: Classic→SQL_COMPUTE, Pro→SQL_PRO_COMPUTE, Serverless→SERVERLESS_SQL_COMPUTE
-- Frontend and backend agree on all calculations (no discrepancies found)
-- Fallback $/DBU: Classic=$0.22, Pro=$0.55, Serverless=$0.70
-- Edge case: empty string warehouse size defaults to Small via falsy `or` (no warning)
-- Edge case: 0 clusters → treated as 1 via falsy `or`
-- Edge case: negative clusters → produces negative DBU (no guard in backend)
-
-## Known Limitations
-- Backend does not validate negative cluster counts (produces negative DBU)
-- Empty string warehouse size silently defaults to Small (no warning)
-- VM pricing for Classic/Pro DBSQL uses default estimates ($0.20/$0.10), not real instance prices
+- Tests: 709 total (10 new), 0 failures
+- All sprint 4 files under 200 lines
 
 ## Files Changed
-- `tests/sprint_4/` — 10 new files (1228 lines total)
-- `harness/contracts/sprint-4.md` — new
-- `harness/handoffs/sprint-4-handoff.md` — new
+- `backend/app/routes/export/calculations.py` — `_calc_dbsql_dbu`: added `max(1,...)` guard + empty string warning
+- `tests/regression/test_sprint_4_bugs.py` — NEW: 8 regression tests
+- `tests/sprint_4/test_dbsql_calculations.py` — Added 2 run-based hours tests
+- `tests/sprint_4/test_dbsql_vm_and_notes.py` — Updated 2 edge case tests for new behavior
+
+## Known Limitations
+- VM pricing for Classic/Pro DBSQL uses default estimates ($0.20/$0.10), not real instance prices
+- Live app UI verification still needed (Visual QA scope)
