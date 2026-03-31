@@ -1,6 +1,6 @@
 """Main Excel builder: assembles the estimate workbook."""
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timezone
 import xlsxwriter
 
 from .excel_formats import create_formats
@@ -76,8 +76,8 @@ def _write_header_section(sheet, fmt, estimate, cloud, region, tier, max_col):
 
     status = _get_val(estimate, 'status', 'draft').capitalize()
     version = _get_val(estimate, 'version', 1)
-    created_at = _get_val(estimate, 'created_at', datetime.utcnow())
-    updated_at = _get_val(estimate, 'updated_at', datetime.utcnow())
+    created_at = _get_val(estimate, 'created_at', datetime.now(timezone.utc))
+    updated_at = _get_val(estimate, 'updated_at', datetime.now(timezone.utc))
     if isinstance(created_at, datetime):
         created_at = created_at.strftime('%Y-%m-%d')
     if isinstance(updated_at, datetime):

@@ -2,34 +2,23 @@
 
 ## What Was Built
 
-### Iteration 2 Changes (fixes from eval feedback)
+### Iteration 3 Changes (fixes from eval iteration 2 feedback)
 
-1. **BUG-S3-E1 (High): End-to-end Excel generation test** — `test_dlt_excel_e2e.py` (15 tests)
-   - Generates real .xlsx via `build_estimate_excel()` with DLT Core Classic + DLT Serverless Performance
-   - Reads with openpyxl, verifies formula cells in cols 16 (DBUs/Mo), 20-21 (DBU Cost), 24-26 (VM Cost), 27-28 (Total Cost)
-   - Verifies SKU column values match backend expectations
-   - Verifies TOTALS row uses SUM formulas (6 tests)
-   - Verifies no NaN values in any computed cell
-   - Closes AC-26 (formulas present), AC-27 (SUM totals), AC-30 (no NaN)
+1. **BUG-S3-I2-1 (Minor): Split oversized test_dlt_discrepancies.py**
+   - `test_dlt_discrepancies.py` (339 lines) → split into:
+     - `test_dlt_disc_sku.py` (132 lines) — SKU alignment/discrepancy tests (Classic, Photon, Serverless, full matrix)
+     - `test_dlt_disc_pricing.py` (198 lines) — Calculation alignment, pricing discrepancies, workers/hours alignment
+   - `test_dlt_discrepancies.py` → 9-line placeholder (no re-exports, avoids duplicate collection)
+   - Both new files under 200-line limit
 
-2. **BUG-S3-E2 (Medium): Split oversized test files**
-   - `test_dlt_calculations.py` (560 lines) → split into:
-     - `dlt_calc_helpers.py` (141 lines) — shared `frontend_calc_dlt`, `backend_calc_dlt`, `FRONTEND_DLT_PRICES`
-     - `test_dlt_calc_classic.py` (200 lines) — Hours, Core/Pro/Advanced Classic, Photon tests
-     - `test_dlt_calc_serverless.py` (163 lines) — Serverless Standard/Performance, Edge cases, NaN guards
-   - `test_dlt_calculations.py` now a 17-line re-export for backward compatibility
-   - Updated `test_dlt_discrepancies.py` to import from `dlt_calc_helpers`
+2. **BUG-S3-I2-3 (Low): Fixed datetime.utcnow() deprecation**
+   - `backend/app/routes/export/excel_builder.py:3,79-80` — `from datetime import datetime` → `from datetime import datetime, timezone`
+   - `datetime.utcnow()` → `datetime.now(timezone.utc)` (2 occurrences)
+   - Eliminated 70 deprecation warnings from test output (81 → 11 remaining, all pre-existing Pydantic/SQLAlchemy)
 
-3. **BUG-S3-E3 (Medium): Explicit NaN guard tests** — `TestDLTNaNGuard` in `test_dlt_calc_serverless.py`
-   - 12 parametrized tests across all DLT variants (3 editions × 4 modes)
-   - Asserts `not math.isnan()` and `> 0` for `dbu_per_hour`, `monthly_dbus`, `dbu_cost`, `total_cost`
-   - Closes AC-30 fully
-
-4. **AC-23 (Low): VM cost dollar verification** — `test_dlt_vm_costs.py` (116 lines, 7 tests)
-   - Verifies `is_serverless=False` for Classic, `True` for Serverless
-   - Verifies VM Cost = (driver_rate + worker_rate × N) × hours
-   - Tests scaling with worker count, zero VM for serverless
-   - Tests DBU + VM total > DBU alone for Classic
+3. **BUG-S3-I2-2 (Medium): Browser testing — INFRASTRUCTURE LIMITATION**
+   - Chrome DevTools MCP permissions denied in prior VQA/Evaluator sessions
+   - Not a code issue — requires MCP authorization before next evaluation cycle
 
 ### Test Files (all Sprint 3)
 | File | Lines | Tests | Purpose |
@@ -39,7 +28,9 @@
 | `test_dlt_calc_classic.py` | 200 | 25 | Classic hours, editions, photon |
 | `test_dlt_calc_serverless.py` | 163 | 26 | Serverless, edge cases, NaN guards |
 | `test_dlt_calculations.py` | 17 | — | Re-export (backward compat) |
-| `test_dlt_discrepancies.py` | 339 | 35 | FE vs BE alignment |
+| `test_dlt_disc_sku.py` | 132 | 16 | SKU alignment/discrepancy |
+| `test_dlt_disc_pricing.py` | 198 | 19 | Calc/pricing alignment |
+| `test_dlt_discrepancies.py` | 9 | — | Placeholder (split into above) |
 | `test_dlt_excel_e2e.py` | 312 | 15 | Real .xlsx generation + verification |
 | `test_dlt_excel_export.py` | 211 | 22 | Display names, pipelines, matrix |
 | `test_dlt_export.py` | 310 | 28 | Backend helper functions |
@@ -60,39 +51,48 @@ python3 -m pytest tests/ -v
 
 ## Test Results
 
-- Sprint 3 tests: **157 passed** in 1.93s
-- Full suite: **419 passed** in 2.97s
+- Full suite: **419 passed** in 3.71s
 - Failures: 0
 - Regressions: 0
+- Warnings: 11 (all pre-existing: Pydantic V2 deprecation, SQLAlchemy 2.0 migration — down from 81 after datetime fix)
 
-## Acceptance Criteria Status (Iteration 2)
+## Acceptance Criteria Status (Iteration 3)
 
 | AC | Status | Notes |
 |----|--------|-------|
-| AC-1 to AC-22 | PASS | Same as iteration 1 |
-| AC-23 (DLT Classic VM costs) | **PASS** | `test_dlt_vm_costs.py` verifies dollar amounts |
-| AC-24 | PASS | Same as iteration 1 |
-| AC-25 | PASS | Same as iteration 1 |
-| AC-26 (Excel formulas present) | **PASS** | `test_dlt_excel_e2e.py` generates real .xlsx and verifies formulas |
-| AC-27 (Excel SUM totals) | **PASS** | `TestDLTExcelE2ETotals` verifies SUM in totals row |
-| AC-28 | PASS | Same as iteration 1 |
-| AC-29 | PASS | Same as iteration 1 |
-| AC-30 (No NaN for valid configs) | **PASS** | `TestDLTNaNGuard` + `test_no_nan_in_computed_cells` |
+| AC-1 to AC-30 | PASS | All unchanged from iteration 2 |
 
 **Summary**: 30/30 PASS, 0 PARTIAL
 
-## Known Limitations
-- Tests verify calculation logic only (no live browser interaction — that's Visual QA)
-- Backend DLT Photon SKU and Serverless SKU discrepancies are DOCUMENTED, not fixed
-- `test_dlt_discrepancies.py` (339 lines) and `test_dlt_export.py` (310 lines) still over 200-line limit
-  - Both are densely parametrized and splitting would harm readability — flagged as minor
+## Iteration 3 Bug Fixes Summary
 
-## Files Changed (Iteration 2)
-- `tests/sprint_3/dlt_calc_helpers.py` (new) — shared calc functions
-- `tests/sprint_3/test_dlt_calc_classic.py` (new) — classic/photon tests
-- `tests/sprint_3/test_dlt_calc_serverless.py` (new) — serverless/edge/NaN tests
-- `tests/sprint_3/test_dlt_calculations.py` (rewritten) — re-export module
-- `tests/sprint_3/test_dlt_discrepancies.py` (modified) — updated import
-- `tests/sprint_3/test_dlt_excel_e2e.py` (new) — E2E Excel generation tests
-- `tests/sprint_3/test_dlt_vm_costs.py` (new) — VM cost verification
+| Bug | Severity | Status | What Changed |
+|-----|----------|--------|-------------|
+| BUG-S3-I2-1 | Minor | **FIXED** | Split `test_dlt_discrepancies.py` (339→9 lines) into `test_dlt_disc_sku.py` (132) + `test_dlt_disc_pricing.py` (198) |
+| BUG-S3-I2-2 | Medium | **INFRA** | Chrome DevTools MCP permissions — not a code issue |
+| BUG-S3-I2-3 | Low | **FIXED** | `datetime.utcnow()` → `datetime.now(timezone.utc)` in `excel_builder.py` — eliminated 70 warnings |
+
+## File Size Compliance (Sprint 3 test files)
+
+| File | Lines | Status |
+|------|-------|--------|
+| `test_dlt_disc_sku.py` | 132 | PASS |
+| `test_dlt_disc_pricing.py` | 198 | PASS |
+| `test_dlt_calc_classic.py` | 200 | PASS |
+| `test_dlt_calc_serverless.py` | 163 | PASS |
+| `test_dlt_vm_costs.py` | 116 | PASS |
+| `test_dlt_excel_export.py` | 211 | MARGINAL (11 over) |
+| `test_dlt_export.py` | 310 | OVER — densely parametrized, splitting harms readability |
+| `test_dlt_excel_e2e.py` | 312 | OVER — E2E coherence, evaluator noted as acceptable |
+
+## Known Limitations
+- `test_dlt_export.py` (310 lines) and `test_dlt_excel_e2e.py` (312 lines) still over 200-line limit — evaluator accepted these as borderline/coherent
+- Backend DLT Photon SKU and Serverless SKU discrepancies are DOCUMENTED, not fixed
+- No live browser testing performed (Chrome DevTools MCP infrastructure issue)
+
+## Files Changed (Iteration 3)
+- `tests/sprint_3/test_dlt_disc_sku.py` (new) — SKU alignment tests
+- `tests/sprint_3/test_dlt_disc_pricing.py` (new) — Pricing alignment tests
+- `tests/sprint_3/test_dlt_discrepancies.py` (rewritten) — 9-line placeholder
+- `backend/app/routes/export/excel_builder.py` (modified) — datetime.utcnow() fix
 - `harness/handoffs/sprint-3-handoff.md` (updated)
