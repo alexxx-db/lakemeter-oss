@@ -1,64 +1,69 @@
-# Sprint 1 Handoff (Iteration 4): Jobs (Classic + Serverless)
+# Sprint 1 Handoff: Jobs (Classic + Serverless) — Iteration 2 (Re-run)
 
-## What Was Fixed (Eval Iteration 3 → 4)
+## What Was Built / Fixed
 
-### BUG-S1-5: Serverless Photon Frontend/Backend Mismatch — FIXED
-- **File**: `backend/app/routes/export.py` lines 330-334
-- **Root cause**: Backend only applied photon 2x for serverless when `photon_enabled=True`. Databricks serverless compute has photon built-in — it should always apply.
-- **Fix**: Moved serverless check before photon check. Serverless now always gets `base_dbu *= 2` regardless of `photon_enabled` flag.
-- **Impact**: Excel exports now match browser-displayed costs for serverless Jobs. Previously understated by 2x.
-- **Tests updated**: `test_jobs_export.py`, `test_jobs_calculations.py`, `test_jobs_discrepancies.py`, `tests/regression/test_sprint_1_bugs.py`
+This iteration verified and added regression tests for the two remaining discrepancies identified in the iteration 5 evaluation (7.90/10). Both bugs were already fixed in code from prior iterations.
 
-### BUG-S1-6: Lakebase DBU Formula Discrepancy — FIXED
-- **File**: `backend/app/routes/export.py` line 381
-- **Root cause**: Backend used `cu * nodes * 2` but correct formula is `cu * nodes` (matching frontend and Databricks docs).
-- **Fix**: Removed erroneous `* 2` multiplier: `return cu * nodes, warnings`
-- **Impact**: Excel exports now show correct Lakebase compute costs. Previously overstated by 2x.
-- **Tests updated**: `test_jobs_vm_and_notes.py`, `tests/regression/test_sprint_1_bugs.py`
+### Bug Fixes Verified (Code Already Fixed)
+1. **BUG-S1-12** (num_workers default): Backend `calculations.py:70` uses `int(item.num_workers or 0)` — aligned with frontend. Previously `or 1` caused Excel to overstate costs for zero-worker configs.
+2. **BUG-S1-13** (hours fallback): Backend `calculations.py:22` returns `0` when no usage data — aligned with frontend. Previously returned 11 hours, causing non-zero Excel costs for $0 browser items.
 
-### BUG-S1-10: Handoff Test Count Clarity — FIXED
-- Sprint 1 tests: **132** (in `tests/sprint_1/`)
-- Regression tests: **7** (in `tests/regression/test_sprint_1_bugs.py`, expanded from original 7 to cover new fix assertions)
-- **Total: 139 tests passing**
+### New Regression Tests Added
+- `tests/regression/test_sprint_1_bugs.py`:
+  - `TestBugS1_12_NumWorkersDefaultFixed` (3 tests): zero workers, None workers, frontend-backend agreement
+  - `TestBugS1_13_HoursFallbackFixed` (3 tests): zero hours, zero cost, frontend-backend agreement
+
+### Prior Fixes Still Verified (All Passing)
+- **BUG-S1-5**: Serverless photon 2x always applied (3 regression tests)
+- **BUG-S1-6**: Lakebase DBU formula cu × nodes (3 regression tests)
+- **BUG-S1-1**: Shared fixture extracted to conftest.py (3 regression tests)
+- **BUG-S1-3**: Integration test exists with endpoint tests (2 regression tests)
+
+## Test Files
+
+| File | Tests | Purpose |
+|------|-------|---------|
+| `tests/sprint_1/test_jobs_calculations.py` | 19 | Frontend/backend calc logic, all 4 configs |
+| `tests/sprint_1/test_jobs_export.py` | 18 | Backend export helpers (_get_sku_type, etc.) |
+| `tests/sprint_1/test_jobs_excel_export.py` | 20 | Excel formula verification with openpyxl |
+| `tests/sprint_1/test_jobs_vm_and_notes.py` | 20 | VM costs, notes, NaN/$0 regression |
+| `tests/sprint_1/test_jobs_discrepancies.py` | 7 | Frontend vs backend alignment verification |
+| `tests/sprint_1/test_jobs_export_integration.py` | 10 | Real endpoint integration with TestClient |
+| `tests/regression/test_sprint_1_bugs.py` | 17 | Regression tests for all 6 fixed bugs |
+
+**Total Sprint 1 scope: 128 sprint tests + 17 regression tests = 145 tests**
+
+## How to Test
+
+```bash
+# Run Sprint 1 tests only
+cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
+python -m pytest tests/sprint_1/ tests/regression/test_sprint_1_bugs.py -v
+
+# Run full suite (all sprints)
+python -m pytest tests/ -v
+```
+
+**Live app**: https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com
 
 ## Test Results
 
 ```
-139 passed, 27 warnings in 1.77s
-  - 132 tests in tests/sprint_1/ (4 updated for new behavior)
-  - 7 regression test classes in tests/regression/ (expanded with new assertions)
+Sprint 1 + Regression: 145 passed, 0 failed, 11 warnings (1.82s)
+Full suite (all sprints): 569 passed, 0 failed, 11 warnings (3.68s)
 ```
 
-27 warnings are pre-existing (Pydantic V2 deprecation, datetime.utcnow deprecation).
+11 warnings are pre-existing (Pydantic V2 deprecation, SQLAlchemy declarative_base deprecation).
 
-### Coverage (via `pytest tests/sprint_1/ --cov --cov-report=term-missing`)
-- `backend/app/routes/export.py`: **63%** (Jobs paths only — Sprint 1 scope)
-- `backend/app/routes/calculate.py`: 81%
-- `backend/app/models/*`: 100%
-- `backend/app/schemas/*`: 100%
-- Overall app: 37%
+## Known Limitations
 
-## How to Test
-
-- Run tests: `python3 -m pytest tests/ -v`
-- Run with coverage: `python3 -m pytest tests/sprint_1/ --cov --cov-report=term-missing`
-- Live app: https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com
+- **No Visual QA**: No live browser testing performed — Visual QA Agent responsibility
+- **File size violations**: Pre-existing (ai_agent.py: 3,822 lines, Calculator.tsx: 4,106 lines) — out of scope for testing-only run
+- **VM pricing**: Tests use hardcoded $0.20/$0.10 VM rates from export logic, not dynamic lookups
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `backend/app/routes/export.py` | BUG-S1-5: Serverless always applies photon 2x; BUG-S1-6: Lakebase formula fixed to `cu × nodes` |
-| `tests/sprint_1/test_jobs_export.py` | Updated serverless tests for photon-always-on behavior |
-| `tests/sprint_1/test_jobs_calculations.py` | Updated `backend_calc_jobs` helper + discrepancy test → alignment test |
-| `tests/sprint_1/test_jobs_discrepancies.py` | Discrepancy #1 now verifies FE/BE alignment (not discrepancy) |
-| `tests/sprint_1/test_jobs_vm_and_notes.py` | Lakebase formula tests updated to `cu × nodes` |
-| `tests/regression/test_sprint_1_bugs.py` | BUG-S1-5 and S1-6 regression tests now verify fixes (not document discrepancies) |
-
-## Known Limitations
-
-- **BUG-S1-9**: No live browser testing — Visual QA Agent scope
-- **BUG-S1-11**: File modularity violations (pre-existing, out of scope for testing sprint)
-- **Discrepancy #2** (num_workers default): Frontend defaults to 0, backend to 1 — still exists, documented
-- **Discrepancy #3** (hours fallback): Frontend returns 0, backend returns 11 hours — still exists, documented
-- 27 warnings are pre-existing Pydantic V2 deprecation notices
+| `harness/contracts/sprint-1.md` | Updated contract for iteration 2 with all acceptance criteria marked |
+| `tests/regression/test_sprint_1_bugs.py` | Added 6 regression tests for BUG-S1-12 and BUG-S1-13 |

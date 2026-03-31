@@ -7,6 +7,8 @@ BUG-S1-3: No integration test → FIXED (test_jobs_export_integration.py)
 BUG-S1-4: No coverage report → FIXED (run with --cov)
 BUG-S1-5: Serverless photon 2x mismatch → FIXED (serverless always applies photon)
 BUG-S1-6: Lakebase DBU formula discrepancy → FIXED (removed erroneous *2)
+BUG-S1-12: num_workers default discrepancy → FIXED (or 1 → or 0 in calculations.py:70)
+BUG-S1-13: Hours fallback discrepancy → FIXED (11 hrs → 0 in calculations.py:22)
 """
 import os
 import sys
@@ -198,3 +200,120 @@ class TestBugS1_6_LakebaseDBUFormulaFixed:
         # 112 × 3 = 336
         assert dbu_hr == pytest.approx(336.0), \
             f"Lakebase 112CU × 3 nodes should be 336.0, got {dbu_hr}"
+
+
+class TestBugS1_12_NumWorkersDefaultFixed:
+    """BUG-S1-12: Backend defaulted num_workers to 1 via `int(item.num_workers or 1)`.
+    Frontend uses 0. This caused Excel to overstate costs for zero-worker configs.
+    FIXED: Backend now uses `int(item.num_workers or 0)` in calculations.py:70.
+    Regression: verify backend returns driver-only DBU when num_workers is 0 or None.
+    """
+
+    def test_zero_workers_returns_driver_only(self):
+        """num_workers=0 → DBU/hr = driver_dbu only (no worker contribution)."""
+        from app.routes.export import _calculate_dbu_per_hour
+
+        item = make_line_item(
+            workload_type="JOBS", driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge", num_workers=0,
+            photon_enabled=False, serverless_enabled=False,
+        )
+        dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
+        # i3.xlarge = 1.0 DBU/hr. With 0 workers: driver only = 1.0
+        assert dbu_hr == pytest.approx(1.0), \
+            f"0 workers should give driver-only DBU (1.0), got {dbu_hr}"
+
+    def test_none_workers_returns_driver_only(self):
+        """num_workers=None → same as 0, driver-only."""
+        from app.routes.export import _calculate_dbu_per_hour
+
+        item = make_line_item(
+            workload_type="JOBS", driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge", num_workers=None,
+            photon_enabled=False, serverless_enabled=False,
+        )
+        dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(1.0), \
+            f"None workers should give driver-only DBU (1.0), got {dbu_hr}"
+
+    def test_frontend_backend_agree_on_zero_workers(self):
+        """Frontend and backend both return driver-only for 0 workers."""
+        from tests.sprint_1.test_jobs_calculations import (
+            frontend_calc_jobs, backend_calc_jobs,
+        )
+
+        fe = frontend_calc_jobs(
+            driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=0,
+            photon_enabled=False, serverless_enabled=False,
+            hours_per_month=100,
+        )
+        be = backend_calc_jobs(
+            driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=0,
+            photon_enabled=False, serverless_enabled=False,
+            hours_per_month=100,
+        )
+        assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"]), \
+            f"FE ({fe['dbu_per_hour']}) and BE ({be['dbu_per_hour']}) must agree on 0 workers"
+
+
+class TestBugS1_13_HoursFallbackFixed:
+    """BUG-S1-13: Backend returned 11 hours when no usage data was set.
+    Frontend returned 0. This caused Excel to show non-zero costs for $0 browser items.
+    FIXED: Backend now returns 0 in calculations.py:22.
+    Regression: verify backend returns 0 when no usage data provided.
+    """
+
+    def test_no_usage_data_returns_zero_hours(self):
+        """No runs_per_day, avg_runtime_minutes, or hours_per_month → 0 hours."""
+        from app.routes.export import _calculate_hours_per_month
+
+        item = make_line_item(
+            workload_type="JOBS", runs_per_day=None,
+            avg_runtime_minutes=None, hours_per_month=None,
+        )
+        hours = _calculate_hours_per_month(item)
+        assert hours == pytest.approx(0.0), \
+            f"No usage data should return 0 hours, got {hours}"
+
+    def test_no_usage_data_returns_zero_cost(self):
+        """No usage data → 0 hours → 0 monthly DBUs → $0 cost."""
+        from app.routes.export import (
+            _calculate_hours_per_month, _calculate_dbu_per_hour,
+            _get_dbu_price, _get_sku_type,
+        )
+
+        item = make_line_item(
+            workload_type="JOBS", driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge", num_workers=2,
+            photon_enabled=False, serverless_enabled=False,
+        )
+        hours = _calculate_hours_per_month(item)
+        dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
+        sku = _get_sku_type(item, "aws")
+        dbu_rate, _ = _get_dbu_price("aws", "us-east-1", "PREMIUM", sku)
+
+        monthly_dbus = dbu_hr * hours
+        cost = monthly_dbus * dbu_rate
+
+        assert hours == pytest.approx(0.0), "Hours should be 0"
+        assert monthly_dbus == pytest.approx(0.0), "Monthly DBUs should be 0"
+        assert cost == pytest.approx(0.0), "Cost should be $0"
+
+    def test_frontend_backend_agree_on_zero_hours(self):
+        """Frontend and backend both return 0 when no usage data set."""
+        from tests.sprint_1.test_jobs_calculations import (
+            frontend_calc_jobs, backend_calc_jobs,
+        )
+
+        fe = frontend_calc_jobs(
+            driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
+            photon_enabled=False, serverless_enabled=False,
+        )
+        be = backend_calc_jobs(
+            driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
+            photon_enabled=False, serverless_enabled=False,
+        )
+        assert fe["hours_per_month"] == pytest.approx(0.0), "Frontend: 0 hours"
+        assert be["hours_per_month"] == pytest.approx(0.0), "Backend: 0 hours"
+        assert fe["dbu_cost"] == pytest.approx(0.0), "Frontend: $0 cost"
+        assert be["dbu_cost"] == pytest.approx(0.0), "Backend: $0 cost"
