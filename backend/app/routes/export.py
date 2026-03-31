@@ -297,8 +297,8 @@ def _calculate_hours_per_month(item) -> float:
         return (runs * runtime / 60) * days
     if item.hours_per_month:
         return float(item.hours_per_month)
-    # Fallback defaults
-    return (1 * 30 / 60) * 22  # 1 run, 30 min, 22 days = 11 hrs
+    # No usage data provided — return 0 (consistent with frontend)
+    return 0
 
 
 def _calculate_dbu_per_hour(item, cloud: str = 'aws') -> tuple[float, list[str]]:
@@ -324,13 +324,18 @@ def _calculate_dbu_per_hour(item, cloud: str = 'aws') -> tuple[float, list[str]]
         if not worker_found and item.worker_node_type:
             warnings.append(f"Worker DBU rate not found for {item.worker_node_type}, using 0.5")
 
-        num_workers = int(item.num_workers or 1)
+        num_workers = int(item.num_workers or 0)
         base_dbu = float(driver_dbu) + (float(worker_dbu) * num_workers)
 
         if item.serverless_enabled:
             # Serverless compute always has photon built-in (2x multiplier)
             base_dbu *= 2
-            mode_multiplier = 2 if item.serverless_mode == 'performance' else 1
+            # ALL_PURPOSE Serverless only supports Performance mode (always 2x)
+            # Jobs/DLT Serverless support both Standard (1x) and Performance (2x)
+            if wt == 'ALL_PURPOSE':
+                mode_multiplier = 2
+            else:
+                mode_multiplier = 2 if item.serverless_mode == 'performance' else 1
             return base_dbu * mode_multiplier, warnings
 
         if item.photon_enabled:
@@ -897,7 +902,7 @@ def _build_estimate_excel(estimate_id: UUID, current_user: User, db: Session):
         # VM costs
         driver_vm_cost_per_hour = 0
         worker_vm_cost_per_hour = 0
-        num_workers = int(item.num_workers or 1)
+        num_workers = int(item.num_workers or 0)
         if not is_serverless and wt in ('JOBS', 'ALL_PURPOSE', 'DLT'):
             driver_vm_cost_per_hour = 0.20
             worker_vm_cost_per_hour = 0.10

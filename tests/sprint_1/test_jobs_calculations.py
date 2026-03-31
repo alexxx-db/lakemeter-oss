@@ -99,18 +99,18 @@ def backend_calc_jobs(
     days_per_month: int = 22,
     dbu_price: float = 0.15,
 ) -> dict:
-    """Replicate backend export.py logic for JOBS."""
-    # Hours (export.py lines 286-301)
+    """Replicate backend export.py logic for JOBS (post-fix)."""
+    # Hours (export.py) — FIXED: fallback is 0 (not 11)
     if runs_per_day and avg_runtime_minutes:
         hours = (runs_per_day * avg_runtime_minutes / 60) * days_per_month
     elif hours_per_month:
         hours = hours_per_month
     else:
-        hours = (1 * 30 / 60) * 22  # Backend fallback: 11 hours
+        hours = 0  # No usage data = 0 hours (aligned with frontend)
 
-    # DBU/hr (export.py lines 309-337)
-    # Backend defaults to num_workers or 1 (line 327)
-    nw = num_workers if num_workers else 1  # Backend quirk
+    # DBU/hr (export.py)
+    # FIXED: num_workers defaults to 0 (not 1) — aligned with frontend
+    nw = num_workers if num_workers else 0
     base_dbu = driver_dbu_rate + (worker_dbu_rate * nw)
 
     if serverless_enabled:
@@ -198,13 +198,13 @@ class TestHoursCalculation:
         assert result["hours_per_month"] == pytest.approx(110.0)
 
     def test_backend_fallback_hours(self):
-        """Backend fallback when neither run-based nor hours_per_month set."""
+        """Backend returns 0 when neither run-based nor hours_per_month set (FIXED)."""
         result = backend_calc_jobs(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
             photon_enabled=False, serverless_enabled=False,
         )
-        # Backend fallback: (1 * 30 / 60) * 22 = 11 hours
-        assert result["hours_per_month"] == pytest.approx(11.0)
+        # FIXED: Backend now returns 0 (aligned with frontend)
+        assert result["hours_per_month"] == pytest.approx(0.0)
 
 
 # ============================================================
@@ -472,13 +472,10 @@ class TestFrontendVsBackendDiscrepancies:
         assert fe["dbu_per_hour"] == pytest.approx(6.0)
         assert be["dbu_per_hour"] == pytest.approx(6.0)
 
-    def test_num_workers_zero_discrepancy(self):
+    def test_num_workers_zero_aligned(self):
         """
-        KNOWN DISCREPANCY: Frontend defaults num_workers to 0,
-        backend defaults to 1 when num_workers is falsy (0 or None).
-
-        Frontend: driver_dbu + worker_dbu × 0 = 1.0
-        Backend: driver_dbu + worker_dbu × 1 = 2.0
+        FIXED: Frontend and backend both default num_workers to 0.
+        Both: driver_dbu + worker_dbu × 0 = 1.0
         """
         fe = frontend_calc_jobs(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=0,
@@ -491,9 +488,9 @@ class TestFrontendVsBackendDiscrepancies:
             hours_per_month=100,
         )
         assert fe["dbu_per_hour"] == pytest.approx(1.0), "Frontend: 0 workers = driver only"
-        assert be["dbu_per_hour"] == pytest.approx(2.0), "Backend: 0 workers defaults to 1"
-        assert fe["dbu_per_hour"] != pytest.approx(be["dbu_per_hour"]), \
-            "DISCREPANCY: Backend defaults 0 workers to 1"
+        assert be["dbu_per_hour"] == pytest.approx(1.0), "Backend: 0 workers = driver only (FIXED)"
+        assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"]), \
+            "FE and BE now agree on 0 workers"
 
     def test_sku_always_matches(self):
         """SKU mapping should be identical between frontend and backend."""

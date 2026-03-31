@@ -98,8 +98,8 @@ class TestAllPurposeCalculateDBUPerHour:
 
     def test_serverless_standard_mode(self):
         """
-        Serverless standard: (1.0 + 1.0*4) * 2 (photon) * 1 (standard) = 10.0.
-        Note: Backend does NOT force performance for ALL_PURPOSE.
+        Serverless standard: ALL_PURPOSE always forces performance (2x).
+        FIXED: (1.0 + 1.0*4) * 2 (photon) * 2 (always perf) = 20.0.
         """
         item = make_line_item(
             workload_type="ALL_PURPOSE",
@@ -110,8 +110,8 @@ class TestAllPurposeCalculateDBUPerHour:
             serverless_mode="standard",
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        # Backend: base(5) * photon(2) * standard(1) = 10
-        assert dbu_hr == pytest.approx(10.0)
+        # FIXED: ALL_PURPOSE always performance: base(5) * photon(2) * perf(2) = 20
+        assert dbu_hr == pytest.approx(20.0)
 
     def test_serverless_performance_mode(self):
         """Serverless perf: (1.0 + 1.0*4) * 2 (photon) * 2 (perf) = 20.0."""
@@ -154,8 +154,8 @@ class TestAllPurposeCalculateDBUPerHour:
         # Fallback: driver=0.25 + worker=0.5*4 = 2.25
         assert dbu_hr == pytest.approx(2.25)
 
-    def test_num_workers_defaults_to_1(self):
-        """Backend defaults num_workers=None to 1 (known quirk)."""
+    def test_num_workers_defaults_to_0(self):
+        """Backend defaults num_workers=None to 0 (FIXED: was 1)."""
         item = make_line_item(
             workload_type="ALL_PURPOSE",
             driver_node_type="i3.xlarge",
@@ -165,8 +165,8 @@ class TestAllPurposeCalculateDBUPerHour:
             serverless_enabled=False,
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # 1.0 + 1.0*1 = 2.0 (backend defaults None to 1)
-        assert dbu_hr == pytest.approx(2.0)
+        # FIXED: int(None or 0) = 0, so driver_dbu only. i3.xlarge rate = 1.0
+        assert dbu_hr == pytest.approx(1.0)
 
 
 # ============================================================
@@ -195,10 +195,10 @@ class TestAllPurposeCalculateHoursPerMonth:
         )
         assert _calculate_hours_per_month(item) == pytest.approx(75.0)
 
-    def test_fallback_11_hours(self):
-        """No data -> fallback 11 hours."""
+    def test_fallback_zero_hours(self):
+        """No data -> 0 hours (FIXED: was 11)."""
         item = make_line_item()
-        assert _calculate_hours_per_month(item) == pytest.approx(11.0)
+        assert _calculate_hours_per_month(item) == pytest.approx(0.0)
 
 
 # ============================================================

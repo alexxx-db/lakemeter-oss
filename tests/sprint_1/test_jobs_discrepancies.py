@@ -95,23 +95,16 @@ class TestDiscrepancy01ServerlessPhotonFixed:
         assert dbu_hr > 0, "DBU/hr should be positive for serverless Jobs"
 
 
-class TestDiscrepancy02NumWorkersDefault:
+class TestDiscrepancy02NumWorkersDefaultFixed:
     """
-    DISCREPANCY #2: Default num_workers
+    DISCREPANCY #2 — FIXED (BUG-S1-12):
 
-    Frontend: num_workers defaults to 0 when falsy
-              costCalculation.ts line 125: const numWorkers = item.num_workers || 0
-    Backend:  num_workers defaults to 1 when falsy
-              export.py line 327: num_workers = int(item.num_workers or 1)
-
-    Impact: When num_workers is 0 or None:
-    - Frontend: driver_dbu only (e.g., 1.0)
-    - Backend: driver_dbu + 1×worker_dbu (e.g., 2.0)
-    - Excel shows higher DBU/hr than browser for 0-worker configs
+    Frontend and backend now BOTH default num_workers to 0 (driver only).
+    Previously backend used 1, causing Excel to overstate costs.
     """
 
-    def test_zero_workers(self):
-        """Frontend=1.0, Backend=2.0 when num_workers=0."""
+    def test_zero_workers_now_aligned(self):
+        """FIXED: Frontend=1.0, Backend=1.0 when num_workers=0."""
         fe = frontend_calc_jobs(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=0,
             photon_enabled=False, serverless_enabled=False,
@@ -123,10 +116,12 @@ class TestDiscrepancy02NumWorkersDefault:
             hours_per_month=100,
         )
         assert fe["dbu_per_hour"] == pytest.approx(1.0)
-        assert be["dbu_per_hour"] == pytest.approx(2.0)
+        assert be["dbu_per_hour"] == pytest.approx(1.0)
+        assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"]), \
+            "BUG-S1-12 fixed: FE and BE both use 0 workers when num_workers=0"
 
     def test_backend_export_directly_zero_workers(self):
-        """Verify the actual backend export function defaults to 1."""
+        """Verify the actual backend export function now defaults to 0."""
         item = make_line_item(
             workload_type="JOBS",
             driver_node_type="i3.xlarge",
@@ -136,10 +131,11 @@ class TestDiscrepancy02NumWorkersDefault:
             serverless_enabled=False,
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # Backend: int(0 or 1) = 1, so 1.0 + 1.0×1 = 2.0
-        assert dbu_hr == pytest.approx(2.0)
+        # i3.xlarge has dbu_rate=1.0. With 0 workers: driver only = 1.0
+        assert dbu_hr == pytest.approx(1.0), \
+            f"Backend 0 workers should use driver-only (1.0 for i3.xlarge), got {dbu_hr}"
 
-    def test_nonzero_workers_no_discrepancy(self):
+    def test_nonzero_workers_still_match(self):
         """When num_workers > 0, both agree."""
         for n in [1, 2, 5, 10]:
             fe = frontend_calc_jobs(
@@ -156,22 +152,16 @@ class TestDiscrepancy02NumWorkersDefault:
                 f"Mismatch at num_workers={n}"
 
 
-class TestDiscrepancy03BackendHoursFallback:
+class TestDiscrepancy03BackendHoursFallbackFixed:
     """
-    DISCREPANCY #3: Hours fallback when no usage config
+    DISCREPANCY #3 — FIXED (BUG-S1-13):
 
-    Frontend: Returns 0 hours (no fallback)
-              costCalculation.ts: hoursPerMonth stays 0 if nothing set
-    Backend:  Returns 11 hours as fallback
-              export.py line 301: return (1 * 30 / 60) * 22
-
-    Impact: If a line item has no usage config at all:
-    - Frontend shows 0 DBUs and $0 cost
-    - Backend Excel shows 11 hours worth of DBUs and cost
+    Frontend and backend now BOTH return 0 hours when no usage data.
+    Previously backend returned 11 hours, causing Excel to show cost for $0 browser items.
     """
 
-    def test_no_usage_config(self):
-        """Frontend=0 hours, Backend=11 hours when nothing set."""
+    def test_no_usage_config_now_aligned(self):
+        """FIXED: Frontend=0 hours, Backend=0 hours when nothing set."""
         fe = frontend_calc_jobs(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=2,
             photon_enabled=False, serverless_enabled=False,
@@ -181,4 +171,6 @@ class TestDiscrepancy03BackendHoursFallback:
             photon_enabled=False, serverless_enabled=False,
         )
         assert fe["hours_per_month"] == pytest.approx(0.0)
-        assert be["hours_per_month"] == pytest.approx(11.0)
+        assert be["hours_per_month"] == pytest.approx(0.0)
+        assert fe["dbu_cost"] == 0
+        assert be["dbu_cost"] == 0

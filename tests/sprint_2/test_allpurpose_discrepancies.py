@@ -1,13 +1,10 @@
 """
-Sprint 2: All-Purpose Frontend vs Backend Discrepancy Detection
+Sprint 2: All-Purpose Frontend vs Backend Alignment Tests
 
-Detects and documents differences between frontend (costCalculation.ts)
-and backend (export.py) calculation logic for All-Purpose workloads.
-
-Key discrepancies:
-1. ALL_PURPOSE Serverless mode: FE always forces 2x, BE uses stored mode
-2. num_workers=0: FE uses 0, BE defaults to 1
-3. Hours fallback: FE returns 0, BE returns 11
+After iteration 2 fixes, all three discrepancies are now RESOLVED:
+1. ALL_PURPOSE Serverless mode: BE now always forces 2x (matching FE)
+2. num_workers=0: BE now uses 0 (matching FE)
+3. Hours fallback: BE now returns 0 (matching FE)
 """
 import pytest
 from tests.sprint_2.test_allpurpose_calculations import (
@@ -70,15 +67,11 @@ class TestClassicPhotonAlignment:
         assert fe["sku"] == be["sku"]
 
 
-class TestServerlessModeDiscrepancy:
+class TestServerlessModeAlignment:
     """
-    DISCREPANCY: ALL_PURPOSE Serverless multiplier.
+    FIXED: ALL_PURPOSE Serverless multiplier.
 
-    Frontend: ALWAYS uses performance (2x), regardless of serverless_mode.
-    Backend: Uses whatever serverless_mode is stored (standard=1x, performance=2x).
-
-    When serverless_mode='standard', FE shows 2x but BE exports 1x.
-    When serverless_mode='performance', they agree.
+    Both frontend and backend now always use performance mode (2x) for ALL_PURPOSE.
     """
 
     def test_performance_mode_aligned(self):
@@ -96,11 +89,10 @@ class TestServerlessModeDiscrepancy:
         assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"])
         assert fe["dbu_per_hour"] == pytest.approx(20.0)
 
-    def test_standard_mode_discrepancy(self):
+    def test_standard_mode_now_aligned(self):
         """
-        KNOWN DISCREPANCY: When serverless_mode='standard':
-        - Frontend: 5.0 * 2 * 2 = 20.0 (always performance)
-        - Backend:  5.0 * 2 * 1 = 10.0 (standard mode)
+        FIXED: When serverless_mode='standard', both FE and BE use 2x for ALL_PURPOSE.
+        Previously: FE=20.0, BE=10.0. Now: both=20.0.
         """
         fe = frontend_calc_allpurpose(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=4,
@@ -112,41 +104,32 @@ class TestServerlessModeDiscrepancy:
             photon_enabled=False, serverless_enabled=True,
             serverless_mode="standard", hours_per_month=730,
         )
-        # Frontend always uses 2x for ALL_PURPOSE serverless
-        assert fe["dbu_per_hour"] == pytest.approx(20.0), \
-            "Frontend: ALL_PURPOSE serverless always performance (2x)"
-        # Backend uses the stored mode (standard=1x)
-        assert be["dbu_per_hour"] == pytest.approx(10.0), \
-            "Backend: ALL_PURPOSE serverless with standard mode (1x)"
-        # They disagree — this is a known discrepancy
-        assert fe["dbu_per_hour"] != pytest.approx(be["dbu_per_hour"]), \
-            "DISCREPANCY: FE forces 2x, BE uses stored mode"
+        assert fe["dbu_per_hour"] == pytest.approx(20.0)
+        assert be["dbu_per_hour"] == pytest.approx(20.0)
+        assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"]), \
+            "FE and BE should now agree for ALL_PURPOSE serverless standard mode"
 
-    def test_discrepancy_ratio_is_2x(self):
-        """The discrepancy is exactly a 2x factor when mode='standard'."""
-        fe = frontend_calc_allpurpose(
-            driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=4,
-            photon_enabled=False, serverless_enabled=True,
-            serverless_mode="standard", hours_per_month=730,
-        )
-        be = backend_calc_allpurpose(
-            driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=4,
-            photon_enabled=False, serverless_enabled=True,
-            serverless_mode="standard", hours_per_month=730,
-        )
-        assert fe["dbu_per_hour"] / be["dbu_per_hour"] == pytest.approx(2.0)
+    def test_both_modes_produce_same_result(self):
+        """Standard and performance mode both yield 20.0 for ALL_PURPOSE serverless."""
+        for mode in ("standard", "performance"):
+            be = backend_calc_allpurpose(
+                driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=4,
+                photon_enabled=False, serverless_enabled=True,
+                serverless_mode=mode, hours_per_month=730,
+            )
+            assert be["dbu_per_hour"] == pytest.approx(20.0), \
+                f"ALL_PURPOSE serverless {mode} mode should always be 20.0"
 
 
-class TestNumWorkersDiscrepancy:
+class TestNumWorkersAlignment:
     """
-    KNOWN DISCREPANCY (from Sprint 1): num_workers=0 handling.
+    FIXED: num_workers=0 handling now matches between FE and BE.
 
-    Frontend: uses 0 workers (driver only)
-    Backend: defaults 0 to 1 worker
+    Both use 0 workers (driver only) when num_workers=0.
     """
 
-    def test_zero_workers_discrepancy(self):
-        """FE: driver only (1.0). BE: driver + 1 worker (2.0)."""
+    def test_zero_workers_now_aligned(self):
+        """FIXED: Both FE and BE treat 0 workers as driver-only."""
         fe = frontend_calc_allpurpose(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=0,
             photon_enabled=False, serverless_enabled=False,
@@ -157,21 +140,36 @@ class TestNumWorkersDiscrepancy:
             photon_enabled=False, serverless_enabled=False,
             hours_per_month=730,
         )
-        assert fe["dbu_per_hour"] == pytest.approx(1.0), "FE: 0 workers"
-        assert be["dbu_per_hour"] == pytest.approx(2.0), "BE: defaults 0->1"
-        assert fe["dbu_per_hour"] != pytest.approx(be["dbu_per_hour"])
+        assert fe["dbu_per_hour"] == pytest.approx(1.0), "FE: 0 workers = driver only"
+        assert be["dbu_per_hour"] == pytest.approx(1.0), "BE: 0 workers = driver only"
+        assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"])
+
+    def test_explicit_workers_still_match(self):
+        """Explicit num_workers should still work correctly."""
+        for n in (1, 2, 4, 8):
+            fe = frontend_calc_allpurpose(
+                driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=n,
+                photon_enabled=False, serverless_enabled=False,
+                hours_per_month=730,
+            )
+            be = backend_calc_allpurpose(
+                driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=n,
+                photon_enabled=False, serverless_enabled=False,
+                hours_per_month=730,
+            )
+            assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"]), \
+                f"FE/BE mismatch with {n} workers"
 
 
-class TestHoursFallbackDiscrepancy:
+class TestHoursFallbackAlignment:
     """
-    KNOWN DISCREPANCY (from Sprint 1): no hours/runs set.
+    FIXED: No hours/runs set now returns 0 in both FE and BE.
 
-    Frontend: returns 0 hours
-    Backend: returns 11 hours (fallback)
+    Previously: FE=0, BE=11. Now: both=0.
     """
 
-    def test_no_hours_no_runs_discrepancy(self):
-        """FE: 0 hours (0 cost). BE: 11 hours (non-zero cost)."""
+    def test_no_hours_no_runs_now_aligned(self):
+        """FIXED: Both FE and BE return 0 hours when no input."""
         fe = frontend_calc_allpurpose(
             driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=4,
             photon_enabled=False, serverless_enabled=False,
@@ -181,9 +179,24 @@ class TestHoursFallbackDiscrepancy:
             photon_enabled=False, serverless_enabled=False,
         )
         assert fe["hours_per_month"] == pytest.approx(0)
-        assert be["hours_per_month"] == pytest.approx(11.0)
+        assert be["hours_per_month"] == pytest.approx(0)
         assert fe["dbu_cost"] == 0
-        assert be["dbu_cost"] > 0
+        assert be["dbu_cost"] == 0
+
+    def test_explicit_hours_still_work(self):
+        """Explicit hours_per_month still works correctly."""
+        for h in (100, 200, 730):
+            fe = frontend_calc_allpurpose(
+                driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=4,
+                photon_enabled=False, serverless_enabled=False,
+                hours_per_month=h,
+            )
+            be = backend_calc_allpurpose(
+                driver_dbu_rate=1.0, worker_dbu_rate=1.0, num_workers=4,
+                photon_enabled=False, serverless_enabled=False,
+                hours_per_month=h,
+            )
+            assert fe["hours_per_month"] == pytest.approx(be["hours_per_month"])
 
 
 class TestSKUAlignment:

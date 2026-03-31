@@ -1,64 +1,74 @@
-# Sprint 2 Handoff: All-Purpose (Classic + Serverless)
+# Sprint 2 Handoff (Iteration 2): All-Purpose (Classic + Serverless)
 
 ## What Was Built
 
-99 new tests across 6 files covering All-Purpose workload type calculations:
+### Iteration 1 (99 tests)
+99 tests across 6 files covering All-Purpose workload calculations, export, discrepancies, VM costs, and integration.
 
-| File | Tests | Coverage |
-|------|-------|----------|
-| `test_allpurpose_calculations.py` | 26 | Frontend/backend formula replication, hours, classic/photon/serverless, edge cases |
-| `test_allpurpose_discrepancies.py` | 12 | FE/BE alignment tests, **new serverless mode discrepancy** |
-| `test_allpurpose_export.py` | 15 | Backend export helpers: SKU, DBU/hr, hours, serverless detection, pricing |
-| `test_allpurpose_excel_export.py` | 22 | Excel formula presence, computed values, totals row SUM formulas |
-| `test_allpurpose_vm_and_notes.py` | 12 | VM cost presence/absence, display name, config details, pricing tiers |
-| `test_allpurpose_export_integration.py` | 12 | FastAPI TestClient with mocked DB/auth, real export pipeline |
+### Iteration 2 (fixes + 12 new tests)
+**3 backend code fixes** in `export.py` + **10 new regression tests** + **updated 8 existing tests** to reflect fixed behavior.
 
-### Shared Test Infrastructure
-- `tests/sprint_2/conftest.py` — `make_line_item(**kwargs)` factory with ALL_PURPOSE defaults
-- Fixtures: `aws_instance_rates`, `us_east_1_premium_rates` (from conftest.py)
+#### Backend Fixes
+1. **BUG-S1-12 FIXED**: `export.py:327` — `num_workers` default changed from `or 1` to `or 0` (aligned with frontend)
+2. **BUG-S1-13 FIXED**: `export.py:301` — Hours fallback changed from 11 hrs to 0 (aligned with frontend)
+3. **BUG-S2-1 FIXED**: `export.py:333` — ALL_PURPOSE Serverless now always uses performance mode (2x), matching frontend behavior
+4. **Secondary fix**: `export.py:905` — Second `num_workers or 1` in VM costs section also changed to `or 0`
 
-## Key Findings
+#### Regression Tests Added
+- `tests/regression/test_sprint_2_bugs.py` — 10 new tests:
+  - `TestBugS1_12_NumWorkersDefaultFixed` (3 tests): 0 workers = driver only for JOBS and ALL_PURPOSE
+  - `TestBugS1_13_HoursFallbackFixed` (3 tests): no usage data = 0 hours
+  - `TestBugS2_1_AllPurposeServerlessModeFixed` (4 tests): ALL_PURPOSE serverless always 2x, Jobs still respects mode
 
-### NEW Discrepancy: ALL_PURPOSE Serverless Mode (FE/BE Mismatch)
-- **Frontend** (`costCalculation.ts` line 314): Hardcodes `serverlessMultiplier = 2` for ALL_PURPOSE regardless of `serverless_mode`
-- **Backend** (`export.py` line 333): Uses `mode_multiplier = 2 if serverless_mode == 'performance' else 1` — no ALL_PURPOSE override
-- **Impact**: When `serverless_mode='standard'`, FE shows 20.0 DBU/hr but Excel export shows 10.0 DBU/hr (2x ratio)
-- **Documented in**: `test_allpurpose_discrepancies.py::TestServerlessModeDiscrepancy`
-
-### Known Discrepancies (from Sprint 1, still present)
-1. **num_workers default**: FE uses 0 when null, BE defaults to 1
-2. **Hours fallback**: FE returns 0 when no input, BE returns 11 hours
+#### Updated Tests
+Sprint 1 and Sprint 2 tests that asserted the old (broken) behavior updated to assert the fixed behavior:
+- `test_jobs_calculations.py`: `backend_calc_jobs` replica updated, discrepancy tests now assert alignment
+- `test_jobs_discrepancies.py`: Discrepancy #2 and #3 tests now verify FE/BE alignment
+- `test_jobs_export.py`: `test_default_num_workers` and `test_fallback_when_nothing_set` updated
+- `test_allpurpose_calculations.py`: `backend_calc_allpurpose` replica updated
+- `test_allpurpose_discrepancies.py`: All 3 discrepancy classes now verify alignment (not discrepancy)
+- `test_allpurpose_export.py`: serverless mode, num_workers default, hours fallback tests updated
 
 ## How to Test
 
 ```bash
-# Run Sprint 2 tests only
+# Run full suite (Sprint 1 + Sprint 2 + Regression)
 cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
+python -m pytest tests/ -v
+
+# Run Sprint 2 only
 python -m pytest tests/sprint_2/ -v
 
-# Run full suite (Sprint 1 + Sprint 2)
-python -m pytest tests/ -v
+# Run regression tests only
+python -m pytest tests/regression/ -v
 ```
 
 ## Test Results
 
 ```
-238 passed, 0 failed, 0 errors
-- Sprint 1: 139 tests
-- Sprint 2: 99 tests
+250 passed, 0 failed, 51 warnings
+  - Sprint 1: 128 tests
+  - Sprint 2: 101 tests (99 iter1 + 2 new alignment tests)
+  - Regression: 21 tests (11 Sprint 1 + 10 Sprint 2)
 ```
 
 ## Files Changed
-- `tests/sprint_2/__init__.py` (new)
-- `tests/sprint_2/conftest.py` (new)
-- `tests/sprint_2/test_allpurpose_calculations.py` (new)
-- `tests/sprint_2/test_allpurpose_discrepancies.py` (new)
-- `tests/sprint_2/test_allpurpose_export.py` (new)
-- `tests/sprint_2/test_allpurpose_excel_export.py` (new)
-- `tests/sprint_2/test_allpurpose_vm_and_notes.py` (new)
-- `tests/sprint_2/test_allpurpose_export_integration.py` (new)
+
+### Backend (code fixes)
+- `backend/app/routes/export.py` — 3 fixes (num_workers default, hours fallback, ALL_PURPOSE serverless mode)
+
+### Tests (new)
+- `tests/regression/test_sprint_2_bugs.py` — 10 new regression tests
+
+### Tests (updated)
+- `tests/sprint_1/test_jobs_calculations.py` — backend_calc_jobs replica updated
+- `tests/sprint_1/test_jobs_discrepancies.py` — discrepancy tests now verify alignment
+- `tests/sprint_1/test_jobs_export.py` — num_workers and hours fallback tests updated
+- `tests/sprint_2/test_allpurpose_calculations.py` — backend_calc_allpurpose replica updated
+- `tests/sprint_2/test_allpurpose_discrepancies.py` — all discrepancy tests now verify alignment
+- `tests/sprint_2/test_allpurpose_export.py` — serverless mode, num_workers, hours tests updated
 
 ## Known Limitations
-- VM cost values in tests use hardcoded $0.20/$0.10 (matching backend export.py lines 897-903) — actual VM pricing is more complex
-- The serverless mode discrepancy is documented but not fixed (requires product decision on which behavior is correct)
+- VM cost values in tests use hardcoded $0.20/$0.10 (matching backend export.py) — actual VM pricing is more complex
 - No browser E2E tests — those are for Visual QA agent
+- The 3 backend fixes affect ALL workload types that use these code paths (Jobs, DLT), not just All-Purpose

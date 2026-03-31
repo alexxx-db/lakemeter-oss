@@ -102,26 +102,25 @@ def backend_calc_allpurpose(
     days_per_month: int = 22,
     dbu_price: float = 0.40,
 ) -> dict:
-    """Replicate backend export.py logic for ALL_PURPOSE."""
-    # Hours (export.py lines 286-301)
+    """Replicate backend export.py logic for ALL_PURPOSE (post-fix)."""
+    # Hours (export.py lines 286-301) — FIXED: fallback is 0 (not 11)
     if runs_per_day and avg_runtime_minutes:
         hours = (runs_per_day * avg_runtime_minutes / 60) * days_per_month
     elif hours_per_month:
         hours = hours_per_month
     else:
-        hours = (1 * 30 / 60) * 22  # Backend fallback: 11 hours
+        hours = 0  # No usage data = 0 hours (aligned with frontend)
 
     # DBU/hr (export.py lines 309-339)
-    # Backend defaults num_workers to 1 when 0 or None (line 327)
-    nw = num_workers if num_workers else 1
+    # FIXED: num_workers defaults to 0 (not 1) — aligned with frontend
+    nw = num_workers if num_workers else 0
     base_dbu = driver_dbu_rate + (worker_dbu_rate * nw)
 
     if serverless_enabled:
         # Serverless always has photon built-in (2x)
         base_dbu *= 2
-        # Backend does NOT force performance mode for ALL_PURPOSE
-        # It uses whatever serverless_mode is stored
-        mode_mult = 2 if serverless_mode == "performance" else 1
+        # FIXED: ALL_PURPOSE Serverless always uses performance mode (2x)
+        mode_mult = 2
         dbu_per_hour = base_dbu * mode_mult
     else:
         if photon_enabled:

@@ -164,8 +164,8 @@ class TestCalculateDBUPerHour:
         assert dbu_hr == pytest.approx(expected)
         assert len(warnings) == 2  # Both driver and worker warnings
 
-    def test_default_num_workers_is_1(self):
-        """Backend defaults num_workers to 1 when not set (export.py line 327)."""
+    def test_default_num_workers_is_0(self):
+        """Backend defaults num_workers to 0 when not set (FIXED: was 1)."""
         item = make_line_item(
             workload_type="JOBS",
             driver_node_type="i3.xlarge",
@@ -175,8 +175,8 @@ class TestCalculateDBUPerHour:
             serverless_enabled=False,
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # Backend: int(None or 1) = 1, so 1.0 + 1.0 × 1 = 2.0
-        assert dbu_hr == pytest.approx(2.0)
+        # FIXED: int(None or 0) = 0, so driver_dbu only. i3.xlarge rate = 1.0
+        assert dbu_hr == pytest.approx(1.0)
 
     def test_mixed_instance_types(self):
         """m5.xlarge driver(0.69) + 4× i3.2xlarge workers(2.0) = 8.69 DBU/hr."""
@@ -221,9 +221,9 @@ class TestCalculateHoursPerMonth:
         assert _calculate_hours_per_month(item) == pytest.approx(22.0)
 
     def test_fallback_when_nothing_set(self):
-        """Backend fallback: (1 × 30 / 60) × 22 = 11 hours."""
+        """Backend returns 0 when nothing set (FIXED: was 11 hours)."""
         item = make_line_item()
-        assert _calculate_hours_per_month(item) == pytest.approx(11.0)
+        assert _calculate_hours_per_month(item) == pytest.approx(0.0)
 
 
 # ============================================================
