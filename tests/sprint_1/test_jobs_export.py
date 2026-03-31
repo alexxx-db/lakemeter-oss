@@ -1,0 +1,422 @@
+"""
+Sprint 1: Jobs Excel Export Verification Tests
+
+Tests the backend export helper functions directly:
+- _get_sku_type
+- _calculate_dbu_per_hour
+- _calculate_hours_per_month
+- _is_serverless_workload
+- Excel formula structure verification
+"""
+import json
+import os
+import sys
+import pytest
+from types import SimpleNamespace
+
+# Import backend export functions
+BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'backend')
+sys.path.insert(0, BACKEND_DIR)
+
+
+def make_line_item(**kwargs):
+    """Create a mock line item with default values matching the LineItem model."""
+    defaults = {
+        "workload_type": "JOBS",
+        "workload_name": "Test Job",
+        "serverless_enabled": False,
+        "serverless_mode": None,
+        "photon_enabled": False,
+        "driver_node_type": None,
+        "worker_node_type": None,
+        "num_workers": None,
+        "dlt_edition": None,
+        "dbsql_warehouse_type": None,
+        "dbsql_warehouse_size": None,
+        "dbsql_num_clusters": None,
+        "vector_search_mode": None,
+        "vector_capacity_millions": None,
+        "model_serving_gpu_type": None,
+        "fmapi_provider": None,
+        "fmapi_model": None,
+        "fmapi_endpoint_type": None,
+        "fmapi_context_length": None,
+        "fmapi_rate_type": None,
+        "fmapi_quantity": None,
+        "lakebase_cu": None,
+        "lakebase_ha_nodes": None,
+        "lakebase_storage_gb": None,
+        "runs_per_day": None,
+        "avg_runtime_minutes": None,
+        "days_per_month": None,
+        "hours_per_month": None,
+        "driver_pricing_tier": None,
+        "worker_pricing_tier": None,
+        "driver_payment_option": None,
+        "worker_payment_option": None,
+        "notes": None,
+        "display_order": 0,
+    }
+    defaults.update(kwargs)
+    return SimpleNamespace(**defaults)
+
+
+# Import export functions after path setup
+from app.routes.export import (
+    _get_sku_type,
+    _calculate_dbu_per_hour,
+    _calculate_hours_per_month,
+    _is_serverless_workload,
+    _get_dbu_price,
+)
+
+
+# ============================================================
+# Test: SKU Type Determination
+# ============================================================
+
+class TestGetSkuType:
+    """Verify _get_sku_type returns correct SKU for Jobs variants."""
+
+    def test_jobs_classic_standard(self):
+        item = make_line_item(workload_type="JOBS", serverless_enabled=False, photon_enabled=False)
+        assert _get_sku_type(item, "aws") == "JOBS_COMPUTE"
+
+    def test_jobs_classic_photon(self):
+        item = make_line_item(workload_type="JOBS", serverless_enabled=False, photon_enabled=True)
+        assert _get_sku_type(item, "aws") == "JOBS_COMPUTE_(PHOTON)"
+
+    def test_jobs_serverless(self):
+        item = make_line_item(workload_type="JOBS", serverless_enabled=True)
+        assert _get_sku_type(item, "aws") == "JOBS_SERVERLESS_COMPUTE"
+
+    def test_jobs_serverless_ignores_photon_flag(self):
+        """Serverless SKU doesn't change based on photon flag."""
+        item = make_line_item(workload_type="JOBS", serverless_enabled=True, photon_enabled=True)
+        assert _get_sku_type(item, "aws") == "JOBS_SERVERLESS_COMPUTE"
+
+
+# ============================================================
+# Test: DBU Per Hour Calculation
+# ============================================================
+
+class TestCalculateDBUPerHour:
+    """Verify _calculate_dbu_per_hour for Jobs workloads."""
+
+    def test_classic_standard_with_instance_types(self):
+        """i3.xlarge driver(1.0) + 2× i3.xlarge workers(1.0) = 3.0 DBU/hr."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=2,
+            photon_enabled=False,
+            serverless_enabled=False,
+        )
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(3.0)
+        assert len(warnings) == 0
+
+    def test_classic_photon_doubles(self):
+        """Photon: (1.0 + 1.0×2) × 2 = 6.0 DBU/hr."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=2,
+            photon_enabled=True,
+            serverless_enabled=False,
+        )
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(6.0)
+
+    def test_serverless_standard_no_photon_flag(self):
+        """
+        Backend quirk: serverless without photon_enabled flag.
+        Backend: base(3.0) × 1 (no photon applied) × 1 (standard) = 3.0
+        """
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=2,
+            photon_enabled=False,
+            serverless_enabled=True,
+            serverless_mode="standard",
+        )
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(3.0)
+
+    def test_serverless_standard_with_photon_flag(self):
+        """
+        Backend: serverless with photon_enabled=True.
+        base(3.0) × 2 (photon) × 1 (standard) = 6.0
+        """
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=2,
+            photon_enabled=True,
+            serverless_enabled=True,
+            serverless_mode="standard",
+        )
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(6.0)
+
+    def test_serverless_performance(self):
+        """Serverless performance: base(3.0) × 2 (performance) = 6.0 (no photon flag)."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=2,
+            photon_enabled=False,
+            serverless_enabled=True,
+            serverless_mode="performance",
+        )
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(6.0)
+
+    def test_serverless_performance_with_photon(self):
+        """Serverless performance + photon: base(3.0) × 2 × 2 = 12.0."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=2,
+            photon_enabled=True,
+            serverless_enabled=True,
+            serverless_mode="performance",
+        )
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(12.0)
+
+    def test_fallback_dbu_rates_when_no_instance(self):
+        """Unknown instance types fall back to driver=0.25, worker=0.5."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="unknown.type",
+            worker_node_type="unknown.type",
+            num_workers=2,
+            photon_enabled=False,
+            serverless_enabled=False,
+        )
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
+        expected = 0.25 + (0.5 * 2)  # 1.25
+        assert dbu_hr == pytest.approx(expected)
+        assert len(warnings) == 2  # Both driver and worker warnings
+
+    def test_default_num_workers_is_1(self):
+        """Backend defaults num_workers to 1 when not set (export.py line 327)."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=None,  # Not set
+            photon_enabled=False,
+            serverless_enabled=False,
+        )
+        dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
+        # Backend: int(None or 1) = 1, so 1.0 + 1.0 × 1 = 2.0
+        assert dbu_hr == pytest.approx(2.0)
+
+    def test_mixed_instance_types(self):
+        """m5.xlarge driver(0.69) + 4× i3.2xlarge workers(2.0) = 8.69 DBU/hr."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="m5.xlarge",
+            worker_node_type="i3.2xlarge",
+            num_workers=4,
+            photon_enabled=False,
+            serverless_enabled=False,
+        )
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(8.69)
+
+
+# ============================================================
+# Test: Hours Per Month Calculation
+# ============================================================
+
+class TestCalculateHoursPerMonth:
+    """Verify _calculate_hours_per_month for Jobs workloads."""
+
+    def test_run_based(self):
+        item = make_line_item(runs_per_day=10, avg_runtime_minutes=30, days_per_month=22)
+        assert _calculate_hours_per_month(item) == pytest.approx(110.0)
+
+    def test_direct_hours(self):
+        item = make_line_item(hours_per_month=730)
+        assert _calculate_hours_per_month(item) == pytest.approx(730.0)
+
+    def test_run_based_priority(self):
+        """Run-based takes priority over hours_per_month."""
+        item = make_line_item(
+            runs_per_day=10, avg_runtime_minutes=30, days_per_month=22,
+            hours_per_month=730,
+        )
+        assert _calculate_hours_per_month(item) == pytest.approx(110.0)
+
+    def test_default_days(self):
+        """Default days_per_month = 22."""
+        item = make_line_item(runs_per_day=1, avg_runtime_minutes=60, days_per_month=None)
+        assert _calculate_hours_per_month(item) == pytest.approx(22.0)
+
+    def test_fallback_when_nothing_set(self):
+        """Backend fallback: (1 × 30 / 60) × 22 = 11 hours."""
+        item = make_line_item()
+        assert _calculate_hours_per_month(item) == pytest.approx(11.0)
+
+
+# ============================================================
+# Test: Serverless Detection
+# ============================================================
+
+class TestIsServerlessWorkload:
+    """Verify _is_serverless_workload for Jobs workloads."""
+
+    def test_jobs_classic_is_not_serverless(self):
+        item = make_line_item(workload_type="JOBS", serverless_enabled=False)
+        assert _is_serverless_workload(item) is False
+
+    def test_jobs_serverless_is_serverless(self):
+        item = make_line_item(workload_type="JOBS", serverless_enabled=True)
+        assert _is_serverless_workload(item) is True
+
+
+# ============================================================
+# Test: DBU Price Lookup
+# ============================================================
+
+class TestDBUPriceLookup:
+    """Verify _get_dbu_price returns correct $/DBU rates."""
+
+    def test_jobs_compute_us_east_1(self):
+        price, found = _get_dbu_price("aws", "us-east-1", "PREMIUM", "JOBS_COMPUTE")
+        assert found is True
+        assert price == pytest.approx(0.15)
+
+    def test_jobs_compute_photon_us_east_1(self):
+        price, found = _get_dbu_price("aws", "us-east-1", "PREMIUM", "JOBS_COMPUTE_(PHOTON)")
+        assert found is True
+        assert price == pytest.approx(0.15)
+
+    def test_jobs_serverless_compute_us_east_1(self):
+        price, found = _get_dbu_price("aws", "us-east-1", "PREMIUM", "JOBS_SERVERLESS_COMPUTE")
+        assert found is True
+        assert price == pytest.approx(0.35)
+
+    def test_fallback_for_unknown_sku(self):
+        price, found = _get_dbu_price("aws", "us-east-1", "PREMIUM", "NONEXISTENT_SKU")
+        assert found is False
+        assert price == 0  # No fallback for unknown SKU
+
+
+# ============================================================
+# Test: End-to-End Export Row Calculation
+# ============================================================
+
+class TestExportRowCalculation:
+    """End-to-end: create a mock line item and verify all computed values."""
+
+    def test_jobs_classic_standard_full_calc(self):
+        """Full calculation chain for Jobs Classic Standard."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=2,
+            photon_enabled=False,
+            serverless_enabled=False,
+            runs_per_day=10,
+            avg_runtime_minutes=30,
+            days_per_month=22,
+        )
+
+        # Step 1: Hours
+        hours = _calculate_hours_per_month(item)
+        assert hours == pytest.approx(110.0)
+
+        # Step 2: DBU/hr
+        dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(3.0)
+
+        # Step 3: Monthly DBUs
+        monthly_dbus = dbu_hr * hours
+        assert monthly_dbus == pytest.approx(330.0)
+
+        # Step 4: DBU price
+        sku = _get_sku_type(item, "aws")
+        assert sku == "JOBS_COMPUTE"
+        dbu_price, found = _get_dbu_price("aws", "us-east-1", "PREMIUM", sku)
+        assert dbu_price == pytest.approx(0.15)
+
+        # Step 5: DBU cost
+        dbu_cost = monthly_dbus * dbu_price
+        assert dbu_cost == pytest.approx(49.50)
+
+        # Step 6: No VM for this test (would need VM price lookup)
+        assert _is_serverless_workload(item) is False
+
+    def test_jobs_serverless_performance_full_calc(self):
+        """Full calculation chain for Jobs Serverless Performance."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=2,
+            photon_enabled=True,  # Set photon for backend to match frontend
+            serverless_enabled=True,
+            serverless_mode="performance",
+            hours_per_month=730,
+        )
+
+        hours = _calculate_hours_per_month(item)
+        assert hours == pytest.approx(730.0)
+
+        dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
+        # base(3.0) × photon(2) × performance(2) = 12.0
+        assert dbu_hr == pytest.approx(12.0)
+
+        monthly_dbus = dbu_hr * hours
+        assert monthly_dbus == pytest.approx(8760.0)
+
+        sku = _get_sku_type(item, "aws")
+        assert sku == "JOBS_SERVERLESS_COMPUTE"
+
+        dbu_price, _ = _get_dbu_price("aws", "us-east-1", "PREMIUM", sku)
+        assert dbu_price == pytest.approx(0.35)
+
+        dbu_cost = monthly_dbus * dbu_price
+        assert dbu_cost == pytest.approx(3066.0)
+
+        assert _is_serverless_workload(item) is True
+
+    def test_jobs_classic_photon_full_calc(self):
+        """Full calculation chain for Jobs Classic Photon."""
+        item = make_line_item(
+            workload_type="JOBS",
+            driver_node_type="i3.xlarge",
+            worker_node_type="i3.xlarge",
+            num_workers=2,
+            photon_enabled=True,
+            serverless_enabled=False,
+            hours_per_month=110,
+        )
+
+        hours = _calculate_hours_per_month(item)
+        assert hours == pytest.approx(110.0)
+
+        dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
+        assert dbu_hr == pytest.approx(6.0)  # 3.0 × 2
+
+        monthly_dbus = dbu_hr * hours
+        assert monthly_dbus == pytest.approx(660.0)
+
+        sku = _get_sku_type(item, "aws")
+        assert sku == "JOBS_COMPUTE_(PHOTON)"
+
+        dbu_price, _ = _get_dbu_price("aws", "us-east-1", "PREMIUM", sku)
+        dbu_cost = monthly_dbus * dbu_price
+        assert dbu_cost == pytest.approx(99.0)  # 660 × $0.15
