@@ -16,20 +16,27 @@
     "Sprint 9: Lakebase (CU Sizes, HA Nodes, Storage)",
     "Sprint 10: Full Combined Estimate (All 9 Types + Excel)"
   ],
-  "last_action": "Sprint 1 iteration 2: Added 6 regression tests for BUG-S1-12 (num_workers default) and BUG-S1-13 (hours fallback). Both bugs already fixed in code. 145 sprint tests + 569 total tests passing.",
+  "last_action": "Sprint 1 iteration 2 BUILD complete: BUG-S1-12 (num_workers=0 → driver only) and BUG-S1-13 (hours fallback=0) confirmed fixed in calculations.py. 6 regression tests guard these fixes. 145 sprint tests + 569 total tests passing. Ready for Visual QA + Evaluator.",
   "sprints_completed": [
     {
       "sprint": 2,
       "score": 9.3,
       "debt": false,
-      "trajectory": [0.0, 8.93, 8.95, 9.3],
+      "trajectory": [
+        0.0,
+        8.93,
+        8.95,
+        9.3
+      ],
       "iterations": 4
     },
     {
       "sprint": 4,
       "score": 9.0,
       "debt": false,
-      "trajectory": [9.0],
+      "trajectory": [
+        9.0
+      ],
       "iterations": 1
     }
   ],
@@ -39,12 +46,14 @@
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 1,
+  "current_iteration": 2,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
-  "dev_server_command": "N/A — testing live app at https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
+  "dev_server_command": "N/A \u2014 testing live app at https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "test_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "mode": "TESTING_ONLY",
   "last_updated": "2026-03-31T20:15:00",
-  "score_trajectory": [7.43, 7.80, 8.05, 7.90]
+  "score_trajectory": [
+    7.9
+  ]
 }
