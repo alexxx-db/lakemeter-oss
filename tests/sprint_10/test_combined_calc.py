@@ -4,7 +4,7 @@ from tests.sprint_10.conftest import (
     make_jobs_serverless, make_all_purpose_classic_photon,
     make_dlt_pro_serverless, make_dbsql_serverless_medium,
     make_model_serving_gpu, make_fmapi_databricks, make_fmapi_proprietary,
-    make_vector_search_standard, make_lakebase, make_all_nine_items,
+    make_vector_search_standard, make_lakebase,
 )
 from app.routes.export.calculations import (
     _calculate_dbu_per_hour, _calculate_hours_per_month, _is_serverless_workload,
@@ -92,12 +92,12 @@ class TestDbsqlServerlessMediumCalc:
 class TestModelServingCalc:
     """AC-2: Model Serving GPU DBU calculation."""
 
-    def test_dbu_per_hour_is_numeric(self):
+    def test_dbu_per_hour(self):
         item = make_model_serving_gpu()
         dbu, warnings = _calculate_dbu_per_hour(item, 'aws')
-        assert isinstance(dbu, (int, float))
-        # May or may not find rate; at minimum should not error
-        assert dbu >= 0
+        # gpu_medium_a10g_1x on AWS = 20.0 DBU/hr
+        assert dbu == pytest.approx(20.0, abs=0.01)
+        assert len(warnings) == 0, f"Unexpected warnings: {warnings}"
 
     def test_sku(self):
         item = make_model_serving_gpu()
@@ -118,7 +118,7 @@ class TestFmapiDatabricksCalc:
     def test_sku(self):
         item = make_fmapi_databricks()
         sku = _get_sku_type(item, 'aws')
-        assert isinstance(sku, str) and len(sku) > 0
+        assert sku == 'SERVERLESS_REAL_TIME_INFERENCE'
 
     def test_is_serverless(self):
         assert _is_serverless_workload(make_fmapi_databricks()) is True
@@ -135,7 +135,7 @@ class TestFmapiProprietaryCalc:
     def test_sku(self):
         item = make_fmapi_proprietary()
         sku = _get_sku_type(item, 'aws')
-        assert isinstance(sku, str) and len(sku) > 0
+        assert sku == 'ANTHROPIC_MODEL_SERVING'
 
     def test_is_serverless(self):
         assert _is_serverless_workload(make_fmapi_proprietary()) is True
@@ -175,45 +175,3 @@ class TestLakebaseCalc:
         assert _is_serverless_workload(make_lakebase()) is True
 
 
-class TestAllNineItemsCalc:
-    """AC-14: Cross-workload consistency checks."""
-
-    def test_all_items_produce_valid_dbu(self):
-        """Every item returns a numeric, non-negative DBU/hr."""
-        for item in make_all_nine_items():
-            dbu, warnings = _calculate_dbu_per_hour(item, 'aws')
-            assert isinstance(dbu, (int, float)), f"{item.workload_type} returned non-numeric"
-            assert dbu >= 0, f"{item.workload_type} returned negative DBU"
-
-    def test_all_items_produce_valid_sku(self):
-        """Every item maps to a non-empty SKU string."""
-        for item in make_all_nine_items():
-            sku = _get_sku_type(item, 'aws')
-            assert isinstance(sku, str) and len(sku) > 0, \
-                f"{item.workload_type} returned invalid SKU"
-
-    def test_all_items_produce_valid_hours(self):
-        """Every non-FMAPI item returns positive hours."""
-        for item in make_all_nine_items():
-            hours = _calculate_hours_per_month(item)
-            if item.workload_type not in ('FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY'):
-                assert hours > 0, f"{item.workload_type} returned 0 hours"
-
-    def test_serverless_classification(self):
-        """All 9 items in combined set are correctly classified."""
-        expected_serverless = {
-            "JOBS": True,       # serverless_enabled=True
-            "ALL_PURPOSE": False,  # classic photon
-            "DLT": True,        # serverless_enabled=True
-            "DBSQL": True,      # warehouse_type=SERVERLESS
-            "MODEL_SERVING": True,
-            "FMAPI_DATABRICKS": True,
-            "FMAPI_PROPRIETARY": True,
-            "VECTOR_SEARCH": True,
-            "LAKEBASE": True,
-        }
-        for item in make_all_nine_items():
-            result = _is_serverless_workload(item)
-            expected = expected_serverless[item.workload_type]
-            assert result == expected, \
-                f"{item.workload_type}: expected serverless={expected}, got {result}"

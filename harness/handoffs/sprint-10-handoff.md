@@ -1,28 +1,41 @@
-# Sprint 10 Handoff: Full Combined Estimate — All 9 Workload Types
+# Sprint 10 Handoff: Full Combined Estimate — Iteration 2
 
 ## What Was Built
 
-92 tests verifying that all 9 workload types work correctly together in a single combined estimate with Excel export.
+101 tests verifying that all 9 workload types work correctly together in a single combined estimate with Excel export. Iteration 2 fixed all 4 bugs from evaluation and added 9 new tests.
 
-### Files Created
-- `tests/sprint_10/__init__.py`
-- `tests/sprint_10/conftest.py` — Factory functions for all 9 workload types + `make_all_nine_items()`
-- `tests/sprint_10/excel_helpers.py` — Excel generation, row finding, column constants
-- `tests/sprint_10/test_combined_calc.py` — 34 tests: DBU/hr, SKU, serverless classification, hours for each workload type
-- `tests/sprint_10/test_combined_excel.py` — 38 tests: Row count, SKU mapping, formula patterns, VM costs, tokens, hours, DBU rates, no NaN/broken
-- `tests/sprint_10/test_combined_totals.py` — 20 tests: Totals SUM formulas, storage sub-rows, multi-row workloads, cross-workload consistency, edge cases (empty, single, duplicate, all clouds)
-- `harness/contracts/sprint-10.md` — Sprint contract with 14 acceptance criteria
+### Iteration 2 Fixes
 
-### Combined Estimate Line Items Tested
-1. Jobs Serverless Performance — 200 hrs/month
-2. All-Purpose Classic Photon — 2 workers, 730 hrs/month
-3. DLT Pro Serverless Standard — 100 hrs/month
-4. DBSQL Serverless Medium — 1 cluster, 500 hrs/month
-5. Model Serving GPU — 200 hrs/month
-6. FMAPI Databricks — llama-3-3-70b input tokens, 100M/month
-7. FMAPI Proprietary — Anthropic Claude output tokens, 50M/month
-8. Vector Search Standard — 5M vectors, 730 hrs/month
-9. Lakebase — 4 CU, 2 HA nodes, 100GB, 730 hrs/month
+**BUG-S10-001 (Major)**: Model Serving GPU `gpu_medium` returned 0 DBU/hr
+- Root cause: `gpu_medium` doesn't exist in pricing JSON; valid key is `gpu_medium_a10g_1x`
+- Fix: `conftest.py` changed gpu type; test now asserts exact 20.0 DBU/hr with 0 warnings
+
+**BUG-S10-003 (Minor)**: FMAPI SKU assertions too weak
+- Fix: Replaced `isinstance(sku, str) and len(sku) > 0` with exact string matches: `SERVERLESS_REAL_TIME_INFERENCE` and `ANTHROPIC_MODEL_SERVING`
+
+**BUG-S10-004 (Minor)**: `test_combined_excel.py` at 310 lines exceeded 200-line limit
+- Split into: `test_excel_structure.py` (196 lines) + `test_excel_formulas.py` (154 lines)
+- Also extracted: `test_cross_workload.py` (52 lines) + `test_pricing_lookups.py` (41 lines)
+- All sprint 10 files now under 200 lines
+
+**BUG-S10-002 (Minor)**: Notes column not tested
+- Added `TestNotesColumn` in `test_excel_structure.py` with storage notes and non-empty assertions
+
+**New**: `TestPricingLookups` (6 tests) verifying standard configs resolve without fallback warnings
+
+### Files
+
+| File | Lines | Action |
+|------|-------|--------|
+| `tests/sprint_10/conftest.py` | 173 | Modified — gpu_medium → gpu_medium_a10g_1x |
+| `tests/sprint_10/test_combined_calc.py` | 177 | Modified — FMAPI SKU exact assertions, extracted classes |
+| `tests/sprint_10/test_combined_excel.py` | — | Deleted — split into two files below |
+| `tests/sprint_10/test_excel_structure.py` | 196 | New — structure/row/SKU/mode/hours/DBU/notes |
+| `tests/sprint_10/test_excel_formulas.py` | 154 | New — formula/VM/token/NaN checks |
+| `tests/sprint_10/test_cross_workload.py` | 52 | New — cross-workload consistency |
+| `tests/sprint_10/test_pricing_lookups.py` | 41 | New — pricing fallback warning validation |
+| `tests/sprint_10/test_combined_totals.py` | 196 | Unchanged |
+| `tests/sprint_10/excel_helpers.py` | 127 | Unchanged |
 
 ## How to Test
 
@@ -33,19 +46,11 @@ python -m pytest tests/sprint_10/ -v
 
 ## Test Results
 
-- **92 passed** in 1.51s (Sprint 10 only)
-- **1245 passed** in 5.92s (full suite including all sprints 1-10)
+- **Sprint 10**: 101 passed in 1.56s (up from 92)
+- **Full suite (Sprints 1-10)**: 1254 passed in 5.81s (up from 1245)
 - 0 failures, 0 errors
 
-### Key Verifications
-- Excel generates 11 data rows (9 workloads + 2 storage sub-rows for Lakebase and Vector Search)
-- All 8 totals columns use SUM formulas spanning the correct data range
-- Token-based items (FMAPI) use `=N*O` formula; hourly items use `=P*L`
-- Serverless items have 0 VM costs; Classic has non-zero VM costs
-- Storage sub-rows have DATABRICKS_STORAGE SKU and pricing notes
-- Works for all 3 clouds (aws, azure, gcp)
-- Edge cases: empty estimates, single items, duplicate workload types
-
 ## Known Limitations
-- Model Serving GPU type `gpu_medium` may not have a matching rate in pricing JSON (test accepts 0 DBU with warning)
-- FMAPI model rates depend on pricing JSON data availability; tests verify structure not specific rates
+
+- DLT and Vector Search still use fallback pricing (backend data gap, not a test issue)
+- 5 of 9 primary workload rows have Notes=None (backend export behavior; tests assert current state)

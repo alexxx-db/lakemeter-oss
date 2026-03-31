@@ -96,11 +96,11 @@ def make_dbsql_serverless_medium():
 
 
 def make_model_serving_gpu():
-    """Model Serving Medium GPU — 200 hrs/month."""
+    """Model Serving Medium GPU (A10G x1) — 200 hrs/month."""
     return make_line_item(
         workload_type="MODEL_SERVING",
         workload_name="Model Serving GPU",
-        model_serving_gpu_type="gpu_medium",
+        model_serving_gpu_type="gpu_medium_a10g_1x",
         hours_per_month=200,
         display_order=4,
     )
