@@ -21,7 +21,7 @@ DISCREPANCY 3: DLT Serverless $/DBU rate
 """
 import pytest
 
-from tests.sprint_3.test_dlt_calculations import (
+from tests.sprint_3.dlt_calc_helpers import (
     frontend_calc_dlt,
     backend_calc_dlt,
     FRONTEND_DLT_PRICES,
