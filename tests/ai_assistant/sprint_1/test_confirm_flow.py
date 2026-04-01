@@ -10,13 +10,18 @@ from tests.ai_assistant.conftest import (
 )
 
 JOBS_PROMPT = (
-    "I need a daily ETL job running 5 times a day for 20 minutes each, "
-    "4 workers, classic compute with Photon on AWS us-east-1. "
-    "Please propose the workload."
+    "I need a Lakeflow Jobs workload for a daily ETL pipeline. "
+    "Medium complexity (MERGE/upsert, 3-5 joins) on a 1TB base table. "
+    "Running 5 times a day for 20 minutes each, 4 workers, "
+    "classic compute with Photon on AWS us-east-1 Premium tier."
 )
 JOBS_FOLLOWUP = (
-    "Use m6i.xlarge driver, i3.xlarge workers, 22 days/month. "
-    "Go ahead and propose the configuration."
+    "Use Lakeflow Jobs (not SDP). m6i.xlarge driver, i3.xlarge workers, "
+    "spot pricing for workers, 22 days/month. "
+    "Please propose the workload configuration now."
+)
+JOBS_FINAL = (
+    "Yes, that looks right. Please go ahead and propose it."
 )
 
 
@@ -32,7 +37,7 @@ class TestConfirmWorkflow:
         cid = str(uuid.uuid4())
         proposal, resp = send_chat_until_proposal(
             self.client,
-            [JOBS_PROMPT, JOBS_FOLLOWUP],
+            [JOBS_PROMPT, JOBS_FOLLOWUP, JOBS_FINAL],
             self.estimate,
             conversation_id=cid,
         )
@@ -49,7 +54,7 @@ class TestConfirmWorkflow:
         cid = str(uuid.uuid4())
         proposal, _ = send_chat_until_proposal(
             self.client,
-            [JOBS_PROMPT, JOBS_FOLLOWUP],
+            [JOBS_PROMPT, JOBS_FOLLOWUP, JOBS_FINAL],
             self.estimate,
             conversation_id=cid,
         )
@@ -83,7 +88,7 @@ class TestConfirmWorkflow:
         cid = str(uuid.uuid4())
         proposal, _ = send_chat_until_proposal(
             self.client,
-            [JOBS_PROMPT, JOBS_FOLLOWUP],
+            [JOBS_PROMPT, JOBS_FOLLOWUP, JOBS_FINAL],
             self.estimate,
             conversation_id=cid,
         )

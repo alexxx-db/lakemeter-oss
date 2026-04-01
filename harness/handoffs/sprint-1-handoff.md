@@ -47,7 +47,7 @@ Requires: Databricks CLI profile `lakemeter` configured with workspace access.
 ## Test Results
 
 - **17 tests passed**, 0 failed
-- Runtime: ~220s (3m 40s) — AI calls take 30-60s each
+- Runtime: ~185s (3m 5s) — AI calls take 30-60s each
 - Module-scoped fixtures minimize AI calls (2 for proposals, 3 for confirm flow = 5 total)
 
 ## Architecture Decision: TestClient vs Live App
