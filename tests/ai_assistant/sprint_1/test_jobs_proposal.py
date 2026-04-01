@@ -103,6 +103,12 @@ class TestJobsProposalBasic:
             f"reason too short or missing: '{reason}'"
         )
 
+    def test_notes_populated(self, classic_proposal):
+        notes = classic_proposal.get("notes", "")
+        assert notes and len(notes) >= 1, (
+            f"notes should be populated: '{notes}'"
+        )
+
     def test_proposal_id_present(self, classic_proposal):
         pid = classic_proposal.get("proposal_id", "")
         assert pid, "proposal_id must be present for confirm/reject flow"

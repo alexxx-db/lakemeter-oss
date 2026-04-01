@@ -1,4 +1,4 @@
-# Sprint 1 Handoff: Test Infrastructure + JOBS Workload
+# Sprint 1 Handoff: Test Infrastructure + JOBS Workload (Iteration 2)
 
 ## What Was Built
 
@@ -14,12 +14,13 @@
   - `get_conversation_state()` — check conversation state
 
 ### JOBS Workload Tests (`tests/ai_assistant/sprint_1/test_jobs_proposal.py`)
-- **11 classic JOBS tests** (module-scoped fixture — single AI call shared):
+- **12 classic JOBS tests** (module-scoped fixture — single AI call shared):
   - workload_type == "JOBS"
   - workload_name non-empty (>= 3 chars)
   - runs_per_day, avg_runtime_minutes, days_per_month present and > 0
   - num_workers present and >= 1
   - reason populated (>= 10 chars)
+  - **notes populated (>= 1 char)** — NEW in iteration 2, fixes BUG-S1-001
   - proposal_id present
   - serverless_enabled explicitly set
   - photon_enabled set for classic compute
@@ -35,10 +36,16 @@
   - Confirmed proposal is removed from pending list in conversation state
   - Reject proposal returns success with "rejected" action
 
+## Iteration 2 Changes (Evaluator Bug Fixes)
+
+1. **BUG-S1-001 FIXED**: Added `test_notes_populated` to `TestJobsProposalBasic` — asserts `notes` field is a non-empty string. Satisfies contract criterion 8 fully (reason AND notes).
+2. **BUG-S1-002 FIXED**: Removed unused `jobs_proposal_result` fixture from `tests/ai_assistant/sprint_1/conftest.py`. File now contains only a module docstring. Eliminates dead code.
+
 ## How to Test
 
 ```bash
 cd /Users/steven.tan/Desktop/Ent\ 1\ -\ Q4\ FY\ 2026\ Team\ Project/lakemeter_app
+source .venv/bin/activate
 python -m pytest tests/ai_assistant/sprint_1/ -v
 ```
 
@@ -46,13 +53,13 @@ Requires: Databricks CLI profile `lakemeter` configured with workspace access.
 
 ## Test Results
 
-- **17 tests passed**, 0 failed
-- Runtime: ~185s (3m 5s) — AI calls take 30-60s each
+- **18 tests passed**, 0 failed (up from 17 in iteration 1)
+- Runtime: ~164s (2m 44s)
 - Module-scoped fixtures minimize AI calls (2 for proposals, 3 for confirm flow = 5 total)
 
 ## Architecture Decision: TestClient vs Live App
 
-Initially attempted to test against the live Databricks App at `https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com`. The Databricks Apps proxy re-scopes OAuth tokens, removing `model-serving` scope needed for FMAPI (Claude API). Switched to FastAPI TestClient which uses the backend's CLI token fallback — this token has `all-apis` scope including `model-serving`.
+Initially attempted to test against the live Databricks App. The Databricks Apps proxy re-scopes OAuth tokens, removing `model-serving` scope needed for FMAPI (Claude API). Switched to FastAPI TestClient which uses the backend's CLI token fallback — this token has `all-apis` scope including `model-serving`.
 
 ## Known Limitations
 
@@ -60,13 +67,9 @@ Initially attempted to test against the live Databricks App at `https://lakemete
 - Each confirm flow test makes its own AI call (~30-60s each) since they need independent conversations.
 - Rate limiting: Claude FMAPI has QPH limits. Running full suite repeatedly may hit rate limits.
 
-## Files Changed
+## Files Changed (Iteration 2)
 
-- `tests/ai_assistant/__init__.py` (new)
-- `tests/ai_assistant/conftest.py` (new — shared test infrastructure)
-- `tests/ai_assistant/sprint_1/__init__.py` (new)
-- `tests/ai_assistant/sprint_1/conftest.py` (new — sprint-specific fixtures)
-- `tests/ai_assistant/sprint_1/test_jobs_proposal.py` (new — 14 JOBS tests)
-- `tests/ai_assistant/sprint_1/test_confirm_flow.py` (new — 3 confirm flow tests)
-- `harness/contracts/sprint-1.md` (updated — AI assistant test contract)
-- `harness/state.json` (updated)
+- `tests/ai_assistant/sprint_1/test_jobs_proposal.py` — added `test_notes_populated` method (BUG-S1-001)
+- `tests/ai_assistant/sprint_1/conftest.py` — removed unused `jobs_proposal_result` fixture (BUG-S1-002)
+- `harness/handoffs/sprint-1-handoff.md` — updated for iteration 2
+- `harness/state.json` — updated iteration count
