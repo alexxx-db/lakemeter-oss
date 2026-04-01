@@ -1,49 +1,37 @@
-# Sprint 2 Contract: All-Purpose (Classic + Serverless)
+# Sprint 2 Contract: ALL_PURPOSE (Interactive Compute) — AI Assistant Tests
 
 ## Acceptance Criteria
 
-### Calculation Tests
-- [ ] AC-1: All-Purpose Classic Standard: DBU/hr = (driver_dbu + worker_dbu x N) x 1.0
-- [ ] AC-2: All-Purpose Classic Photon: DBU/hr = (driver_dbu + worker_dbu x N) x 2.0
-- [ ] AC-3: All-Purpose Serverless: frontend always forces performance mode (2x serverless multiplier)
-- [ ] AC-4: All-Purpose Serverless: photon always on (built-in 2x) -> total = base x 2 x 2 = 4x
-- [ ] AC-5: Run-based hours: (runs/day x mins/60) x days/month
-- [ ] AC-6: Direct hours: hours_per_month passthrough
-- [ ] AC-7: Monthly DBUs = DBU/hr x hours
-- [ ] AC-8: DBU cost = monthly_dbus x $/DBU
+- [ ] AC-1: Interactive compute prompt produces `workload_type=ALL_PURPOSE`
+- [ ] AC-2: `num_workers` present and >= 1 (user asked for 8 workers)
+- [ ] AC-3: `hours_per_month` present and reasonable for "8 hours a day" (120-200 range)
+- [ ] AC-4: `driver_node_type` populated (non-empty string)
+- [ ] AC-5: `worker_node_type` populated (non-empty string)
+- [ ] AC-6: Pricing tier fields present (`driver_pricing_tier` and/or `worker_pricing_tier`)
+- [ ] AC-7: `workload_name` is descriptive (>= 3 chars)
+- [ ] AC-8: `reason` populated (>= 10 chars)
+- [ ] AC-9: `notes` populated (>= 1 char)
+- [ ] AC-10: `proposal_id` present for confirm/reject flow
+- [ ] AC-11: Edge case — AI distinguishes ALL_PURPOSE from JOBS for interactive use case
+- [ ] AC-12: All tests pass with `pytest tests/ai_assistant/sprint_2/ -v`
 
-### SKU Tests
-- [ ] AC-9: Classic Standard -> ALL_PURPOSE_COMPUTE
-- [ ] AC-10: Classic Photon -> ALL_PURPOSE_COMPUTE_(PHOTON)
-- [ ] AC-11: Serverless -> ALL_PURPOSE_SERVERLESS_COMPUTE
+## API Contract
 
-### VM Cost Tests
-- [ ] AC-12: Classic includes VM costs (driver + worker x N)
-- [ ] AC-13: Serverless has zero VM costs
-
-### Frontend/Backend Discrepancy Detection
-- [ ] AC-14: Detect ALL_PURPOSE Serverless multiplier discrepancy (FE always 2x, BE uses stored mode)
-- [ ] AC-15: Detect num_workers=0 default discrepancy (FE=0, BE=1)
-- [ ] AC-16: Detect hours fallback discrepancy (FE=0, BE=11)
-
-### Export Tests
-- [ ] AC-17: Excel export uses correct SKU for All-Purpose variants
-- [ ] AC-18: Excel formulas present (not static values) in computed columns
-- [ ] AC-19: Excel SUM totals row correct
-
-### Edge Cases
-- [ ] AC-20: Zero hours = zero cost
-- [ ] AC-21: Large cluster (many workers)
-- [ ] AC-22: Fractional DBU rates
-- [ ] AC-23: No NaN or $0 for valid configurations
+Same as Sprint 1 — `POST /api/v1/chat` with `mode=estimate`.
 
 ## Test Plan
 
-- **Unit tests**: Frontend and backend calculation functions replicated in Python
-- **Parametrized tests**: Multiple instance types and cluster configurations
-- **Discrepancy tests**: Compare frontend vs backend output for each config
-- **Export tests**: TestClient-based Excel export verification via openpyxl
-- **Regression tests**: Guard Sprint 1 bugs that also apply to All-Purpose
+- Module-scoped fixture: single AI call for interactive cluster proposal, shared across test class
+- 12+ test functions covering all acceptance criteria
+- Edge case test uses separate conversation to verify type distinction
+- Timeout: 120s per AI call
+- Follow-up messages if AI asks clarifying questions
+
+## Files
+
+- `tests/ai_assistant/sprint_2/__init__.py`
+- `tests/ai_assistant/sprint_2/conftest.py`
+- `tests/ai_assistant/sprint_2/test_allpurpose_proposal.py`
 
 ## Production Readiness Items This Sprint
 - N/A (testing-only run)
