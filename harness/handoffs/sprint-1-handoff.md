@@ -1,42 +1,72 @@
-# Sprint 1 Handoff: Jobs (Classic + Serverless) — Iteration 4
+# Sprint 1 Handoff: Test Infrastructure + JOBS Workload
 
 ## What Was Built
 
-### Bug Fixes (This Iteration)
-- **BUG-S1-12b**: Fixed `excel_row_writer.py` — `_write_vm_costs()` and `_write_total_costs()` had `nw = row_data.get('num_workers', 1)` defaulting to 1 worker. Changed to `default=0` to match frontend behavior. This ensures VM cost formulas don't inflate costs when `num_workers` is missing from row_data.
+### Test Infrastructure (`tests/ai_assistant/conftest.py`)
+- FastAPI TestClient wrapping the local backend with Lakebase + FMAPI access
+- Auto-configures env vars for Databricks CLI auth, SP credentials via secrets scope
+- Session-scoped test estimate (created once, cleaned up after)
+- Chat helper utilities:
+  - `send_chat_message()` — sends non-streaming chat, retries on 500 with 30s backoff
+  - `extract_proposal()` — extracts `proposed_workload` from response or tool_results
+  - `send_chat_until_proposal()` — sends multiple messages until a proposal is returned
+  - `confirm_proposal()` / `reject_proposal()` — confirm/reject via REST API
+  - `get_conversation_state()` — check conversation state
 
-### Prior Iteration Fixes (Verified Still Working)
-- **BUG-S1-5**: Serverless always applies photon 2x (built-in), regardless of `photon_enabled` flag
-- **BUG-S1-6**: Lakebase formula corrected from `cu × nodes × 2` to `cu × nodes`
-- **BUG-S1-12**: `calculations.py` uses `int(item.num_workers or 0)` (was `or 1`)
-- **BUG-S1-13**: Hours fallback returns 0 when no usage data (was 11 hrs)
-- **BUG-S1-15**: All Pydantic V2 deprecation warnings fixed (ConfigDict + SQLAlchemy orm import)
+### JOBS Workload Tests (`tests/ai_assistant/sprint_1/test_jobs_proposal.py`)
+- **11 classic JOBS tests** (module-scoped fixture — single AI call shared):
+  - workload_type == "JOBS"
+  - workload_name non-empty (>= 3 chars)
+  - runs_per_day, avg_runtime_minutes, days_per_month present and > 0
+  - num_workers present and >= 1
+  - reason populated (>= 10 chars)
+  - proposal_id present
+  - serverless_enabled explicitly set
+  - photon_enabled set for classic compute
+  - node types populated for classic compute
+- **3 serverless JOBS tests** (separate module-scoped fixture):
+  - workload_type == "JOBS"
+  - serverless_enabled == True
+  - scheduling fields (runs_per_day, avg_runtime_minutes) present
 
-### Regression Tests Added (This Iteration)
-- `TestBugS1_12b_ExcelRowWriterNumWorkersDefault` — 2 tests:
-  - Verifies no `'num_workers', 1)` pattern in `excel_row_writer.py`
-  - Scans all export modules for the same anti-pattern
-
-## Files Changed (This Iteration)
-- `backend/app/routes/export/excel_row_writer.py` — Lines 131, 154: `default=1` → `default=0`
-- `tests/regression/test_sprint_1_bugs.py` — Added `TestBugS1_12b_ExcelRowWriterNumWorkersDefault` class (2 tests)
+### Confirm Workflow Tests (`tests/ai_assistant/sprint_1/test_confirm_flow.py`)
+- **3 tests** (each creates its own conversation):
+  - Confirm proposal returns success with workload_config
+  - Confirmed proposal is removed from pending list in conversation state
+  - Reject proposal returns success with "rejected" action
 
 ## How to Test
-- **App URL**: https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com
-- Create a Jobs line item with `num_workers=0` → export Excel → verify DBU/hr = driver-only (no worker contribution)
-- Create a Jobs line item with no usage data → export Excel → verify $0 cost (not 11 hrs × rate)
+
+```bash
+cd /Users/steven.tan/Desktop/Ent\ 1\ -\ Q4\ FY\ 2026\ Team\ Project/lakemeter_app
+python -m pytest tests/ai_assistant/sprint_1/ -v
+```
+
+Requires: Databricks CLI profile `lakemeter` configured with workspace access.
 
 ## Test Results
-```
-Sprint 1 tests:     128 passed (tests/sprint_1/ — 6 test files)
-Regression tests:    22 passed (tests/regression/test_sprint_1_bugs.py)
-Sprint 1 total:     150 passed
-Full suite total:   574 passed
-Failures:             0
-Warnings:             0
-Duration:           3.60s
-```
+
+- **17 tests passed**, 0 failed
+- Runtime: ~220s (3m 40s) — AI calls take 30-60s each
+- Module-scoped fixtures minimize AI calls (2 for proposals, 3 for confirm flow = 5 total)
+
+## Architecture Decision: TestClient vs Live App
+
+Initially attempted to test against the live Databricks App at `https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com`. The Databricks Apps proxy re-scopes OAuth tokens, removing `model-serving` scope needed for FMAPI (Claude API). Switched to FastAPI TestClient which uses the backend's CLI token fallback — this token has `all-apis` scope including `model-serving`.
 
 ## Known Limitations
-- **BUG-S1-9**: No Visual QA report exists — Visual QA Agent responsibility, not Build Agent
-- **BUG-S1-11**: File size violations are pre-existing (ai_agent.py: 3822 lines, Calculator.tsx: 4106 lines) — out of scope for testing-only harness
+
+- Tests are non-deterministic: AI may ask different clarifying questions across runs. Follow-up messages mitigate this but 3 messages may not always be enough.
+- Each confirm flow test makes its own AI call (~30-60s each) since they need independent conversations.
+- Rate limiting: Claude FMAPI has QPH limits. Running full suite repeatedly may hit rate limits.
+
+## Files Changed
+
+- `tests/ai_assistant/__init__.py` (new)
+- `tests/ai_assistant/conftest.py` (new — shared test infrastructure)
+- `tests/ai_assistant/sprint_1/__init__.py` (new)
+- `tests/ai_assistant/sprint_1/conftest.py` (new — sprint-specific fixtures)
+- `tests/ai_assistant/sprint_1/test_jobs_proposal.py` (new — 14 JOBS tests)
+- `tests/ai_assistant/sprint_1/test_confirm_flow.py` (new — 3 confirm flow tests)
+- `harness/contracts/sprint-1.md` (updated — AI assistant test contract)
+- `harness/state.json` (updated)
