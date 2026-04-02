@@ -72,15 +72,16 @@ NON_SERVING_INTERACTIVE_FINAL = (
 
 # Variant 5: Negative — batch ETL (should NOT be MODEL_SERVING)
 NON_SERVING_ETL_PRIMARY = (
-    "I need a daily batch ETL pipeline to transform raw CSV files "
-    "into curated Delta tables on AWS us-east-1."
+    "I need a Lakeflow Jobs workload for a daily batch ETL pipeline "
+    "to transform raw CSV files into curated Delta tables on AWS us-east-1."
 )
 NON_SERVING_ETL_FOLLOWUP = (
-    "This is a daily batch ETL job — processes 200GB, "
+    "This is a Lakeflow Jobs (procedural) ETL job — processes 200GB, "
     "4 workers, runs once a day for 30 minutes, 22 days/month. "
-    "Please propose the workload configuration now."
+    "Please propose the Lakeflow Jobs workload configuration now."
 )
 NON_SERVING_ETL_FINAL = (
-    "Go ahead and propose a batch ETL workload — "
-    "daily job, 4 workers, 30 minutes per run, 22 days/month."
+    "Go ahead and propose a Lakeflow Jobs workload — "
+    "daily ETL job, 4 workers, 30 minutes per run, 22 days/month. "
+    "I want the JOBS workload type, not DLT."
 )
