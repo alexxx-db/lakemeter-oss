@@ -34,7 +34,13 @@ INTERACTIVE_AMBIGUOUS_PRIMARY = (
 INTERACTIVE_AMBIGUOUS_FOLLOWUP = (
     "This is for interactive use — not scheduled batch jobs. "
     "Standard All-Purpose Compute cluster, 4 workers, ~132 hours/month. "
+    "Use m5.xlarge instances, standard pricing tier, no Photon. "
     "Please propose the workload."
+)
+INTERACTIVE_AMBIGUOUS_FINAL = (
+    "Please go ahead and propose the All-Purpose Compute workload with "
+    "4 workers, m5.xlarge instances, 132 hours per month, standard tier, "
+    "no Photon. This is interactive compute, not a batch job."
 )
 
 
@@ -57,7 +63,7 @@ def interactive_edge_proposal(http_client, test_estimate):
     """AI call with ambiguous 'interactive' prompt — should still be ALL_PURPOSE."""
     proposal, resp = send_chat_until_proposal(
         http_client,
-        [INTERACTIVE_AMBIGUOUS_PRIMARY, INTERACTIVE_AMBIGUOUS_FOLLOWUP],
+        [INTERACTIVE_AMBIGUOUS_PRIMARY, INTERACTIVE_AMBIGUOUS_FOLLOWUP, INTERACTIVE_AMBIGUOUS_FINAL],
         test_estimate,
     )
     return proposal

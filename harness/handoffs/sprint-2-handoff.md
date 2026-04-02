@@ -18,6 +18,7 @@
 - **2 edge case tests** (separate module-scoped fixture):
   - Interactive notebook prompt maps to ALL_PURPOSE (not JOBS)
   - hours_per_month present and > 0 for interactive use case
+- **Flakiness fix (iteration 1)**: Added 3rd follow-up message (`INTERACTIVE_AMBIGUOUS_FINAL`) to edge case prompts — the AI sometimes asks clarifying questions instead of proposing on the 2nd message. More explicit prompts with specific instance types and parameters reduce non-determinism.
 
 ## How to Test
 
@@ -31,9 +32,10 @@ Requires: Databricks CLI profile `lakemeter` configured with workspace access.
 
 ## Test Results
 
-- **31 tests passed** (18 Sprint 1 + 13 Sprint 2), 0 failed
-- Runtime: ~390s (6m 30s) for full suite; ~93s for Sprint 2 only
+- **31 tests passed** (18 Sprint 1 + 13 Sprint 2), 0 failed, 0 errors
+- Runtime: ~287s (4m 47s) for full suite; ~120s for Sprint 2 only
 - Module-scoped fixtures minimize AI calls (2 for Sprint 2 proposals = 2 total AI calls)
+- Edge case may use up to 3 AI calls if AI asks clarifying questions
 
 ## Architecture Decision
 
@@ -44,6 +46,7 @@ Follows Sprint 1 pattern: FastAPI TestClient with local backend for FMAPI access
 - Tests are non-deterministic: AI may produce different field values across runs
 - hours_per_month assertion uses wide range (50-750) to account for AI interpretation variability
 - Each edge case variant makes its own AI call (~30-60s each)
+- Edge case prompts use 3 messages to handle AI clarification requests; may occasionally still need retry if AI is unusually terse
 
 ## Files Changed
 
