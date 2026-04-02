@@ -40,7 +40,9 @@ def _calculate_dbu_per_hour(item, cloud: str = 'aws') -> tuple:
     elif wt == 'LAKEBASE':
         cu = float(item.lakebase_cu or 0)
         nodes = float(item.lakebase_ha_nodes or 1)
-        if cu == 0:
+        if cu < 0:
+            warnings.append(f"Lakebase CU is negative ({cu})")
+        elif cu == 0:
             warnings.append("Lakebase CU not specified")
         return cu * nodes, warnings
     elif wt == 'DATABRICKS_APPS':

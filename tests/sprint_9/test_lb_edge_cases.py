@@ -27,24 +27,35 @@ class TestZeroCU:
 
 
 class TestNegativeCU:
-    """Negative CU should be handled gracefully (treated as invalid)."""
+    """Negative CU should emit a warning and still compute correctly."""
 
     @pytest.mark.parametrize("neg_cu", [-1, -0.5, -112])
     def test_negative_cu_returns_negative_dbu(self, neg_cu):
-        """Backend computes CU × nodes — negative CU yields negative DBU/hr.
-
-        This confirms the current behavior. A future validation layer
-        should reject negative CU before it reaches the calculation.
-        """
+        """Backend computes CU × nodes — negative CU yields negative DBU/hr."""
         item = make_line_item(lakebase_cu=neg_cu, lakebase_ha_nodes=1)
         dbu_hr, _ = _calculate_dbu_per_hour(item, 'aws')
         assert dbu_hr < 0, f"Negative CU ({neg_cu}) should yield negative DBU/hr"
+
+    @pytest.mark.parametrize("neg_cu", [-1, -0.5, -112])
+    def test_negative_cu_emits_warning(self, neg_cu):
+        """Backend should warn when CU is negative."""
+        item = make_line_item(lakebase_cu=neg_cu, lakebase_ha_nodes=1)
+        _, warnings = _calculate_dbu_per_hour(item, 'aws')
+        assert any("negative" in w.lower() for w in warnings), (
+            f"Expected 'negative' warning for CU={neg_cu}, got: {warnings}")
 
     def test_negative_cu_with_ha_nodes(self):
         """Negative CU with HA nodes still returns negative product."""
         item = make_line_item(lakebase_cu=-4, lakebase_ha_nodes=3)
         dbu_hr, _ = _calculate_dbu_per_hour(item, 'aws')
         assert dbu_hr == pytest.approx(-12.0)
+
+    def test_negative_cu_warning_includes_value(self):
+        """Warning message should include the actual negative CU value."""
+        item = make_line_item(lakebase_cu=-4, lakebase_ha_nodes=1)
+        _, warnings = _calculate_dbu_per_hour(item, 'aws')
+        assert any("-4" in w for w in warnings), (
+            f"Warning should include CU value -4, got: {warnings}")
 
     def test_negative_cu_helper_matches_backend(self):
         """Verify helper mirrors backend for negative inputs."""
