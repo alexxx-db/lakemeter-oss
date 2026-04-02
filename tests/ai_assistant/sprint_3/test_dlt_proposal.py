@@ -179,24 +179,42 @@ class TestDltCoreEdition:
         pid = dlt_core_proposal.get("proposal_id", "")
         assert pid, "proposal_id must be present"
 
+    def test_reason_populated(self, dlt_core_proposal):
+        reason = dlt_core_proposal.get("reason", "")
+        assert reason and len(reason) >= 10, (
+            f"reason too short or missing: '{reason}'"
+        )
+
+    def test_notes_populated(self, dlt_core_proposal):
+        notes = dlt_core_proposal.get("notes", "")
+        assert notes and len(notes) >= 1, (
+            f"notes should be populated: '{notes}'"
+        )
+
+    def test_serverless_explicitly_set(self, dlt_core_proposal):
+        se = dlt_core_proposal.get("serverless_enabled")
+        assert se is not None, "serverless_enabled should be explicitly set"
+
     def test_classic_compute_fields(self, dlt_core_proposal):
         """Core classic should have node types and worker count."""
-        if not dlt_core_proposal.get("serverless_enabled"):
-            has_nodes = (
-                dlt_core_proposal.get("driver_node_type")
-                or dlt_core_proposal.get("worker_node_type")
-            )
-            assert has_nodes, "Classic DLT should have node types"
-            nw = dlt_core_proposal.get("num_workers")
-            assert nw is not None and nw >= 1, (
-                f"Classic DLT should have num_workers >= 1, got {nw}"
-            )
+        if dlt_core_proposal.get("serverless_enabled"):
+            pytest.skip("AI chose serverless — classic compute fields not applicable")
+        has_nodes = (
+            dlt_core_proposal.get("driver_node_type")
+            or dlt_core_proposal.get("worker_node_type")
+        )
+        assert has_nodes, "Classic DLT should have node types"
+        nw = dlt_core_proposal.get("num_workers")
+        assert nw is not None and nw >= 1, (
+            f"Classic DLT should have num_workers >= 1, got {nw}"
+        )
 
     def test_photon_set_for_classic(self, dlt_core_proposal):
         """If classic compute, photon_enabled should be set."""
-        if not dlt_core_proposal.get("serverless_enabled"):
-            pe = dlt_core_proposal.get("photon_enabled")
-            assert pe is not None, "photon_enabled should be set for classic"
+        if dlt_core_proposal.get("serverless_enabled"):
+            pytest.skip("AI chose serverless — photon check not applicable")
+        pe = dlt_core_proposal.get("photon_enabled")
+        assert pe is not None, "photon_enabled should be set for classic"
 
 
 # -- DLT Advanced edition tests ------------------------------------------------
@@ -226,6 +244,18 @@ class TestDltAdvancedEdition:
     def test_proposal_id_present(self, dlt_advanced_proposal):
         pid = dlt_advanced_proposal.get("proposal_id", "")
         assert pid, "proposal_id must be present"
+
+    def test_reason_populated(self, dlt_advanced_proposal):
+        reason = dlt_advanced_proposal.get("reason", "")
+        assert reason and len(reason) >= 10, (
+            f"reason too short or missing: '{reason}'"
+        )
+
+    def test_notes_populated(self, dlt_advanced_proposal):
+        notes = dlt_advanced_proposal.get("notes", "")
+        assert notes and len(notes) >= 1, (
+            f"notes should be populated: '{notes}'"
+        )
 
     def test_serverless_explicitly_set(self, dlt_advanced_proposal):
         se = dlt_advanced_proposal.get("serverless_enabled")
