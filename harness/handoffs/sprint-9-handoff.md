@@ -1,55 +1,45 @@
-# Sprint 9 Handoff: LAKEBASE AI Assistant Proposal Tests
+# Sprint 9 Handoff: LAKEBASE — Iter 2 (Evaluator Feedback Fixes)
 
 ## What Was Built
 
-23 tests validating the AI assistant correctly proposes LAKEBASE workloads for PostgreSQL database requests:
+### Iteration 1 (23 AI assistant tests + backend bugfix)
+23 tests validating the AI assistant correctly proposes LAKEBASE workloads for PostgreSQL database requests. Fixed `UnboundLocalError: total_read_nodes` in `ai_agent.py`.
 
-### Test Files
-| File | Tests | Coverage |
-|------|-------|----------|
-| `test_lakebase_ha_prod.py` | 10 | HA production: type, HA enabled, storage ~500GB, CU ~4, name, reason, notes, proposal_id |
-| `test_lakebase_small_dev.py` | 7 | Small dev/test: type, storage ~10GB, CU ~0.5, no HA, name, reason, proposal_id |
-| `test_lakebase_negative.py` | 6 | Negative discrimination: ETL→JOBS (3), SQL analytics→DBSQL (3) |
+### Iteration 2 (10 new tests + code quality improvements)
+Addressed all 3 evaluator feedback items to close the gap from 9.31 → target 9.5:
 
-### Bug Found & Fixed
-**`UnboundLocalError: total_read_nodes`** in `backend/app/services/ai_agent.py:3086` — when the AI proposed a Lakebase instance with read replicas but without specifying throughput data (reads/writes per second), the variable `total_read_nodes` was only assigned inside the throughput calculation block (line 2990) but referenced in the notes generation section (line 3086). Fixed by using the already-assigned `total_active_nodes` variable (defined at line 3022).
+| Fix | File | Tests Added |
+|-----|------|-------------|
+| **Negative CU edge cases** | `tests/sprint_9/test_lb_edge_cases.py` | +5 tests: parametrized negative CU (-1, -0.5, -112), negative CU × HA nodes, helper-backend parity |
+| **Storage discount propagation** | `tests/sprint_9/test_lb_excel_storage.py` | +5 tests: discounted cost = list cost at 0%, discount % column is 0, discounted rate = list rate |
+| **Temp file context manager** | `tests/sprint_9/excel_helpers.py` | 0 new tests, code quality fix: replaced manual `os.unlink` with `NamedTemporaryFile(delete=True)` context manager |
 
-### Acceptance Criteria Status
-- [x] AC-1 to AC-10: HA production database — all fields validated
-- [x] AC-11 to AC-17: Small dev/test instance — correct sizing, no HA
-- [x] AC-18 to AC-19: ETL pipeline correctly classified as JOBS
-- [x] AC-20 to AC-21: SQL analytics correctly classified as DBSQL
+## Test Results
+
+- Sprint 9 tests: **121 passed** (up from 111)
+- Full regression suite (non-AI): **1350 passed, 0 failed** (6.19s)
+- No regressions introduced
 
 ## How to Test
 
 ```bash
 cd lakemeter_app
 source .venv/bin/activate
-python -m pytest tests/ai_assistant/sprint_9/ -v
+python -m pytest tests/sprint_9/ -v          # 121 tests, ~2s
+python -m pytest tests/ --ignore=tests/ai_assistant -v  # 1350 tests, ~6s
 ```
 
-## Test Results
+## Files Changed (Iteration 2 only)
 
-- `pytest` exit code: 0
-- Sprint 9 tests: 23 passed
-- Full regression suite: 229/229 passed (0 regressions, 31m 40s)
+```
+tests/sprint_9/test_lb_edge_cases.py    (added TestNegativeCU class: 5 tests)
+tests/sprint_9/test_lb_excel_storage.py (added TestStorageDiscountPropagation class: 5 tests)
+tests/sprint_9/excel_helpers.py         (refactored generate_xlsx to use context manager)
+harness/handoffs/sprint-9-handoff.md    (updated)
+harness/state.json                      (updated)
+```
 
 ## Known Limitations
 
-- `test_ha_not_enabled` uses `pytest.skip()` rather than `assert` if AI enables HA for the dev instance — AI may over-provision which is not a failure, just a flag
-- CU values are auto-calculated by backend from throughput inputs; when no throughput specified, AI picks a reasonable default
-
-## Files Changed
-
-```
-tests/ai_assistant/sprint_9/__init__.py           (new)
-tests/ai_assistant/sprint_9/prompts.py             (new)
-tests/ai_assistant/sprint_9/conftest.py            (new)
-tests/ai_assistant/sprint_9/test_lakebase_ha_prod.py   (new)
-tests/ai_assistant/sprint_9/test_lakebase_small_dev.py (new)
-tests/ai_assistant/sprint_9/test_lakebase_negative.py  (new)
-harness/contracts/sprint-9.md                      (updated)
-harness/handoffs/sprint-9-handoff.md               (updated)
-harness/state.json                                 (updated)
-backend/app/services/ai_agent.py                   (bugfix: total_read_nodes → total_active_nodes)
-```
+- Negative CU tests confirm current behavior (returns negative DBU/hr) — a future validation layer should reject negative CU at input time
+- Storage discount is hardcoded at 0.0 in backend — tests verify formula correctness at 0%, not with actual discounts

@@ -1,5 +1,4 @@
 """Shared Excel test helpers for Lakebase export tests."""
-import os
 import tempfile
 from datetime import datetime
 from types import SimpleNamespace
@@ -42,11 +41,10 @@ def generate_xlsx(line_items, cloud='aws', region='us-east-1',
                   tier='PREMIUM'):
     estimate = make_estimate()
     output = build_estimate_excel(estimate, line_items, cloud, region, tier)
-    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=True) as f:
         f.write(output.read())
-        tmp_path = f.name
-    wb = openpyxl.load_workbook(tmp_path)
-    os.unlink(tmp_path)
+        f.flush()
+        wb = openpyxl.load_workbook(f.name)
     return wb
 
 

@@ -26,6 +26,34 @@ class TestZeroCU:
                     for w in warnings)
 
 
+class TestNegativeCU:
+    """Negative CU should be handled gracefully (treated as invalid)."""
+
+    @pytest.mark.parametrize("neg_cu", [-1, -0.5, -112])
+    def test_negative_cu_returns_negative_dbu(self, neg_cu):
+        """Backend computes CU × nodes — negative CU yields negative DBU/hr.
+
+        This confirms the current behavior. A future validation layer
+        should reject negative CU before it reaches the calculation.
+        """
+        item = make_line_item(lakebase_cu=neg_cu, lakebase_ha_nodes=1)
+        dbu_hr, _ = _calculate_dbu_per_hour(item, 'aws')
+        assert dbu_hr < 0, f"Negative CU ({neg_cu}) should yield negative DBU/hr"
+
+    def test_negative_cu_with_ha_nodes(self):
+        """Negative CU with HA nodes still returns negative product."""
+        item = make_line_item(lakebase_cu=-4, lakebase_ha_nodes=3)
+        dbu_hr, _ = _calculate_dbu_per_hour(item, 'aws')
+        assert dbu_hr == pytest.approx(-12.0)
+
+    def test_negative_cu_helper_matches_backend(self):
+        """Verify helper mirrors backend for negative inputs."""
+        item = make_line_item(lakebase_cu=-2, lakebase_ha_nodes=2)
+        dbu_hr, _ = _calculate_dbu_per_hour(item, 'aws')
+        expected = calc_dbu_per_hour(-2, 2)
+        assert dbu_hr == pytest.approx(expected)
+
+
 class TestNoneDefaults:
     """None values should default gracefully."""
 
