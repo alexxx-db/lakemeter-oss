@@ -31,3 +31,38 @@
 - tests/sprint_4/test_dbsql_export_integration.py
 - tests/sprint_4/test_dbsql_discrepancies.py
 - tests/sprint_4/test_dbsql_vm_and_notes.py
+
+---
+
+## AI Assistant E2E Tests (Harness Sprint 4)
+
+### Acceptance Criteria
+
+#### Serverless SQL Warehouse (Primary)
+- [ ] AC-1: AI proposes `workload_type=DBSQL` for serverless SQL warehouse request
+- [ ] AC-2: `dbsql_warehouse_type` is `SERVERLESS`
+- [ ] AC-3: `dbsql_warehouse_size` is a valid size (2X-Small through 4X-Large)
+- [ ] AC-4: `dbsql_num_clusters >= 1`
+- [ ] AC-5: `workload_name` is descriptive (>= 3 chars)
+- [ ] AC-6: `reason` and `notes` populated
+- [ ] AC-7: `proposal_id` present
+
+#### Pro SQL Warehouse
+- [ ] AC-8: AI proposes `dbsql_warehouse_type=PRO` when asked for Pro warehouse
+- [ ] AC-9: Warehouse size maps correctly for user-specified "large"
+- [ ] AC-10: `dbsql_num_clusters` populated
+
+#### Classic SQL Warehouse
+- [ ] AC-11: AI proposes `dbsql_warehouse_type=CLASSIC` when user explicitly requests classic/legacy
+
+#### Negative Discrimination
+- [ ] AC-12: Interactive compute request does NOT produce DBSQL type
+- [ ] AC-13: Batch ETL request does NOT produce DBSQL type
+
+### AI Test Files
+- tests/ai_assistant/sprint_4/prompts.py
+- tests/ai_assistant/sprint_4/conftest.py
+- tests/ai_assistant/sprint_4/test_dbsql_serverless.py
+- tests/ai_assistant/sprint_4/test_dbsql_pro.py
+- tests/ai_assistant/sprint_4/test_dbsql_classic.py
+- tests/ai_assistant/sprint_4/test_dbsql_negative.py

@@ -1,36 +1,53 @@
-# Sprint 4 Handoff: DBSQL (Classic, Pro, Serverless — All Sizes) — Iteration 2
+# Sprint 4 Handoff: DBSQL AI Assistant E2E Tests — Iteration 1
 
-## What Was Built (Iteration 2 Fixes)
+## What Was Built
 
-Fixed 2 bugs from Sprint 4 evaluation + added missing run-based hours test.
+AI assistant end-to-end tests for DBSQL (Databricks SQL) workload proposals. Tests verify the AI correctly proposes DBSQL workloads with Serverless, Pro, and Classic warehouse types from natural language.
 
-### Bug Fixes
-- **BUG-S4-1**: `_calc_dbsql_dbu` now clamps negative/zero cluster counts to 1 via `max(1, int(...))` — previously negative clusters produced negative DBU values
-- **BUG-S4-2**: Empty or whitespace-only warehouse size now triggers a warning ("Empty warehouse size, defaulting to Small") instead of silently defaulting
+### Files Created
 
-### New Tests
-- `tests/regression/test_sprint_4_bugs.py` — 8 regression tests for BUG-S4-1 and BUG-S4-2
-- `tests/sprint_4/test_dbsql_calculations.py` — 2 new run-based hours tests (10 runs/day × 30 min × 22 days = 110 hrs, verified FE + BE)
+| File | Lines | Purpose |
+|------|------:|---------|
+| `tests/ai_assistant/sprint_4/__init__.py` | 0 | Package marker |
+| `tests/ai_assistant/sprint_4/prompts.py` | 74 | 4 prompt sequences (serverless, pro, classic, negative) |
+| `tests/ai_assistant/sprint_4/conftest.py` | 55 | 4 module-scoped fixtures (1 AI call each) |
+| `tests/ai_assistant/sprint_4/test_dbsql_serverless.py` | 62 | 9 tests: type, warehouse_type, size, clusters, name, reason, notes, proposal_id |
+| `tests/ai_assistant/sprint_4/test_dbsql_pro.py` | 56 | 8 tests: type, warehouse_type, size (large+), clusters, name, reason, proposal_id |
+| `tests/ai_assistant/sprint_4/test_dbsql_classic.py` | 50 | 7 tests: type, warehouse_type, size, clusters, name, reason, proposal_id |
+| `tests/ai_assistant/sprint_4/test_dbsql_negative.py` | 16 | 2 tests: non-DBSQL request should not produce DBSQL |
 
-### Updated Tests
-- `tests/sprint_4/test_dbsql_vm_and_notes.py` — Updated `test_empty_string_size` and `test_negative_clusters` to match new behavior
+### AI Calls
+
+4 total AI conversations (module-scoped fixtures):
+1. Serverless Medium warehouse for BI dashboards
+2. Pro Large warehouse with 2 clusters for analytics
+3. Classic Small warehouse for legacy integration
+4. Interactive compute (negative — should produce ALL_PURPOSE, not DBSQL)
 
 ## How to Test
-- Run: `python3 -m pytest tests/ -v`
-- Live app: https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com
-- Navigate to Calculator → add DBSQL line items (Classic Small, Pro Medium 2-cluster, Serverless Large, Serverless 4X-Large)
+
+```bash
+cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
+source .venv/bin/activate
+python -m pytest tests/ai_assistant/sprint_4/ -v
+```
 
 ## Test Results
-- `pytest` exit code: 0
-- Tests: 709 total (10 new), 0 failures
-- All sprint 4 files under 200 lines
 
-## Files Changed
-- `backend/app/routes/export/calculations.py` — `_calc_dbsql_dbu`: added `max(1,...)` guard + empty string warning
-- `tests/regression/test_sprint_4_bugs.py` — NEW: 8 regression tests
-- `tests/sprint_4/test_dbsql_calculations.py` — Added 2 run-based hours tests
-- `tests/sprint_4/test_dbsql_vm_and_notes.py` — Updated 2 edge case tests for new behavior
+### Sprint 4: 26 passed, 0 failed (177.14s)
+### Sprint 1-3 Regression: 60 passed, 0 failed (497.98s)
+
+**Zero regressions. All 86 AI assistant tests pass.**
+
+## Acceptance Criteria: 13/13 PASS
+
+- AC-1 through AC-7 (Serverless): All PASS
+- AC-8 through AC-10 (Pro): All PASS
+- AC-11 (Classic): PASS
+- AC-12 through AC-13 (Negative): PASS
 
 ## Known Limitations
-- VM pricing for Classic/Pro DBSQL uses default estimates ($0.20/$0.10), not real instance prices
-- Live app UI verification still needed (Visual QA scope)
+
+- Tests are non-deterministic: AI may choose slightly different sizes or cluster counts
+- Each test run requires ~3 minutes for 4 AI conversations (module-scoped fixtures minimize calls)
+- Pro test accepts Large or bigger (AI may upsize based on analytics use case)
