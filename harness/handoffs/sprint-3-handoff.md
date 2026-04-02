@@ -1,28 +1,27 @@
-# Sprint 3 Handoff: DLT/SDP (Spark Declarative Pipelines) — Iteration 5 (Build iter 2)
+# Sprint 3 Handoff: DLT/SDP — Iteration 3 (File Split)
 
-## What Was Built
+## What Changed (Iteration 3)
 
-### DLT Proposal Tests (`tests/ai_assistant/sprint_3/test_dlt_proposal.py`)
-- **9 DLT Pro Serverless tests** (module-scoped fixture — single AI call shared)
-- **10 DLT Core Edition tests** (separate module-scoped fixture)
-- **8 DLT Advanced Edition tests** (separate module-scoped fixture)
-- **2 Negative Discrimination tests** (NEW — verifies non-DLT prompt does NOT produce DLT)
+Split `test_dlt_proposal.py` (262 lines) into 4 per-variant files to address the evaluator's sole remaining deduction (Code Quality: 9.0 — file over 200-line guideline).
 
-### Iteration 5 Changes (addressing eval feedback — score 9.35 → targeting 9.5)
+### Files Changed
 
-**Fix 1: Code Quality — prompt extraction (eval deduction: 279 lines over 200 guideline)**
-- Extracted all prompt constants to `tests/ai_assistant/sprint_3/prompts.py` (71 lines)
-- Test file reduced from 279 → 262 lines (net reduction despite adding new test class)
-- Clean separation of concerns: prompts are data, test file is logic
+| File | Lines | Action |
+|------|------:|--------|
+| `tests/ai_assistant/sprint_3/conftest.py` | 58 | **Rewritten** — now contains 4 module-scoped fixtures (moved from test file) |
+| `tests/ai_assistant/sprint_3/test_dlt_pro.py` | 55 | **New** — 9 tests for DLT Pro serverless |
+| `tests/ai_assistant/sprint_3/test_dlt_core.py` | 72 | **New** — 10 tests for DLT Core classic |
+| `tests/ai_assistant/sprint_3/test_dlt_advanced.py` | 51 | **New** — 8 tests for DLT Advanced |
+| `tests/ai_assistant/sprint_3/test_dlt_negative.py` | 18 | **New** — 2 negative discrimination tests |
+| `tests/ai_assistant/sprint_3/prompts.py` | 71 | **Unchanged** — prompt constants |
+| `tests/ai_assistant/sprint_3/test_dlt_proposal.py` | — | **Deleted** — replaced by 4 per-variant files |
 
-**Fix 2: Testing Coverage — negative discrimination test (eval: "no negative test cases")**
-- Added `TestDltNegativeDiscrimination` class with 2 assertions:
-  - `test_non_dlt_prompt_does_not_produce_dlt` — interactive compute prompt must NOT yield DLT
-  - `test_non_dlt_prompt_produces_all_purpose` — must yield ALL_PURPOSE instead
-- New `non_dlt_proposal` module-scoped fixture (1 additional AI call)
-- Total AI calls per run: 4 (PRO + CORE + ADVANCED + negative)
+### Design Decision
 
-### Prior Iteration Fixes (all verified intact)
+Module-scoped fixtures moved to `conftest.py`. Each test file uses exactly one fixture, so each AI call happens once per variant — identical behavior to the monolithic file (4 total AI calls).
+
+## Prior Iteration Fixes (all still intact)
+
 - **BUG-S3-001** (iter 3): Hardened `DLT_ADVANCED_FINAL` prompt
 - **BUG-S3-002** (iter 3): Added `test_scheduling_fields_present` to Core → 15/15 ACs
 - **BUG-S3-003** (iter 4): FMAPI tool_use/tool_result conversion fix in ai_client.py + ai_agent.py
@@ -37,33 +36,16 @@ python -m pytest tests/ai_assistant/sprint_3/ -v
 
 ## Test Results
 
-### Sprint 3 Only
-```
-29 passed, 0 failed, 6 warnings in 193.85s (3m 13s)
-```
+### Sprint 3: 29 passed, 0 failed (215.96s)
+### Sprint 1+2 Regression: 31 passed, 0 failed (294.91s)
 
-### Sprint 1 + Sprint 2 Regression
-```
-31 passed, 0 failed, 6 warnings in 297.96s (4m 57s)
-```
-
-### Full Project Test Suite
-```
-1364 passed, 0 failed, 6 warnings in 540.96s (9m 00s)
-```
-Up from 1362 → 1364 (2 new negative tests). Zero regressions.
+**Zero regressions. All 60 tests pass.**
 
 ## Acceptance Criteria: 15/15 PASS (unchanged)
+
 All original ACs remain passing. Negative tests are bonus coverage beyond contract.
 
 ## Known Limitations
-- Test file at 262 lines (over 200 guideline) due to 4 test classes; further reduction would require parametrizing across variants, sacrificing readability
+
 - Negative test adds a 4th AI call per run (~30s additional runtime)
 - Tests are non-deterministic: DLT Core may choose serverless — classic-specific tests properly `pytest.skip`
-
-## Files Changed
-| File | Action | Lines | Purpose |
-|------|--------|------:|---------|
-| `tests/ai_assistant/sprint_3/prompts.py` | NEW | 71 | Extracted prompt constants |
-| `tests/ai_assistant/sprint_3/test_dlt_proposal.py` | MODIFIED | 262 | Imports from prompts.py, added negative test class |
-| `harness/handoffs/sprint-3-handoff.md` | UPDATED | — | This file |
