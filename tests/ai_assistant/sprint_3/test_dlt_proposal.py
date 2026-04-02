@@ -55,7 +55,10 @@ DLT_ADVANCED_FOLLOWUP = (
 )
 DLT_ADVANCED_FINAL = (
     "Go ahead and propose the DLT/SDP workload with Advanced edition, "
-    "serverless performance mode, 6 runs/day, 20 min each."
+    "serverless performance mode, Photon enabled, 6 runs/day, 20 min each, "
+    "30 days/month. Base table size is medium (~100GB). "
+    "Use sensible defaults for anything I haven't specified — "
+    "just propose the workload now, don't ask more questions."
 )
 
 
@@ -215,6 +218,13 @@ class TestDltCoreEdition:
             pytest.skip("AI chose serverless — photon check not applicable")
         pe = dlt_core_proposal.get("photon_enabled")
         assert pe is not None, "photon_enabled should be set for classic"
+
+    def test_scheduling_fields_present(self, dlt_core_proposal):
+        has_runs = dlt_core_proposal.get("runs_per_day") is not None
+        has_hours = dlt_core_proposal.get("hours_per_month") is not None
+        assert has_runs or has_hours, (
+            "DLT Core proposal should have runs_per_day or hours_per_month"
+        )
 
 
 # -- DLT Advanced edition tests ------------------------------------------------

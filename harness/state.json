@@ -18,7 +18,7 @@
     "Sprint 11: Multi-Workload — ML Pipeline (Model Serving + FMAPI + Vector Search)",
     "Sprint 12: Multi-Workload — Complete Platform (5+ workloads)"
   ],
-  "last_action": "Sprint 3 iteration 2 BUILD complete. All 5 evaluator issues fixed: +5 new tests (reason/notes on Core+Advanced, serverless_explicitly_set on Core), 2 improved tests (pytest.skip for classic compute). 26 S3 tests pass, 57 total pass. Zero regressions.",
+  "last_action": "Sprint 3 iteration 3 BUILD complete. Both evaluator bugs fixed: BUG-S3-001 (hardened Advanced prompt — 2/2 stable runs) + BUG-S3-002 (added Core scheduling test). 27 S3 tests pass, 58 total pass. 15/15 ACs covered. Zero regressions.",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -48,13 +48,13 @@
   "last_install_test": 2,
   "last_integration_test": 2,
   "context_resets": 0,
-  "current_iteration": 2,
+  "current_iteration": 3,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "N/A — uses FastAPI TestClient with local backend for FMAPI access",
   "dev_server_port": null,
   "live_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "mode": "TESTING_ONLY",
-  "score_trajectory": [9.22],
-  "last_updated": "2026-04-02T11:05:00"
+  "score_trajectory": [0.0, 0.0, 8.2],
+  "last_updated": "2026-04-02T12:15:00"
 }

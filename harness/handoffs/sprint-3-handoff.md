@@ -1,4 +1,4 @@
-# Sprint 3 Handoff: DLT/SDP (Spark Declarative Pipelines) — AI Assistant Tests (Iteration 2)
+# Sprint 3 Handoff: DLT/SDP (Spark Declarative Pipelines) — AI Assistant Tests (Iteration 3)
 
 ## What Was Built
 
@@ -13,30 +13,33 @@
   - proposal_id present
   - scheduling fields present (runs_per_day or hours_per_month)
   - serverless_enabled explicitly set (not None)
-- **9 DLT Core Edition tests** (separate module-scoped fixture):
+- **10 DLT Core Edition tests** (separate module-scoped fixture):
   - workload_type == "DLT"
   - dlt_edition contains "CORE" for basic ETL pipeline
   - workload_name non-empty
   - proposal_id present
-  - **NEW** reason populated (>= 10 chars)
-  - **NEW** notes populated (>= 1 char)
-  - **NEW** serverless_enabled explicitly set (not None)
+  - reason populated (>= 10 chars)
+  - notes populated (>= 1 char)
+  - serverless_enabled explicitly set (not None)
   - classic compute has node types and num_workers >= 1 (skips via `pytest.skip` if serverless)
   - photon_enabled set for classic compute (skips via `pytest.skip` if serverless)
+  - **NEW** scheduling_fields_present (runs_per_day or hours_per_month) — completes AC-15 for Core
 - **8 DLT Advanced Edition tests** (separate module-scoped fixture):
   - workload_type == "DLT"
   - dlt_edition contains "ADVANCED" for full monitoring
   - workload_name non-empty
   - proposal_id present
-  - **NEW** reason populated (>= 10 chars)
-  - **NEW** notes populated (>= 1 char)
+  - reason populated (>= 10 chars)
+  - notes populated (>= 1 char)
   - serverless_enabled explicitly set
   - scheduling fields present
 
-### Iteration 2 Changes (from evaluator feedback)
-1. **ISSUE-S3-001**: Added `test_reason_populated` and `test_notes_populated` to `TestDltCoreEdition` and `TestDltAdvancedEdition` — reason/notes now asserted on all 3 variants (was Pro only)
-2. **ISSUE-S3-002**: Replaced `if not serverless_enabled` silent-pass guards with `pytest.skip("AI chose serverless — ...")` so test output shows SKIPPED instead of misleading PASS
-3. **ISSUE-S3-003**: Added `test_serverless_explicitly_set` to `TestDltCoreEdition` — AC-12 now tested on all 3 variants
+### Iteration 3 Changes (from evaluator feedback)
+1. **BUG-S3-001 [MAJOR]**: Hardened `DLT_ADVANCED_FINAL` prompt — added Photon preference, base table size hint, days/month, and "don't ask more questions" directive. Eliminates intermittent fixture failures where AI asked clarifying questions instead of proposing.
+2. **BUG-S3-002 [MINOR]**: Added `test_scheduling_fields_present` to `TestDltCoreEdition` — AC-15 now tested on all 3 variants (was Pro + Advanced only). **15/15 ACs now covered.**
+
+### Stability Verification
+Advanced fixture tested **twice** consecutively — both passed. Previously failed ~30-50% per VQA report; now stable with the hardened prompt.
 
 ## How to Test
 
@@ -50,19 +53,23 @@ Requires: Databricks CLI profile `lakemeter` configured with workspace access.
 
 ## Test Results
 
-- **57 tests passed** (18 S1 + 13 S2 + 26 S3), 0 failed, 0 errors
-- Sprint 3 only: 26 passed in ~169s
-- Full regression suite: 57 passed in ~591s (9m 51s)
+- **Sprint 3 only**: 27 passed, 0 failed, 0 errors in ~243s (4m 3s)
+- **Full AI regression (S1+S2+S3)**: 58 passed, 0 failed, 0 errors in ~550s (9m 9s)
+- **Advanced stability retest**: 8/8 passed in ~64s
 - Module-scoped fixtures: 3 AI calls for Sprint 3 (PRO, CORE, ADVANCED)
 - Zero regressions across all sprints
+- Test count: 26 → 27 (new Core scheduling test)
 
 ## Known Limitations
 
 - Tests are non-deterministic: AI may produce different field values across runs
-- DLT Core was requested as classic compute but AI may sometimes choose serverless — classic-specific tests now properly skip with `pytest.skip` instead of silently passing
+- DLT Core was requested as classic compute but AI may sometimes choose serverless — classic-specific tests properly skip with `pytest.skip`
 - Each variant makes its own AI call (~30-60s each)
 
 ## Files Changed
 
-- `tests/ai_assistant/sprint_3/test_dlt_proposal.py` — MODIFIED (+5 new test methods, 2 improved methods; 21→26 tests)
-- `harness/handoffs/sprint-3-handoff.md` — Updated for iteration 2
+- `tests/ai_assistant/sprint_3/test_dlt_proposal.py` — MODIFIED:
+  - Hardened `DLT_ADVANCED_FINAL` prompt (lines 56-61) to prevent intermittent failures
+  - Added `test_scheduling_fields_present` to `TestDltCoreEdition` (lines 219-224)
+  - Test count: 26 → 27
+- `harness/handoffs/sprint-3-handoff.md` — Updated for iteration 3
