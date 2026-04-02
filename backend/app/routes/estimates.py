@@ -95,9 +95,6 @@ def list_estimates(
             estimate_id=e.estimate_id,
             estimate_name=e.estimate_name,
             customer_name=e.customer_name,
-            sfdc_account_id=e.sfdc_account_id,
-            opportunity_id=e.opportunity_id,
-            uco_id=e.uco_id,
             cloud=e.cloud,
             region=e.region,
             tier=e.tier,
@@ -307,10 +304,7 @@ def duplicate_estimate(
     new_estimate = Estimate(
         estimate_name=f"{original.estimate_name} (Copy)",
         owner_user_id=current_user.user_id,  # New owner is current user
-        sfdc_account_id=original.sfdc_account_id,
         customer_name=original.customer_name,
-        opportunity_id=original.opportunity_id,
-        uco_id=original.uco_id,
         cloud=original.cloud,
         region=original.region,
         tier=original.tier,
@@ -406,10 +400,7 @@ def clone_estimate(
     new_estimate = Estimate(
         estimate_name=new_name,
         owner_user_id=current_user.user_id,
-        sfdc_account_id=original.sfdc_account_id,
         customer_name=original.customer_name,
-        opportunity_id=original.opportunity_id,
-        uco_id=original.uco_id,
         cloud=original.cloud,
         region=original.region,
         tier=original.tier,

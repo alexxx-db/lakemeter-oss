@@ -16,10 +16,7 @@ class Estimate(Base):
     estimate_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     estimate_name = Column(String(500), nullable=False)
     owner_user_id = Column(UUID(as_uuid=True), ForeignKey("lakemeter.users.user_id"))
-    sfdc_account_id = Column(String(18))  # Salesforce Account ID
     customer_name = Column(String(255))
-    opportunity_id = Column(String(18))  # Salesforce Opportunity ID
-    uco_id = Column(String(18))  # Salesforce Use Case ID
     cloud = Column(String(50))
     region = Column(String(50))
     tier = Column(String(20))

@@ -34,15 +34,12 @@ import clsx from 'clsx'
 import { useStore } from '../store/useStore'
 import { 
   exportEstimateToExcel,
-  fetchSalesforceAccounts,
-  fetchSalesforceOpportunities,
-  fetchSalesforceUseCases,
   type RegionResponse
 } from '../api/client'
 import { saveAs } from 'file-saver'
 import WorkloadForm from '../components/WorkloadForm'
 import SearchableSelect from '../components/SearchableSelect'
-import type { LineItem, SalesforceAccount, SalesforceOpportunity, SalesforceUseCase } from '../types'
+import type { LineItem } from '../types'
 import {
   getInstanceDBURate as getBundleInstanceDBURate,
   getPhotonMultiplier as getBundlePhotonMultiplier,
@@ -429,17 +426,6 @@ export default function Calculator() {
   // Track VM cost loading to show proper loading state instead of "jumping" prices
   const [isLoadingVMCosts, setIsLoadingVMCosts] = useState(false)
   
-  // Salesforce data
-  const [sfAccounts, setSfAccounts] = useState<SalesforceAccount[]>([])
-  const [sfOpportunities, setSfOpportunities] = useState<SalesforceOpportunity[]>([])
-  const [sfUseCases, setSfUseCases] = useState<SalesforceUseCase[]>([])
-  const [sfAccountSearch, setSfAccountSearch] = useState('')
-  const [sfOpportunitySearch, setSfOpportunitySearch] = useState('')
-  const [sfUseCaseSearch, setSfUseCaseSearch] = useState('')
-  const [isLoadingSfAccounts, setIsLoadingSfAccounts] = useState(false)
-  const [isLoadingSfOpportunities, setIsLoadingSfOpportunities] = useState(false)
-  const [isLoadingSfUseCases, setIsLoadingSfUseCases] = useState(false)
-  
   // Regions data (fetched from API based on cloud)
   const [regions, setRegions] = useState<RegionResponse[]>([])
   const [isLoadingRegions, setIsLoadingRegions] = useState(false)
@@ -448,9 +434,6 @@ export default function Calculator() {
   const [formData, setFormData] = useState({
     estimate_name: '',
     customer_name: '',
-    sfdc_account_id: '',  // Salesforce Account ID
-    opportunity_id: '',  // Salesforce Opportunity ID
-    uco_id: '',  // Salesforce Use Case ID
     cloud: 'aws',
     region: '',
     tier: ''  // No default - must be selected
@@ -509,91 +492,6 @@ export default function Calculator() {
   
   // NOTE: fetchReferenceData() and loadPricingBundle() are now called in Layout.tsx at app startup
   // This significantly speeds up Calculator page load
-  
-  // Salesforce lazy loading state - only fetch when user interacts with dropdown
-  const [sfAccountsFetched, setSfAccountsFetched] = useState(false)
-  
-  // Lazy load Salesforce accounts - only fetch when user starts searching or dropdown is opened
-  // This is a major performance optimization - Salesforce API calls are slow
-  const fetchSfAccountsLazy = useCallback(async (search?: string) => {
-    setIsLoadingSfAccounts(true)
-    try {
-      const accounts = await fetchSalesforceAccounts({ 
-        search: search || undefined,
-        limit: 1000 
-      })
-      setSfAccounts(accounts)
-      setSfAccountsFetched(true)
-    } catch (error) {
-      console.error('Failed to fetch Salesforce accounts:', error)
-    } finally {
-      setIsLoadingSfAccounts(false)
-    }
-  }, [])
-  
-  // Fetch when search changes (debounced), but only if already fetched once or user is searching
-  useEffect(() => {
-    if (!sfAccountsFetched && !sfAccountSearch) {
-      // Don't auto-fetch on mount - wait for user interaction
-      return
-    }
-    
-    const timeoutId = setTimeout(() => {
-      fetchSfAccountsLazy(sfAccountSearch)
-    }, 300) // 300ms debounce
-    
-    return () => clearTimeout(timeoutId)
-  }, [sfAccountSearch, sfAccountsFetched, fetchSfAccountsLazy])
-  
-  // Fetch Salesforce opportunities when account is selected or search changes
-  useEffect(() => {
-    if (!formData.sfdc_account_id) {
-      setSfOpportunities([])
-      return
-    }
-    
-    const timeoutId = setTimeout(async () => {
-      setIsLoadingSfOpportunities(true)
-      try {
-        const opportunities = await fetchSalesforceOpportunities({ 
-          account_id: formData.sfdc_account_id,
-          limit: 1000 
-        })
-        setSfOpportunities(opportunities)
-      } catch (error) {
-        console.error('Failed to fetch Salesforce opportunities:', error)
-      } finally {
-        setIsLoadingSfOpportunities(false)
-      }
-    }, 300)
-    
-    return () => clearTimeout(timeoutId)
-  }, [formData.sfdc_account_id, sfOpportunitySearch])
-  
-  // Fetch Salesforce use cases when account is selected or search changes
-  useEffect(() => {
-    if (!formData.sfdc_account_id) {
-      setSfUseCases([])
-      return
-    }
-    
-    const timeoutId = setTimeout(async () => {
-      setIsLoadingSfUseCases(true)
-      try {
-        const useCases = await fetchSalesforceUseCases({ 
-          account_id: formData.sfdc_account_id,
-          limit: 1000 
-        })
-        setSfUseCases(useCases)
-      } catch (error) {
-        console.error('Failed to fetch Salesforce use cases:', error)
-      } finally {
-        setIsLoadingSfUseCases(false)
-      }
-    }, 300)
-    
-    return () => clearTimeout(timeoutId)
-  }, [formData.sfdc_account_id, sfUseCaseSearch])
   
   // NOTE: Removed bulk fetchVMPricing call (was loading 16+ MB of data)
   // VM pricing is now fetched on-demand via fetchVMCostForInstance for each selected instance type
@@ -733,9 +631,6 @@ export default function Calculator() {
   const defaultEstimateFormData = {
     estimate_name: '',
     customer_name: '',
-    sfdc_account_id: '',
-    opportunity_id: '',
-    uco_id: '',
     cloud: 'aws',
     region: '',
     tier: ''
@@ -747,9 +642,6 @@ export default function Calculator() {
       setFormData({
         estimate_name: currentEstimate.estimate_name,
         customer_name: currentEstimate.customer_name || '',
-        sfdc_account_id: currentEstimate.sfdc_account_id || '',
-        opportunity_id: currentEstimate.opportunity_id || '',
-        uco_id: currentEstimate.uco_id || '',
         // Convert to lowercase for UI matching (DB stores uppercase)
         cloud: (currentEstimate.cloud || 'aws').toLowerCase(),
         region: currentEstimate.region || '',
@@ -1741,22 +1633,15 @@ export default function Calculator() {
     return details
   }
   
-  // Check if opportunity OR use case is selected (at least one required)
-  const hasOpportunityOrUseCase = Boolean(formData.opportunity_id || formData.uco_id)
-  
   // Validation: check if all required fields are filled
-  const canCreateEstimate = formData.estimate_name.trim() && 
-    formData.sfdc_account_id && 
-    hasOpportunityOrUseCase &&
-    formData.region && 
+  const canCreateEstimate = formData.estimate_name.trim() &&
+    formData.region &&
     formData.tier
-  
+
   // Get missing fields for helpful message
   const getMissingFields = () => {
     const missing: string[] = []
     if (!formData.estimate_name.trim()) missing.push('Estimate Name')
-    if (!formData.sfdc_account_id) missing.push('Salesforce Account')
-    if (!hasOpportunityOrUseCase) missing.push('Opportunity or Use Case')
     if (!formData.region) missing.push('Region')
     if (!formData.tier) missing.push('Databricks Tier')
     return missing
@@ -2094,116 +1979,6 @@ export default function Calculator() {
                       </div>
                     </div>
                   )}
-                </div>
-                
-                {/* Salesforce Selection */}
-                <div className="border-t border-[var(--border-primary)] pt-5">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-4 flex items-center gap-2">
-                    <BuildingOfficeIcon className="w-4 h-4" />
-                    Salesforce Context
-                  </h4>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4" onClick={(e) => e.stopPropagation()}>
-                    {/* Account Selection */}
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                        Salesforce Account <span className="text-red-500">*</span>
-                      </label>
-                      <SearchableSelect
-                        options={(() => {
-                          if (isLoadingSfAccounts && sfAccounts.length === 0) return []
-                          const searchOptions = sfAccounts.map(a => ({
-                            value: a.salesforce_account_id,
-                            label: a.salesforce_account_name || a.salesforce_account_id
-                          }))
-                          if (formData.sfdc_account_id && formData.customer_name) {
-                            const existsInSearch = sfAccounts.some(a => a.salesforce_account_id === formData.sfdc_account_id)
-                            if (!existsInSearch) {
-                              return [{ value: formData.sfdc_account_id, label: formData.customer_name }, ...searchOptions]
-                            }
-                          }
-                          return searchOptions
-                        })()}
-                        value={formData.sfdc_account_id}
-                        onChange={(value) => {
-                          const selectedAccount = sfAccounts.find(a => a.salesforce_account_id === value)
-                          setFormData(prev => ({ 
-                            ...prev, 
-                            sfdc_account_id: value,
-                            customer_name: selectedAccount?.salesforce_account_name || prev.customer_name,
-                            opportunity_id: '',
-                            uco_id: ''
-                          }))
-                          setSfOpportunitySearch('')
-                          setSfUseCaseSearch('')
-                          markAsChanged()
-                        }}
-                        onSearchChange={setSfAccountSearch}
-                        onOpen={() => {
-                          // Lazy load Salesforce accounts when dropdown opens (first time only)
-                          if (!sfAccountsFetched && !isLoadingSfAccounts) {
-                            fetchSfAccountsLazy()
-                          }
-                        }}
-                        placeholder={isLoadingSfAccounts ? "Loading accounts..." : "Select account..."}
-                        searchPlaceholder="Search accounts..."
-                        isLoading={isLoadingSfAccounts}
-                        required
-                      />
-                    </div>
-                    
-                    {/* Opportunity Selection */}
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                        Opportunity
-                        {!formData.sfdc_account_id && (
-                          <span className="text-[var(--text-muted)] text-[10px] ml-1">(select account first)</span>
-                        )}
-                      </label>
-                      <SearchableSelect
-                        options={sfOpportunities.map(o => ({
-                          value: o.id,
-                          label: o.name || o.id
-                        }))}
-                        value={formData.opportunity_id}
-                        onChange={(value) => {
-                          setFormData(prev => ({ ...prev, opportunity_id: value }))
-                          markAsChanged()
-                        }}
-                        onSearchChange={setSfOpportunitySearch}
-                        placeholder={!formData.sfdc_account_id ? "Select account first" : isLoadingSfOpportunities ? "Loading opportunities..." : "Select opportunity..."}
-                        searchPlaceholder="Search opportunities..."
-                        isLoading={isLoadingSfOpportunities}
-                        disabled={!formData.sfdc_account_id}
-                      />
-                    </div>
-                    
-                    {/* Use Case Selection */}
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
-                        Use Case
-                        {!formData.sfdc_account_id && (
-                          <span className="text-[var(--text-muted)] text-[10px] ml-1">(select account first)</span>
-                        )}
-                      </label>
-                      <SearchableSelect
-                        options={sfUseCases.map(uc => ({
-                          value: uc.salesforce_use_case_id,
-                          label: uc.salesforce_use_case_name || uc.salesforce_use_case_id
-                        }))}
-                        value={formData.uco_id}
-                        onChange={(value) => {
-                          setFormData(prev => ({ ...prev, uco_id: value }))
-                          markAsChanged()
-                        }}
-                        onSearchChange={setSfUseCaseSearch}
-                        placeholder={!formData.sfdc_account_id ? "Select account first" : isLoadingSfUseCases ? "Loading use cases..." : "Select use case..."}
-                        searchPlaceholder="Search use cases..."
-                        isLoading={isLoadingSfUseCases}
-                        disabled={!formData.sfdc_account_id}
-                      />
-                    </div>
-                  </div>
                 </div>
                 
                 {/* Save Button */}

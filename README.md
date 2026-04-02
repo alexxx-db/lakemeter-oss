@@ -9,11 +9,6 @@ A full-stack application for creating, managing, and exporting Databricks pricin
 - **User-scoped Estimates**: Users can only see estimates they own or have been shared with
 - **OAuth Token Management**: Automatic token refresh for Lakebase database connections
 
-### Salesforce Integration
-- **Account Search**: Search and select Salesforce accounts
-- **Opportunity Linking**: Associate estimates with Salesforce opportunities
-- **Use Case Tracking**: Link estimates to specific use cases
-
 ### Workload Types (from Lakebase)
 The workload types are dynamically loaded from the `lakemeter.ref_workload_types` table:
 
@@ -73,7 +68,7 @@ The workload types are dynamically loaded from the `lakemeter.ref_workload_types
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  React + Vite   │────▶│    FastAPI      │────▶│   Lakebase      │
 │  Tailwind CSS   │     │    Python       │     │   PostgreSQL    │
-│  Zustand        │     │  OAuth/SSO      │     │   + Salesforce  │
+│  Zustand        │     │  OAuth/SSO      │     │                 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
      Frontend               Backend                Database
 ```
@@ -125,10 +120,7 @@ CREATE TABLE lakemeter.estimates (
     estimate_id UUID PRIMARY KEY,
     estimate_name VARCHAR(255) NOT NULL,
     owner_user_id UUID,
-    sfdc_account_id VARCHAR(50),
     customer_name VARCHAR(255),
-    uco_id VARCHAR(50),
-    opportunity_id VARCHAR(50),
     cloud VARCHAR(50),
     region VARCHAR(100),
     tier VARCHAR(50),
@@ -253,11 +245,6 @@ CREATE TABLE lakemeter.line_items (
 - `GET /api/v1/vm-pricing/` - Get VM pricing data
 - `GET /api/v1/vm-pricing/tiers` - Pricing tier options
 - `GET /api/v1/vm-pricing/payment-options` - Payment options
-
-### Salesforce
-- `GET /api/v1/salesforce/accounts` - Search Salesforce accounts
-- `GET /api/v1/salesforce/opportunities` - Search opportunities (filterable by account)
-- `GET /api/v1/salesforce/use-cases` - Search use cases (filterable by account)
 
 ## Tech Stack
 

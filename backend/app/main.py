@@ -18,7 +18,6 @@ from app.routes import (
     users_router,
     export_router,
     vm_pricing_router,
-    salesforce_router,
     calculate_router,
     reference_router
 )
@@ -58,7 +57,6 @@ app.include_router(workload_types_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(export_router, prefix="/api/v1")
 app.include_router(vm_pricing_router, prefix="/api/v1")
-app.include_router(salesforce_router, prefix="/api/v1")
 app.include_router(calculate_router, prefix="/api/v1")
 app.include_router(reference_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")

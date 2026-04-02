@@ -13,9 +13,6 @@ import type {
   VMPricingTier,
   VMPaymentOption,
   VMInstanceType,
-  SalesforceAccount,
-  SalesforceOpportunity,
-  SalesforceUseCase,
   ModelServingGPUType,
   FMAPIDatabricksConfig,
   FMAPIProprietaryConfig
@@ -703,34 +700,6 @@ export const exportAllEstimatesToExcel = async (): Promise<Blob> => {
   const { data } = await api.get('/export/estimates/excel', {
     responseType: 'blob'
   })
-  return data
-}
-
-// ============================================================================
-// Salesforce Data
-// ============================================================================
-export const fetchSalesforceAccounts = async (params?: { search?: string; limit?: number; offset?: number }): Promise<SalesforceAccount[]> => {
-  const { data } = await api.get('/salesforce/accounts', { params })
-  return data
-}
-
-export const fetchSalesforceOpportunities = async (params?: { 
-  account_id?: string
-  search?: string
-  limit?: number
-  offset?: number
-}): Promise<SalesforceOpportunity[]> => {
-  const { data } = await api.get('/salesforce/opportunities', { params })
-  return data
-}
-
-export const fetchSalesforceUseCases = async (params?: { 
-  account_id?: string
-  search?: string
-  limit?: number
-  offset?: number
-}): Promise<SalesforceUseCase[]> => {
-  const { data } = await api.get('/salesforce/use-cases', { params })
   return data
 }
 

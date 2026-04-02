@@ -5,7 +5,6 @@ from app.schemas.line_item import LineItemCreate, LineItemUpdate, LineItemRespon
 from app.schemas.workload_type import WorkloadTypeResponse
 from app.schemas.sharing import ShareCreate, ShareResponse
 from app.schemas.vm_pricing import VMPricingResponse, VMPricingTierResponse, VMPaymentOptionResponse
-from app.schemas.salesforce import SalesforceAccountResponse, SalesforceOpportunityResponse, SalesforceUseCaseResponse
 
 __all__ = [
     "UserCreate", "UserUpdate", "UserResponse",
@@ -14,7 +13,6 @@ __all__ = [
     "WorkloadTypeResponse",
     "ShareCreate", "ShareResponse",
     "VMPricingResponse", "VMPricingTierResponse", "VMPaymentOptionResponse",
-    "SalesforceAccountResponse", "SalesforceOpportunityResponse", "SalesforceUseCaseResponse",
 ]
 
 

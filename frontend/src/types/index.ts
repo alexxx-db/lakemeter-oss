@@ -14,10 +14,7 @@ export interface Estimate {
   estimate_id: string
   estimate_name: string
   owner_user_id?: string
-  sfdc_account_id?: string  // Salesforce Account ID
   customer_name?: string
-  opportunity_id?: string  // Salesforce Opportunity ID
-  uco_id?: string  // Salesforce Use Case ID
   cloud?: string
   region?: string
   tier?: string
@@ -43,9 +40,6 @@ export interface EstimateListItem {
   estimate_id: string
   estimate_name: string
   customer_name?: string
-  sfdc_account_id?: string
-  opportunity_id?: string
-  uco_id?: string
   cloud?: string
   region?: string
   tier?: string
@@ -337,23 +331,3 @@ export interface VMInstanceType {
   instance_type: string
 }
 
-// Salesforce types
-export interface SalesforceAccount {
-  salesforce_account_id: string
-  salesforce_account_name: string | null
-  dim_salesforce_account_region: string | null
-}
-
-export interface SalesforceOpportunity {
-  id: string
-  name: string | null
-  accountid: string | null
-}
-
-export interface SalesforceUseCase {
-  salesforce_use_case_id: string
-  salesforce_use_case_name: string | null
-  customer_id: string | null
-  dim_canonical_customer_name: string | null
-  dim_business_unit_latest: string | null
-}
