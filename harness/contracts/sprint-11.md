@@ -1,41 +1,44 @@
-# Sprint 11 Contract: Model Serving Re-validation + Sprint 10 Regression Tests
+# Sprint 11 Contract: Multi-Workload ML Pipeline (AI Assistant Tests)
 
 ## Context
 
-Sprint 5 (Model Serving) passed at 9.38/10 but Sprint 10 (Full Combined Estimate) iteration 1 scored 8.10/10 due to 4 bugs. Those bugs were fixed in Sprint 10 iteration 2, which scored 9.0+. This sprint adds explicit regression tests to guard against recurrence and strengthens Model Serving validation in the combined estimate context.
+Sprint 10 validated multi-workload conversations for JOBS + ALL_PURPOSE + DBSQL.
+Sprint 11 tests the AI assistant's ability to handle an **ML/RAG pipeline** conversation:
+vector search for embeddings, Claude (proprietary FMAPI) for text generation,
+and a model serving endpoint for a custom reranker — all within a single conversation.
+
+**Prior non-AI Sprint 11 tests** (Model Serving combined validation, notes completeness,
+S10 regression) remain in `tests/sprint_11/` unchanged. This contract adds AI assistant
+tests in `tests/ai_assistant/sprint_11/`.
 
 ## Acceptance Criteria
 
-### Regression Tests for BUG-S10-001 through BUG-S10-004
+### 3-Workload ML Pipeline (VECTOR_SEARCH + FMAPI_PROPRIETARY + MODEL_SERVING)
+- [ ] AC-1: Conversation produces 3 proposals across turns
+- [ ] AC-2: The set of workload types covers VECTOR_SEARCH, FMAPI_PROPRIETARY, MODEL_SERVING
+- [ ] AC-3: Each proposal has `workload_name` (>=3 chars), `reason` (>=10 chars), `notes`, `proposal_id`
+- [ ] AC-4: VECTOR_SEARCH proposal has `vector_search_endpoint_type` populated
+- [ ] AC-5: FMAPI_PROPRIETARY proposal has `fmapi_provider` containing "anthropic" and `fmapi_model` containing "claude"
+- [ ] AC-6: MODEL_SERVING proposal has `model_serving_type` populated
+- [ ] AC-7: All 3 confirmations succeed (`success: true`, `action: confirmed`)
+- [ ] AC-8: Conversation state shows >=3 confirmed workloads with matching types
+- [ ] AC-9: Each proposal has a distinct `proposal_id`
 
-- [ ] AC-1: Regression test that `gpu_medium` (bare, invalid key) returns 0 DBU/hr with a warning
-- [ ] AC-2: Regression test that `gpu_medium_a10g_1x` (valid key) returns 20.0 DBU/hr with no warnings
-- [ ] AC-3: Regression test that FMAPI Databricks SKU is exactly `SERVERLESS_REAL_TIME_INFERENCE` (not just non-empty)
-- [ ] AC-4: Regression test that FMAPI Proprietary (Anthropic) SKU is exactly `ANTHROPIC_MODEL_SERVING`
-- [ ] AC-5: Regression test that all Sprint 10 test files are under 200 lines
-- [ ] AC-6: Regression test that notes column has correct behavior: items with fallback pricing have notes, items without user notes and no warnings have empty notes
+### 2-Workload Variant (VECTOR_SEARCH + FMAPI_PROPRIETARY)
+- [ ] AC-10: Conversation requesting only RAG embeddings + Claude produces 2 proposals
+- [ ] AC-11: Types cover VECTOR_SEARCH and FMAPI_PROPRIETARY; both confirm successfully
 
-### Model Serving in Combined Estimate Validation
-
-- [ ] AC-7: Model Serving GPU (A10G 1x) in combined estimate produces non-zero DBU cost
-- [ ] AC-8: Model Serving row in Excel has exact SKU `SERVERLESS_REAL_TIME_INFERENCE`
-- [ ] AC-9: Model Serving row in Excel has DBU/Hr = 20.0
-- [ ] AC-10: Model Serving row in Excel has formula for DBUs/Mo (not static value)
-- [ ] AC-11: Model Serving row in Excel has no VM costs (serverless)
-- [ ] AC-12: All 14 GPU types across 3 clouds produce correct DBU/hr rates (parametrized)
-
-### Notes Column Completeness
-
-- [ ] AC-13: Storage sub-rows (Lakebase, Vector Search) always have notes
-- [ ] AC-14: Items with fallback pricing warnings have auto-generated notes
-- [ ] AC-15: Notes behavior is documented: no-user-notes + no-warnings = empty notes (expected)
+### Negative Discrimination
+- [ ] AC-12: Prompt requesting only "model serving endpoint for ML inference" produces MODEL_SERVING only
 
 ## Test Plan
 
-- Regression tests: `tests/sprint_11/test_regression_s10_bugs.py`
-- Model Serving combined validation: `tests/sprint_11/test_ms_combined_validation.py`
-- Notes column: `tests/sprint_11/test_notes_completeness.py`
-- Shared helpers: reuse `tests/sprint_10/excel_helpers.py` and `tests/sprint_10/conftest.py`
+- `tests/ai_assistant/sprint_11/prompts.py` — prompt constants
+- `tests/ai_assistant/sprint_11/conftest.py` — module-scoped fixtures
+- `tests/ai_assistant/sprint_11/test_ml_pipeline_types.py` — AC-1..AC-6
+- `tests/ai_assistant/sprint_11/test_ml_pipeline_confirm.py` — AC-7..AC-9
+- `tests/ai_assistant/sprint_11/test_ml_pipeline_two.py` — AC-10..AC-11
+- `tests/ai_assistant/sprint_11/test_ml_pipeline_negative.py` — AC-12
 
 ## File Size Limit
 

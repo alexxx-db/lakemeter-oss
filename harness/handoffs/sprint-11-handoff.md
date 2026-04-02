@@ -1,62 +1,86 @@
-# Sprint 11 Handoff: Model Serving Re-validation + Sprint 10 Regression Tests
+# Sprint 11 Handoff: Multi-Workload ML Pipeline (AI Assistant Tests)
 
 ## What Was Built
 
-Regression test suite guarding against the 4 bugs from Sprint 10 iteration 1 (BUG-S10-001 through BUG-S10-004), comprehensive Model Serving validation in the combined estimate context, and notes column completeness tests.
+AI assistant end-to-end tests for a multi-workload ML/RAG pipeline conversation:
+VECTOR_SEARCH + FMAPI_PROPRIETARY + MODEL_SERVING. Follows the same patterns
+as Sprint 10 (JOBS + ALL_PURPOSE + DBSQL) but targets AI/ML workload types.
 
-### New Test Files (3 files, 50 tests)
+### AI Test Files (6 files, 57 tests)
+
+| File | Lines | Tests | Purpose |
+|------|-------|-------|---------|
+| `tests/ai_assistant/sprint_11/prompts.py` | 119 | — | Prompt constants for 3-wl, 2-wl, negative scenarios |
+| `tests/ai_assistant/sprint_11/conftest.py` | 147 | — | Module-scoped fixtures: ml_pipeline_session, two_ml_session, negative_ms_only_proposal |
+| `tests/ai_assistant/sprint_11/test_ml_pipeline_types.py` | 138 | 24 | AC-1..AC-6: type checks, common fields, type-specific fields |
+| `tests/ai_assistant/sprint_11/test_ml_pipeline_confirm.py` | 90 | 12 | AC-7..AC-9: confirm flow, conversation state, distinct IDs |
+| `tests/ai_assistant/sprint_11/test_ml_pipeline_two.py` | 81 | 14 | AC-10..AC-11: 2-workload VS + FMAPI variant |
+| `tests/ai_assistant/sprint_11/test_ml_pipeline_negative.py` | 52 | 7 | AC-12: model serving only (negative discrimination) |
+
+### Prior Non-AI Tests (unchanged)
 
 | File | Tests | Purpose |
 |------|-------|---------|
-| `tests/sprint_11/test_regression_s10_bugs.py` | 8 | Guards against BUG-S10-001 (invalid `gpu_medium`), BUG-S10-003 (weak FMAPI SKU), BUG-S10-004 (file size limit) |
-| `tests/sprint_11/test_ms_combined_validation.py` | 34 | Model Serving in combined Excel: row exists, SKU, DBU/hr, formula, VM=0, mode; parametrized 14 GPU types × 3 clouds for rate + SKU |
-| `tests/sprint_11/test_notes_completeness.py` | 8 | Storage row notes, fallback pricing notes, expected-empty notes, no `None` literals |
+| `tests/sprint_11/test_regression_s10_bugs.py` | 8 | S10 regression guards |
+| `tests/sprint_11/test_ms_combined_validation.py` | 34 | Model Serving in combined Excel |
+| `tests/sprint_11/test_notes_completeness.py` | 8 | Notes column completeness |
 
-### Acceptance Criteria Coverage
+## Acceptance Criteria Coverage
 
-| AC | Description | Status |
-|----|------------|--------|
-| AC-1 | `gpu_medium` returns 0 DBU/hr with warning | PASS |
-| AC-2 | `gpu_medium_a10g_1x` returns 20.0 with no warnings | PASS |
-| AC-3 | FMAPI DB SKU = `SERVERLESS_REAL_TIME_INFERENCE` (exact) | PASS |
-| AC-4 | FMAPI Prop SKU = `ANTHROPIC_MODEL_SERVING` (exact) | PASS |
-| AC-5 | All test files under 200 lines (sprint_10 + sprint_11) | PASS |
-| AC-6 | Notes behavior documented: empty when no warnings/user input | PASS |
-| AC-7 | Model Serving in combined estimate has non-zero DBU cost | PASS |
-| AC-8 | Excel SKU = `SERVERLESS_REAL_TIME_INFERENCE` | PASS |
-| AC-9 | Excel DBU/Hr = 20.0 for A10G 1x | PASS |
-| AC-10 | Excel DBUs/Mo is a formula | PASS |
-| AC-11 | No VM costs for Model Serving | PASS |
-| AC-12 | All 14 GPU types across 3 clouds correct | PASS (28 parametrized tests) |
-| AC-13 | Storage sub-rows have notes | PASS |
-| AC-14 | Fallback pricing items documented | PASS |
-| AC-15 | Empty notes documented as expected behavior | PASS |
+| AC | Description | Test File |
+|----|------------|-----------|
+| AC-1 | 3 proposals collected | test_ml_pipeline_types.py |
+| AC-2 | Types cover VS, FMAPI_PROP, MS | test_ml_pipeline_types.py |
+| AC-3 | Common fields (name, reason, notes, proposal_id) | test_ml_pipeline_types.py |
+| AC-4 | VS has endpoint_type populated | test_ml_pipeline_types.py |
+| AC-5 | FMAPI_PROP has anthropic provider + claude model | test_ml_pipeline_types.py |
+| AC-6 | MS has model_serving_type populated | test_ml_pipeline_types.py |
+| AC-7 | All 3 confirmations succeed | test_ml_pipeline_confirm.py |
+| AC-8 | State shows >= 3 confirmed with correct types | test_ml_pipeline_confirm.py |
+| AC-9 | Distinct proposal_ids | test_ml_pipeline_confirm.py |
+| AC-10 | 2-workload: VS + FMAPI_PROP | test_ml_pipeline_two.py |
+| AC-11 | Both confirmations succeed | test_ml_pipeline_two.py |
+| AC-12 | Negative: MS only, no VS/FMAPI | test_ml_pipeline_negative.py |
 
 ## Test Results
 
-- **Sprint 11 tests**: 50 passed, 0 failed (1.20s)
-- **Full suite**: 1304 passed, 0 failed (5.88s)
-- **Regressions**: None
+- **Default pytest (non-AI)**: 1409 passed, 0 failed (9.58s) — no regressions
+- **Sprint 11 AI tests collected**: 57 tests (excluded from default run; require FMAPI)
+- **All files under 200 lines**: verified
 
 ## How to Test
 
 ```bash
 cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
 source .venv/bin/activate
-python -m pytest tests/sprint_11/ -v
-python -m pytest  # full suite
+
+# Default pytest (excludes AI tests)
+pytest -v
+
+# Sprint 11 AI tests (explicit, requires FMAPI access)
+pytest tests/ai_assistant/sprint_11/ --no-header --timeout=300
+
+# Sprint 11 non-AI tests
+pytest tests/sprint_11/ -v
 ```
 
 ## Known Limitations
 
-- Notes column behavior is documented, not changed: items without user notes or warnings have empty notes (this is correct behavior, not a bug)
-- The file size limit test checks sprint_10 and sprint_11 directories only
+- AI tests are non-deterministic (LLM responses vary) — auto-skip if FMAPI unreachable
+- The AI may propose workloads in different order than prompted; tests check the SET of types
+- If the AI uses `propose_genai_architecture` (bundle tool) instead of individual proposals, `extract_proposal` may need extension
 
-## Files Changed
+## Files Created
 
-- `tests/sprint_11/__init__.py` (new)
-- `tests/sprint_11/test_regression_s10_bugs.py` (new, 90 lines)
-- `tests/sprint_11/test_ms_combined_validation.py` (new, 102 lines)
-- `tests/sprint_11/test_notes_completeness.py` (new, 97 lines)
-- `harness/contracts/sprint-11.md` (new)
+- `tests/ai_assistant/sprint_11/__init__.py`
+- `tests/ai_assistant/sprint_11/prompts.py` (119 lines)
+- `tests/ai_assistant/sprint_11/conftest.py` (147 lines)
+- `tests/ai_assistant/sprint_11/test_ml_pipeline_types.py` (138 lines)
+- `tests/ai_assistant/sprint_11/test_ml_pipeline_confirm.py` (90 lines)
+- `tests/ai_assistant/sprint_11/test_ml_pipeline_two.py` (81 lines)
+- `tests/ai_assistant/sprint_11/test_ml_pipeline_negative.py` (52 lines)
+
+## Files Modified
+
+- `harness/contracts/sprint-11.md` (updated with AI test contract)
 - `harness/state.json` (updated)
