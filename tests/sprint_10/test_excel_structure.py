@@ -184,13 +184,10 @@ class TestNotesColumn:
             assert notes is not None, \
                 f"Storage row {row_idx}: expected notes, got None"
 
-    def test_notes_column_not_all_empty(self, ws):
-        """At least some data rows should have notes populated."""
-        data_rows = find_all_data_rows(ws)
-        notes_populated = 0
-        for row_idx in data_rows:
-            notes = ws.cell(row=row_idx, column=COL_NOTES).value
-            if notes is not None:
-                notes_populated += 1
-        assert notes_populated >= 2, \
-            f"Expected >=2 rows with notes, got {notes_populated}"
+    def test_warning_items_have_notes(self, ws):
+        """Items using fallback pricing should have warning notes."""
+        for name in ['DLT Pro Serverless', 'Vector Search Standard 5M']:
+            row = find_row_by_name(ws, name)
+            notes = ws.cell(row=row, column=COL_NOTES).value
+            assert notes is not None and len(str(notes)) > 0, \
+                f"{name}: expected fallback warning note, got None"

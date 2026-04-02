@@ -1,51 +1,66 @@
-# Sprint 10 Handoff: Multi-Workload — Jobs + Interactive + DBSQL
+# Sprint 10 Handoff (Iteration 2): Combined Estimate + AI Multi-Workload Tests
 
-## What Was Built
+## What Was Built (Iteration 2 — Evaluator Fixes)
 
-AI assistant multi-workload conversation tests — 62 tests across 4 test files covering:
+Addressed all 4 bugs from sprint-10-eval.md (score 8.10 → targeting 9.5+):
 
-1. **3-workload conversation** (JOBS + ALL_PURPOSE + DBSQL): Tests that a single conversation can collect 3 distinct workload proposals, verify each has correct type and populated fields, and confirm all 3 in sequence.
-2. **2-workload conversation** (JOBS + DBSQL): Tests a shorter multi-workload flow without ALL_PURPOSE.
-3. **Multi-confirm flow**: Verifies all confirmations succeed, conversation state reflects all confirmed workloads, and no pending proposals remain after confirming all.
-4. **Negative discrimination**: Single-workload prompt ("data science notebooks only") produces ALL_PURPOSE — not JOBS or DBSQL.
+### BUG-S10-001: Model Serving GPU pricing
+- **Already resolved in iter 1**: conftest uses `gpu_medium_a10g_1x` (not `gpu_medium`), test asserts 20.0 DBU/hr
+- **Iter 2 addition**: 4 regression tests in `test_regression_s10.py::TestBugS10001ModelServingGpu` — validates GPU type name, non-zero DBU/hr, no warnings, and Excel output
 
-### Files Created
+### BUG-S10-002: Notes column for fallback-pricing items
+- **New test**: `test_excel_structure.py::TestNotesColumn::test_warning_items_have_notes` — asserts DLT and Vector Search rows have non-empty notes
+- **4 regression tests** in `test_regression_s10.py::TestBugS10002FallbackNotesInExcel` — checks fallback note content, SKU mention, and that non-fallback items don't have warnings
+
+### BUG-S10-003: FMAPI SKU assertions
+- **Already resolved in iter 1**: exact string assertions (`SERVERLESS_REAL_TIME_INFERENCE`, `ANTHROPIC_MODEL_SERVING`)
+- **3 regression tests** in `test_regression_s10.py::TestBugS10003FmapiSkuExact` — exact match + differ check
+
+### BUG-S10-004: File size compliance
+- **Already resolved in iter 1**: split into `test_excel_structure.py` + `test_excel_formulas.py`
+- **1 regression test** in `test_regression_s10.py::TestBugS10004FileSizeCompliance` — scans all sprint 10 test files, asserts ≤200 lines
+
+### Additional improvements
+- **Expanded `test_pricing_lookups.py`**: Added `TestFallbackPricingExpected` (DLT, FMAPI DB, FMAPI Prop behavior) and `TestMultiCloudPricing` (cross-cloud validation for Jobs, DBSQL, Model Serving)
+
+## Files Created
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `tests/ai_assistant/sprint_10/__init__.py` | 0 | Package marker |
-| `tests/ai_assistant/sprint_10/prompts.py` | 97 | 12 prompt constants across 3 variants |
-| `tests/ai_assistant/sprint_10/conftest.py` | 133 | Module-scoped fixtures: three_workload_session, two_workload_session, negative_ds_only_proposal |
-| `tests/ai_assistant/sprint_10/test_multi_three_workloads.py` | 116 | 26 tests — type checks, field assertions, workload-specific fields |
-| `tests/ai_assistant/sprint_10/test_multi_two_workloads.py` | 75 | 12 tests — JOBS + DBSQL only |
-| `tests/ai_assistant/sprint_10/test_multi_confirm_all.py` | 90 | 14 tests — confirm flow, conversation state |
-| `tests/ai_assistant/sprint_10/test_multi_negative.py` | 56 | 8 tests — discrimination |
+| `tests/sprint_10/test_regression_s10.py` | 141 | Regression tests for BUG-S10-001..004 (12 tests) |
 
-### Files Modified
-- `harness/contracts/sprint-10.md` — updated contract for AI multi-workload tests
+## Files Modified
+
+| File | Lines | Change |
+|------|-------|--------|
+| `tests/sprint_10/test_excel_structure.py` | 193 | Added `test_warning_items_have_notes` |
+| `tests/sprint_10/test_pricing_lookups.py` | 96 | Added fallback pricing + multi-cloud test classes |
 
 ## How to Test
 
 ```bash
-# Collect tests (no AI calls)
 cd lakemeter_app
 source .venv/bin/activate
-pytest tests/ai_assistant/sprint_10/ --collect-only -q
 
-# Run tests against live backend (requires Databricks CLI profile + FMAPI access)
+# Sprint 10 tests only
+pytest tests/sprint_10/ -v
+
+# Full regression (non-AI)
+pytest --ignore=tests/ai_assistant -v
+
+# AI assistant tests (requires FMAPI access)
 pytest tests/ai_assistant/sprint_10/ -v --timeout=300
 ```
 
-The tests use FastAPI TestClient against the local backend, which calls FMAPI (Claude Sonnet 4.5) for AI proposals. Each module-scoped fixture makes 3+ AI calls, so expect ~5-10 minutes for the full suite.
-
 ## Test Results
 
-- **Sprint 10 AI tests**: 62 collected, require live FMAPI (not run in build phase)
-- **Full non-AI regression**: 1387/1387 passed (6.79s)
-- **Syntax check**: All 7 files pass
+- **Sprint 10 tests**: 119 passed, 0 failed (1.45s) — up from 101 in iter 1 (+18 tests)
+- **Full regression**: 1405 passed, 0 failed (6.82s)
+- **AI assistant tests**: 62 collected (require live FMAPI, not run in build phase)
+- **All files under 200 lines**: verified by `TestBugS10004FileSizeCompliance`
 
 ## Known Limitations
 
-- AI responses are non-deterministic — the AI may propose workloads in a different order or ask clarifying questions. The prompt sequences include followup messages to handle this.
-- The 3-workload test fixture is expensive (~6+ AI calls with retries). Module-scoped fixtures share results across tests in the same file.
-- The conversation state endpoint (`/state`) response shape may vary — tests check for `confirmed_workloads` and `proposed_workloads` keys defensively.
+- DLT (`DELTA_LIVE_TABLES_SERVERLESS`) and Vector Search (`VECTOR_SEARCH_ENDPOINT`) SKUs use fallback pricing — these are real pricing data gaps, not test issues
+- Model Serving `gpu_medium_a10g_1x` resolves on AWS only; Azure/GCP may have different GPU type names
+- AI assistant tests are non-deterministic due to LLM responses
