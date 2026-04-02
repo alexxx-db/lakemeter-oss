@@ -1,56 +1,51 @@
-# Sprint 10 Handoff: Full Combined Estimate — Iteration 2
+# Sprint 10 Handoff: Multi-Workload — Jobs + Interactive + DBSQL
 
 ## What Was Built
 
-101 tests verifying that all 9 workload types work correctly together in a single combined estimate with Excel export. Iteration 2 fixed all 4 bugs from evaluation and added 9 new tests.
+AI assistant multi-workload conversation tests — 62 tests across 4 test files covering:
 
-### Iteration 2 Fixes
+1. **3-workload conversation** (JOBS + ALL_PURPOSE + DBSQL): Tests that a single conversation can collect 3 distinct workload proposals, verify each has correct type and populated fields, and confirm all 3 in sequence.
+2. **2-workload conversation** (JOBS + DBSQL): Tests a shorter multi-workload flow without ALL_PURPOSE.
+3. **Multi-confirm flow**: Verifies all confirmations succeed, conversation state reflects all confirmed workloads, and no pending proposals remain after confirming all.
+4. **Negative discrimination**: Single-workload prompt ("data science notebooks only") produces ALL_PURPOSE — not JOBS or DBSQL.
 
-**BUG-S10-001 (Major)**: Model Serving GPU `gpu_medium` returned 0 DBU/hr
-- Root cause: `gpu_medium` doesn't exist in pricing JSON; valid key is `gpu_medium_a10g_1x`
-- Fix: `conftest.py` changed gpu type; test now asserts exact 20.0 DBU/hr with 0 warnings
+### Files Created
 
-**BUG-S10-003 (Minor)**: FMAPI SKU assertions too weak
-- Fix: Replaced `isinstance(sku, str) and len(sku) > 0` with exact string matches: `SERVERLESS_REAL_TIME_INFERENCE` and `ANTHROPIC_MODEL_SERVING`
+| File | Lines | Purpose |
+|------|-------|---------|
+| `tests/ai_assistant/sprint_10/__init__.py` | 0 | Package marker |
+| `tests/ai_assistant/sprint_10/prompts.py` | 97 | 12 prompt constants across 3 variants |
+| `tests/ai_assistant/sprint_10/conftest.py` | 133 | Module-scoped fixtures: three_workload_session, two_workload_session, negative_ds_only_proposal |
+| `tests/ai_assistant/sprint_10/test_multi_three_workloads.py` | 116 | 26 tests — type checks, field assertions, workload-specific fields |
+| `tests/ai_assistant/sprint_10/test_multi_two_workloads.py` | 75 | 12 tests — JOBS + DBSQL only |
+| `tests/ai_assistant/sprint_10/test_multi_confirm_all.py` | 90 | 14 tests — confirm flow, conversation state |
+| `tests/ai_assistant/sprint_10/test_multi_negative.py` | 56 | 8 tests — discrimination |
 
-**BUG-S10-004 (Minor)**: `test_combined_excel.py` at 310 lines exceeded 200-line limit
-- Split into: `test_excel_structure.py` (196 lines) + `test_excel_formulas.py` (154 lines)
-- Also extracted: `test_cross_workload.py` (52 lines) + `test_pricing_lookups.py` (41 lines)
-- All sprint 10 files now under 200 lines
-
-**BUG-S10-002 (Minor)**: Notes column not tested
-- Added `TestNotesColumn` in `test_excel_structure.py` with storage notes and non-empty assertions
-
-**New**: `TestPricingLookups` (6 tests) verifying standard configs resolve without fallback warnings
-
-### Files
-
-| File | Lines | Action |
-|------|-------|--------|
-| `tests/sprint_10/conftest.py` | 173 | Modified — gpu_medium → gpu_medium_a10g_1x |
-| `tests/sprint_10/test_combined_calc.py` | 177 | Modified — FMAPI SKU exact assertions, extracted classes |
-| `tests/sprint_10/test_combined_excel.py` | — | Deleted — split into two files below |
-| `tests/sprint_10/test_excel_structure.py` | 196 | New — structure/row/SKU/mode/hours/DBU/notes |
-| `tests/sprint_10/test_excel_formulas.py` | 154 | New — formula/VM/token/NaN checks |
-| `tests/sprint_10/test_cross_workload.py` | 52 | New — cross-workload consistency |
-| `tests/sprint_10/test_pricing_lookups.py` | 41 | New — pricing fallback warning validation |
-| `tests/sprint_10/test_combined_totals.py` | 196 | Unchanged |
-| `tests/sprint_10/excel_helpers.py` | 127 | Unchanged |
+### Files Modified
+- `harness/contracts/sprint-10.md` — updated contract for AI multi-workload tests
 
 ## How to Test
 
 ```bash
-cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
-python -m pytest tests/sprint_10/ -v
+# Collect tests (no AI calls)
+cd lakemeter_app
+source .venv/bin/activate
+pytest tests/ai_assistant/sprint_10/ --collect-only -q
+
+# Run tests against live backend (requires Databricks CLI profile + FMAPI access)
+pytest tests/ai_assistant/sprint_10/ -v --timeout=300
 ```
+
+The tests use FastAPI TestClient against the local backend, which calls FMAPI (Claude Sonnet 4.5) for AI proposals. Each module-scoped fixture makes 3+ AI calls, so expect ~5-10 minutes for the full suite.
 
 ## Test Results
 
-- **Sprint 10**: 101 passed in 1.56s (up from 92)
-- **Full suite (Sprints 1-10)**: 1254 passed in 5.81s (up from 1245)
-- 0 failures, 0 errors
+- **Sprint 10 AI tests**: 62 collected, require live FMAPI (not run in build phase)
+- **Full non-AI regression**: 1387/1387 passed (6.79s)
+- **Syntax check**: All 7 files pass
 
 ## Known Limitations
 
-- DLT and Vector Search still use fallback pricing (backend data gap, not a test issue)
-- 5 of 9 primary workload rows have Notes=None (backend export behavior; tests assert current state)
+- AI responses are non-deterministic — the AI may propose workloads in a different order or ask clarifying questions. The prompt sequences include followup messages to handle this.
+- The 3-workload test fixture is expensive (~6+ AI calls with retries). Module-scoped fixtures share results across tests in the same file.
+- The conversation state endpoint (`/state`) response shape may vary — tests check for `confirmed_workloads` and `proposed_workloads` keys defensively.
