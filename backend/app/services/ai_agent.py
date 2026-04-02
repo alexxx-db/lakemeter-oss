@@ -3083,11 +3083,11 @@ Each workload needs to be confirmed individually. Review the configurations and 
             # Read Replicas
             if num_read_replicas > 0:
                 notes_parts.append(f"**📖 Read Replicas: {num_read_replicas} replica(s) (Max: 2)**:")
-                notes_parts.append(f"• **Total instances**: 1 primary + {num_read_replicas} read replica(s) = {total_read_nodes} instances")
+                notes_parts.append(f"• **Total instances**: 1 primary + {num_read_replicas} read replica(s) = {total_active_nodes} instances")
                 notes_parts.append(f"• Each replica has {cu} CU (same as primary)")
                 notes_parts.append("• ✅ Read replicas handle READ requests only")
                 notes_parts.append("• ⚠️ Write requests ALWAYS go to primary node")
-                notes_parts.append(f"• **Read capacity**: {total_read_nodes}x scaling for reads ({int(total_read_nodes * cu * 10000):,} reads/sec total)")
+                notes_parts.append(f"• **Read capacity**: {total_active_nodes}x scaling for reads ({int(total_active_nodes * cu * 10000):,} reads/sec total)")
                 notes_parts.append(f"• **Write capacity**: No scaling (writes on primary only: {int(cu * 15000):,} bulk writes/sec, {int(cu * 1200):,} incremental writes/sec)")
                 notes_parts.append(f"• **Cost**: +{num_read_replicas * 100}% (each replica = full CU cost)")
                 notes_parts.append("• **Best for**: Read-heavy workloads needing horizontal read scaling")
