@@ -12,7 +12,7 @@
     "Sprint 11: Multi-Workload \u2014 ML Pipeline (Model Serving + FMAPI + Vector Search)",
     "Sprint 12: Multi-Workload \u2014 Complete Platform (5+ workloads)"
   ],
-  "last_action": "Sprint 9 BUILD iter 4: LAKEBASE \u2014 cross-cloud Excel tests (AWS/Azure/GCP) + half-CU boundary tests + file modularization. 145/145 sprint tests pass, 1374/1374 full regression pass.",
+  "last_action": "Sprint 9 BUILD iter 5: LAKEBASE \u2014 total cost columns (List+Disc.) tests + compute notes propagation. 158/158 sprint tests pass, 1387/1387 full regression pass.",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -106,7 +106,7 @@
   "last_install_test": 8,
   "last_integration_test": 8,
   "context_resets": 0,
-  "current_iteration": 4,
+  "current_iteration": 5,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "N/A \u2014 uses FastAPI TestClient with local backend for FMAPI access",

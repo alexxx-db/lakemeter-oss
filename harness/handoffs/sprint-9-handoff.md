@@ -1,4 +1,4 @@
-# Sprint 9 Handoff: LAKEBASE — Iter 4 (Cross-Cloud Coverage + Modularization)
+# Sprint 9 Handoff: LAKEBASE — Iter 5 (Total Cost Columns + Notes Coverage)
 
 ## What Was Built
 
@@ -33,6 +33,24 @@ Closed remaining coverage gaps identified during self-review:
 | **Half-CU (0.5) boundary test** | `tests/sprint_9/test_lb_excel_crosscloud.py` | +2 tests (DBU/hr, storage pairing) |
 | **File modularization** | Split `test_lb_excel_compute.py` → extracted cross-cloud tests to own file | No new tests, file size compliance |
 
+### Iteration 5 (Total cost columns + notes coverage)
+Closed the last untested Excel column gap — total cost columns (List + Disc.) were defined in helpers but had zero test coverage:
+
+| Fix | File | Tests Added |
+|-----|------|-------------|
+| **Compute total cost (List + Disc.)** | `tests/sprint_9/test_lb_excel_totals.py` (NEW) | +5 tests |
+| **Storage total cost (List + Disc.)** | `tests/sprint_9/test_lb_excel_totals.py` | +4 tests |
+| **End-to-end pair totals** | `tests/sprint_9/test_lb_excel_totals.py` | +2 tests |
+| **Compute notes propagation** | `tests/sprint_9/test_lb_excel_totals.py` | +2 tests |
+
+Key verifications added:
+- Total Cost (List) = DBU Cost (List) for serverless (VM costs = 0)
+- Total Cost (Disc.) = DBU Cost (Disc.) for serverless
+- Both compute and storage pair totals are positive
+- Compute total exceeds storage total for standard configs
+- User-provided notes propagate to compute row
+- Empty notes default behavior verified
+
 ## Evaluator Feedback Resolution Summary
 
 All 3 items from the iter 1 evaluation (9.31/10) have been fully resolved:
@@ -43,10 +61,16 @@ All 3 items from the iter 1 evaluation (9.31/10) have been fully resolved:
 | "storage discount propagation not tested" (Testing Coverage 9→10) | 8 discount propagation tests (storage + compute) | Iter 2+3 |
 | "temp file context manager" (Production Readiness 9→10) | `with tempfile.NamedTemporaryFile(delete=True)` pattern | Iter 2 |
 
+Additional coverage added beyond evaluator feedback:
+- Cross-cloud Excel output (AWS/Azure/GCP) — iter 4
+- Half-CU boundary tests — iter 4
+- Total cost columns (List + Disc.) — iter 5
+- Compute notes propagation — iter 5
+
 ## Test Results
 
-- Sprint 9 tests: **145 passed** (up from 134 in iter 3, 121 iter 2, 111 iter 1)
-- Full regression suite (non-AI): **1374 passed, 0 failed** (6.44s)
+- Sprint 9 tests: **158 passed** (up from 145 in iter 4, 134 iter 3, 121 iter 2, 111 iter 1)
+- Full regression suite (non-AI): **1387 passed, 0 failed** (7.04s)
 - AI assistant tests: **23 passed** (unchanged)
 - No regressions introduced
 
@@ -55,17 +79,16 @@ All 3 items from the iter 1 evaluation (9.31/10) have been fully resolved:
 ```bash
 cd lakemeter_app
 source .venv/bin/activate
-python -m pytest tests/sprint_9/ -v          # 145 tests, ~2.6s
-python -m pytest tests/ --ignore=tests/ai_assistant -v  # 1374 tests, ~6.5s
+python -m pytest tests/sprint_9/ -v          # 158 tests, ~3.2s
+python -m pytest tests/ --ignore=tests/ai_assistant -v  # 1387 tests, ~7s
 ```
 
-## Files Changed (Iteration 4 only)
+## Files Changed (Iteration 5 only)
 
 ```
-tests/sprint_9/test_lb_excel_compute.py     (removed cross-cloud tests, now 158 lines)
-tests/sprint_9/test_lb_excel_crosscloud.py  (NEW: 86 lines — cross-cloud + half-CU tests)
-harness/handoffs/sprint-9-handoff.md        (updated)
-harness/state.json                          (updated)
+tests/sprint_9/test_lb_excel_totals.py  (NEW: 13 tests — total cost columns + notes)
+harness/handoffs/sprint-9-handoff.md    (updated)
+harness/state.json                      (updated)
 ```
 
 ## All Sprint 9 Test Files
@@ -82,8 +105,9 @@ harness/state.json                          (updated)
 | `test_lb_excel_crosscloud.py` | 86 | 11 | AWS/Azure/GCP + half-CU boundary |
 | `test_lb_excel_integrity.py` | 138 | 9 | Multi-item rows, discount propagation |
 | `test_lb_excel_storage.py` | 197 | 18 | Storage row values, discount, notes |
+| `test_lb_excel_totals.py` | 150 | 13 | Total cost columns + notes |
 | `test_lb_sku_pricing.py` | 85 | 13 | SKU determination, pricing, serverless |
-| **Total** | **1153** | **145** | |
+| **Total** | **1303** | **158** | |
 
 ## Known Limitations
 
