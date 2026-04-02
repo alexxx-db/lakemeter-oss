@@ -2,63 +2,16 @@
 
 Uses module-scoped fixtures to minimise expensive AI calls.
 Three proposal variants: PRO serverless, CORE basic, ADVANCED with monitoring.
+Plus negative test: non-DLT prompt must NOT produce DLT workload.
 """
-import uuid
 import pytest
 
 from tests.ai_assistant.conftest import send_chat_until_proposal
-
-# -- Prompt sequences ----------------------------------------------------------
-
-# Variant 1: CDC pipeline, Pro edition, serverless
-DLT_PRO_PRIMARY = (
-    "I need to set up a CDC pipeline using Spark Declarative Pipelines (SDP) "
-    "with Pro edition and serverless compute on AWS us-east-1."
-)
-DLT_PRO_FOLLOWUP = (
-    "This is a DLT/SDP workload (not Lakeflow Jobs). Use Pro edition for CDC "
-    "and SCD type 2 support. Serverless compute, standard mode, Photon enabled. "
-    "Running 4 times a day for 30 minutes each, 30 days/month. "
-    "Please propose the SDP workload configuration now."
-)
-DLT_PRO_FINAL = (
-    "Yes, please go ahead and propose the Spark Declarative Pipelines (DLT) "
-    "workload with Pro edition, serverless, 4 runs/day, 30 min each."
-)
-
-# Variant 2: Basic pipeline, Core edition
-DLT_CORE_PRIMARY = (
-    "I need a basic DLT pipeline for simple batch ETL — just reading from S3, "
-    "transforming, and writing to Delta tables. Nothing fancy, on AWS us-east-1."
-)
-DLT_CORE_FOLLOWUP = (
-    "This should be an SDP (Spark Declarative Pipelines) workload with Core "
-    "edition — no CDC or SCD needed. Classic compute, 4 workers, i3.xlarge, "
-    "Photon enabled. 2 runs per day, 45 minutes each, 22 days/month. "
-    "Please propose the DLT workload now."
-)
-DLT_CORE_FINAL = (
-    "Please propose the DLT/SDP workload with Core edition, classic compute, "
-    "4 workers, i3.xlarge, 2 runs/day, 45 min each, 22 days/month."
-)
-
-# Variant 3: Advanced pipeline with full monitoring
-DLT_ADVANCED_PRIMARY = (
-    "I need an advanced DLT pipeline with full data quality expectations, "
-    "monitoring, and enhanced autoscaling on AWS us-east-1."
-)
-DLT_ADVANCED_FOLLOWUP = (
-    "Use SDP (Spark Declarative Pipelines) with Advanced edition — we need "
-    "data quality expectations and enhanced monitoring. Serverless compute, "
-    "performance mode. 6 runs per day, 20 minutes each, 30 days/month. "
-    "Please propose the DLT workload configuration now."
-)
-DLT_ADVANCED_FINAL = (
-    "Go ahead and propose the DLT/SDP workload with Advanced edition, "
-    "serverless performance mode, Photon enabled, 6 runs/day, 20 min each, "
-    "30 days/month. Base table size is medium (~100GB). "
-    "Use sensible defaults for anything I haven't specified — "
-    "just propose the workload now, don't ask more questions."
+from tests.ai_assistant.sprint_3.prompts import (
+    DLT_PRO_PRIMARY, DLT_PRO_FOLLOWUP, DLT_PRO_FINAL,
+    DLT_CORE_PRIMARY, DLT_CORE_FOLLOWUP, DLT_CORE_FINAL,
+    DLT_ADVANCED_PRIMARY, DLT_ADVANCED_FOLLOWUP, DLT_ADVANCED_FINAL,
+    NON_DLT_PRIMARY, NON_DLT_FOLLOWUP, NON_DLT_FINAL,
 )
 
 
@@ -93,6 +46,17 @@ def dlt_advanced_proposal(http_client, test_estimate):
     proposal, resp = send_chat_until_proposal(
         http_client,
         [DLT_ADVANCED_PRIMARY, DLT_ADVANCED_FOLLOWUP, DLT_ADVANCED_FINAL],
+        test_estimate,
+    )
+    return proposal
+
+
+@pytest.fixture(scope="module")
+def non_dlt_proposal(http_client, test_estimate):
+    """AI call for an interactive compute request — should NOT be DLT."""
+    proposal, resp = send_chat_until_proposal(
+        http_client,
+        [NON_DLT_PRIMARY, NON_DLT_FOLLOWUP, NON_DLT_FINAL],
         test_estimate,
     )
     return proposal
@@ -201,7 +165,7 @@ class TestDltCoreEdition:
     def test_classic_compute_fields(self, dlt_core_proposal):
         """Core classic should have node types and worker count."""
         if dlt_core_proposal.get("serverless_enabled"):
-            pytest.skip("AI chose serverless — classic compute fields not applicable")
+            pytest.skip("AI chose serverless — classic compute fields N/A")
         has_nodes = (
             dlt_core_proposal.get("driver_node_type")
             or dlt_core_proposal.get("worker_node_type")
@@ -215,7 +179,7 @@ class TestDltCoreEdition:
     def test_photon_set_for_classic(self, dlt_core_proposal):
         """If classic compute, photon_enabled should be set."""
         if dlt_core_proposal.get("serverless_enabled"):
-            pytest.skip("AI chose serverless — photon check not applicable")
+            pytest.skip("AI chose serverless — photon check N/A")
         pe = dlt_core_proposal.get("photon_enabled")
         assert pe is not None, "photon_enabled should be set for classic"
 
@@ -276,4 +240,23 @@ class TestDltAdvancedEdition:
         has_hours = dlt_advanced_proposal.get("hours_per_month") is not None
         assert has_runs or has_hours, (
             "DLT Advanced proposal should have scheduling fields"
+        )
+
+
+# -- Negative test: non-DLT prompt must NOT produce DLT -----------------------
+
+
+class TestDltNegativeDiscrimination:
+    """Non-DLT prompt (interactive compute) must NOT produce a DLT workload."""
+
+    def test_non_dlt_prompt_does_not_produce_dlt(self, non_dlt_proposal):
+        wt = non_dlt_proposal.get("workload_type", "")
+        assert wt != "DLT", (
+            f"Interactive compute prompt should NOT produce DLT, got {wt}"
+        )
+
+    def test_non_dlt_prompt_produces_all_purpose(self, non_dlt_proposal):
+        wt = non_dlt_proposal.get("workload_type", "")
+        assert wt == "ALL_PURPOSE", (
+            f"Interactive compute prompt should produce ALL_PURPOSE, got {wt}"
         )

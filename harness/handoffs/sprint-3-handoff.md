@@ -1,54 +1,31 @@
-# Sprint 3 Handoff: DLT/SDP (Spark Declarative Pipelines) — AI Assistant Tests (Iteration 4)
+# Sprint 3 Handoff: DLT/SDP (Spark Declarative Pipelines) — Iteration 5 (Build iter 2)
 
 ## What Was Built
 
 ### DLT Proposal Tests (`tests/ai_assistant/sprint_3/test_dlt_proposal.py`)
-- **9 DLT Pro Serverless tests** (module-scoped fixture — single AI call shared):
-  - workload_type == "DLT"
-  - workload_name non-empty (>= 3 chars)
-  - dlt_edition contains "PRO"
-  - serverless_enabled == True
-  - reason populated (>= 10 chars)
-  - notes populated (>= 1 char)
-  - proposal_id present
-  - scheduling fields present (runs_per_day or hours_per_month)
-  - serverless_enabled explicitly set (not None)
-- **10 DLT Core Edition tests** (separate module-scoped fixture):
-  - workload_type == "DLT"
-  - dlt_edition contains "CORE" for basic ETL pipeline
-  - workload_name non-empty
-  - proposal_id present
-  - reason populated (>= 10 chars)
-  - notes populated (>= 1 char)
-  - serverless_enabled explicitly set (not None)
-  - classic compute has node types and num_workers >= 1 (skips via `pytest.skip` if serverless)
-  - photon_enabled set for classic compute (skips via `pytest.skip` if serverless)
-  - scheduling_fields_present (runs_per_day or hours_per_month)
-- **8 DLT Advanced Edition tests** (separate module-scoped fixture):
-  - workload_type == "DLT"
-  - dlt_edition contains "ADVANCED" for full monitoring
-  - workload_name non-empty
-  - proposal_id present
-  - reason populated (>= 10 chars)
-  - notes populated (>= 1 char)
-  - serverless_enabled explicitly set
-  - scheduling fields present
+- **9 DLT Pro Serverless tests** (module-scoped fixture — single AI call shared)
+- **10 DLT Core Edition tests** (separate module-scoped fixture)
+- **8 DLT Advanced Edition tests** (separate module-scoped fixture)
+- **2 Negative Discrimination tests** (NEW — verifies non-DLT prompt does NOT produce DLT)
 
-### Iteration 4 Changes (from VQA report — BUG-S3-003)
+### Iteration 5 Changes (addressing eval feedback — score 9.35 → targeting 9.5)
 
-**BUG-S3-003 [CRITICAL]: Databricks FMAPI tool_use/tool_result mismatch**
+**Fix 1: Code Quality — prompt extraction (eval deduction: 279 lines over 200 guideline)**
+- Extracted all prompt constants to `tests/ai_assistant/sprint_3/prompts.py` (71 lines)
+- Test file reduced from 279 → 262 lines (net reduction despite adding new test class)
+- Clean separation of concerns: prompts are data, test file is logic
 
-Root cause: The Databricks FMAPI endpoint (Claude Opus 4.5) cannot convert OpenAI-format assistant messages that contain BOTH `content` and `tool_calls` fields to Anthropic format. When the AI responds with text AND a tool call in the same turn, the follow-up API call fails with `messages.1: tool_use ids were found without tool_result blocks`.
+**Fix 2: Testing Coverage — negative discrimination test (eval: "no negative test cases")**
+- Added `TestDltNegativeDiscrimination` class with 2 assertions:
+  - `test_non_dlt_prompt_does_not_produce_dlt` — interactive compute prompt must NOT yield DLT
+  - `test_non_dlt_prompt_produces_all_purpose` — must yield ALL_PURPOSE instead
+- New `non_dlt_proposal` module-scoped fixture (1 additional AI call)
+- Total AI calls per run: 4 (PRO + CORE + ADVANCED + negative)
 
-**Two fixes applied:**
-
-1. **`backend/app/services/ai_client.py` (primary fix):** When formatting assistant messages with `tool_calls`, always omit the `content` field. The OpenAI spec allows tool_calls without content, and this prevents the FMAPI conversion bug.
-
-2. **`backend/app/services/ai_agent.py` (defense-in-depth):** The non-streaming `chat()` method now uses simplified history (text-only) after tool execution, matching the existing streaming `chat_stream()` approach. Tool_calls and tool_result structures are used only for the immediate follow-up API call and then replaced with a text summary in conversation history.
-
-### Prior Iteration Fixes (still in place)
-- **BUG-S3-001** (iter 3): Hardened `DLT_ADVANCED_FINAL` prompt — added Photon, base table size, "don't ask more questions"
-- **BUG-S3-002** (iter 3): Added `test_scheduling_fields_present` to `TestDltCoreEdition` — 15/15 ACs
+### Prior Iteration Fixes (all verified intact)
+- **BUG-S3-001** (iter 3): Hardened `DLT_ADVANCED_FINAL` prompt
+- **BUG-S3-002** (iter 3): Added `test_scheduling_fields_present` to Core → 15/15 ACs
+- **BUG-S3-003** (iter 4): FMAPI tool_use/tool_result conversion fix in ai_client.py + ai_agent.py
 
 ## How to Test
 
@@ -58,26 +35,35 @@ source .venv/bin/activate
 python -m pytest tests/ai_assistant/sprint_3/ -v
 ```
 
-Requires: Databricks CLI profile `lakemeter` configured with workspace access.
-
 ## Test Results
 
-- **Sprint 3 only**: 27 passed, 0 failed, 0 errors in ~140s (2m 20s)
-- **Full AI regression (S1+S2+S3)**: 58 passed, 0 failed, 0 errors in ~386s (6m 25s)
-- Module-scoped fixtures: 3 AI calls for Sprint 3 (PRO, CORE, ADVANCED)
-- Zero regressions across all sprints
-- All 3 DLT variants stable (Pro, Core, Advanced)
+### Sprint 3 Only
+```
+29 passed, 0 failed, 6 warnings in 193.85s (3m 13s)
+```
+
+### Sprint 1 + Sprint 2 Regression
+```
+31 passed, 0 failed, 6 warnings in 297.96s (4m 57s)
+```
+
+### Full Project Test Suite
+```
+1364 passed, 0 failed, 6 warnings in 540.96s (9m 00s)
+```
+Up from 1362 → 1364 (2 new negative tests). Zero regressions.
+
+## Acceptance Criteria: 15/15 PASS (unchanged)
+All original ACs remain passing. Negative tests are bonus coverage beyond contract.
 
 ## Known Limitations
-
-- Tests are non-deterministic: AI may produce different field values across runs
-- DLT Core was requested as classic compute but AI may sometimes choose serverless — classic-specific tests properly skip with `pytest.skip`
-- Each variant makes its own AI call (~30-60s each)
+- Test file at 262 lines (over 200 guideline) due to 4 test classes; further reduction would require parametrizing across variants, sacrificing readability
+- Negative test adds a 4th AI call per run (~30s additional runtime)
+- Tests are non-deterministic: DLT Core may choose serverless — classic-specific tests properly `pytest.skip`
 
 ## Files Changed
-
-- `backend/app/services/ai_client.py` — MODIFIED:
-  - When formatting assistant messages with tool_calls, always omit content field to prevent FMAPI conversion bug (BUG-S3-003)
-- `backend/app/services/ai_agent.py` — MODIFIED:
-  - Non-streaming `chat()` now uses simplified history after tool execution (text-only, matching streaming path)
-- `harness/handoffs/sprint-3-handoff.md` — Updated for iteration 4
+| File | Action | Lines | Purpose |
+|------|--------|------:|---------|
+| `tests/ai_assistant/sprint_3/prompts.py` | NEW | 71 | Extracted prompt constants |
+| `tests/ai_assistant/sprint_3/test_dlt_proposal.py` | MODIFIED | 262 | Imports from prompts.py, added negative test class |
+| `harness/handoffs/sprint-3-handoff.md` | UPDATED | — | This file |
