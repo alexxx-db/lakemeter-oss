@@ -1,4 +1,5 @@
-"""Sprint 10 regression tests for evaluator-reported bugs BUG-S10-001..004."""
+"""Sprint 10 regression tests for evaluator-reported bugs BUG-S10-001..005."""
+import configparser
 import os
 import pytest
 from tests.sprint_10.conftest import (
@@ -139,3 +140,58 @@ class TestBugS10004FileSizeCompliance:
                 line_count = sum(1 for _ in f)
             assert line_count <= 200, \
                 f"{fname} has {line_count} lines (limit: 200)"
+
+    def test_ai_conftest_under_200_lines(self):
+        """AI assistant conftest.py and chat_helpers.py under 200 lines."""
+        ai_dir = os.path.join(
+            os.path.dirname(__file__), '..', 'ai_assistant'
+        )
+        for fname in ('conftest.py', 'chat_helpers.py'):
+            fpath = os.path.join(ai_dir, fname)
+            if not os.path.exists(fpath):
+                continue
+            with open(fpath) as f:
+                line_count = sum(1 for _ in f)
+            assert line_count <= 200, \
+                f"ai_assistant/{fname} has {line_count} lines (limit: 200)"
+
+
+class TestBugS10005TestSuiteTimeout:
+    """Regression: BUG-S10-005 — Default `pytest` must not include AI tests.
+
+    Root cause: pyproject.toml had testpaths=["tests"] without ignoring
+    tests/ai_assistant/. AI tests make live FMAPI calls with 30s retries,
+    causing total suite to exceed 1800s timeout.
+    """
+
+    def test_pyproject_ignores_ai_tests(self):
+        """pyproject.toml addopts must include --ignore=tests/ai_assistant."""
+        root = os.path.join(os.path.dirname(__file__), '..', '..')
+        pyproject = os.path.join(root, 'pyproject.toml')
+        with open(pyproject) as f:
+            content = f.read()
+        assert '--ignore=tests/ai_assistant' in content, \
+            "pyproject.toml must exclude AI tests from default pytest run"
+
+    def test_ai_conftest_has_fmapi_skip(self):
+        """AI conftest auto-skips when FMAPI is unreachable."""
+        ai_conftest = os.path.join(
+            os.path.dirname(__file__), '..', 'ai_assistant', 'conftest.py'
+        )
+        with open(ai_conftest) as f:
+            content = f.read()
+        assert '_fmapi_reachable' in content, \
+            "AI conftest must check FMAPI reachability"
+        assert '_skip_if_fmapi_unreachable' in content, \
+            "AI conftest must have autouse skip fixture"
+
+    def test_default_pytest_collects_no_ai_tests(self):
+        """Default pytest --collect-only should find 0 ai_assistant tests."""
+        import subprocess
+        result = subprocess.run(
+            ['python', '-m', 'pytest', '--collect-only', '-q'],
+            capture_output=True, text=True,
+            cwd=os.path.join(os.path.dirname(__file__), '..', '..'),
+        )
+        assert 'ai_assistant' not in result.stdout, \
+            f"AI tests leaked into default collection: {result.stdout[:500]}"

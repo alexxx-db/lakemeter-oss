@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from tests.ai_assistant.conftest import (
+from tests.ai_assistant.chat_helpers import (
     send_chat_until_proposal,
     confirm_proposal,
     extract_proposal,

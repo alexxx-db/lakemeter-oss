@@ -1,20 +1,45 @@
-"""Shared test infrastructure for AI assistant end-to-end tests.
+"""Shared fixtures for AI assistant end-to-end tests.
 
 Uses FastAPI TestClient against the local backend. The backend uses
 Databricks CLI token for FMAPI calls (model-serving scope) and
 service principal for Lakebase DB access.
 
-Required env vars (set automatically if DATABRICKS_CONFIG_PROFILE=lakemeter):
-  DATABRICKS_HOST, DATABRICKS_CONFIG_PROFILE, DATABRICKS_SECRETS_SCOPE,
-  SP_CLIENT_ID_KEY, SP_SECRET_KEY, LAKEBASE_INSTANCE_NAME, DB_HOST,
-  DB_USER, DB_NAME, DB_PORT, DB_SSLMODE
+Run explicitly with:  pytest tests/ai_assistant/ --timeout=300
+(AI tests are excluded from default `pytest` via pyproject.toml addopts.)
 """
 import os
 import sys
 import uuid
-from typing import Optional
 
 import pytest
+
+from tests.ai_assistant.chat_helpers import (  # noqa: F401 — re-export
+    send_chat_message,
+    extract_proposal,
+    send_chat_until_proposal,
+    confirm_proposal,
+    reject_proposal,
+    get_conversation_state,
+    AUTH_EMAIL,
+    AUTH_HEADERS,
+)
+
+
+def _fmapi_reachable() -> bool:
+    """Quick check: can we reach the Databricks host?"""
+    import socket
+    host = os.environ.get("DATABRICKS_HOST", "")
+    hostname = host.replace("https://", "").replace("http://", "").strip("/")
+    if not hostname:
+        return False
+    try:
+        socket.create_connection((hostname, 443), timeout=5)
+        return True
+    except (socket.timeout, OSError):
+        return False
+
+
+_FMAPI_AVAILABLE = _fmapi_reachable()
 
 # Ensure backend is importable
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
@@ -38,8 +63,12 @@ _ENV_DEFAULTS = {
 for key, default in _ENV_DEFAULTS.items():
     os.environ.setdefault(key, default)
 
-AUTH_EMAIL = "test-harness@databricks.com"
-AUTH_HEADERS = {"X-Forwarded-Email": AUTH_EMAIL}
+
+@pytest.fixture(autouse=True)
+def _skip_if_fmapi_unreachable():
+    """Auto-skip AI tests when FMAPI endpoint is unreachable."""
+    if not _FMAPI_AVAILABLE:
+        pytest.skip("FMAPI unreachable — skipping AI assistant test")
 
 
 @pytest.fixture(scope="session")
@@ -50,6 +79,10 @@ def http_client():
 
     with TestClient(app, raise_server_exceptions=False) as client:
         yield client
+
+    from app.database import engine
+    if engine:
+        engine.dispose()
 
 
 @pytest.fixture(scope="session")
@@ -71,126 +104,3 @@ def test_estimate(http_client):
         f"/api/v1/estimates/{estimate['estimate_id']}",
         headers=AUTH_HEADERS,
     )
-
-
-# ── Chat helper utilities ──────────────────────────────────────────
-
-
-def send_chat_message(
-    http_client,
-    message: str,
-    estimate: dict,
-    conversation_id: Optional[str] = None,
-    workloads_context: Optional[list] = None,
-    max_retries: int = 2,
-) -> dict:
-    """Send a non-streaming chat message and return the parsed response.
-
-    Retries on 500 errors (rate-limit, transient Claude failures) with a
-    30-second backoff between attempts.
-    """
-    import time
-
-    cid = conversation_id or str(uuid.uuid4())
-    payload = {
-        "message": message,
-        "conversation_id": cid,
-        "estimate_context": {
-            "estimate_id": estimate["estimate_id"],
-            "estimate_name": estimate["estimate_name"],
-            "cloud": estimate.get("cloud", "AWS"),
-            "region": estimate.get("region", "us-east-1"),
-            "tier": estimate.get("tier", "PREMIUM"),
-        },
-        "workloads_context": workloads_context or [],
-        "mode": "estimate",
-        "stream": False,
-    }
-    last_err = ""
-    for attempt in range(1 + max_retries):
-        resp = http_client.post(
-            "/api/v1/chat", json=payload, headers=AUTH_HEADERS
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            data["_conversation_id"] = data.get("conversation_id", cid)
-            return data
-        last_err = resp.text[:300]
-        if attempt < max_retries:
-            time.sleep(30)  # back off for rate limits
-    assert False, (
-        f"Chat call failed after {1 + max_retries} attempts "
-        f"({resp.status_code}): {last_err}"
-    )
-
-
-def extract_proposal(response: dict) -> Optional[dict]:
-    """Extract proposed_workload from a chat response."""
-    pw = response.get("proposed_workload")
-    if pw:
-        return pw
-    for tr in response.get("tool_results") or []:
-        if (
-            tr.get("tool") == "propose_workload"
-            and tr.get("result", {}).get("success")
-        ):
-            return tr["result"].get("workload")
-    return None
-
-
-def send_chat_until_proposal(
-    http_client,
-    messages: list[str],
-    estimate: dict,
-    conversation_id: Optional[str] = None,
-) -> tuple[dict, dict]:
-    """Send messages sequentially until we get a proposed_workload.
-
-    Returns (proposal_dict, last_response_dict).
-    Raises AssertionError if no proposal after all messages.
-    """
-    cid = conversation_id or str(uuid.uuid4())
-    last_resp: dict = {}
-    for msg in messages:
-        last_resp = send_chat_message(
-            http_client, msg, estimate, conversation_id=cid
-        )
-        proposal = extract_proposal(last_resp)
-        if proposal:
-            return proposal, last_resp
-    raise AssertionError(
-        f"No proposal after {len(messages)} messages. "
-        f"Last response: {last_resp.get('content', '')[:300]}"
-    )
-
-
-def confirm_proposal(http_client, conversation_id: str, proposal_id: str) -> dict:
-    """Confirm a proposed workload."""
-    resp = http_client.post(
-        f"/api/v1/chat/{conversation_id}/confirm-workload",
-        json={"proposal_id": proposal_id, "confirmed": True},
-        headers=AUTH_HEADERS,
-    )
-    assert resp.status_code == 200, f"Confirm failed: {resp.text[:200]}"
-    return resp.json()
-
-
-def reject_proposal(http_client, conversation_id: str, proposal_id: str) -> dict:
-    """Reject a proposed workload."""
-    resp = http_client.post(
-        f"/api/v1/chat/{conversation_id}/confirm-workload",
-        json={"proposal_id": proposal_id, "confirmed": False},
-        headers=AUTH_HEADERS,
-    )
-    assert resp.status_code == 200, f"Reject failed: {resp.text[:200]}"
-    return resp.json()
-
-
-def get_conversation_state(http_client, conversation_id: str) -> dict:
-    """Get conversation state (pending proposals, confirmed workloads)."""
-    resp = http_client.get(
-        f"/api/v1/chat/{conversation_id}/state",
-        headers=AUTH_HEADERS,
-    )
-    assert resp.status_code == 200, f"State fetch failed: {resp.text[:200]}"
-    return resp.json()

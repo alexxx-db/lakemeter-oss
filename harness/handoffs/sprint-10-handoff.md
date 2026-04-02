@@ -1,40 +1,36 @@
-# Sprint 10 Handoff (Iteration 2): Combined Estimate + AI Multi-Workload Tests
+# Sprint 10 Handoff (Iteration 3): Test Suite Timeout Fix + AI Test Isolation
 
-## What Was Built (Iteration 2 — Evaluator Fixes)
+## What Was Built (Iteration 3 — Timeout Fix)
 
-Addressed all 4 bugs from sprint-10-eval.md (score 8.10 → targeting 9.5+):
+Addressed test suite timeout (1800s) caused by AI assistant tests being collected in default pytest run.
 
-### BUG-S10-001: Model Serving GPU pricing
-- **Already resolved in iter 1**: conftest uses `gpu_medium_a10g_1x` (not `gpu_medium`), test asserts 20.0 DBU/hr
-- **Iter 2 addition**: 4 regression tests in `test_regression_s10.py::TestBugS10001ModelServingGpu` — validates GPU type name, non-zero DBU/hr, no warnings, and Excel output
+### BUG-S10-005: Test suite timeout
+- **Root cause**: `pyproject.toml` had `testpaths = ["tests"]` without excluding `tests/ai_assistant/`. AI tests make live FMAPI calls with 30s retry backoff — 3-workload conversations (9+ chat calls) easily exceed 1800s when FMAPI is slow or unavailable.
+- **Fix 1**: Added `addopts = "--ignore=tests/ai_assistant"` to `pyproject.toml` so default `pytest` excludes AI tests
+- **Fix 2**: Added `_fmapi_reachable()` check + autouse `_skip_if_fmapi_unreachable` fixture to `tests/ai_assistant/conftest.py` — even when AI tests are run explicitly, they gracefully skip if FMAPI is unreachable
+- **Fix 3**: Split `tests/ai_assistant/conftest.py` (was 227 lines) into `conftest.py` (106 lines) + `chat_helpers.py` (129 lines) for 200-line compliance
+- **4 regression tests** in `test_regression_s10.py`:
+  - `TestBugS10004FileSizeCompliance::test_ai_conftest_under_200_lines`
+  - `TestBugS10005TestSuiteTimeout::test_pyproject_ignores_ai_tests`
+  - `TestBugS10005TestSuiteTimeout::test_ai_conftest_has_fmapi_skip`
+  - `TestBugS10005TestSuiteTimeout::test_default_pytest_collects_no_ai_tests`
 
-### BUG-S10-002: Notes column for fallback-pricing items
-- **New test**: `test_excel_structure.py::TestNotesColumn::test_warning_items_have_notes` — asserts DLT and Vector Search rows have non-empty notes
-- **4 regression tests** in `test_regression_s10.py::TestBugS10002FallbackNotesInExcel` — checks fallback note content, SKU mention, and that non-fallback items don't have warnings
-
-### BUG-S10-003: FMAPI SKU assertions
-- **Already resolved in iter 1**: exact string assertions (`SERVERLESS_REAL_TIME_INFERENCE`, `ANTHROPIC_MODEL_SERVING`)
-- **3 regression tests** in `test_regression_s10.py::TestBugS10003FmapiSkuExact` — exact match + differ check
-
-### BUG-S10-004: File size compliance
-- **Already resolved in iter 1**: split into `test_excel_structure.py` + `test_excel_formulas.py`
-- **1 regression test** in `test_regression_s10.py::TestBugS10004FileSizeCompliance` — scans all sprint 10 test files, asserts ≤200 lines
-
-### Additional improvements
-- **Expanded `test_pricing_lookups.py`**: Added `TestFallbackPricingExpected` (DLT, FMAPI DB, FMAPI Prop behavior) and `TestMultiCloudPricing` (cross-cloud validation for Jobs, DBSQL, Model Serving)
+### All prior bugs (BUG-S10-001..004) remain fixed from iteration 2
 
 ## Files Created
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `tests/sprint_10/test_regression_s10.py` | 141 | Regression tests for BUG-S10-001..004 (12 tests) |
+| `tests/ai_assistant/chat_helpers.py` | 129 | Extracted chat helper functions from conftest |
 
 ## Files Modified
 
 | File | Lines | Change |
 |------|-------|--------|
-| `tests/sprint_10/test_excel_structure.py` | 193 | Added `test_warning_items_have_notes` |
-| `tests/sprint_10/test_pricing_lookups.py` | 96 | Added fallback pricing + multi-cloud test classes |
+| `pyproject.toml` | 20 | Added `addopts` to ignore AI tests + custom markers |
+| `tests/ai_assistant/conftest.py` | 106 | Added FMAPI skip logic, moved helpers to chat_helpers.py |
+| `tests/ai_assistant/sprint_10/conftest.py` | 163 | Updated import path to chat_helpers |
+| `tests/sprint_10/test_regression_s10.py` | 197 | Added BUG-S10-005 regression tests + AI conftest size check |
 
 ## How to Test
 
@@ -42,25 +38,25 @@ Addressed all 4 bugs from sprint-10-eval.md (score 8.10 → targeting 9.5+):
 cd lakemeter_app
 source .venv/bin/activate
 
+# Default pytest (excludes AI tests, completes in ~9s)
+pytest -v
+
 # Sprint 10 tests only
 pytest tests/sprint_10/ -v
 
-# Full regression (non-AI)
-pytest --ignore=tests/ai_assistant -v
-
-# AI assistant tests (requires FMAPI access)
-pytest tests/ai_assistant/sprint_10/ -v --timeout=300
+# AI assistant tests (explicit, requires FMAPI access)
+pytest tests/ai_assistant/ --no-header --timeout=300
 ```
 
 ## Test Results
 
-- **Sprint 10 tests**: 119 passed, 0 failed (1.45s) — up from 101 in iter 1 (+18 tests)
-- **Full regression**: 1405 passed, 0 failed (6.82s)
-- **AI assistant tests**: 62 collected (require live FMAPI, not run in build phase)
-- **All files under 200 lines**: verified by `TestBugS10004FileSizeCompliance`
+- **Sprint 10 tests**: 123 passed, 0 failed (3.69s) — up from 119 (+4 regression tests)
+- **Full regression**: 1409 passed, 0 failed (9.16s) — up from 1405
+- **AI assistant tests**: excluded from default run; 62 collected when run explicitly
+- **All files under 200 lines**: verified
 
 ## Known Limitations
 
-- DLT (`DELTA_LIVE_TABLES_SERVERLESS`) and Vector Search (`VECTOR_SEARCH_ENDPOINT`) SKUs use fallback pricing — these are real pricing data gaps, not test issues
-- Model Serving `gpu_medium_a10g_1x` resolves on AWS only; Azure/GCP may have different GPU type names
-- AI assistant tests are non-deterministic due to LLM responses
+- DLT and Vector Search SKUs still use fallback pricing (real pricing data gap)
+- AI assistant tests remain non-deterministic (LLM responses vary)
+- FMAPI reachability check uses TCP socket to port 443 (5s timeout) — doesn't verify auth
