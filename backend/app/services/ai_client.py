@@ -178,7 +178,10 @@ class ClaudeAIClient:
                             "content": tool_content
                         })
             elif msg.get("tool_calls"):
-                # Assistant message with tool calls - content can be omitted if empty
+                # Assistant message with tool calls — omit content field.
+                # Databricks FMAPI cannot convert content + tool_calls together
+                # to Anthropic format; it drops tool_result pairing. Always send
+                # tool_calls-only assistant messages (OpenAI spec allows this).
                 assistant_msg = {
                     "role": "assistant",
                     "tool_calls": [
@@ -193,10 +196,6 @@ class ClaudeAIClient:
                         for i, tc in enumerate(msg["tool_calls"])
                     ]
                 }
-                # Only include content if it's non-empty
-                content = msg.get("content", "")
-                if content:
-                    assistant_msg["content"] = content
                 formatted_messages.append(assistant_msg)
             else:
                 # For regular messages, ensure content is non-empty

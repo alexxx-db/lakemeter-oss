@@ -1456,16 +1456,15 @@ class EstimateAgent:
                 if tool_call["name"] == "propose_workload" and result.get("success"):
                     proposed_workload = result.get("proposed_workload")
             
-            # Add assistant message with tool use to history
-            self.conversation_history.append({
+            # Build temporary messages for the follow-up call (need tool structures)
+            tool_use_msg = {
                 "role": "assistant",
                 "content": response.get("content", ""),
                 "tool_calls": response["tool_calls"]
-            })
-            
-            # Add tool results to history
+            }
+            tool_result_msgs = []
             for i, tool_call in enumerate(response["tool_calls"]):
-                self.conversation_history.append({
+                tool_result_msgs.append({
                     "role": "user",
                     "content": [
                         {
@@ -1475,7 +1474,12 @@ class EstimateAgent:
                         }
                     ]
                 })
-            
+
+            # Temporarily add tool messages for the follow-up call
+            self.conversation_history.append(tool_use_msg)
+            for trm in tool_result_msgs:
+                self.conversation_history.append(trm)
+
             # Get follow-up response after tool execution
             follow_up = await self.client.chat(
                 messages=self.conversation_history,
@@ -1484,11 +1488,25 @@ class EstimateAgent:
                 max_tokens=4096,
                 temperature=0
             )
-            
+
             final_content = follow_up.get("content", "")
+
+            # SIMPLIFIED HISTORY: Replace tool_use + tool_result messages with
+            # text-only summary. This prevents tool_use/tool_result mismatch
+            # errors on subsequent calls (same approach as chat_stream).
+            num_tool_msgs = 1 + len(tool_result_msgs)  # assistant + tool results
+            del self.conversation_history[-num_tool_msgs:]
+
+            tool_summaries = [tr["tool"] for tr in tool_results]
+            history_content = final_content or ""
+            action_note = f"[Actions: {'; '.join(tool_summaries)}]"
+            if history_content:
+                history_content = f"{action_note}\n\n{history_content}"
+            else:
+                history_content = action_note
             self.conversation_history.append({
                 "role": "assistant",
-                "content": final_content
+                "content": history_content
             })
         else:
             # No tool calls, just text response
@@ -1912,8 +1930,6 @@ The following fields MUST be set before workloads can be added:
                 context += f"\n- **Customer**: {est.get('customer_name')}"
             if est.get('description'):
                 context += f"\n- **Description**: {est.get('description')}"
-            if est.get('sfdc_account_id'):
-                context += f"\n- **Salesforce Account**: Linked"
         else:
             context += "\n\nNo estimate loaded. User may be creating a new one."
         
