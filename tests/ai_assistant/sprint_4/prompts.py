@@ -1,7 +1,7 @@
 """Prompt constants for DBSQL workload proposal tests.
 
 Three warehouse type variants: SERVERLESS, PRO, CLASSIC.
-One negative discrimination variant: non-DBSQL request.
+Two negative discrimination variants: interactive compute, batch ETL.
 """
 
 # Valid DBSQL warehouse sizes for assertions
@@ -68,4 +68,19 @@ NON_DBSQL_FOLLOWUP = (
 NON_DBSQL_FINAL = (
     "Go ahead and propose an All-Purpose Compute workload — "
     "4 workers, i3.xlarge, 176 hours/month, interactive use."
+)
+
+# Variant 5: Negative test — batch ETL (should NOT be DBSQL)
+NON_DBSQL_ETL_PRIMARY = (
+    "I need a batch ETL pipeline that runs daily to process raw data "
+    "into curated Delta tables on AWS us-east-1."
+)
+NON_DBSQL_ETL_FOLLOWUP = (
+    "This is a daily batch ETL job — processes 500GB, "
+    "4 workers, runs once a day for 45 minutes, 22 days/month. "
+    "Please propose the workload configuration now."
+)
+NON_DBSQL_ETL_FINAL = (
+    "Go ahead and propose a batch ETL workload — "
+    "daily job, 4 workers, 45 minutes per run, 22 days/month."
 )

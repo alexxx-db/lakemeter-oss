@@ -1,7 +1,7 @@
 """Sprint 4 conftest — module-scoped fixtures for DBSQL proposal tests.
 
 Each fixture makes one AI call and is shared across tests in its file.
-Four variants: SERVERLESS, PRO, CLASSIC, non-DBSQL negative.
+Five variants: SERVERLESS, PRO, CLASSIC, non-DBSQL interactive, non-DBSQL batch ETL.
 """
 import pytest
 
@@ -11,6 +11,7 @@ from tests.ai_assistant.sprint_4.prompts import (
     DBSQL_PRO_PRIMARY, DBSQL_PRO_FOLLOWUP, DBSQL_PRO_FINAL,
     DBSQL_CLASSIC_PRIMARY, DBSQL_CLASSIC_FOLLOWUP, DBSQL_CLASSIC_FINAL,
     NON_DBSQL_PRIMARY, NON_DBSQL_FOLLOWUP, NON_DBSQL_FINAL,
+    NON_DBSQL_ETL_PRIMARY, NON_DBSQL_ETL_FOLLOWUP, NON_DBSQL_ETL_FINAL,
 )
 
 
@@ -53,6 +54,17 @@ def non_dbsql_proposal(http_client, test_estimate):
     proposal, resp = send_chat_until_proposal(
         http_client,
         [NON_DBSQL_PRIMARY, NON_DBSQL_FOLLOWUP, NON_DBSQL_FINAL],
+        test_estimate,
+    )
+    return proposal
+
+
+@pytest.fixture(scope="module")
+def non_dbsql_etl_proposal(http_client, test_estimate):
+    """AI call for batch ETL — should NOT produce DBSQL."""
+    proposal, resp = send_chat_until_proposal(
+        http_client,
+        [NON_DBSQL_ETL_PRIMARY, NON_DBSQL_ETL_FOLLOWUP, NON_DBSQL_ETL_FINAL],
         test_estimate,
     )
     return proposal
