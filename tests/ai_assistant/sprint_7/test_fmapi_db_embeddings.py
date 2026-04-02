@@ -32,3 +32,21 @@ class TestFmapiDbEmbeddings:
         assert provider, (
             f"fmapi_provider should be present, got '{provider}'"
         )
+
+    def test_endpoint_type_valid(self, embeddings_proposal):
+        et = embeddings_proposal.get("fmapi_endpoint_type", "")
+        assert et in ["global", "regional"], (
+            f"fmapi_endpoint_type '{et}' not in ['global', 'regional']"
+        )
+
+    def test_workload_name_non_empty(self, embeddings_proposal):
+        name = embeddings_proposal.get("workload_name", "")
+        assert name and len(name) >= 3, (
+            f"workload_name too short or missing: '{name}'"
+        )
+
+    def test_reason_populated(self, embeddings_proposal):
+        reason = embeddings_proposal.get("reason", "")
+        assert reason and len(reason) >= 10, (
+            f"reason too short or missing: '{reason}'"
+        )

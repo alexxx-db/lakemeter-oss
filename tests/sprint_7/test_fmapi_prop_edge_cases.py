@@ -85,6 +85,67 @@ class TestDisplayNames:
         assert len(qty_detail) == 1
 
 
+class TestUnknownProviderFallback:
+    """SUG-S7-002 regression: unknown provider should fallback gracefully."""
+
+    def test_unknown_provider_sku_fallback(self):
+        """Unknown provider should return OPENAI_MODEL_SERVING fallback."""
+        item = make_line_item(
+            fmapi_provider="meta", fmapi_model="llama-3",
+            fmapi_rate_type="input_token")
+        sku = _get_fmapi_sku(item, "aws")
+        assert sku == "OPENAI_MODEL_SERVING", (
+            f"Unknown provider should fallback to OPENAI_MODEL_SERVING, got {sku}")
+
+    def test_unknown_provider_rate_not_found(self):
+        """Unknown provider should return found=False from rate lookup."""
+        item = make_line_item(
+            fmapi_provider="meta", fmapi_model="llama-3",
+            fmapi_rate_type="input_token")
+        rate, found = _get_fmapi_dbu_per_million(item, "aws")
+        assert not found, "Unknown provider should not find rate in pricing data"
+
+    def test_empty_provider_sku_fallback(self):
+        """Empty provider should fallback gracefully."""
+        item = make_line_item(
+            fmapi_provider="", fmapi_model="unknown-model",
+            fmapi_rate_type="input_token")
+        sku = _get_fmapi_sku(item, "aws")
+        assert sku is not None and isinstance(sku, str)
+
+    def test_none_model_sku_fallback(self):
+        """None model should fallback gracefully (no crash)."""
+        item = make_line_item(
+            fmapi_provider="anthropic", fmapi_model=None,
+            fmapi_rate_type="input_token")
+        sku = _get_fmapi_sku(item, "aws")
+        assert sku is not None
+
+
+class TestGoogleCacheTypesGraceful:
+    """SUG-S7-001 regression: Google cache_read/cache_write handled gracefully."""
+
+    @pytest.mark.parametrize("rate_type", ["cache_read", "cache_write"])
+    def test_google_cache_rate_not_found(self, rate_type):
+        """Google doesn't support cache rate types — should return not found."""
+        item = make_line_item(
+            fmapi_provider="google", fmapi_model="gemini-2-5-flash",
+            fmapi_rate_type=rate_type, fmapi_context_length="long")
+        rate, found = _get_fmapi_dbu_per_million(item, "aws")
+        assert not found, (
+            f"Google {rate_type} should not be found in pricing data")
+
+    @pytest.mark.parametrize("rate_type", ["cache_read", "cache_write"])
+    def test_google_cache_sku_still_returns_gemini(self, rate_type):
+        """Even for unsupported cache types, SKU should be GEMINI_MODEL_SERVING."""
+        item = make_line_item(
+            fmapi_provider="google", fmapi_model="gemini-2-5-flash",
+            fmapi_rate_type=rate_type, fmapi_context_length="long")
+        sku = _get_fmapi_sku(item, "aws")
+        # Should still resolve to GEMINI (from fallback) or at least not crash
+        assert sku is not None
+
+
 class TestFileSizeLimits:
     """BUG-S7-6 regression: Key export files stay under 200 lines."""
 

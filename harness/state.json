@@ -14,7 +14,7 @@
     "Sprint 11: Multi-Workload \u2014 ML Pipeline (Model Serving + FMAPI + Vector Search)",
     "Sprint 12: Multi-Workload \u2014 Complete Platform (5+ workloads)"
   ],
-  "last_action": "Sprint 7 BUILD iter 1: FMAPI_DATABRICKS \u2014 5 prompt variants (Llama input 10M, output 5M, BGE embeddings 20M, 2 negative). 21 tests all pass. S1-S9 regression 1304/1304 pass. Zero regressions. Ready for VQA+Evaluator.",
+  "last_action": "Sprint 7 BUILD iter 2: FMAPI_DATABRICKS \u2014 +36 backend pricing tests (SKU, rates, calc paths, data integrity), +10 edge cases (unknown provider fallback SUG-S7-002, Google cache SUG-S7-001), +9 AI assistant assertions. Total: 116 backend + 30 AI assistant = 146 sprint tests. Full regression 1340/1340 pass. Zero regressions.",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -90,7 +90,7 @@
   "last_install_test": 5,
   "last_integration_test": 5,
   "context_resets": 0,
-  "current_iteration": 1,
+  "current_iteration": 2,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "N/A \u2014 uses FastAPI TestClient with local backend for FMAPI access",
@@ -98,5 +98,5 @@
   "live_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "mode": "TESTING_ONLY",
   "score_trajectory": [],
-  "last_updated": "2026-04-02T19:45:00"
+  "last_updated": "2026-04-02T20:30:00"
 }

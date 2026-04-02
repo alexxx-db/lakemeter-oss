@@ -39,3 +39,19 @@ class TestFmapiDbOutputTokens:
         assert et in VALID_ENDPOINT_TYPES, (
             f"fmapi_endpoint_type '{et}' not in {VALID_ENDPOINT_TYPES}"
         )
+
+    def test_workload_name_non_empty(self, output_token_proposal):
+        name = output_token_proposal.get("workload_name", "")
+        assert name and len(name) >= 3, (
+            f"workload_name too short or missing: '{name}'"
+        )
+
+    def test_reason_populated(self, output_token_proposal):
+        reason = output_token_proposal.get("reason", "")
+        assert reason and len(reason) >= 10, (
+            f"reason too short or missing: '{reason}'"
+        )
+
+    def test_proposal_id_present(self, output_token_proposal):
+        pid = output_token_proposal.get("proposal_id", "")
+        assert pid, "proposal_id must be present for confirm/reject flow"
