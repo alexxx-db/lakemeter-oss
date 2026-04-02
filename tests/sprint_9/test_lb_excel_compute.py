@@ -154,3 +154,5 @@ class TestDBUCostFormula:
         if all(isinstance(v, (int, float)) for v in (dbus_mo, dbu_rate, dbu_cost)):
             expected = dbus_mo * dbu_rate
             assert abs(dbu_cost - expected) < 0.01
+
+
