@@ -1,36 +1,37 @@
-# Sprint 2 Contract: Integration & Regression Testing
+# Sprint 2 Contract: DLT + DBSQL Parity (All Editions/Types/Sizes)
 
 ## Acceptance Criteria
 
-- [ ] AC-1: Full pytest suite runs — 1419+ original tests pass (excluding network-dependent skips)
-- [ ] AC-2: 91 installation tests from Sprint 1 still pass (no regressions)
-- [ ] AC-3: 10 Lakebase permission tests exist and are properly skip-guarded for offline runs
-- [ ] AC-4: Integration test: SP OAuth flow verified (token gen → DB connect → query execution)
-- [ ] AC-5: Integration test: App health endpoint returns 200
-- [ ] AC-6: Cross-workload regression: all 9 workload types have tests (JOBS, ALL_PURPOSE, DLT, DBSQL, MODEL_SERVING, VECTOR_SEARCH, FMAPI_DATABRICKS, FMAPI_PROPRIETARY, LAKEBASE)
-- [ ] AC-7: Multi-workload scenarios pass (sprint 10-11 test suites)
-- [ ] AC-8: AI assistant tests pass (sprint_1, sprint_2 AI tests) or are skip-guarded
-- [ ] AC-9: All regression tests pass (tests/regression/)
-- [ ] AC-10: New integration test file validates cross-feature data consistency
-- [ ] AC-11: Test summary report generated showing pass/fail/skip counts per module
+### DLT Parity
+- [ ] DLT Core Classic (no photon): backend DBU/hr, SKU, $/DBU, monthly cost match frontend
+- [ ] DLT Core Classic (photon): backend uses correct photon multiplier from `DLT_CORE_COMPUTE`
+- [ ] DLT Pro Classic (no photon): SKU = `DLT_PRO_COMPUTE`, pricing matches
+- [ ] DLT Pro Classic (photon): SKU = `DLT_PRO_COMPUTE_(PHOTON)`, photon mult from `DLT_PRO_COMPUTE`
+- [ ] DLT Advanced Classic (no photon): SKU = `DLT_ADVANCED_COMPUTE`
+- [ ] DLT Advanced Classic (photon): SKU = `DLT_ADVANCED_COMPUTE_(PHOTON)`, photon mult from `DLT_ADVANCED_COMPUTE`
+- [ ] DLT Core Serverless (standard mode): SKU = `JOBS_SERVERLESS_COMPUTE`, photon applied, mode_mult = 1
+- [ ] DLT Core Serverless (performance mode): mode_mult = 2
+- [ ] DLT Pro Serverless (standard): photon mult from `DLT_PRO_COMPUTE` (not `DLT_CORE_COMPUTE`)
+- [ ] DLT Advanced Serverless (performance): photon mult from `DLT_ADVANCED_COMPUTE`
+- [ ] Frontend DLT serverless photon lookup fixed to use edition-specific SKU (not always `DLT_CORE_COMPUTE`)
+
+### DBSQL Parity
+- [ ] All 9 warehouse sizes produce correct DBU/hr: 2X-Small(4), X-Small(6), Small(12), Medium(24), Large(40), X-Large(80), 2X-Large(144), 3X-Large(272), 4X-Large(528)
+- [ ] DBSQL Classic: SKU = `SQL_COMPUTE` for all sizes
+- [ ] DBSQL Pro: SKU = `SQL_PRO_COMPUTE` for all sizes
+- [ ] DBSQL Serverless: SKU = `SERVERLESS_SQL_COMPUTE` for all sizes
+- [ ] Multi-cluster: DBU/hr = base_dbu × num_clusters (tested with 1, 2, 3 clusters)
+- [ ] Hours/month calculations match (run-based and direct)
+- [ ] Monthly cost = DBU/hr × hours × $/DBU matches between frontend and backend
+
+### Regression
+- [ ] All 1762 existing tests still pass
+- [ ] No changes to JOBS or ALL_PURPOSE calculation paths
+
+## Known Issue to Fix
+- **DLT serverless photon lookup** (from Sprint 1 finding): Frontend `costCalculation.ts:290` always uses `DLT_CORE_COMPUTE` for photon lookup regardless of edition. Backend correctly uses `DLT_{edition}_COMPUTE`. Currently produces same result (all editions have 2.9 multiplier on AWS) but is a correctness bug. Fix frontend to use `DLT_${dltEdition}_COMPUTE`.
 
 ## Test Plan
-
-- Run `pytest` on the full suite with `-v --tb=short`
-- Create `tests/test_integration_validation/` with:
-  - `test_suite_completeness.py`: validates all expected test modules exist and collect
-  - `test_workload_coverage.py`: verifies each of the 9 workload types has test coverage
-  - `test_permission_flow.py`: integration test for SP OAuth flow (skip-guarded)
-  - `test_cross_feature_consistency.py`: validates pricing data consistency across workloads
-- Run tests in isolation groups to identify any cross-contamination
-
-## Files
-
-- `tests/test_integration_validation/__init__.py`
-- `tests/test_integration_validation/test_suite_completeness.py`
-- `tests/test_integration_validation/test_workload_coverage.py`
-- `tests/test_integration_validation/test_permission_flow.py`
-- `tests/test_integration_validation/test_cross_feature_consistency.py`
-
-## Production Readiness Items This Sprint
-- N/A (testing-only validation sprint)
+- Parity tests: Extend `tests/parity/test_parity_dlt.py` with all 9 DLT combinations (3 editions × 3 modes)
+- Parity tests: Extend `tests/parity/test_parity_dbsql.py` with all 27 DBSQL combinations (3 types × 9 sizes)
+- Regression: Full `pytest tests/` must pass

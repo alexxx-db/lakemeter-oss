@@ -286,8 +286,8 @@ export function calculateWorkloadCost(
       } else if (item.workload_type === 'ALL_PURPOSE') {
         skuTypeForLookup = 'ALL_PURPOSE_COMPUTE'
       } else if (item.workload_type === 'DLT') {
-        // DLT serverless uses JOBS_SERVERLESS_COMPUTE for pricing, but photon from DLT_CORE_COMPUTE
-        skuTypeForLookup = 'DLT_CORE_COMPUTE'
+        // DLT serverless uses JOBS_SERVERLESS_COMPUTE for pricing, but photon from edition-specific SKU
+        skuTypeForLookup = `DLT_${dltEdition}_COMPUTE`
       }
     }
     
@@ -428,25 +428,25 @@ export function calculateWorkloadCost(
       dbuPerHour = vectorUnitsUsed * vectorModeDBURate
       monthlyDBUs = dbuPerHour * hoursPerMonth
       
-      // TODO: Storage calculation for Vector Search - waiting for database column
+      // Storage calculation for Vector Search
       // Free Storage = units_used × 20 GB
       // Billable Storage = MAX(0, storage_gb - free_storage_gb)
       // Storage Cost = billable_storage_gb × price_per_gb_per_month ($0.023/GB/month)
-      // const vectorStorageGB = item.vector_search_storage_gb || 0
-      // const vectorFreeStorageGB = vectorUnitsUsed * 20
-      // const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
-      // const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
-      // const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
-      // 
-      // if (vectorStorageGB > 0) {
-      //   storageCost = vectorStorageCost
-      //   storageDetails = {
-      //     totalStorageGB: vectorStorageGB,
-      //     freeStorageGB: vectorFreeStorageGB,
-      //     billableStorageGB: vectorBillableStorageGB,
-      //     pricePerGB: vectorStoragePricePerGB
-      //   }
-      // }
+      const vectorStorageGB = item.vector_search_storage_gb || 0
+      const vectorFreeStorageGB = vectorUnitsUsed * 20
+      const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
+      const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
+      const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
+
+      if (vectorStorageGB > 0) {
+        storageCost = vectorStorageCost
+        storageDetails = {
+          totalStorageGB: vectorStorageGB,
+          freeStorageGB: vectorFreeStorageGB,
+          billableStorageGB: vectorBillableStorageGB,
+          pricePerGB: vectorStoragePricePerGB
+        }
+      }
       break
     
     case 'MODEL_SERVING':
