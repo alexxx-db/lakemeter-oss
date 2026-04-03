@@ -1,39 +1,53 @@
-# Sprint 1 Contract: Automated Parity Test Framework
+# Sprint 1 Contract: JOBS + ALL_PURPOSE Parity (Classic/Photon/Serverless)
 
 ## Acceptance Criteria
-- [ ] Parametrized pytest suite covering all 9 workload types with min 3 scenarios each
-- [ ] Each test verifies: DBU/hr, $/DBU price, monthly DBU cost, storage cost (where applicable), total monthly cost
-- [ ] Tests load real pricing data from `backend/static/pricing/*.json`
-- [ ] Any parity mismatch produces a clear diff showing expected vs actual values
-- [ ] All tests pass (0 failures)
-- [ ] Minimum 27 test cases (9 types x 3 scenarios)
-- [ ] Tests replicate frontend costCalculation.ts logic in Python for comparison
+
+- [ ] Driver DBU fallback rate in backend matches frontend (0.5, not 0.25)
+- [ ] JOBS Classic: DBU/hr, $/DBU, hours/mo, monthly DBUs, monthly cost match UI within $0.01
+- [ ] JOBS Classic Photon: Same parity with photon multiplier applied
+- [ ] JOBS Serverless Standard: Same parity with photon always-on + 1x mode multiplier
+- [ ] JOBS Serverless Performance: Same parity with photon always-on + 2x mode multiplier
+- [ ] ALL_PURPOSE Classic: DBU/hr, $/DBU, hours/mo, monthly DBUs, monthly cost match UI
+- [ ] ALL_PURPOSE Classic Photon: Same parity with photon multiplier applied
+- [ ] ALL_PURPOSE Serverless: Same parity with always-performance (2x) + photon always-on
+- [ ] SKU product type correct for all JOBS/ALL_PURPOSE variants
+- [ ] End-to-end Excel generation produces correct values for JOBS/ALL_PURPOSE items
+- [ ] Edge cases: zero workers, 8+ workers, run-based hours, direct hours, large worker counts
+- [ ] All existing parity tests still pass (no regressions)
+
+## Bugs Found (Code Review)
+
+### BUG-1: Driver DBU fallback mismatch
+- **Frontend** (`costCalculation.ts:250`): `driverDBURate = 0.5`
+- **Backend** (`calculations.py:56`): `driver_dbu = 0.25`
+- **Impact**: When instance type is not found in pricing JSON, backend computes lower DBU/hr
+- **Fix**: Change backend fallback to 0.5 to match frontend
 
 ## Test Plan
 
-### Test file: `tests/parity/test_parity_all_workloads.py`
-Parametrized test suite with one module per workload type section:
+### Unit tests (parity)
+- JOBS Classic: 2, 4, 8 workers with known instance types
+- JOBS Classic: zero workers (driver only)
+- JOBS Classic: run-based hours vs direct hours
+- JOBS Photon: verified photon multiplier from JSON
+- JOBS Serverless Standard: 1x mode multiplier
+- JOBS Serverless Performance: 2x mode multiplier
+- ALL_PURPOSE Classic: basic, photon, zero workers
+- ALL_PURPOSE Serverless: always performance (2x)
+- Fallback rates: items with unknown instance types should use 0.5 fallback for both driver and worker
 
-1. **JOBS** (3+ scenarios): classic, serverless standard, serverless performance + photon
-2. **ALL_PURPOSE** (3+ scenarios): classic, photon, serverless (always performance mode)
-3. **DLT** (3+ scenarios): Core classic, Pro photon, Advanced serverless
-4. **DBSQL** (3+ scenarios): Classic Small, Pro Medium, Serverless 4X-Large
-5. **VECTOR_SEARCH** (3+ scenarios): standard 1M, standard 5M, storage_optimized 100M
-6. **MODEL_SERVING** (3+ scenarios): cpu, gpu_small_t4, gpu_medium_a10g_1x
-7. **FMAPI_DATABRICKS** (3+ scenarios): input_token, output_token, provisioned_scaling
-8. **FMAPI_PROPRIETARY** (3+ scenarios): openai input, anthropic output, google input
-9. **LAKEBASE** (3+ scenarios): basic CU, HA nodes, with storage
+### Integration tests (Excel generation)
+- Generate Excel for a JOBS Classic item → verify DBU/hr, cost cells
+- Generate Excel for JOBS Serverless Performance → verify cells
+- Generate Excel for ALL_PURPOSE Serverless → verify cells
+- Verify Excel formulas (DBUs/Mo = DBU/Hr × Hours/Mo) produce correct cached values
 
-### Helper: `tests/parity/frontend_calc.py`
-Python reimplementation of frontend costCalculation.ts formulas for comparison.
+### Regression tests
+- All 9 existing parity tests must continue to pass
+- All sprint_10 tests must continue to pass
 
-### Verification per test case:
-- `dbu_per_hour` (backend `_calculate_dbu_per_hour` vs frontend formula)
-- `dbu_price` (backend `_get_dbu_price` vs frontend `dbuRatesMap` lookup)
-- `monthly_dbus` (dbu/hr × hours or tokens × rate)
-- `monthly_dbu_cost` (monthly_dbus × dbu_price)
-- `storage_cost` (for LAKEBASE and VECTOR_SEARCH)
-- `total_monthly_cost` (dbu_cost + storage_cost + vm_cost)
-
-## Production Readiness Items This Sprint
-- Test infrastructure only — no production code changes
+## Files to Modify
+- `backend/app/routes/export/calculations.py` — fix driver DBU fallback
+- `tests/parity/test_parity_jobs.py` — add edge case tests
+- `tests/parity/test_parity_allpurpose.py` — add edge case tests
+- New: `tests/parity/test_excel_jobs_allpurpose.py` — end-to-end Excel generation tests

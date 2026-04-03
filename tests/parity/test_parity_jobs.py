@@ -157,3 +157,78 @@ class TestJobsServerless:
             dbu_price=be['dbu_price'],
         )
         assert be['monthly_cost'] == pytest.approx(fe_cost, abs=TOL)
+
+
+class TestJobsEdgeCases:
+    """Edge cases for JOBS workload parity."""
+
+    def test_unknown_instance_fallback(self, pricing):
+        """Unknown instance types should use fallback 0.5 DBU for both driver and worker."""
+        item = make_item(
+            workload_type='JOBS', driver_node_type='unknown.type',
+            worker_node_type='also.unknown', num_workers=3,
+            hours_per_month=100,
+        )
+        be = _get_be_results(item, pricing)
+        # Frontend uses 0.5 fallback for both driver and worker
+        fe_dbu_hr = fe_compute_dbu_per_hour(
+            driver_dbu_rate=0.5, worker_dbu_rate=0.5,
+            num_workers=3, workload_type='JOBS',
+        )
+        assert be['dbu_hr'] == pytest.approx(fe_dbu_hr, abs=TOL)
+        assert be['sku'] == 'JOBS_COMPUTE'
+
+    def test_eight_workers(self, pricing):
+        """JOBS with 8 workers — high worker count."""
+        driver_dbu = pricing['instance_dbu_rates']['aws']['m5d.xlarge']['dbu_rate']
+        worker_dbu = pricing['instance_dbu_rates']['aws']['i3.xlarge']['dbu_rate']
+        item = make_item(
+            workload_type='JOBS', driver_node_type='m5d.xlarge',
+            worker_node_type='i3.xlarge', num_workers=8,
+            hours_per_month=730,
+        )
+        be = _get_be_results(item, pricing)
+        fe_dbu_hr = fe_compute_dbu_per_hour(
+            driver_dbu_rate=driver_dbu, worker_dbu_rate=worker_dbu,
+            num_workers=8, workload_type='JOBS',
+        )
+        fe_cost = fe_monthly_dbu_cost(
+            dbu_per_hour=fe_dbu_hr, hours_per_month=730,
+            dbu_price=be['dbu_price'],
+        )
+        assert be['dbu_hr'] == pytest.approx(fe_dbu_hr, abs=TOL)
+        assert be['monthly_cost'] == pytest.approx(fe_cost, abs=TOL)
+
+    def test_photon_with_many_workers(self, pricing):
+        """JOBS photon with 6 workers — ensures multiplier applies to full base."""
+        driver_dbu = pricing['instance_dbu_rates']['aws']['m5d.xlarge']['dbu_rate']
+        worker_dbu = pricing['instance_dbu_rates']['aws']['r5.xlarge']['dbu_rate']
+        photon_mult = pricing['dbu_multipliers']['aws:JOBS_COMPUTE:photon']['multiplier']
+        item = make_item(
+            workload_type='JOBS', driver_node_type='m5d.xlarge',
+            worker_node_type='r5.xlarge', num_workers=6,
+            photon_enabled=True, hours_per_month=500,
+        )
+        be = _get_be_results(item, pricing)
+        fe_dbu_hr = fe_compute_dbu_per_hour(
+            driver_dbu_rate=driver_dbu, worker_dbu_rate=worker_dbu,
+            num_workers=6, photon_enabled=True, workload_type='JOBS',
+            photon_multiplier=photon_mult,
+        )
+        assert be['dbu_hr'] == pytest.approx(fe_dbu_hr, abs=TOL)
+
+    def test_days_per_month_default(self, pricing):
+        """Run-based hours use days_per_month=22 as default."""
+        driver_dbu = pricing['instance_dbu_rates']['aws']['m5d.xlarge']['dbu_rate']
+        worker_dbu = pricing['instance_dbu_rates']['aws']['i3.xlarge']['dbu_rate']
+        item = make_item(
+            workload_type='JOBS', driver_node_type='m5d.xlarge',
+            worker_node_type='i3.xlarge', num_workers=2,
+            runs_per_day=5, avg_runtime_minutes=60,
+            # days_per_month not set — should default to 22
+        )
+        be = _get_be_results(item, pricing)
+        fe_hours = fe_hours_per_month(
+            runs_per_day=5, avg_runtime_minutes=60, days_per_month=22,
+        )
+        assert be['hours'] == pytest.approx(fe_hours, abs=TOL)

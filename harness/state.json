@@ -1,20 +1,21 @@
 {
   "status": "IN_PROGRESS",
-  "app_name": "lakemeter-export-parity",
+  "app_name": "lakemeter-excel-parity",
   "workspace_dir": "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app",
   "quality_target": 9.0,
   "current_phase": "BUILD_AGENT",
   "spec_complete": true,
   "current_sprint": 1,
-  "planned_sprints": 4,
+  "planned_sprints": 5,
   "remaining_spec_items": [
-    "Sprint 1: Automated Parity Test Framework — parametrized pytest comparing backend export calculations to frontend costCalculation.ts for all 9 workload types",
-    "Sprint 2: Installer Pre-Flight Checks — auto-create secrets scope, prompt for SP credentials, validate deps, --dry-run and --non-interactive flags",
-    "Sprint 3: App Config & Database Permissions — fix DATABRICKS_HOST to empty for auto-inject, add GRANT USAGE/CONNECT ON DATABASE for SP",
-    "Sprint 4: End-to-End Integration Validation — full export round-trip, pricing integrity, cross-cloud parity, regression sweep, >=120 total tests"
+    "Sprint 1: JOBS + ALL_PURPOSE Parity (Classic/Photon/Serverless)",
+    "Sprint 2: DLT + DBSQL Parity (All Editions/Types/Sizes)",
+    "Sprint 3: VECTOR_SEARCH + MODEL_SERVING + LAKEBASE Parity",
+    "Sprint 4: FMAPI_DATABRICKS + FMAPI_PROPRIETARY Parity (All Models/Providers/Token Types)",
+    "Sprint 5: Cross-Workload Regression + Excel Formula Audit"
   ],
-  "dynamically_added_sprints": [],
   "sprints_completed": [],
+  "dynamically_added_sprints": [],
   "feature_sprints_since_doc_sprint": 0,
   "last_doc_sprint": 0,
   "last_install_test": 0,
@@ -23,6 +24,10 @@
   "current_iteration": 1,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
-  "dev_server_command": "cd backend && python -m uvicorn app.main:app --reload --port 8000",
-  "last_updated": "2026-04-03T16:15:00"
+  "dev_server_command": "cd backend && uvicorn app.main:app --reload --port 8000",
+  "live_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
+  "test_estimate_id": "4a3be3ef-1300-458b-890b-755b008e5940",
+  "dev_server_port": 8000,
+  "last_updated": "2026-04-03T17:00:00",
+  "last_action": "Sprint 1 Build complete. Fixed driver DBU fallback (0.25→0.5), added 9 new tests, fixed Vector Search AttributeError. 170/170 tests pass."
 }

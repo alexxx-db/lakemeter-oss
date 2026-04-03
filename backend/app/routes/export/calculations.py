@@ -53,7 +53,7 @@ def _calculate_dbu_per_hour(item, cloud: str = 'aws') -> tuple:
 
 def _calc_compute_dbu(item, cloud, wt, warnings):
     """Calculate DBU/hr for Jobs, All-Purpose, or DLT workloads."""
-    driver_dbu = 0.25
+    driver_dbu = 0.5  # Match frontend fallback (costCalculation.ts:250)
     worker_dbu = 0.5
     driver_found = False
     worker_found = False
@@ -125,7 +125,7 @@ def _calc_vector_search_dbu(item, cloud, warnings):
     capacity = float(item.vector_capacity_millions or 1)  # Default 1, matching frontend
     if capacity <= 0:
         capacity = 1
-    mode = item.vector_search_mode or 'standard'
+    mode = (item.vector_search_mode or 'standard').lower()
     key = f"{cloud}:{mode}"
     info = VECTOR_SEARCH_RATES.get(key, {})
     if not info:

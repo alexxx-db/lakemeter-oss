@@ -138,8 +138,10 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier):
         item, is_fmapi_token, is_fmapi_provisioned, dbu_per_hour, cloud, auto_notes)
 
     num_workers = int(item.num_workers or 0)
-    driver_vm_hr = 0.20 if (not is_serverless and wt in ('JOBS', 'ALL_PURPOSE', 'DLT')) else 0
-    worker_vm_hr = 0.10 if (not is_serverless and wt in ('JOBS', 'ALL_PURPOSE', 'DLT')) else 0
+    # VM costs are $0 by default — matching frontend behavior.
+    # The frontend only shows VM costs when real cloud VM pricing data is available.
+    driver_vm_hr = 0
+    worker_vm_hr = 0
 
     user_notes = _get_val(item, 'notes', '') or ''
     notes_parts = [user_notes] if user_notes else []
@@ -178,9 +180,9 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier):
     if wt == 'LAKEBASE':
         row = write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
                                    'Lakebase (Storage)', 'lakebase_storage_gb')
-    if wt == 'VECTOR_SEARCH':
+    elif wt == 'VECTOR_SEARCH' and (getattr(item, 'vector_search_storage_gb', 0) or 0) > 0:
         row = write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
-                                   'Vector Search (Storage)', 'vector_capacity_millions')
+                                   'Vector Search (Storage)', 'vector_search_storage_gb')
     return row
 
 
