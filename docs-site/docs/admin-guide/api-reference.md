@@ -13,7 +13,7 @@ https://<your-app-name>-xxxxx.aws.databricksapps.com/api/v1
 ```
 
 :::info
-In production (`ENVIRONMENT=production`), the interactive API docs at `/docs` and `/redoc` are disabled. Set `ENVIRONMENT=development` to enable them.
+In production (`ENVIRONMENT=production`), the Swagger API docs at `/docs` and `/redoc` are disabled (the Docusaurus documentation site at `/docs/` is unaffected). Set `ENVIRONMENT=development` to re-enable Swagger.
 :::
 
 ---

@@ -94,8 +94,12 @@ env:
 
 The `valueFrom` pattern references Databricks App resources that are resolved at runtime, keeping database hostnames and credentials out of the YAML file. Hardcoded values are limited to non-sensitive defaults (`DB_PORT=5432`, `DB_SSLMODE=require`, SP key names).
 
+:::note
+The `backend/app.yaml` (for backend-only deployment) omits `DB_PORT` and `DB_SSLMODE` — these fall back to defaults in `config.py` (`5432` and `require`). The root `app.yaml` sets them explicitly for clarity. Both configurations produce the same runtime behavior.
+:::
+
 :::info
-In production, the API docs (`/docs` and `/redoc`) are automatically disabled. Set `ENVIRONMENT=development` to enable them.
+In production, the Swagger API docs (`/docs` and `/redoc`) are automatically disabled. The Docusaurus documentation site at `/docs/` is unaffected. Set `ENVIRONMENT=development` to re-enable Swagger.
 :::
 
 ## Deployment with deploy.sh

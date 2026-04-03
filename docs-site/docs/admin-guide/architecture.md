@@ -24,7 +24,7 @@ Lakemeter is built as a full-stack application on the Databricks platform, using
 │  │  │           Service Layer                         │  │  │
 │  │  │  ├── Calculation Engine (export/calculations)   │  │  │
 │  │  │  ├── Pricing Bundle Manager                     │  │  │
-│  │  │  ├── Export Engine (Excel/XLSX, 11 modules)     │  │  │
+│  │  │  ├── Export Engine (Excel/XLSX, 10 modules)     │  │  │
 │  │  │  └── AI Client (Foundation Model API)           │  │  │
 │  │  └──────────┬──────────────────────────────────────┘  │  │
 │  │             │                                          │  │

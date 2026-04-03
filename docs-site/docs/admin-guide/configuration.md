@@ -14,7 +14,7 @@ Set these in `app.yaml` under the `env` section. Variables marked `valueFrom` ar
 
 | Variable | Source | Description |
 |----------|--------|-------------|
-| `ENVIRONMENT` | `value` | `production` or `development`. Controls logging verbosity and whether `/docs` and `/redoc` endpoints are exposed. |
+| `ENVIRONMENT` | `value` | `production`, `development`, or `local` (default: `local`). In production, logging is limited to warnings/errors and the Swagger API docs (`/docs` and `/redoc`) are disabled. In `development` or `local`, verbose logging is enabled. |
 | `DATABRICKS_HOST` | `value` | Full workspace URL (e.g., `https://workspace.cloud.databricks.com`) |
 | `DATABRICKS_SECRETS_SCOPE` | `valueFrom` | App resource reference for the secret scope name |
 | `LAKEBASE_INSTANCE_NAME` | `valueFrom` | App resource reference for the Lakebase instance identifier |
@@ -96,7 +96,7 @@ See the [Permissions Guide](./permissions) for full details on SP role setup and
 
 ## CORS Configuration
 
-By default, CORS allows same-origin requests only (the React frontend is served from the same FastAPI backend). In local development, the default origins include `http://localhost:5173` and `http://localhost:3000`.
+By default, CORS allows same-origin requests only (the React frontend is served from the same FastAPI backend). In local development, the default origins include `http://localhost:5173`, `http://localhost:3000`, and `http://localhost:5175`.
 
 To allow cross-origin access in production:
 

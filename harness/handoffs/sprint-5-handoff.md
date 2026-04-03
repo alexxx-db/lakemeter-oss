@@ -1,66 +1,54 @@
-# Sprint 5 Handoff: Admin Guide Accuracy & Update (Iteration 2)
+# Sprint 5 Handoff: Admin Guide Accuracy & Update (Iteration 4)
 
 ## What Was Built
 
-### Iteration 1 (prior)
-All 8 admin guide pages were audited against the current codebase and rewritten for accuracy. See iteration 1 handoff for full details.
+### Iteration 1–3 (prior)
+All 8 admin guide pages audited and rewritten against current codebase. 20+ missing frontend convenience endpoints added to api-reference.md. Three accuracy gaps fixed (ENVIRONMENT description, CORS defaults, backend/root app.yaml difference).
 
-### Iteration 2 (this iteration)
-Thorough verification pass of all 8 admin guide pages against source code. One significant gap found and fixed:
+### Iteration 4 (this iteration)
+Deep cross-verification of all 8 admin guide pages against every referenced source file. Two accuracy gaps found and fixed:
 
-**api-reference.md — Added ~20 missing frontend convenience endpoints:**
-- `GET /api` — API root info
-- `GET /api/v1/regions?cloud=` — Regions by cloud from SKU region map
-- `GET /api/v1/reference/clouds` — Cloud providers with regions from DB
-- `GET /api/v1/reference/tiers` — Pricing tiers
-- `GET /api/v1/instances/types?cloud=` and `/reference/instance-types/{cloud}` — Instance types
-- `GET /api/v1/instances/families` — Instance family categories
-- `GET /api/v1/instances/vm-costs` — VM cost proxy to external API
-- `GET /api/v1/dbsql/warehouse-sizes` and `/reference/dbsql-sizes` — DBSQL sizes
-- `GET /api/v1/dbsql/warehouse-types` — Warehouse types
-- `GET /api/v1/dlt/editions` and `/reference/dlt-editions` — DLT editions
-- `GET /api/v1/serverless/modes` — Serverless mode options
-- `GET /api/v1/model-serving/gpu-types?cloud=` and `/reference/model-serving-gpu-types/{cloud}` — GPU types
-- `GET /api/v1/photon/multipliers?cloud=` — Photon multipliers
-- `GET /api/v1/fmapi/databricks-models/list` — FMAPI model list
-- `GET /api/v1/reference/fmapi-models` — Foundation models (legacy)
-- `GET /api/v1/reference/fmapi-databricks` — FMAPI Databricks config
-- `GET /api/v1/reference/fmapi-proprietary` — FMAPI Proprietary config
-- `GET /api/v1/pricing/dbu-rates?cloud=&region=&tier=` — DBU rate lookup
-- `GET /api/v1/pricing/product-types?cloud=&region=&tier=` — Product types
+1. **architecture.md — Export module count**:
+   - Was: "Export Engine (Excel/XLSX, 11 modules)"
+   - Now: "Export Engine (Excel/XLSX, 10 modules)" — correctly counts source files excluding `__init__.py`
 
-These endpoints are defined directly in `main.py` (not via routers) and were not covered in the iteration 1 API reference, which only documented router-based endpoints.
+2. **Swagger/Docusaurus disambiguation (4 pages)**:
+   - In production, FastAPI's Swagger docs at `/docs` are disabled, but the Docusaurus documentation site is served at `/docs/` as static files. Four pages (`configuration.md`, `deployment.md`, `api-reference.md`, `troubleshooting.md`) now explicitly say "Swagger API docs" and note the Docusaurus site is unaffected.
 
-### Verification Results (All 8 Pages)
-- **deployment.md** — Verified against `deploy.sh` and both `app.yaml` files. Accurate.
-- **configuration.md** — Verified against `app/config.py` Settings class. All env vars match.
-- **installer.md** — Verified against `install_lakemeter.py`. 9-step flow matches.
-- **architecture.md** — Verified against actual file tree (`backend/app/` routes, models, auth, services, schemas). All directories and files match.
-- **permissions.md** — Verified against `token_manager.py` and `database.py`. Token lifecycle accurate.
-- **api-reference.md** — Fixed. Now documents all endpoints from both routers and `main.py`.
-- **troubleshooting.md** — Verified debug endpoints exist in `main.py`. All 4 debug endpoints documented.
-- **database.md** — Verified against `models/line_item.py` and other model files. All columns match.
+### Full Verification Results (All 8 Pages)
+- **deployment.md** — Verified against `deploy.sh` (4 steps), both `app.yaml` files. Steps, env vars, and auth flow accurate.
+- **configuration.md** — Verified against `config.py` Settings class. All env vars, CORS defaults, SP credential flow, DB connection pool params accurate.
+- **installer.md** — Verified against `install_lakemeter.py`. All 5 CLI flags, 7 config params, 9-step flow match.
+- **architecture.md** — Verified against actual file tree. 9 routers, 11 models, 10 export modules, frontend structure all accurate.
+- **permissions.md** — Verified against `token_manager.py` and `database.py`. 3 permission layers, token lifecycle (30-min refresh, 15-min pool recycle), test list accurate.
+- **api-reference.md** — All endpoints verified against route files and `main.py`. 9 routers + main.py endpoints + debug endpoints all documented.
+- **troubleshooting.md** — Debug endpoints verified in `main.py`. CORS defaults consistent with configuration.md. Swagger/Docusaurus distinction clarified.
+- **database.md** — Verified against `models/estimate.py`, `models/line_item.py`, `models/user.py`. All columns match including `discount_config` (added by installer ALTER TABLE).
 
 ## How to Test
 
 - **Docs build**: `cd docs-site && npm run build` (verified — builds cleanly, zero errors)
 - **Navigate**: Open any admin guide page and cross-reference against the source file it documents
-- **API reference**: Compare the new "Frontend Data Endpoints" section against `grep -n "@app.get" backend/app/main.py`
+- **Configuration check**: Compare env var table against `backend/app/config.py` Settings class
 
 ## Test Results
 
 - `npm run build`: SUCCESS (zero errors, zero warnings)
-- `pytest`: 1969 passed, 84 failed (all pre-existing in `test_workload_coverage.py`), 2 skipped (142s)
+- `pytest`: 1969 passed, 84 failed (all pre-existing in `test_workload_coverage.py`), 2 skipped (148s)
 - No new test failures introduced
 
 ## Known Limitations
 
 - Screenshots are not included (documentation content sprint)
-- The frontend convenience endpoints in `main.py` have some overlap/duplication with router-based endpoints in `routes/reference.py` — this is by design for frontend store compatibility
-- Some GPU DBU rates in `main.py` hardcoded endpoints may not exactly match values in the Lakebase `sync_product_serverless_rates` table (hardcoded fallbacks vs. DB values)
+- JWT settings (`jwt_secret_key`, `jwt_algorithm`, `access_token_expire_minutes`) exist in `config.py` but are unused — correctly omitted from docs
+- Some GPU DBU rates in `main.py` hardcoded endpoints have minor rounding differences vs. the `/reference/` path variants (e.g., Azure A100 80GB 1x: 78.5 vs 78.6 DBU/hr)
 
 ## Files Changed
 
-- `docs-site/docs/admin-guide/api-reference.md` — Added "Frontend Data Endpoints" section with ~20 missing endpoints
+- `docs-site/docs/admin-guide/architecture.md` — Fixed export module count (11 → 10)
+- `docs-site/docs/admin-guide/configuration.md` — Clarified Swagger vs Docusaurus docs disambiguation
+- `docs-site/docs/admin-guide/deployment.md` — Clarified Swagger vs Docusaurus docs disambiguation
+- `docs-site/docs/admin-guide/api-reference.md` — Clarified Swagger vs Docusaurus docs disambiguation
+- `docs-site/docs/admin-guide/troubleshooting.md` — Clarified Swagger vs Docusaurus docs disambiguation
 - `harness/handoffs/sprint-5-handoff.md` — Updated
 - `harness/state.json` — Updated

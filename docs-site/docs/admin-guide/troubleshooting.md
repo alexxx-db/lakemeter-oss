@@ -134,7 +134,7 @@ Do not restart the app — redeployment handles the restart automatically.
 
 ### API Docs Not Visible
 
-In production (`ENVIRONMENT=production`), the `/docs` and `/redoc` endpoints are disabled. To enable them temporarily, set `ENVIRONMENT=development` in `app.yaml` and redeploy.
+In production (`ENVIRONMENT=production`), the Swagger API docs at `/docs` and `/redoc` are disabled (the Docusaurus documentation site at `/docs/` is unaffected). To enable Swagger temporarily, set `ENVIRONMENT=development` in `app.yaml` and redeploy.
 
 ### CORS Errors
 
