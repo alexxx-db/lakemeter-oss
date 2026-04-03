@@ -40,6 +40,10 @@ DBU/Hour = (Driver DBU + Worker DBU x Workers) x Photon Multiplier
          = 10.0 DBU/hour
 ```
 
+:::info Photon multiplier for All-Purpose
+The Photon multiplier for All-Purpose Compute is **2.0x on all clouds** (AWS, Azure, and GCP). This is lower than the Jobs and DLT multiplier (2.9x AWS / 2.5x Azure, GCP). Lakemeter loads the correct multiplier automatically from the pricing bundle.
+:::
+
 **2. Monthly DBUs and cost**
 
 ```
@@ -69,9 +73,9 @@ All-Purpose Serverless always runs in **Performance mode** with a 4x total multi
 ```
 DBU/Hour     = (1.0 + 1.0 x 4) x 2 x 2 = 20.0 DBU/hour
 Monthly DBUs = 20.0 x 176 = 3,520 DBUs
-DBU Cost     = 3,520 x $0.70/DBU (example Serverless rate) = $2,464.00
+DBU Cost     = 3,520 x $0.75/DBU (example Serverless rate) = $2,640.00
 VM Cost      = $0 (no infrastructure costs)
-Total        = $2,464.00/month
+Total        = $2,640.00/month
 ```
 
 In this case, Classic is significantly cheaper for a cluster running 176 hours/month. Serverless shines for shorter, less predictable usage.

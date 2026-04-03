@@ -14,7 +14,7 @@
     "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 2 iter 3 BUILD complete. Fixed display name accuracy (Lakeflow Jobs, All Purpose Compute, Lakeflow SDP), pricing tier labels to match exact UI text, added AWS Payment Option documentation to all three guides, fixed inaccurate '0 workers' tip. All SKUs verified against pricing bundle. Docs build passes. 1969 tests pass (84 pre-existing failures).",
+  "last_action": "Sprint 2 iter 4 BUILD complete. Fixed All-Purpose Serverless example rate ($0.70→$0.75/DBU, matching actual ALL_PURPOSE_SERVERLESS_COMPUTE bundle rate for AWS us-east-1 Premium). Added Photon multiplier info box to All-Purpose guide (2.0x all clouds, unlike Jobs/DLT). Fixed DLT Run-Based heading formatting. All example $/DBU rates now verified against actual pricing bundle data. Docs build passes. 1969 tests pass (84 pre-existing failures).",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -30,7 +30,7 @@
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 3,
+  "current_iteration": 4,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",

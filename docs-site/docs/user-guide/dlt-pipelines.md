@@ -125,7 +125,9 @@ DLT supports two input methods:
 |-------|-------------|---------|
 | **Hours Per Month** | Total pipeline uptime | 0 |
 
-Common values: 730 (24/7 streaming), 176 (business hours), 44 (light usage). **Run-Based (for scheduled pipelines):**
+Common values: 730 (24/7 streaming), 176 (business hours), 44 (light usage).
+
+**Run-Based (for scheduled pipelines):**
 
 | Field | Description | Default |
 |-------|-------------|---------|
