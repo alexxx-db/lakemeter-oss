@@ -52,7 +52,7 @@ class TestCacheRateTypes:
 
 
 class TestBatchInferenceRateType:
-    """batch_inference is hourly, not token-based."""
+    """batch_inference pricing data and rate lookup tests."""
 
     def test_batch_inference_is_hourly_in_pricing(self):
         key = "aws:anthropic:claude-opus-4:global:all:batch_inference"

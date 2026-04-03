@@ -70,7 +70,11 @@ class TestCalcItemValuesTokenPath:
 
 
 class TestCalcItemValuesBatchInference:
-    """BUG-S7-1 regression: batch_inference uses provisioned (hourly) path."""
+    """batch_inference is token-based (not hourly) — matching frontend behavior.
+
+    Frontend costCalculation.ts only treats 'provisioned_scaling' as provisioned.
+    batch_inference goes through the token path with DBU per 1M tokens rate.
+    """
 
     def test_batch_inference_produces_nonzero_dbus(self):
         item = make_line_item(
@@ -78,15 +82,15 @@ class TestCalcItemValuesBatchInference:
             fmapi_rate_type="batch_inference", fmapi_quantity=730)
         notes = []
         hours, tok_qty, dbu_m, total_dbus, tok_type = calc_item_values(
-            item, False, True, 0, "aws", notes)
-        assert hours == 730
+            item, True, False, 0, "aws", notes)
+        assert tok_qty == 730
         assert total_dbus > 0, "batch_inference should produce non-zero DBUs"
-        assert tok_qty == 0
+        assert hours == 0
 
-    def test_batch_inference_is_hourly(self):
-        """BUG-S7-3 regression: _is_fmapi_hourly includes batch_inference."""
+    def test_batch_inference_is_not_hourly(self):
+        """batch_inference is token-based, not hourly — matches frontend."""
         item = make_line_item(fmapi_rate_type="batch_inference")
-        assert _is_fmapi_hourly(item, "aws") is True
+        assert _is_fmapi_hourly(item, "aws") is False
 
 
 class TestCalcItemValuesStandardToken:

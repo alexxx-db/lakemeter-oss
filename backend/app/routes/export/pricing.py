@@ -33,8 +33,8 @@ FALLBACK_DBU_PRICES = {
     'DLT_CORE_COMPUTE': 0.20, 'DLT_CORE_COMPUTE_(PHOTON)': 0.20,
     'DLT_PRO_COMPUTE': 0.25, 'DLT_PRO_COMPUTE_(PHOTON)': 0.25,
     'DLT_ADVANCED_COMPUTE': 0.36, 'DLT_ADVANCED_COMPUTE_(PHOTON)': 0.36,
-    'DELTA_LIVE_TABLES_SERVERLESS': 0.30,
-    'SQL_COMPUTE': 0.22, 'SQL_PRO_COMPUTE': 0.55, 'SERVERLESS_SQL_COMPUTE': 0.70,
+    'DELTA_LIVE_TABLES_SERVERLESS': 0.30, 'SQL_COMPUTE': 0.22,
+    'SQL_PRO_COMPUTE': 0.55, 'SERVERLESS_SQL_COMPUTE': 0.70,
     'SERVERLESS_REAL_TIME_INFERENCE': 0.07, 'SERVERLESS_REAL_TIME_INFERENCE_LAUNCH': 0.07,
     'OPENAI_MODEL_SERVING': 0.07, 'ANTHROPIC_MODEL_SERVING': 0.07,
     'GEMINI_MODEL_SERVING': 0.07, 'GOOGLE_MODEL_SERVING': 0.07,
@@ -184,7 +184,6 @@ def _get_fmapi_dbu_per_million(item, cloud: str) -> tuple:
         return 0, False
     return 0, False
 
-
 # Fallback DBU/1M token rates matching frontend costCalculation.ts
 FMAPI_PROP_FALLBACK_RATES = {
     'input_token': 21.43, 'input': 21.43,
@@ -195,10 +194,7 @@ FMAPI_PROP_FALLBACK_RATES = {
 
 def _is_fmapi_hourly(item, cloud: str) -> bool:
     """Check if FMAPI rate is hourly (provisioned) vs token-based.
-
-    Note: batch_inference is token-based (DBU per 1M tokens), not hourly.
-    Only provisioned_scaling and provisioned_entry are hourly billing.
-    This matches the frontend costCalculation.ts logic.
+    Only provisioned_scaling/provisioned_entry are hourly — matches frontend.
     """
     rate_type = item.fmapi_rate_type or 'input_token'
     return rate_type in ('provisioned_scaling', 'provisioned_entry')
