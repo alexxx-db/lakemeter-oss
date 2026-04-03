@@ -48,12 +48,12 @@ The `i3.xlarge` instance has a DBU rate of **1.0 DBU/hr** per instance.
 
 ```
 DBU/Hour = (Driver DBU + Worker DBU × Num Workers) × Photon Multiplier
-         = (1.0 + 1.0 × 4) × 2.0
-         = 5.0 × 2.0
-         = 10.0 DBU/hr
+         = (1.0 + 1.0 × 4) × 2.9
+         = 5.0 × 2.9
+         = 14.5 DBU/hr
 ```
 
-The Photon multiplier is **2.0** when Photon is enabled (1.0 otherwise).
+The Photon multiplier varies by workload type and cloud. For Jobs on AWS it is **2.9** (All-Purpose uses 2.0). The multiplier is 1.0 when Photon is disabled.
 
 ### Step 3: Calculate monthly DBUs and DBU cost
 
@@ -61,11 +61,11 @@ The `JOBS_COMPUTE_(PHOTON)` SKU on AWS us-east-1 Premium costs **$0.15/DBU**.
 
 ```
 Monthly DBUs = DBU/Hour × Hours/Month
-             = 10.0 × 82.5
-             = 825.0 DBUs
+             = 14.5 × 82.5
+             = 1,196.25 DBUs
 
-DBU Cost     = 825.0 × $0.15
-             = $123.75/month
+DBU Cost     = 1,196.25 × $0.15
+             = $179.44/month
 ```
 
 ### Step 4: Calculate VM cost
@@ -83,10 +83,10 @@ VM Cost = (Driver $/hr + Worker $/hr × Workers) × Hours/Month
 
 ```
 Monthly Cost = DBU Cost + VM Cost
-             = $123.75 + $128.70
-             = $252.45/month
+             = $179.44 + $128.70
+             = $308.14/month
 
-Annual Cost  = $252.45 × 12 = $3,029.40/year
+Annual Cost  = $308.14 × 12 = $3,697.65/year
 ```
 
 ---
@@ -189,40 +189,42 @@ Hours/Month = (10 × 30 ÷ 60) × 22 = 110 hours
 
 ### Classic Calculation
 
+The Photon multiplier for Jobs on AWS is **2.9**. The SKU is `JOBS_COMPUTE_(PHOTON)` at **$0.15/DBU**.
+
 ```
-DBU/Hour     = (1.0 + 1.0 × 4) × 2.0 = 10.0 DBU/hr
-Monthly DBUs = 10.0 × 110 = 1,100 DBUs
-DBU Cost     = 1,100 × $0.15 = $165.00
+DBU/Hour     = (1.0 + 1.0 × 4) × 2.9 = 14.5 DBU/hr
+Monthly DBUs = 14.5 × 110 = 1,595 DBUs
+DBU Cost     = 1,595 × $0.15 = $239.25
 VM Cost      = ($0.312 + $0.312 × 4) × 110 = $171.60
-Monthly Cost = $165.00 + $171.60 = $336.60
+Monthly Cost = $239.25 + $171.60 = $410.85
 ```
 
 ### Serverless Calculation
 
-Jobs Serverless always applies Photon (2x) and a Serverless multiplier (1x Standard, 2x Performance). Using Standard:
+Jobs Serverless always applies the Photon multiplier (2.9 on AWS) and a Serverless mode multiplier (1x Standard, 2x Performance). Using Standard mode. The SKU is `JOBS_SERVERLESS_COMPUTE` at **$0.35/DBU**.
 
 ```
-DBU/Hour     = (1.0 + 1.0 × 4) × 2.0 × 1.0 = 10.0 DBU/hr
-Monthly DBUs = 10.0 × 110 = 1,100 DBUs
-DBU Cost     = 1,100 × $0.15 = $165.00
-VM Cost      = $0 (Serverless)
-Monthly Cost = $165.00
+DBU/Hour     = (1.0 + 1.0 × 4) × 2.9 × 1.0 = 14.5 DBU/hr
+Monthly DBUs = 14.5 × 110 = 1,595 DBUs
+DBU Cost     = 1,595 × $0.35 = $558.25
+VM Cost      = $0 (Serverless — no separate VM charges)
+Monthly Cost = $558.25
 ```
 
 ### Side-by-Side
 
 | | Classic | Serverless (Standard) |
 |--|---------|----------------------|
-| DBU/Hour | 10.0 | 10.0 |
-| Monthly DBUs | 1,100 | 1,100 |
-| DBU Cost | $165.00 | $165.00 |
+| DBU/Hour | 14.5 | 14.5 |
+| Monthly DBUs | 1,595 | 1,595 |
+| $/DBU | $0.15 | $0.35 |
+| DBU Cost | $239.25 | $558.25 |
 | VM Cost | $171.60 | $0.00 |
-| **Monthly Total** | **$336.60** | **$165.00** |
-| **Annual Total** | **$4,039.20** | **$1,980.00** |
-| **Savings** | — | **51% less** |
+| **Monthly Total** | **$410.85** | **$558.25** |
+| **Annual Total** | **$4,930.20** | **$6,699.00** |
 
 :::note
-This comparison uses the same instance types for both modes. In practice, Serverless may use different compute under the hood, but Lakemeter models it based on the equivalent instance configuration you select.
+In this scenario, Classic is cheaper because the VM costs ($171.60) are less than the DBU price premium for Serverless ($0.35 vs $0.15 per DBU). Serverless becomes more cost-effective for workloads with low utilization, burst patterns, or where you value the operational simplicity of not managing cluster infrastructure.
 :::
 
 ---
@@ -237,7 +239,7 @@ DBU/Hour = (Driver DBU + Worker DBU × Workers) × Photon Multiplier
 
 | Parameter | Value |
 |-----------|-------|
-| Photon Multiplier | 2.0 if Photon enabled, 1.0 otherwise |
+| Photon Multiplier | Varies by workload and cloud: Jobs/DLT on AWS = 2.9, Azure/GCP = 2.5; All-Purpose = 2.0 on all clouds. 1.0 when Photon is disabled. Fallback = 2.0 if lookup fails. |
 | Driver/Worker DBU | From instance type lookup (e.g., `i3.xlarge` = 1.0) |
 | Fallback DBU | 0.5 for unknown instance types |
 
@@ -251,7 +253,7 @@ DBU/Hour = (Driver DBU + Worker DBU × Workers) × Photon × Serverless Multipli
 
 | Parameter | Jobs | All-Purpose |
 |-----------|------|-------------|
-| Photon | Always 2x (built-in) | Always 2x |
+| Photon | Always on (AWS: 2.9x, Azure/GCP: 2.5x) | Always on (2.0x) |
 | Serverless Standard | 1x | N/A |
 | Serverless Performance | 2x | Always 2x |
 

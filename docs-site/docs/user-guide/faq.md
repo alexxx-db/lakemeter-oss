@@ -46,7 +46,7 @@ See the [Getting Started](./getting-started) guide for how to set these when cre
 
 **Classic** compute means you specify the exact instance types (e.g., `i3.xlarge`) and pay for both DBU consumption and VM infrastructure separately. You have full control over cluster configuration.
 
-**Serverless** compute means Databricks manages the infrastructure. You pay only for DBUs at a higher per-DBU rate, but there are no separate VM costs and no cluster startup time. For many workloads, Serverless is simpler and often cheaper despite the higher DBU rate. See the [Classic vs Serverless comparison](./calculation-reference#worked-example-4-classic-vs-serverless-comparison) for a detailed cost breakdown.
+**Serverless** compute means Databricks manages the infrastructure. You pay only for DBUs at a higher per-DBU rate, but there are no separate VM costs and no cluster startup time. Whether Serverless is cheaper depends on the workload — it excels for burst or low-utilization patterns, but sustained high-utilization workloads may cost less on Classic. See the [Classic vs Serverless comparison](./calculation-reference#worked-example-4-classic-vs-serverless-comparison) for a detailed cost breakdown.
 
 ## AI Assistant
 

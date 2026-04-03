@@ -108,7 +108,7 @@ For multi-workload proposals (like a full platform estimate), the assistant prop
 
 ## Conversation Management
 
-- The assistant maintains conversation history within a session (up to ~15 recent messages for context)
+- The assistant maintains conversation history within a session. When the history grows beyond 25 messages, it is trimmed to the 15 most recent messages to keep responses fast and relevant.
 - Click **Clear** to reset the conversation and start fresh
 - History does not persist across browser sessions
 
