@@ -11,7 +11,7 @@
     "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 4 iter 1 BUILD complete. Rewrote AI Assistant guide (4 conversation examples, 5 agent tools documented, both modes), Export guide (30-column layout, 6 sections, 4 use cases, formatting details), Calculation Reference (4 fully worked examples with real pricing data, removed all sprint-numbered references), and created new FAQ page (13 questions across 5 categories). Added FAQ to sidebar. Docs build passes. 1969 tests pass (84 pre-existing failures).",
+  "last_action": "Sprint 4 iter 2 BUILD complete. Fixed Lakebase CU range inaccuracy in calculation reference (was 0.5-112, corrected to 1/2/4/8). Verified all 4 docs pages against source code: AI assistant tools (5 tools confirmed), export layout (30 columns confirmed), DBSQL size mapping (all 9 sizes confirmed), Vector Search rates, Lakebase storage formula. Docs build passes. 1969 tests pass (84 pre-existing failures).",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -41,7 +41,7 @@
   "last_install_test": 3,
   "last_integration_test": 3,
   "context_resets": 0,
-  "current_iteration": 1,
+  "current_iteration": 2,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",

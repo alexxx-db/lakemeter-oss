@@ -334,8 +334,8 @@ Same token-based formula as Databricks FMAPI. Rate types include `input`, `outpu
 ```
 DBU/Hour = CU Size × Number of Nodes
 ```
-- CU Size: 0.5 to 112 compute units
-- Nodes: 1 (primary only) or 2–3 (primary + read replicas)
+- CU Size: 1, 2, 4, or 8 compute units per node
+- Nodes: 1 (primary only), 2 (primary + 1 read replica), or 3 (primary + 2 read replicas)
 - **SKU:** `DATABASE_SERVERLESS_COMPUTE`
 
 **Storage:**
