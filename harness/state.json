@@ -12,7 +12,7 @@
     "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 3 iter 1 BUILD complete. Rewrote 6 workload guides (DBSQL, Model Serving, Vector Search, FMAPI Databricks, FMAPI Proprietary, Lakebase) with real-world scenarios, worked examples with verified numbers, configuration references, tips, and common mistakes. Restructured sidebar into Compute Workloads and AI/ML & Data Services categories. Rewrote workloads overview as decision guide. Docs build passes. 1969 tests pass (84 pre-existing failures).",
+  "last_action": "Sprint 3 iter 2 BUILD complete. Fixed Lakebase CU sizes (1/2/4/8 not 0.5-112), removed backup retention from config reference (hidden field), fixed FMAPI Proprietary context length default (Long not All), reordered context length descriptions. All pricing numbers re-verified against pricing bundles. Docs build passes. 1969 tests pass (84 pre-existing failures).",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -35,10 +35,10 @@
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 1,
+  "current_iteration": 2,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",
-  "last_updated": "2026-04-04T03:30:00",
+  "last_updated": "2026-04-04T03:15:00",
   "score_trajectory": []
 }

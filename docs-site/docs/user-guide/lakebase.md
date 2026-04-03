@@ -65,20 +65,13 @@ Storage: 100 x 15 x $0.023 = $34.50
 Total:   $104.90/month
 ```
 
-Half CU (0.5) is also supported for the smallest workloads:
-
-```
-Compute: 0.5 x 1 x 730 hrs = 365 DBUs x $0.40 = $146.00
-```
-
 ## Configuration reference
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| **CU Size** | Compute Units per node. Ranges from 0.5 to 112. Determines the DBU/hour rate per node. | 1 |
+| **CU Size** | Compute Units per node: 1, 2, 4, or 8. Determines the DBU/hour rate per node. | 1 |
 | **Number of Nodes** | 1 = primary only. 2 = primary + 1 read replica (HA). 3 = primary + 2 read replicas (max HA). | 1 |
 | **Storage (GB)** | Provisioned storage in gigabytes, 0 to 8,192. | 0 |
-| **Backup Retention (Days)** | How long to retain automated backups. | 7 |
 | **Hours Per Month** | Compute uptime. Use 730 for always-on databases. | 730 |
 
 ### Nodes and high availability
@@ -134,9 +127,7 @@ Total = Compute Cost + Storage Cost
 
 | Scenario | Behavior |
 |----------|----------|
-| CU = 0 | Compute cost = $0; storage-only billing |
 | Storage = 0 or not set | No storage sub-row emitted in Excel |
-| CU = 0.5 | Supported -- DBU/Hour = 0.5 x nodes |
 | Maximum storage (8,192 GB) | Storage cost = 8,192 x 15 x $0.023 = $2,826.24/month |
 
 ## Tips
@@ -144,14 +135,14 @@ Total = Compute Cost + Storage Cost
 - **Start with 1 CU for development**: A single CU with 1 node is sufficient for development and testing. Scale up for production based on query load.
 - **Use 2 nodes for production**: A read replica provides both read scaling and automatic failover. The 2x compute cost is worth it for production reliability.
 - **Storage is cheap relative to compute**: 500 GB costs ~$172/month, while even 1 CU at 730 hours costs ~$292. Optimize CU size first.
-- **Half CU for minimal workloads**: If your application has very light database usage (simple CRUD, few concurrent users), 0.5 CU keeps costs minimal.
+- **Start with 1 CU**: The smallest CU option is ideal for development and light workloads. Scale to 2, 4, or 8 CU based on query load and concurrency.
 
 ## Common mistakes
 
 - **Expecting a single cost number**: Lakebase produces **two rows** in the Excel export -- one for compute, one for storage. The total is the sum of both.
 - **Setting storage to 0 for testing**: If storage is 0 or not set, no storage row appears. Remember to include realistic storage estimates for production sizing.
 - **Forgetting nodes multiply compute**: 2 nodes doubles the DBU/hour, 3 nodes triples it. A 4 CU database with 3 nodes uses 12 DBU/hour, not 4.
-- **Confusing CU with vCPU**: Compute Units (CU) are a Databricks-specific unit, not CPU cores. CU sizes range from 0.5 to 112 and map to DBU rates, not to hardware specifications.
+- **Confusing CU with vCPU**: Compute Units (CU) are a Databricks-specific unit, not CPU cores. The available CU sizes (1, 2, 4, 8) map to DBU rates, not to hardware specifications.
 
 ## Excel export
 

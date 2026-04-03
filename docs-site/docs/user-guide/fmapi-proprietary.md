@@ -111,7 +111,7 @@ Short context uses a smaller context window. If your prompts are under the short
 | **Provider** | The commercial LLM provider | Anthropic, OpenAI, Google | Anthropic |
 | **Model** | Specific model variant (filtered by provider) | See table above | First model in list |
 | **Endpoint Type** | How requests are routed | Global, In-Geo (Regional) | Global |
-| **Context Length** | Context window size tier | All, Short, Long | All |
+| **Context Length** | Context window size tier | All, Short, Long | Long |
 | **Rate Type** | Token direction | Input Token, Output Token | Input Token |
 | **Quantity (Millions)** | Monthly token volume in millions | Any positive number | — |
 
@@ -128,11 +128,11 @@ Use In-Geo when you have data residency requirements (e.g., data must stay in EU
 
 | Length | Description | Cost |
 |--------|-------------|------|
-| **All** | Default context window | Varies |
-| **Short** | Reduced context window | Lower |
-| **Long** | Extended context window | Higher |
+| **Long** | Extended context window (default) | Higher |
+| **Short** | Reduced context window | Lower (~50% less) |
+| **All** | Standard context window — rate varies by model | Varies |
 
-Short context is significantly cheaper (often 50% less) than long context. Use short when your prompts fit within the shorter window.
+Short context is significantly cheaper (often 50% less) than long context. Use short when your prompts fit within the shorter window. Not all models support all context lengths — Lakemeter automatically filters available options based on the selected model.
 
 ## Rate types
 
