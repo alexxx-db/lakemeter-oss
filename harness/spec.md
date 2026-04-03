@@ -1,94 +1,108 @@
-# Lakemeter — Installation, Integration & Documentation Validation Sprint
+# Lakemeter Excel Export Parity Fix — Product Spec
 
-## Vision
+## Overview
 
-Special-purpose validation sprint focused on three critical areas of the Lakemeter app after the Lakebase customer deployment feature landed (commit `fa55995`). This sprint validates the NEW installer (`scripts/install_lakemeter.py`), the SP OAuth M2M authentication via Roles API, the full 1419-test regression suite, and produces comprehensive documentation covering the deployment pipeline, permission model, and installer flow.
+Lakemeter is a Databricks cost estimation tool. The frontend calculates costs in `costCalculation.ts` and displays them in the UI. The backend independently calculates costs in `backend/app/routes/export/` and writes them to Excel exports. These two calculation paths have diverged, producing mismatched numbers. This project systematically tests EVERY workload type and configuration against the live app, identifies EVERY mismatch, and fixes them ALL so the Excel export is pixel-perfect with the UI.
 
-## Mode
+This is a **tool improvement project** — sprints are improvement areas (workload groups), not new features. The "app" is the existing Lakemeter; the evaluator verifies fixes by comparing live UI numbers against exported Excel cells.
 
-**VALIDATION_AND_DOCS** — No new features. Three parallel workstreams: Installation testing, Integration/regression testing, and Documentation generation. Each workstream is a sprint with its own acceptance criteria.
+## Test Environment
 
-## Environment
+- **Live app URL**: https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com
+- **Test estimate ID**: `4a3be3ef-1300-458b-890b-755b008e5940`
+- **Comparison methodology**: Open browser → read UI costs → download Excel → compare cell-by-cell
+- **Tolerance**: $0.01 (matching existing parity test tolerance)
 
-- **Databricks CLI profile**: `lakemeter`
-- **Workspace**: `https://fe-vm-lakemeter.cloud.databricks.com`
-- **Lakebase instance**: `lakemeter-customer`
-- **Lakebase host**: `ep-silent-fire-d1kv74l0.database.us-west-2.cloud.databricks.com`
-- **App name**: `lakemeter-api`
-- **App URL**: `https://lakemeter-api-335310294452632.aws.databricksapps.com`
-- **Secrets scope**: `lakemeter-secrets`
+## Code Architecture (Existing)
 
-## Key Technical Context
+- **Frontend calculations**: `frontend/src/utils/costCalculation.ts` (571 lines)
+- **Frontend pricing lookup**: `frontend/src/utils/pricingBundle.ts` (603 lines)
+- **Backend export package**: `backend/app/routes/export/`
+  - `pricing.py` — JSON loading, SKU resolution, DBU price lookup
+  - `calculations.py` — DBU/hr and hours/month calculations
+  - `excel_builder.py` — Workbook assembly orchestrator
+  - `excel_item_helpers.py` — Per-item value calculation + storage sub-rows
+  - `excel_row_writer.py` — Cell and formula writing (30-column layout)
+  - `excel_columns.py` — Column definitions
+  - `excel_sections.py` — Totals, summary, legend sections
+- **Static pricing JSON**: `backend/static/pricing/` (9 JSON files)
+- **Existing parity tests**: `tests/parity/` (Python reimplementation of FE formulas + 9 test files)
 
-### SP Roles API — Critical Finding
-The Lakebase Roles API (`/api/2.0/database/instances/{name}/roles`) requires `identity_type: "SERVICE_PRINCIPAL"` when creating roles for Service Principals. Using `CREATE ROLE` SQL or `identity_type: "PG_ONLY"` does NOT grant OAuth M2M token exchange. This is a critical deployment requirement documented in `scripts/install_lakemeter.py`.
+## Comparison Points Per Workload
 
-### app.yaml — valueFrom Pattern
-Five env vars use Databricks Apps `valueFrom` resource references (not hardcoded values):
-- `DATABRICKS_SECRETS_SCOPE` → `lakemeter-secrets-scope`
-- `LAKEBASE_INSTANCE_NAME` → `lakemeter-lakebase-instance`
-- `DB_HOST` → `lakemeter-db-host`
-- `DB_USER` → `lakemeter-db-user`
-- `DB_NAME` → `lakemeter-db-name`
+For each workload item, compare these values between UI and Excel:
+1. **DBU/hr** — the computed DBU rate per hour
+2. **$/DBU** — the price per DBU (from pricing JSON lookup)
+3. **Hours/month** — computed from config or direct input
+4. **Monthly DBUs** — DBU/hr × Hours/month
+5. **Monthly DBU cost** — Monthly DBUs × $/DBU
+6. **VM cost** (where applicable) — driver + worker VM costs
+7. **Total monthly cost** — DBU cost + VM cost
+8. **SKU product type** — correct SKU used for pricing lookup
+9. **Configuration details** — instance types, worker counts, sizes displayed correctly
 
-### Installer — 9-Step Flow
-1. Validate prerequisites (CLI, profile, secrets)
-2. Gather configuration (interactive prompts)
-3. Provision Lakebase instance (or skip with `--skip-provision`)
-4. Create database, schema, tables, views, constraints
-5. Load pricing reference data from `backend/static/pricing/`
-6. Create SKU discount mapping
-7. Configure SP access (OAuth M2M via Roles API)
-8. Create cost calculation views
-9. Generate app configuration (app.yaml with valueFrom refs)
+For FMAPI workloads (token-based billing), additionally compare:
+- Token quantity (millions)
+- DBU per 1M tokens rate
+- Total DBUs
+- Monthly cost
 
-### Permission Tests — 10 Tests
-File: `tests/test_lakebase_permissions.py` — 5 test classes, 10 tests:
-- Token generation (2): SP token generation + expiry validation
-- DB connection (2): connectivity + PG16 version check
-- Read access (3): workload types (9 expected) + DBU rates + VM costs
-- Write access (1): full CRUD on users table
-- Token refresh (1): auto-refresh after invalidation
-- App health (1): FastAPI health endpoint with DB connection
+For storage sub-rows (Vector Search, Lakebase), compare:
+- Storage quantity
+- Storage rate
+- Storage cost
 
 ## Features by Sprint
 
-### Sprint 1: Installation Testing
-Run `install_lakemeter.py --skip-provision --profile lakemeter` against the existing `lakemeter-customer` instance. Verify all 9 steps complete successfully. Validate pricing data loads correctly (workload types, DBU rates, VM costs, SKU mappings). Verify app.yaml generation with correct valueFrom references. Test error handling for missing prerequisites.
+### Sprint 1: JOBS + ALL_PURPOSE Parity (Classic/Photon/Serverless)
+- Browser-test all JOBS configurations: classic, photon, serverless (standard + performance mode)
+- Browser-test all ALL_PURPOSE configurations: classic, photon, serverless
+- Compare DBU/hr, $/DBU, monthly DBU, total cost for each
+- Fix all mismatches in backend export code
+- Update parity tests to cover any new edge cases found
 
-**Acceptance Criteria:**
-- Installer runs end-to-end with `--skip-provision` (instance already exists)
-- All 9 steps report success (green checkmarks)
-- Pricing reference data loaded: 9 workload types, DBU rates > 0, VM costs > 0
-- Generated app.yaml matches expected valueFrom pattern
-- SP role created with `identity_type=SERVICE_PRINCIPAL` (not PG_ONLY)
-- Clean exit code 0
+### Sprint 2: DLT + DBSQL Parity (All Editions/Types/Sizes)
+- Browser-test DLT: Core/Pro/Advanced × Classic/Photon/Serverless
+- Browser-test DBSQL: Classic/Pro/Serverless × all warehouse sizes (2X-Small through 4X-Large)
+- Compare all cost components for each configuration
+- Fix all mismatches — pay special attention to DLT edition-specific photon multipliers and DBSQL size-specific DBU rates
+- Update parity tests
 
-### Sprint 2: Integration & Regression Testing
-Run the full pytest suite (1419 tests). Run the 10 Lakebase permission tests separately. Verify SP can connect to Lakebase via OAuth M2M. Verify app health endpoint works with new config. Cross-feature regression across all 9 workload types + multi-workload scenarios + AI assistant.
+### Sprint 3: VECTOR_SEARCH + MODEL_SERVING + LAKEBASE Parity
+- Browser-test Vector Search: Standard/Storage-Optimized modes, various capacity levels
+- Browser-test Model Serving: CPU/T4/A10G/A100 GPU types
+- Browser-test Lakebase: various CU sizes, HA node counts, storage amounts
+- Compare compute costs AND storage sub-row costs
+- Fix all mismatches — special attention to ceiling/rounding in Vector Search, storage DSU calculations in Lakebase
+- Update parity tests
 
-**Acceptance Criteria:**
-- Full pytest suite: 1419+ tests pass (excluding network-dependent tests that skip)
-- Permission tests: 10/10 pass (token gen, DB connect, read, write, refresh, health)
-- SP OAuth flow: token generation → DB connection → query execution verified
-- App health endpoint returns 200 with healthy DB status
-- No regressions in any workload type (JOBS, ALL_PURPOSE, DLT, DBSQL, MODEL_SERVING, VECTOR_SEARCH, FMAPI_DATABRICKS, FMAPI_PROPRIETARY, LAKEBASE)
-- Multi-workload scenarios pass (sprints 10-11 test suites)
+### Sprint 4: FMAPI_DATABRICKS + FMAPI_PROPRIETARY Parity (All Models/Providers/Token Types)
+- Browser-test FMAPI Databricks: various models × input/output/cache tokens × provisioned modes
+- Browser-test FMAPI Proprietary: OpenAI/Anthropic/Google × various models × input/output/cache tokens
+- Compare token quantities, DBU/1M rates, total DBUs, monthly costs
+- Fix all mismatches — special attention to provider name normalization (Google→GEMINI), fallback rates, context length handling
+- Update parity tests
 
-### Sprint 3: Documentation
-Document the installer flow, SP Roles API finding, deployment steps, permission test coverage, and app.yaml configuration. Update existing docs-site with new deployment and admin guides.
+### Sprint 5: Cross-Workload Regression + Excel Formula Audit
+- Re-test ALL 9 workload types after all fixes to catch any regressions
+- Audit Excel formulas: verify every `=` formula in the spreadsheet produces the correct result (not just the cached value)
+- Verify totals row sums all line items correctly
+- Verify cost summary section matches
+- Run full parity test suite (`pytest tests/parity/`)
+- Fix any remaining issues
 
-**Acceptance Criteria:**
-- Installer guide: complete 9-step walkthrough with `--skip-provision` usage
-- SP Roles API documentation: the critical `identity_type=SERVICE_PRINCIPAL` finding with why `CREATE ROLE` SQL doesn't work
-- Deployment guide: end-to-end deployment steps from clean state
-- Permission test coverage: what each of the 10 tests verifies and why
-- app.yaml reference: valueFrom pattern explained with all 5 resource references
-- Docs site builds successfully (`cd docs-site && npm run build`)
+## Acceptance Criteria (Global)
+
+- Every workload type's Excel export matches UI costs within $0.01 tolerance
+- All existing parity tests pass
+- New parity tests added for any configurations that were previously untested
+- No regressions: fixing one workload must not break another
+- Excel formulas (not just cached values) produce correct results when recalculated
 
 ## References
-- Installer: `scripts/install_lakemeter.py` (1299 lines)
-- Permission tests: `tests/test_lakebase_permissions.py` (237 lines)
-- App config: `app.yaml` (41 lines)
-- Token manager: `backend/app/auth/token_manager.py`
-- Existing docs: `docs-site/docs/`
+
+- Frontend cost formulas: `frontend/src/utils/costCalculation.ts`
+- Backend export: `backend/app/routes/export/`
+- Static pricing: `backend/static/pricing/`
+- Existing parity tests: `tests/parity/`
+- Sprint 10 cross-workload tests: `tests/sprint_10/`
