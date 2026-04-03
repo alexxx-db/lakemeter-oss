@@ -84,15 +84,15 @@ Total:   $104.90/month
 
 Each additional node multiplies the compute cost linearly.
 
-### Run-based usage
+### Estimating hours for part-time usage
 
-If your database is not always-on (e.g., a development database used during work hours):
+Lakebase uses direct hours input only. If your database is not always-on (e.g., a development database used during work hours), calculate your hours manually:
 
 ```
-Hours/Month = (Runs Per Day x Avg Runtime Minutes / 60) x Days Per Month
+Hours/Month = Sessions Per Day x Avg Duration Hours x Days Per Month
 ```
 
-**Example**: 8 sessions/day x 60 min each x 22 days = 176 hours/month
+**Example**: 8 hours/day x 22 business days = 176 hours/month — enter **176** in the Hours/Month field.
 
 ## How costs are calculated
 

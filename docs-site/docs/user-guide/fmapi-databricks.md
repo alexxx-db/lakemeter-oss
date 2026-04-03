@@ -120,15 +120,14 @@ The model list updates with each pricing bundle release. If a model is missing, 
 | **Rate Type** | Token direction or provisioned tier | Input Token |
 | **Quantity** | Volume -- millions of tokens/month (token-based) or hours/month (provisioned) | — |
 
-### Inference types in the UI
+### Rate type groups in the UI
 
-The UI groups rate types by inference category:
+The UI groups rate types into two categories in the dropdown:
 
-| UI Option | Rate Types |
-|-----------|------------|
-| **Pay-Per-Token** | `input_token`, `output_token` |
-| **Provisioned Throughput** | `provisioned_scaling`, `provisioned_entry` |
-| **Batch Inference** | Uses token-based rates with batch pricing |
+| Group | Rate Types |
+|-------|------------|
+| **Token-based** | `input_token`, `output_token` |
+| **Provisioned** | `provisioned_scaling`, `provisioned_entry` |
 
 ## How costs are calculated
 

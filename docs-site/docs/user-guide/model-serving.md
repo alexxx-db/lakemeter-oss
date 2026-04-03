@@ -97,21 +97,15 @@ DBU rates vary by cloud provider. The same GPU type may have a different DBU/hou
 | **Number of Endpoints** | Number of identical serving endpoints. This field is visible in the UI for planning purposes but does not multiply the cost calculation — each endpoint should be added as a separate workload entry if you need to estimate multiple endpoints. | 1 |
 | **Hours Per Month** | Endpoint uptime. Use 730 for 24/7 endpoints. | 730 |
 
-### Run-based usage
+### Estimating hours for intermittent usage
 
-If your endpoint serves intermittent batch requests rather than continuous traffic, use the run-based fields:
-
-| Field | Description | Default |
-|-------|-------------|---------|
-| **Runs Per Day** | Number of invocation batches per day | — |
-| **Avg Runtime (minutes)** | Average duration per batch | — |
-| **Days Per Month** | Active days | 22 |
+Model Serving uses direct hours input only. If your endpoint serves intermittent batch requests rather than continuous traffic, calculate your hours manually:
 
 ```
-Hours/Month = (Runs Per Day x Avg Runtime Minutes / 60) x Days Per Month
+Hours/Month = (Batches Per Day x Avg Duration Minutes / 60) x Days Per Month
 ```
 
-**Example**: 100 inference batches/day x 2 min each x 22 days = 73.3 hours/month
+**Example**: 100 inference batches/day x 2 min each x 22 days = 73.3 hours/month — enter **73** in the Hours/Month field.
 
 ## How costs are calculated
 

@@ -1,4 +1,4 @@
-# Sprint 3 Handoff: Workload Guides — SQL, AI/ML, and Lakebase (Iteration 3)
+# Sprint 3 Handoff: Workload Guides — SQL, AI/ML, and Lakebase (Iteration 4)
 
 ## What Was Built (Iteration 1)
 
@@ -107,8 +107,56 @@ All pricing numbers re-verified against pricing bundle JSONs:
 | `docs-site/docs/user-guide/model-serving.md` | Added Number of Endpoints to config reference |
 | `docs-site/docs/user-guide/lakebase.md` | Removed duplicate "Start with 1 CU" tip |
 
+## What Was Fixed (Iteration 4)
+
+### Model Serving — Removed false run-based usage fields
+- **Removed "Run-based usage" fields table**: The Model Serving UI does NOT have run-based input (Runs Per Day, Avg Runtime, Days Per Month). It only has a direct Hours/Month field. The docs incorrectly documented run-based fields that don't exist in the UI.
+- **Replaced with "Estimating hours for intermittent usage"**: A tip showing how to manually calculate hours from batch patterns, making it clear users enter the calculated value directly.
+
+### Lakebase — Reframed run-based usage section
+- **Reframed "Run-based usage" to "Estimating hours for part-time usage"**: Like Model Serving, Lakebase only has direct Hours/Month input — no run-based toggle. The docs implied run-based UI fields existed. Rewritten to clearly state it's a manual calculation tip.
+
+### FMAPI Databricks — Corrected inference types table
+- **Removed "Batch Inference" row**: The FMAPI Databricks rate type dropdown only shows `input_token`, `output_token`, `provisioned_scaling`, and `provisioned_entry`. "Batch Inference" exists in config but is not rendered in the UI dropdown.
+- **Fixed group labels**: Changed "Pay-Per-Token" → "Token-based" and "Provisioned Throughput" → "Provisioned" to match the actual `<optgroup>` labels in the UI code (WorkloadForm.tsx lines 1646-1656).
+
+### Workloads Overview — Clarified usage input modes
+- **Fixed "Most workloads" claim**: Only 4 of 9 workloads (Jobs, All-Purpose, DLT, DBSQL) support the Run-Based/Direct Hours toggle. Updated to name these explicitly and note that Model Serving, Vector Search, and Lakebase use direct hours only, while FMAPI uses token volume.
+
+### Verification method
+All fixes verified by reading WorkloadForm.tsx source code:
+- Line 1940: Run-based fields excluded for `show_lakebase_config`, `show_vector_search_mode`, `show_fmapi_config`, and `MODEL_SERVING`
+- Lines 2002-2015: Model Serving, Vector Search, and Lakebase get direct hours only
+- Lines 1646-1656: FMAPI Databricks rate type dropdown has two optgroups: "Token-based" and "Provisioned"
+- Lines 1586-1613: Model Serving config section has GPU Type, Number of Endpoints only (no run-based fields)
+
+## How to Test (Iteration 4)
+
+- Start: `cd docs-site && npm run start`
+- Navigate to: http://localhost:3000
+- Check Model Serving guide: verify run-based fields table is gone, replaced with "Estimating hours for intermittent usage" tip
+- Check Lakebase guide: verify "Run-based usage" is now "Estimating hours for part-time usage"
+- Check FMAPI Databricks guide: verify "Inference types in the UI" is now "Rate type groups in the UI" with only Token-based and Provisioned rows (no Batch Inference)
+- Check Workloads Overview: verify "Usage input modes" lists specific workloads
+- Verify docs build: `cd docs-site && npm run build` — zero errors
+
+## Test Results
+
+- `npm run build`: Passes with zero errors
+- `pytest`: 1,969 passed, 84 failed (pre-existing), 2 skipped
+- All 84 failures are pre-existing structural/coverage tests, unchanged from iteration 1
+
+## Files Changed (Iteration 4 only)
+
+| File | Action |
+|------|--------|
+| `docs-site/docs/user-guide/model-serving.md` | Replaced run-based fields table with manual hour calculation tip |
+| `docs-site/docs/user-guide/lakebase.md` | Reframed run-based section as manual calculation tip |
+| `docs-site/docs/user-guide/fmapi-databricks.md` | Removed Batch Inference row, fixed group labels to match UI |
+| `docs-site/docs/user-guide/workloads.md` | Clarified which workloads support run-based vs direct hours |
+
 ## Known Limitations
 
 - $/DBU rates in examples use fallback rates for AWS/us-east-1/Premium. Actual rates vary by cloud/region/tier — noted with disclaimer in each guide.
 - VM costs for DBSQL Classic/Pro use default estimates rather than actual instance pricing.
-- `batch_inference` rate type exists in the UI code but is not prominently documented — it uses token-based rates with batch pricing and is a less common use case.
+- `batch_inference` rate type exists in the FMAPI Databricks config code but is not rendered in the UI dropdown — not documented.

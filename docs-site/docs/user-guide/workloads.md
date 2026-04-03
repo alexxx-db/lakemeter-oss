@@ -57,17 +57,19 @@ All workloads share these base fields:
 
 ## Usage input modes
 
-Most workloads support two ways to specify usage:
+Compute workloads (**Jobs**, **All-Purpose**, **DLT**, **DBSQL**) support two ways to specify usage:
+
+**Run-Based** (default): Specify runs per day, average runtime, and days per month. The formula is:
+```
+Hours/Month = (Runs Per Day x Avg Runtime Minutes / 60) x Days Per Month
+```
 
 **Direct Hours**: Enter total hours per month directly. Common values:
 - 730 = 24/7 (always-on)
 - 176 = 8 hours x 22 business days
 - 44 = 2 hours x 22 business days
 
-**Run-Based**: Specify runs per day, average runtime, and days per month. The formula is:
-```
-Hours/Month = (Runs Per Day x Avg Runtime Minutes / 60) x Days Per Month
-```
+**Model Serving**, **Vector Search**, and **Lakebase** use direct hours only. **FMAPI** workloads use token volume (millions/month) or provisioned hours instead of either mode.
 
 ## Pricing tier restrictions
 
