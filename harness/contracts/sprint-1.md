@@ -1,40 +1,44 @@
-# Sprint 1 Contract: Test Infrastructure + JOBS Workload
+# Sprint 1 Contract: Installation Testing
+
+## Feature
+Validate `scripts/install_lakemeter.py` installer and all artifacts it produces — pricing data, app.yaml config, SP role configuration, database schema. Pure local tests (no network calls).
 
 ## Acceptance Criteria
 
-- [ ] Test infrastructure: shared conftest with auth, estimate creation/cleanup, chat helpers
-- [ ] Chat helper sends message to `POST /api/v1/chat` and parses response including `proposed_workload`
-- [ ] Auth uses Databricks workspace token (from env var or CLI) against live app
-- [ ] Test estimate created per session, cleaned up after
-- [ ] JOBS test: natural language prompt produces `workload_type=JOBS` proposal
-- [ ] JOBS test: `num_workers`, `runs_per_day`, `avg_runtime_minutes`, `days_per_month` present and valid
-- [ ] JOBS test: `workload_name` is non-empty and descriptive
-- [ ] JOBS test: `reason` and `notes` fields populated
-- [ ] Confirm-workload test: confirm proposal via `POST /api/v1/chat/{id}/confirm-workload`
-- [ ] Confirm-workload test: verified via `GET /api/v1/chat/{id}/state`
-- [ ] Edge case: serverless vs classic defaults — AI picks reasonable config
-- [ ] All tests pass with `pytest tests/ai_assistant/sprint_1/ -v`
+### Installer Script Validation
+- [ ] Installer script exists and is parseable Python
+- [ ] All 9 step functions are defined and callable
+- [ ] `--skip-provision`, `--profile`, `--skip-deploy` CLI args supported
+- [ ] SP role creation uses `identity_type: SERVICE_PRINCIPAL` (not PG_ONLY)
+- [ ] DB connections use `sslmode=require`
 
-## API Contract
+### Pricing Data Validation (Step 5)
+- [ ] All 9 pricing JSON files exist in `backend/static/pricing/`
+- [ ] Each file is valid JSON with > 0 entries
+- [ ] manifest.json lists all 9 files with total_entries > 0
+- [ ] DBU rates keys use `cloud:region:tier` format
+- [ ] Instance DBU rates keys use `cloud:instance_type` format
+- [ ] DBSQL rates, multipliers, FMAPI rates all have correct key formats
 
-- `POST /api/v1/chat` — send chat message, receive AI response with `proposed_workload`
-- `POST /api/v1/chat/{id}/confirm-workload` — confirm/reject a proposed workload
-- `GET /api/v1/chat/{id}/state` — get conversation state
-- `POST /api/v1/estimates/` — create test estimate
-- `DELETE /api/v1/estimates/{id}` — cleanup test estimate
+### App Config Validation (Step 9)
+- [ ] `app.yaml` is valid YAML
+- [ ] Contains 5 `valueFrom` references
+- [ ] Contains hardcoded values for ENVIRONMENT, DB_PORT, DB_SSLMODE
+- [ ] Command starts uvicorn on port 8000
+
+### Installer Code Quality
+- [ ] Pricing loader uses TRUNCATE + batch insert pattern
+- [ ] All step functions have docstrings
+- [ ] Error handling present (sys.exit on critical failures)
 
 ## Test Plan
+- Static tests: installer script parsing, function signatures, code pattern verification
+- Data tests: pricing JSON schema/format/content validation
+- Config tests: app.yaml structure and valueFrom pattern
+- All tests pass with `pytest tests/test_installation/ -v`
 
-- Unit tests: N/A (testing live app)
-- Integration tests: 6-8 test functions hitting live API
-- Timeout: 120s per AI call (Claude can take 30-60s)
-- Retry: if AI asks clarifying questions, send follow-up with specifics
-
-## Files
-
-- `tests/ai_assistant/__init__.py`
-- `tests/ai_assistant/conftest.py` — shared fixtures (auth, estimate, chat helpers)
-- `tests/ai_assistant/sprint_1/__init__.py`
-- `tests/ai_assistant/sprint_1/conftest.py` — sprint-specific fixtures
-- `tests/ai_assistant/sprint_1/test_jobs_proposal.py` — JOBS workload proposal tests
-- `tests/ai_assistant/sprint_1/test_confirm_flow.py` — confirm/reject workload tests
+## Files to Create
+- `tests/test_installation/__init__.py`
+- `tests/test_installation/test_installer_script.py`
+- `tests/test_installation/test_pricing_data.py`
+- `tests/test_installation/test_app_config.py`

@@ -1,132 +1,32 @@
 {
   "status": "IN_PROGRESS",
-  "app_name": "lakemeter-ai-assistant-9workload-tests",
+  "app_name": "lakemeter-validation-sprint",
   "workspace_dir": "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app",
   "quality_target": 9.5,
-  "current_phase": "BUILD_AGENT",
+  "current_phase": "VISUAL_QA",
   "spec_complete": true,
-  "current_sprint": 11,
-  "planned_sprints": 12,
+  "current_sprint": 1,
+  "planned_sprints": 3,
   "remaining_spec_items": [
-    "Sprint 12: Multi-Workload \u2014 Complete Platform (5+ workloads)"
+    "Sprint 2: Integration & Regression \u2014 1419 tests, 10 permission tests, SP OAuth, app health, cross-feature regression",
+    "Sprint 3: Documentation \u2014 installer guide, SP Roles API finding, deployment steps, permission tests, app.yaml reference"
   ],
-  "last_action": "Sprint 11 BUILD iter 1: ML pipeline multi-workload AI tests (VECTOR_SEARCH + FMAPI_PROPRIETARY + MODEL_SERVING). 6 new files, 57 AI tests collected. 3-workload, 2-workload, and negative discrimination scenarios. 1409 non-AI tests pass in 9.58s.",
   "sprints_completed": [
-    {
-      "sprint": 1,
-      "score": 9.56,
-      "debt": false,
-      "trajectory": [
-        9.56
-      ],
-      "iterations": 1
-    },
-    {
-      "sprint": 1,
-      "score": 9.56,
-      "debt": false,
-      "trajectory": [
-        9.28,
-        9.56
-      ],
-      "iterations": 2
-    },
-    {
-      "sprint": 2,
-      "score": 9.5,
-      "debt": false,
-      "trajectory": [
-        9.5
-      ],
-      "iterations": 1
-    },
-    {
-      "sprint": 3,
-      "score": 9.78,
-      "debt": false,
-      "trajectory": [
-        9.35,
-        9.43,
-        9.78
-      ],
-      "iterations": 3
-    },
-    {
-      "sprint": 4,
-      "score": 9.63,
-      "debt": false,
-      "trajectory": [
-        9.1,
-        9.63
-      ],
-      "iterations": 2
-    },
-    {
-      "sprint": 5,
-      "score": 9.7,
-      "debt": false,
-      "trajectory": [
-        9.7
-      ],
-      "iterations": 1
-    },
-    {
-      "sprint": 6,
-      "score": 9.83,
-      "debt": false,
-      "trajectory": [
-        9.83
-      ],
-      "iterations": 1
-    },
-    {
-      "sprint": 7,
-      "score": 9.83,
-      "debt": false,
-      "trajectory": [
-        9.83
-      ],
-      "iterations": 1
-    },
-    {
-      "sprint": 8,
-      "score": 9.75,
-      "debt": false,
-      "trajectory": [
-        9.75
-      ],
-      "iterations": 1
-    },
-    {
-      "sprint": 9,
-      "score": 0.0,
-      "debt": true,
-      "trajectory": [],
-      "iterations": 0
-    },
-    {
-      "sprint": 10,
-      "score": 9.5,
-      "debt": false,
-      "trajectory": [
-        9.5
-      ],
-      "iterations": 1
-    }
+    {"sprint": 1, "feature": "Installation Testing", "score": null, "iterations": 1, "trajectory": [], "tests": 91}
   ],
   "dynamically_added_sprints": [],
-  "feature_sprints_since_doc_sprint": 2,
-  "last_doc_sprint": 8,
-  "last_install_test": 8,
-  "last_integration_test": 8,
+  "feature_sprints_since_doc_sprint": 0,
+  "last_doc_sprint": 0,
+  "last_install_test": 0,
+  "last_integration_test": 0,
   "context_resets": 0,
   "current_iteration": 1,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
-  "dev_server_command": "N/A \u2014 uses FastAPI TestClient with local backend for FMAPI access",
-  "dev_server_port": null,
-  "live_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
-  "mode": "TESTING_ONLY",
-  "score_trajectory": [],
-  "last_updated": "2026-04-03T04:15:00"
+  "dev_server_command": "cd backend && python -m uvicorn app.main:app --reload --port 8000",
+  "mode": "VALIDATION_AND_DOCS",
+  "databricks_profile": "lakemeter",
+  "lakebase_instance": "lakemeter-customer",
+  "lakebase_host": "ep-silent-fire-d1kv74l0.database.us-west-2.cloud.databricks.com",
+  "last_updated": "2026-04-03T10:00:00"
 }
