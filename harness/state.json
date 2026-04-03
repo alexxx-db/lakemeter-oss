@@ -5,13 +5,12 @@
   "quality_target": 9.0,
   "current_phase": "BUILD_AGENT",
   "spec_complete": true,
-  "current_sprint": 4,
+  "current_sprint": 5,
   "planned_sprints": 6,
   "remaining_spec_items": [
-    "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 4 iter 4 BUILD complete. Comprehensive source code verification of all 4 Sprint 4 pages (AI Assistant, Export, Calculation Reference, FAQ). Fixed 2 accuracy issues: (1) FAQ incorrectly stated Photon 'doubles' the DBU rate — corrected to explain variable multiplier (2.9x Jobs/DLT AWS, 2.5x Azure/GCP, 2.0x All-Purpose); (2) Export legend section incorrectly listed Orange as a legend item — corrected to match actual Excel Legend output (Blue, Cyan, Pink, Green, Purple). All other claims verified accurate: pricing rates, formulas, AI tool count/names, conversation management thresholds, DBSQL size map, Vector Search divisors, Lakebase DSU pricing. Docs build clean. 1969 tests pass (84 pre-existing failures).",
+  "last_action": "Sprint 5 iter 1 BUILD complete. All 8 admin guide pages rewritten against source code. Docs build clean. 1969 tests pass (84 pre-existing failures, unchanged). Handoff written.",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -33,18 +32,25 @@
       "debt": true,
       "trajectory": [],
       "iterations": 0
+    },
+    {
+      "sprint": 4,
+      "score": 0.0,
+      "debt": true,
+      "trajectory": [],
+      "iterations": 0
     }
   ],
   "dynamically_added_sprints": [],
-  "feature_sprints_since_doc_sprint": 0,
+  "feature_sprints_since_doc_sprint": 2,
   "last_doc_sprint": 3,
   "last_install_test": 3,
   "last_integration_test": 3,
   "context_resets": 0,
-  "current_iteration": 4,
+  "current_iteration": 1,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",
-  "last_updated": "2026-04-04T04:45:00",
+  "last_updated": "2026-04-04T05:00:00",
   "score_trajectory": []
 }
