@@ -1,6 +1,6 @@
 """Test Vector Search SKU mapping and pricing lookups.
 
-AC-6 to AC-8: SKU = VECTOR_SEARCH_ENDPOINT, $/DBU, serverless.
+AC-6 to AC-8: SKU = SERVERLESS_REAL_TIME_INFERENCE, $/DBU, serverless.
 """
 import pytest
 
@@ -10,33 +10,33 @@ from app.routes.export.calculations import _is_serverless_workload
 
 
 class TestSKUMapping:
-    """AC-6: SKU = VECTOR_SEARCH_ENDPOINT for all Vector Search items."""
+    """AC-6: SKU = SERVERLESS_REAL_TIME_INFERENCE for all Vector Search items."""
 
     @pytest.mark.parametrize("mode", ["standard", "storage_optimized"])
     def test_sku_is_vector_search_endpoint(self, mode):
         item = make_line_item(vector_search_mode=mode)
         sku = _get_sku_type(item, 'aws')
-        assert sku == 'VECTOR_SEARCH_ENDPOINT'
+        assert sku == 'SERVERLESS_REAL_TIME_INFERENCE'
 
     @pytest.mark.parametrize("cloud", ["aws", "azure", "gcp"])
     def test_sku_same_across_clouds(self, cloud):
         item = make_line_item()
         sku = _get_sku_type(item, cloud)
-        assert sku == 'VECTOR_SEARCH_ENDPOINT'
+        assert sku == 'SERVERLESS_REAL_TIME_INFERENCE'
 
 
 class TestDBUPriceLookup:
-    """AC-7: $/DBU lookup for VECTOR_SEARCH_ENDPOINT."""
+    """AC-7: $/DBU lookup for SERVERLESS_REAL_TIME_INFERENCE."""
 
     def test_fallback_price_exists(self):
         price, found = _get_dbu_price('aws', 'us-east-1', 'PREMIUM',
-                                      'VECTOR_SEARCH_ENDPOINT')
-        assert price > 0, "VECTOR_SEARCH_ENDPOINT should have a price"
+                                      'SERVERLESS_REAL_TIME_INFERENCE')
+        assert price > 0, "SERVERLESS_REAL_TIME_INFERENCE should have a price"
 
-    def test_fallback_price_is_0_088(self):
-        """Fallback price for VECTOR_SEARCH_ENDPOINT is $0.088."""
+    def test_fallback_price_is_0_07(self):
+        """Fallback price for SERVERLESS_REAL_TIME_INFERENCE is $0.07."""
         from app.routes.export.pricing import FALLBACK_DBU_PRICES
-        assert FALLBACK_DBU_PRICES.get('VECTOR_SEARCH_ENDPOINT') == 0.088
+        assert FALLBACK_DBU_PRICES.get('SERVERLESS_REAL_TIME_INFERENCE') == 0.07
 
     @pytest.mark.parametrize("cloud,region,tier", [
         ("aws", "us-east-1", "PREMIUM"),
@@ -46,7 +46,7 @@ class TestDBUPriceLookup:
     ])
     def test_price_is_positive(self, cloud, region, tier):
         price, _ = _get_dbu_price(cloud, region, tier,
-                                  'VECTOR_SEARCH_ENDPOINT')
+                                  'SERVERLESS_REAL_TIME_INFERENCE')
         assert price > 0
 
 

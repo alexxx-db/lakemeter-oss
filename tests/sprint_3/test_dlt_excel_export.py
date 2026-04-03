@@ -101,16 +101,16 @@ class TestDLTFullCalculationPipeline:
         assert hours == pytest.approx(730.0)
 
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(20.0)
+        assert dbu_hr == pytest.approx(29.0)
 
         sku = _get_sku_type(item, "aws")
-        assert sku == "DELTA_LIVE_TABLES_SERVERLESS"
+        assert sku == "JOBS_SERVERLESS_COMPUTE"
 
         price, _ = _get_dbu_price("aws", "us-east-1", "PREMIUM", sku)
         assert price > 0
 
         monthly_dbus = dbu_hr * hours
-        assert monthly_dbus == pytest.approx(14600.0)
+        assert monthly_dbus == pytest.approx(21170.0)
 
         is_sl = _is_serverless_workload(item)
         assert is_sl is True
@@ -133,8 +133,8 @@ class TestDLTFullCalculationPipeline:
         assert hours == pytest.approx(720.0)
 
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # m5.xlarge=0.69, r5.xlarge=0.9: (0.69 + 0.9*4) * 2 = 8.58
-        expected_dbu_hr = (0.69 + 0.9 * 4) * 2.0
+        # m5.xlarge=0.69, r5.xlarge=0.9: (0.69 + 0.9*4) * 2.9 = 12.441
+        expected_dbu_hr = (0.69 + 0.9 * 4) * 2.9
         assert dbu_hr == pytest.approx(expected_dbu_hr)
 
         monthly_dbus = dbu_hr * hours
@@ -149,18 +149,18 @@ class TestDLTEditionModeMatrix:
         ("CORE", False, False, "standard", 1.0),
         ("PRO", False, False, "standard", 1.0),
         ("ADVANCED", False, False, "standard", 1.0),
-        # Classic Photon
-        ("CORE", True, False, "standard", 2.0),
-        ("PRO", True, False, "standard", 2.0),
-        ("ADVANCED", True, False, "standard", 2.0),
-        # Serverless Standard (photon built-in 2x, mode 1x)
-        ("CORE", False, True, "standard", 2.0),
-        ("PRO", False, True, "standard", 2.0),
-        ("ADVANCED", False, True, "standard", 2.0),
-        # Serverless Performance (photon built-in 2x, mode 2x = 4x total)
-        ("CORE", False, True, "performance", 4.0),
-        ("PRO", False, True, "performance", 4.0),
-        ("ADVANCED", False, True, "performance", 4.0),
+        # Classic Photon (2.9x for AWS)
+        ("CORE", True, False, "standard", 2.9),
+        ("PRO", True, False, "standard", 2.9),
+        ("ADVANCED", True, False, "standard", 2.9),
+        # Serverless Standard (photon built-in 2.9x, mode 1x)
+        ("CORE", False, True, "standard", 2.9),
+        ("PRO", False, True, "standard", 2.9),
+        ("ADVANCED", False, True, "standard", 2.9),
+        # Serverless Performance (photon built-in 2.9x, mode 2x = 5.8x total)
+        ("CORE", False, True, "performance", 5.8),
+        ("PRO", False, True, "performance", 5.8),
+        ("ADVANCED", False, True, "performance", 5.8),
     ])
     def test_dbu_multiplier(self, edition, photon, serverless, mode, expected_mult):
         """Verify total DBU multiplier for each edition/mode combination."""

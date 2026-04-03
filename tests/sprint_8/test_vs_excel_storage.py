@@ -104,7 +104,7 @@ class TestExcelTotals:
         ]
         wb = generate_xlsx(items)
         ws = wb.active
-        compute_rows = find_data_rows(ws, 'VECTOR_SEARCH_ENDPOINT')
+        compute_rows = find_data_rows(ws, 'SERVERLESS_REAL_TIME_INFERENCE')
         storage_rows = find_data_rows(ws, 'DATABRICKS_STORAGE')
         assert len(compute_rows) == 2, (
             f"Expected 2 compute rows, got {len(compute_rows)}"

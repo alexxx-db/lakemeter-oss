@@ -62,7 +62,7 @@ class TestComputePricing:
 
     def test_compute_fallback_rate(self):
         fallback = FALLBACK_DBU_PRICES['DATABASE_SERVERLESS_COMPUTE']
-        assert fallback == pytest.approx(0.40)
+        assert fallback == pytest.approx(0.48)
 
 
 class TestServerlessClassification:

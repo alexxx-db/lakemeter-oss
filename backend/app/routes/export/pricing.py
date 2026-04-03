@@ -1,6 +1,7 @@
 """Pricing data loading and lookup functions for export."""
-import json
-import os
+import json, logging, os
+
+logger = logging.getLogger(__name__)
 
 # ========== LOAD PRICING DATA FROM STATIC JSON ==========
 _PRICING_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'static', 'pricing')
@@ -22,21 +23,22 @@ FMAPI_DB_RATES = _load_json('fmapi-databricks-rates.json')
 FMAPI_PROP_RATES = _load_json('fmapi-proprietary-rates.json')
 VECTOR_SEARCH_RATES = _load_json('vector-search-rates.json')
 DBSQL_RATES = _load_json('dbsql-rates.json')
+DBU_MULTIPLIERS = _load_json('dbu-multipliers.json')
 
-# Fallback DBU $/DBU rates (aws:us-east-1:PREMIUM)
+# Fallback DBU $/DBU rates — aligned with frontend DEFAULT_DBU_PRICING (costCalculation.ts)
 FALLBACK_DBU_PRICES = {
-    'JOBS_COMPUTE': 0.15, 'JOBS_COMPUTE_(PHOTON)': 0.15,
-    'JOBS_SERVERLESS_COMPUTE': 0.39,
+    'JOBS_COMPUTE': 0.15, 'JOBS_COMPUTE_(PHOTON)': 0.15, 'JOBS_SERVERLESS_COMPUTE': 0.39,
     'ALL_PURPOSE_COMPUTE': 0.55, 'ALL_PURPOSE_COMPUTE_(PHOTON)': 0.55,
     'INTERACTIVE_SERVERLESS_COMPUTE': 0.83, 'ALL_PURPOSE_SERVERLESS_COMPUTE': 0.83,
-    'DLT_CORE_COMPUTE': 0.20, 'DLT_PRO_COMPUTE': 0.25, 'DLT_ADVANCED_COMPUTE': 0.36,
-    'DELTA_LIVE_TABLES_SERVERLESS': 0.50,
+    'DLT_CORE_COMPUTE': 0.20, 'DLT_CORE_COMPUTE_(PHOTON)': 0.20,
+    'DLT_PRO_COMPUTE': 0.25, 'DLT_PRO_COMPUTE_(PHOTON)': 0.25,
+    'DLT_ADVANCED_COMPUTE': 0.36, 'DLT_ADVANCED_COMPUTE_(PHOTON)': 0.36,
+    'DELTA_LIVE_TABLES_SERVERLESS': 0.30,
     'SQL_COMPUTE': 0.22, 'SQL_PRO_COMPUTE': 0.55, 'SERVERLESS_SQL_COMPUTE': 0.70,
-    'VECTOR_SEARCH_ENDPOINT': 0.088,
-    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,
-    'OPENAI_MODEL_SERVING': 0.07, 'ANTHROPIC_MODEL_SERVING': 0.07, 'GEMINI_MODEL_SERVING': 0.07,
-    'FOUNDATION_MODEL_TRAINING': 0.20,
-    'DATABASE_SERVERLESS_COMPUTE': 0.40,
+    'SERVERLESS_REAL_TIME_INFERENCE': 0.07, 'SERVERLESS_REAL_TIME_INFERENCE_LAUNCH': 0.07,
+    'OPENAI_MODEL_SERVING': 0.07, 'ANTHROPIC_MODEL_SERVING': 0.07,
+    'GEMINI_MODEL_SERVING': 0.07, 'GOOGLE_MODEL_SERVING': 0.07,
+    'FOUNDATION_MODEL_TRAINING': 0.20, 'DATABASE_SERVERLESS_COMPUTE': 0.48,
     'DATABRICKS_APPS_COMPUTE': 0.07,
 }
 
@@ -57,6 +59,19 @@ def _get_dbu_price(cloud: str, region: str, tier: str, sku: str) -> tuple:
     return fallback, False
 
 
+def _get_photon_multiplier(cloud: str, sku_base: str) -> float:
+    """Get photon multiplier from dbu-multipliers.json.
+
+    Returns the multiplier (e.g. 2.9 for DLT_ADVANCED on AWS) or 2.0 as default.
+    """
+    key = f"{cloud}:{sku_base}:photon"
+    info = DBU_MULTIPLIERS.get(key, {})
+    if isinstance(info, dict) and 'multiplier' in info:
+        return info['multiplier']
+    logger.warning("Photon multiplier not found for %s, using fallback 2.0", key)
+    return 2.0
+
+
 def _get_sku_type(item, cloud: str = 'aws') -> str:
     """Determine the SKU/product type for a line item."""
     wt = item.workload_type or ''
@@ -75,8 +90,10 @@ def _get_sku_type(item, cloud: str = 'aws') -> str:
         return 'ALL_PURPOSE_COMPUTE'
     elif wt == 'DLT':
         if item.serverless_enabled:
-            return 'DELTA_LIVE_TABLES_SERVERLESS'
+            return 'JOBS_SERVERLESS_COMPUTE'
         edition = (item.dlt_edition or 'CORE').upper()
+        if item.photon_enabled:
+            return f'DLT_{edition}_COMPUTE_(PHOTON)'
         return f'DLT_{edition}_COMPUTE'
     elif wt == 'DBSQL':
         warehouse_type = (item.dbsql_warehouse_type or 'SERVERLESS').upper()
@@ -86,15 +103,22 @@ def _get_sku_type(item, cloud: str = 'aws') -> str:
             return 'SQL_PRO_COMPUTE'
         return 'SQL_COMPUTE'
     elif wt == 'VECTOR_SEARCH':
-        return 'VECTOR_SEARCH_ENDPOINT'
+        return 'SERVERLESS_REAL_TIME_INFERENCE'
     elif wt == 'MODEL_SERVING':
         return 'SERVERLESS_REAL_TIME_INFERENCE'
-    elif wt in ('FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY'):
+    elif wt == 'FMAPI_DATABRICKS':
         return _get_fmapi_sku(item, cloud)
+    elif wt == 'FMAPI_PROPRIETARY':
+        # Use provider-specific SKU for pricing lookup (matches frontend)
+        provider = (item.fmapi_provider or 'openai').lower()
+        provider_mapping = {
+            'google': 'GEMINI', 'anthropic': 'ANTHROPIC', 'openai': 'OPENAI'
+        }
+        return f'{provider_mapping.get(provider, provider.upper())}_MODEL_SERVING'
     elif wt == 'LAKEBASE':
         return 'DATABASE_SERVERLESS_COMPUTE'
     elif wt == 'DATABRICKS_APPS':
-        return 'DATABRICKS_APPS_COMPUTE'
+        return 'ALL_PURPOSE_SERVERLESS_COMPUTE'
     return 'JOBS_COMPUTE'
 
 
@@ -111,8 +135,7 @@ def _get_fmapi_sku(item, cloud: str) -> str:
     elif wt == 'FMAPI_PROPRIETARY':
         provider = item.fmapi_provider or ''
         endpoint = getattr(item, 'fmapi_endpoint_type', 'global') or 'global'
-        default_ctx = 'long' if provider == 'google' else 'all'
-        context = getattr(item, 'fmapi_context_length', default_ctx) or default_ctx
+        context = getattr(item, 'fmapi_context_length', 'long') or 'long'
         key = f"{cloud}:{provider}:{model}:{endpoint}:{context}:{rate_type}"
         info = FMAPI_PROP_RATES.get(key, {})
         return info.get('sku_product_type', 'OPENAI_MODEL_SERVING')
@@ -141,18 +164,33 @@ def _get_fmapi_dbu_per_million(item, cloud: str) -> tuple:
     elif wt == 'FMAPI_PROPRIETARY':
         provider = item.fmapi_provider or ''
         endpoint = getattr(item, 'fmapi_endpoint_type', 'global') or 'global'
-        default_ctx = 'long' if provider == 'google' else 'all'
-        context = getattr(item, 'fmapi_context_length', default_ctx) or default_ctx
+        # Default to 'long' context matching the frontend's default
+        context = getattr(item, 'fmapi_context_length', 'long') or 'long'
         key = f"{cloud}:{provider}:{model}:{endpoint}:{context}:{rate_type}"
         info = FMAPI_PROP_RATES.get(key, {})
         if 'dbu_rate' in info:
             return info['dbu_rate'], True
+        # Try case-insensitive match
         key_lower = key.lower().strip()
         for k, v in FMAPI_PROP_RATES.items():
             if k.lower().strip() == key_lower:
                 return v.get('dbu_rate', 0), True
+        # Try 'all' context as fallback (some models use it)
+        if context != 'all':
+            alt_key = f"{cloud}:{provider}:{model}:{endpoint}:all:{rate_type}"
+            info = FMAPI_PROP_RATES.get(alt_key, {})
+            if 'dbu_rate' in info:
+                return info['dbu_rate'], True
         return 0, False
     return 0, False
+
+
+# Fallback DBU/1M token rates matching frontend costCalculation.ts
+FMAPI_PROP_FALLBACK_RATES = {
+    'input_token': 21.43, 'input': 21.43,
+    'output_token': 321.43, 'output': 321.43,
+    'cache_read': 8.57, 'cache_write': 85.71,
+}
 
 
 def _is_fmapi_hourly(item, cloud: str) -> bool:

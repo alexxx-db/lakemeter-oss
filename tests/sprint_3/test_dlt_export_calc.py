@@ -42,7 +42,7 @@ class TestDLTCalculateDBUPerHour:
         assert len(warnings) == 0
 
     def test_classic_photon_doubles(self):
-        """Photon: (1.0 + 1.0*4) * 2 = 10.0 DBU/hr."""
+        """Photon: (1.0 + 1.0*4) * 2.9 = 14.5 DBU/hr."""
         item = make_line_item(
             driver_node_type="i3.xlarge",
             worker_node_type="i3.xlarge",
@@ -52,10 +52,10 @@ class TestDLTCalculateDBUPerHour:
             serverless_enabled=False,
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(10.0)
+        assert dbu_hr == pytest.approx(14.5)
 
     def test_serverless_standard(self):
-        """DLT Serverless standard: (1.0 + 1.0*4) * 2 * 1 = 10.0."""
+        """DLT Serverless standard: (1.0 + 1.0*4) * 2.9 * 1 = 14.5."""
         item = make_line_item(
             driver_node_type="i3.xlarge",
             worker_node_type="i3.xlarge",
@@ -65,10 +65,10 @@ class TestDLTCalculateDBUPerHour:
             serverless_mode="standard",
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(10.0)
+        assert dbu_hr == pytest.approx(14.5)
 
     def test_serverless_performance(self):
-        """DLT Serverless performance: (1.0 + 1.0*4) * 2 * 2 = 20.0."""
+        """DLT Serverless performance: (1.0 + 1.0*4) * 2.9 * 2 = 29.0."""
         item = make_line_item(
             driver_node_type="i3.xlarge",
             worker_node_type="i3.xlarge",
@@ -78,7 +78,7 @@ class TestDLTCalculateDBUPerHour:
             serverless_mode="performance",
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(20.0)
+        assert dbu_hr == pytest.approx(29.0)
 
     def test_mixed_instance_types(self):
         """m5.xlarge driver(0.69) + 4x r5.xlarge workers(0.9) = 4.29."""

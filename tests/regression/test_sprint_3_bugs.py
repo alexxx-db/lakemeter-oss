@@ -1,8 +1,8 @@
 """
 Regression tests for bugs found during Sprint 3 DLT testing.
 
-BUG-S3-1: DLT Serverless SKU discrepancy: FE=JOBS_SERVERLESS_COMPUTE, BE=DELTA_LIVE_TABLES_SERVERLESS
-BUG-S3-2: DLT Classic Photon SKU: BE missing _(PHOTON) suffix
+BUG-S3-1: DLT Serverless SKU — now aligned to JOBS_SERVERLESS_COMPUTE (matching frontend)
+BUG-S3-2: DLT Classic Photon SKU — now includes _(PHOTON) suffix (matching frontend)
 BUG-S3-3: DLT Serverless also respects mode (standard vs performance), unlike ALL_PURPOSE
 """
 import os
@@ -16,10 +16,8 @@ from tests.sprint_3.conftest import make_line_item
 
 
 class TestBugS3_1_DLTServerlessSKU:
-    """BUG-S3-1: DLT Serverless maps to DELTA_LIVE_TABLES_SERVERLESS in backend.
-    Frontend uses JOBS_SERVERLESS_COMPUTE instead.
-    Status: DOCUMENTED (not yet fixed — both have valid reasoning).
-    Regression: ensure backend consistently returns DELTA_LIVE_TABLES_SERVERLESS.
+    """BUG-S3-1: DLT Serverless now aligned to JOBS_SERVERLESS_COMPUTE.
+    Fixed in Sprint 1 SKU alignment — backend now matches frontend.
     """
 
     def test_backend_dlt_serverless_sku(self):
@@ -29,8 +27,8 @@ class TestBugS3_1_DLTServerlessSKU:
             dlt_edition="CORE", serverless_enabled=True,
         )
         sku = _get_sku_type(item, "aws")
-        assert sku == "DELTA_LIVE_TABLES_SERVERLESS", \
-            f"Backend DLT serverless SKU should be DELTA_LIVE_TABLES_SERVERLESS, got {sku}"
+        assert sku == "JOBS_SERVERLESS_COMPUTE", \
+            f"Backend DLT serverless SKU should be JOBS_SERVERLESS_COMPUTE, got {sku}"
 
     def test_backend_dlt_serverless_all_editions(self):
         """All editions get the same serverless SKU."""
@@ -41,19 +39,17 @@ class TestBugS3_1_DLTServerlessSKU:
                 dlt_edition=edition, serverless_enabled=True,
             )
             sku = _get_sku_type(item, "aws")
-            assert sku == "DELTA_LIVE_TABLES_SERVERLESS", \
-                f"DLT {edition} serverless should be DELTA_LIVE_TABLES_SERVERLESS, got {sku}"
+            assert sku == "JOBS_SERVERLESS_COMPUTE", \
+                f"DLT {edition} serverless should be JOBS_SERVERLESS_COMPUTE, got {sku}"
 
 
 class TestBugS3_2_DLTPhotonSKUSuffix:
-    """BUG-S3-2: Backend DLT Classic Photon returns DLT_{ED}_COMPUTE without _(PHOTON).
-    Frontend adds _(PHOTON) suffix for photon-enabled DLT Classic workloads.
-    Status: DOCUMENTED (backend pricing.py _get_sku_type doesn't handle DLT photon).
-    Regression: ensure backend behavior is consistent (so we know if it changes).
+    """BUG-S3-2: DLT Classic Photon now includes _(PHOTON) suffix.
+    Fixed in Sprint 1 SKU alignment — backend now matches frontend.
     """
 
     @pytest.mark.parametrize("edition", ["CORE", "PRO", "ADVANCED"])
-    def test_backend_dlt_photon_no_suffix(self, edition):
+    def test_backend_dlt_photon_has_suffix(self, edition):
         from app.routes.export import _get_sku_type
 
         item = make_line_item(
@@ -61,9 +57,8 @@ class TestBugS3_2_DLTPhotonSKUSuffix:
             serverless_enabled=False,
         )
         sku = _get_sku_type(item, "aws")
-        assert sku == f"DLT_{edition}_COMPUTE", \
-            f"Backend DLT {edition} photon should be DLT_{edition}_COMPUTE (no PHOTON), got {sku}"
-        assert "PHOTON" not in sku
+        assert sku == f"DLT_{edition}_COMPUTE_(PHOTON)", \
+            f"Backend DLT {edition} photon should be DLT_{edition}_COMPUTE_(PHOTON), got {sku}"
 
 
 class TestBugS3_3_DLTServerlessModeRespected:
@@ -84,8 +79,8 @@ class TestBugS3_3_DLTServerlessModeRespected:
             serverless_mode="standard",
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # base(5.0) * photon(2) * standard(1) = 10.0
-        assert dbu_hr == pytest.approx(10.0)
+        # base(5.0) * photon(2.9 from JSON) * standard(1) = 14.5
+        assert dbu_hr == pytest.approx(14.5)
 
     def test_dlt_serverless_performance_is_2x(self):
         from app.routes.export import _calculate_dbu_per_hour
@@ -99,8 +94,8 @@ class TestBugS3_3_DLTServerlessModeRespected:
             serverless_mode="performance",
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # base(5.0) * photon(2) * perf(2) = 20.0
-        assert dbu_hr == pytest.approx(20.0)
+        # base(5.0) * photon(2.9 from JSON) * perf(2) = 29.0
+        assert dbu_hr == pytest.approx(29.0)
 
     def test_dlt_modes_differ(self):
         """DLT standard != performance (unlike ALL_PURPOSE which always forces 2x)."""

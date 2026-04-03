@@ -65,10 +65,10 @@ class TestStorageCostValues:
     """Verify storage cost = gb × rate in Excel."""
 
     @pytest.mark.parametrize("gb,expected_cost", [
-        (10, 0.23),
-        (100, 2.30),
-        (1000, 23.00),
-        (8192, 188.416),
+        (10, 3.45),       # 10 GB × 15 DSU/GB × $0.023/DSU
+        (100, 34.50),     # 100 GB × 15 DSU/GB × $0.023/DSU
+        (1000, 345.00),   # 1000 GB × 15 DSU/GB × $0.023/DSU
+        (8192, 2826.24),  # 8192 GB × 15 DSU/GB × $0.023/DSU
     ])
     def test_storage_cost(self, gb, expected_cost):
         items = [make_line_item(lakebase_storage_gb=gb)]
@@ -131,9 +131,9 @@ class TestStorageDiscountPropagation:
     """
 
     @pytest.mark.parametrize("gb,expected_list_cost", [
-        (10, 0.23),
-        (100, 2.30),
-        (1000, 23.00),
+        (10, 3.45),       # 10 GB × 15 DSU/GB × $0.023/DSU
+        (100, 34.50),     # 100 GB × 15 DSU/GB × $0.023/DSU
+        (1000, 345.00),   # 1000 GB × 15 DSU/GB × $0.023/DSU
     ])
     def test_storage_discounted_cost_equals_list_at_zero_discount(
         self, gb, expected_list_cost,
@@ -185,7 +185,7 @@ class TestStorageNotes:
         assert row is not None
         notes = ws.cell(row=row, column=COL_NOTES).value
         assert notes is not None
-        assert '/GB/month' in str(notes)
+        assert '/DSU' in str(notes)
 
     def test_storage_notes_has_gb(self):
         items = [make_line_item(lakebase_storage_gb=100)]

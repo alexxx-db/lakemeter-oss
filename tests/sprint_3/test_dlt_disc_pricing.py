@@ -94,21 +94,18 @@ class TestDLTServerlessPricingDiscrepancy:
             assert fe["dbu_per_hour"] == pytest.approx(be["dbu_per_hour"]), \
                 f"DBU/hr should match for {mode} mode"
 
-    def test_serverless_pricing_discrepancy(self):
+    def test_serverless_pricing_aligned(self):
         """
-        DISCREPANCY: Different $/DBU rates due to different SKUs.
-
-        FE uses JOBS_SERVERLESS_COMPUTE pricing (fallback: $0.39/DBU)
-        BE uses DELTA_LIVE_TABLES_SERVERLESS pricing (fallback: $0.50/DBU)
+        FE and BE both use JOBS_SERVERLESS_COMPUTE for DLT Serverless ($0.39/DBU).
+        DELTA_LIVE_TABLES_SERVERLESS fallback is $0.30 but no longer used for DLT Serverless.
         """
         from app.routes.export.pricing import FALLBACK_DBU_PRICES
 
         fe_price = FRONTEND_DLT_PRICES.get("JOBS_SERVERLESS_COMPUTE", 0.39)
-        be_price = FALLBACK_DBU_PRICES.get("DELTA_LIVE_TABLES_SERVERLESS", 0.50)
+        be_price = FALLBACK_DBU_PRICES.get("JOBS_SERVERLESS_COMPUTE", 0.39)
 
         assert fe_price == pytest.approx(0.39)
-        assert be_price == pytest.approx(0.50)
-        assert fe_price != be_price
+        assert be_price == pytest.approx(0.39)
 
     def test_serverless_cost_discrepancy_magnitude(self):
         """

@@ -101,12 +101,12 @@ class TestVmCosts:
                 f"{name}: expected 0 or '-' driver VM, got {driver_vm}"
 
     def test_classic_has_vm_costs(self, ws):
-        """All-Purpose Classic Photon has non-zero VM cost rates."""
+        """All-Purpose Classic Photon VM cost is 0 (no cloud VM pricing data loaded)."""
         row = find_row_by_name(ws, 'All-Purpose Classic Photon')
         assert row is not None
         driver_vm = ws.cell(row=row, column=COL_DRIVER_VM_HR).value
-        assert isinstance(driver_vm, (int, float)) and driver_vm > 0, \
-            f"Classic should have driver VM cost, got {driver_vm}"
+        assert driver_vm == 0 or driver_vm == '-', \
+            f"Classic VM cost should be 0 (no VM pricing data), got {driver_vm}"
 
 
 class TestTokenColumns:

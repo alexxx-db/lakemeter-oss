@@ -45,11 +45,11 @@ class TestDLTGetSkuType:
         assert _get_sku_type(item, "aws") == "DLT_CORE_COMPUTE"
 
     def test_serverless(self):
-        """Backend DLT Serverless -> DELTA_LIVE_TABLES_SERVERLESS."""
+        """DLT Serverless -> JOBS_SERVERLESS_COMPUTE (matches frontend)."""
         item = make_line_item(
             dlt_edition="CORE", serverless_enabled=True,
         )
-        assert _get_sku_type(item, "aws") == "DELTA_LIVE_TABLES_SERVERLESS"
+        assert _get_sku_type(item, "aws") == "JOBS_SERVERLESS_COMPUTE"
 
     def test_serverless_ignores_edition(self):
         """Serverless SKU is the same regardless of DLT edition."""
@@ -57,25 +57,24 @@ class TestDLTGetSkuType:
             item = make_line_item(
                 dlt_edition=edition, serverless_enabled=True,
             )
-            assert _get_sku_type(item, "aws") == "DELTA_LIVE_TABLES_SERVERLESS"
+            assert _get_sku_type(item, "aws") == "JOBS_SERVERLESS_COMPUTE"
 
-    def test_classic_photon_no_suffix(self):
-        """KNOWN ISSUE: Backend DLT Classic Photon does NOT append _(PHOTON)."""
+    def test_classic_photon_has_suffix(self):
+        """DLT Classic Photon appends _(PHOTON) to match frontend."""
         item = make_line_item(
             dlt_edition="CORE", photon_enabled=True,
             serverless_enabled=False,
         )
         sku = _get_sku_type(item, "aws")
-        assert sku == "DLT_CORE_COMPUTE"
-        assert "PHOTON" not in sku, "Backend does NOT add _(PHOTON) for DLT"
+        assert sku == "DLT_CORE_COMPUTE_(PHOTON)"
 
-    def test_advanced_photon_no_suffix(self):
-        """Backend Advanced Photon: still DLT_ADVANCED_COMPUTE (no _(PHOTON))."""
+    def test_advanced_photon_has_suffix(self):
+        """DLT Advanced Photon: DLT_ADVANCED_COMPUTE_(PHOTON)."""
         item = make_line_item(
             dlt_edition="ADVANCED", photon_enabled=True,
             serverless_enabled=False,
         )
-        assert _get_sku_type(item, "aws") == "DLT_ADVANCED_COMPUTE"
+        assert _get_sku_type(item, "aws") == "DLT_ADVANCED_COMPUTE_(PHOTON)"
 
     def test_none_edition_defaults_to_core(self):
         """When dlt_edition is None, backend defaults to CORE."""

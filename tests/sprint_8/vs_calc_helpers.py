@@ -42,12 +42,13 @@ def get_input_divisor(cloud: str, mode: str) -> int:
     return info.get('input_divisor', 2000000)
 
 
-def calc_units(capacity_millions: float, mode: str, cloud: str = 'aws') -> float:
-    """Calculate number of units from capacity in millions."""
+def calc_units(capacity_millions: float, mode: str, cloud: str = 'aws') -> int:
+    """Calculate number of units from capacity in millions (ceiling)."""
     divisor = get_input_divisor(cloud, mode)
     if divisor == 0:
         return 0
-    return capacity_millions * 1_000_000 / divisor
+    vectors_total = capacity_millions * 1_000_000
+    return math.ceil(vectors_total / divisor)
 
 
 def calc_dbu_per_hour(capacity_millions: float, mode: str,

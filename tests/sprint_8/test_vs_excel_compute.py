@@ -20,7 +20,7 @@ class TestComputeRowFormula:
         wb = generate_xlsx(items)
         ws = wb.active
         row = find_vs_compute_row(ws)
-        assert row is not None, "No VECTOR_SEARCH_ENDPOINT row found"
+        assert row is not None, "No SERVERLESS_REAL_TIME_INFERENCE row found"
         cell = ws.cell(row=row, column=COL_DBUS_MO)
         val = cell.value
         assert val is not None
@@ -57,7 +57,7 @@ class TestComputeRowSKU:
         ws = wb.active
         row = find_vs_compute_row(ws)
         assert row is not None
-        assert ws.cell(row=row, column=COL_SKU).value == 'VECTOR_SEARCH_ENDPOINT'
+        assert ws.cell(row=row, column=COL_SKU).value == 'SERVERLESS_REAL_TIME_INFERENCE'
 
     def test_compute_sku_storage_optimized(self):
         items = [make_line_item(vector_search_mode='storage_optimized',
@@ -66,7 +66,7 @@ class TestComputeRowSKU:
         ws = wb.active
         row = find_vs_compute_row(ws)
         assert row is not None
-        assert ws.cell(row=row, column=COL_SKU).value == 'VECTOR_SEARCH_ENDPOINT'
+        assert ws.cell(row=row, column=COL_SKU).value == 'SERVERLESS_REAL_TIME_INFERENCE'
 
 
 class TestExcelServerlessMarkers:
@@ -99,7 +99,7 @@ class TestExcelDBUValues:
 
     @pytest.mark.parametrize("mode,capacity,expected_dbu_hr", [
         ('standard', 2, 4.0),
-        ('standard', 5, 10.0),
+        ('standard', 5, 12.0),
         ('storage_optimized', 64, 18.29),
     ])
     def test_dbu_hr_in_excel(self, mode, capacity, expected_dbu_hr):

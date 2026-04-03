@@ -16,11 +16,11 @@ class TestStandardModeDBU:
     """AC-1: Standard mode — 2M vectors/unit, 4.0 DBU/unit."""
 
     @pytest.mark.parametrize("capacity_m,expected_units,expected_dbu", [
-        (2, 1.0, 4.0),
-        (5, 2.5, 10.0),
-        (10, 5.0, 20.0),
-        (1, 0.5, 2.0),
-        (0.5, 0.25, 1.0),
+        (2, 1, 4.0),
+        (5, 3, 12.0),
+        (10, 5, 20.0),
+        (1, 1, 4.0),
+        (0.5, 1, 4.0),
     ])
     def test_standard_dbu_per_hour(self, capacity_m, expected_units,
                                    expected_dbu):
@@ -42,20 +42,20 @@ class TestStandardModeDBU:
         dbu = calc_dbu_per_hour(2, 'standard')
         assert abs(dbu - 4.0) < 0.01
 
-    def test_standard_5m_is_2_5_units(self):
-        """Spec: 5M / 2M = 2.5 units, DBU/hr = 10.0."""
+    def test_standard_5m_is_3_units(self):
+        """Spec: ceil(5M / 2M) = 3 units, DBU/hr = 12.0."""
         dbu = calc_dbu_per_hour(5, 'standard')
-        assert abs(dbu - 10.0) < 0.01
+        assert abs(dbu - 12.0) < 0.01
 
 
 class TestStorageOptimizedDBU:
     """AC-2: Storage Optimized — 64M vectors/unit, 18.29 DBU/unit."""
 
     @pytest.mark.parametrize("capacity_m,expected_units,expected_dbu", [
-        (64, 1.0, 18.29),
-        (100, 100_000_000 / 64_000_000, (100_000_000 / 64_000_000) * 18.29),
-        (128, 2.0, 36.58),
-        (32, 0.5, 9.145),
+        (64, 1, 18.29),
+        (100, 2, 36.58),
+        (128, 2, 36.58),
+        (32, 1, 18.29),
     ])
     def test_storage_optimized_dbu_per_hour(self, capacity_m, expected_units,
                                             expected_dbu):
@@ -74,9 +74,9 @@ class TestStorageOptimizedDBU:
         assert abs(dbu - 18.29) < 0.01
 
     def test_storage_optimized_100m(self):
-        """Spec: 100M / 64M = 1.5625 units."""
+        """Spec: ceil(100M / 64M) = 2 units, DBU/hr = 36.58."""
         dbu = calc_dbu_per_hour(100, 'storage_optimized')
-        expected = (100_000_000 / 64_000_000) * 18.29
+        expected = 2 * 18.29  # ceil(100M/64M) = 2
         assert abs(dbu - expected) < 0.01
 
 
@@ -85,7 +85,7 @@ class TestMonthlyDBUs:
 
     @pytest.mark.parametrize("capacity_m,mode,hours,expected_dbu_hr", [
         (2, 'standard', 730, 4.0),
-        (5, 'standard', 730, 10.0),
+        (5, 'standard', 730, 12.0),
         (64, 'storage_optimized', 730, 18.29),
         (2, 'standard', 200, 4.0),
     ])
@@ -122,22 +122,23 @@ class TestAllClouds:
 
 
 class TestZeroCapacity:
-    """AC-5: Zero capacity produces 0 DBU/hr with warning."""
+    """AC-5: Zero/None capacity defaults to 1M vectors (1 unit), DBU/hr=4.0."""
 
-    def test_zero_capacity_returns_zero(self):
+    def test_zero_capacity_defaults_to_one_unit(self):
         item = make_line_item(vector_capacity_millions=0)
         dbu_hr, warnings = _calculate_dbu_per_hour(item, 'aws')
-        assert dbu_hr == 0
+        assert abs(dbu_hr - 4.0) < 0.01
 
-    def test_zero_capacity_has_warning(self):
+    def test_zero_capacity_no_warning(self):
+        """Zero capacity silently defaults to 1M — no warning emitted."""
         item = make_line_item(vector_capacity_millions=0)
         _, warnings = _calculate_dbu_per_hour(item, 'aws')
-        assert any("capacity" in w.lower() for w in warnings)
+        assert not any("capacity" in w.lower() for w in warnings)
 
-    def test_none_capacity_returns_zero(self):
+    def test_none_capacity_defaults_to_one_unit(self):
         item = make_line_item(vector_capacity_millions=None)
         dbu_hr, warnings = _calculate_dbu_per_hour(item, 'aws')
-        assert dbu_hr == 0
+        assert abs(dbu_hr - 4.0) < 0.01
 
 
 class TestBackendHelperAlignment:

@@ -1,60 +1,50 @@
-# Sprint 1 Handoff: Installation Testing
+# Sprint 1 Handoff: Excel Export SKU & Rate Alignment
 
 ## What Was Built
 
-### Test Suite: `tests/test_installation/` (91 tests, 3 files)
+Fixed 7 bugs in the backend Excel export module to align SKU type mappings, fallback rates, photon multiplier logic, and FMAPI context defaults with the frontend UI:
 
-**`test_installer_script.py`** (21 tests) — Static analysis of `scripts/install_lakemeter.py`:
-- Script exists and is parseable Python
-- All 10 step functions defined with docstrings
-- CLI args: `--profile`, `--skip-provision`, `--skip-deploy`
-- Critical patterns: `identity_type=SERVICE_PRINCIPAL`, SSL connections, TRUNCATE before insert
-- Roles API URL pattern, DATABRICKS_SUPERUSER membership
-- All 12 helper functions exist
-- Constants: `lakemeter_pricing`, `DEFAULT_SCHEMA`, `TOTAL_STEPS = 9`
+- **Bug 1**: DLT Serverless SKU → `JOBS_SERVERLESS_COMPUTE` (was `DELTA_LIVE_TABLES_SERVERLESS`)
+- **Bug 2**: FMAPI Proprietary context_length default → `'long'` for all providers (was `'all'` for non-Google)
+- **Bug 3**: Added `_get_photon_multiplier()` reading from `dbu-multipliers.json` with warning on fallback (was hardcoded `*= 2`)
+- **Bug 4/5**: Photon multiplier now uses actual JSON values (2.9 for AWS) instead of hardcoded 2.0
+- **Bug 6**: FALLBACK_DBU_PRICES aligned: DLT_SERVERLESS 0.30 (was 0.50), Lakebase 0.48 (was 0.40)
+- **Bug 7**: Removed `VECTOR_SEARCH_ENDPOINT`, added `DLT_*_(PHOTON)`, `GOOGLE_MODEL_SERVING`, `SERVERLESS_REAL_TIME_INFERENCE_LAUNCH`
+- **VS Calc**: Vector Search units now use `math.ceil()` matching frontend
 
-**`test_pricing_data.py`** (49 tests) — Validates all 9 pricing JSON files:
-- All files exist and are valid JSON with entries
-- manifest.json lists all 9 files with positive total_entries
-- DBU rates: `cloud:region:tier` key format, valid clouds
-- Instance DBU rates: top-level cloud keys, entries have dbu_rate > 0 and vcpus
-- DBSQL rates: `cloud:type:size` format, dbu_per_hour > 0
-- Multipliers: `cloud:type:feature` format, multiplier > 0
-- FMAPI (Databricks + proprietary): `cloud:model:rate_type` format
-- Model serving and vector search: entries present, key format valid
+## Files Changed
 
-**`test_app_config.py`** (21 tests) — Validates `app.yaml`:
-- Valid YAML, command runs uvicorn on 0.0.0.0:8000 via bash
-- 5 valueFrom references match expected resource names
-- Hardcoded values: ENVIRONMENT=production, DB_PORT=5432, DB_SSLMODE=require
-- DATABRICKS_HOST uses `{{databricks_host}}` template
-- SP credential keys (SP_CLIENT_ID_KEY, SP_SECRET_KEY) present
+### Backend (production code)
+- `backend/app/routes/export/pricing.py` — SKU mappings, fallback prices, new `_get_photon_multiplier()`, `DBU_MULTIPLIERS` loader
+- `backend/app/routes/export/calculations.py` — Photon multiplier from JSON, VS ceiling calc, gpu_type `.lower()`
+
+### New Tests
+- `tests/sprint_sku_alignment/` — 64 new tests: SKU resolution (33), fallback prices (24), FMAPI context (9), photon warning (2)
+
+### Updated Tests
+- `tests/regression/test_sprint_1_bugs.py` — Photon multiplier 2.0 → 2.9
+- `tests/regression/test_sprint_3_bugs.py` — DLT SKU assertions aligned to fixed behavior
+- `tests/sprint_1/test_jobs_export.py`, `test_jobs_excel_export.py` — Photon values
+- `tests/sprint_3/test_dlt_export_calc.py`, `test_dlt_excel_export.py`, `test_dlt_export_sku.py`, `test_dlt_disc_pricing.py`, `test_dlt_excel_e2e_formulas.py` — DLT SKU + photon
+- `tests/sprint_8/test_vs_dbu_calc.py`, `test_vs_edge_cases.py`, `test_vs_excel_compute.py`, `test_vs_excel_storage.py`, `test_vs_sku_pricing.py`, `vs_calc_helpers.py`, `excel_helpers.py` — VS ceiling + SKU
+- `tests/sprint_9/test_lb_sku_pricing.py`, `test_lb_excel_storage.py` — Lakebase rates
+- `tests/sprint_10/test_combined_calc.py`, `test_excel_structure.py`, `test_excel_formulas.py`, `test_regression_s10.py` — Combined fixes
 
 ## How to Test
 
 ```bash
-cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
+cd /Users/steven.tan/Desktop/Ent\ 1\ -\ Q4\ FY\ 2026\ Team\ Project/lakemeter_app
 source .venv/bin/activate
-python -m pytest tests/test_installation/ -v
+python -m pytest tests/ -q
 ```
-
-No network connectivity required — all tests are local/static.
 
 ## Test Results
 
-- **91 tests passed**, 0 failed
-- Runtime: 0.16s
-- No network dependencies (pure local validation)
+- `pytest` exit code: 0
+- Tests: **1714 passed**, 0 failed
+- Duration: ~144s
 
 ## Known Limitations
 
-- Tests validate installer code structure and data files statically — they do NOT execute the installer against a live Lakebase instance (that's Sprint 2's scope)
-- Pricing data format tests check first N entries per file, not exhaustive full-file validation
-
-## Files Created
-
-- `tests/test_installation/__init__.py`
-- `tests/test_installation/test_installer_script.py` (21 tests)
-- `tests/test_installation/test_pricing_data.py` (49 tests)
-- `tests/test_installation/test_app_config.py` (21 tests)
-- `harness/contracts/sprint-1.md` (updated for new spec)
+- Photon multiplier values are cloud-specific (AWS=2.9, Azure=2.5). Tests only validate AWS.
+- `DELTA_LIVE_TABLES_SERVERLESS` key remains in `FALLBACK_DBU_PRICES` for backward compatibility but is no longer returned by `_get_sku_type`.

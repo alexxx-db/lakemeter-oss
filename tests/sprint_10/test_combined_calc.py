@@ -19,9 +19,9 @@ class TestJobsServerlessCalc:
         item = make_jobs_serverless()
         dbu, warnings = _calculate_dbu_per_hour(item, 'aws')
         # base_dbu = 0.25 (driver default) + 0 (no workers) = 0.25
-        # serverless: *2 = 0.5
-        # performance: *2 = 1.0
-        assert dbu == pytest.approx(1.0, abs=0.01)
+        # serverless photon multiplier from JSON: *2.9 = 0.725
+        # performance: *2 = 1.45
+        assert dbu == pytest.approx(1.45, abs=0.01)
 
     def test_sku(self):
         item = make_jobs_serverless()
@@ -61,12 +61,12 @@ class TestDltProServerlessCalc:
     def test_dbu_per_hour(self):
         item = make_dlt_pro_serverless()
         dbu, warnings = _calculate_dbu_per_hour(item, 'aws')
-        # base = 0.25 + 0 = 0.25, serverless *2 = 0.5, standard *1 = 0.5
-        assert dbu == pytest.approx(0.5, abs=0.01)
+        # base = 0.25 + 0 = 0.25, serverless photon multiplier from JSON: *2.9 = 0.725, standard *1 = 0.725
+        assert dbu == pytest.approx(0.725, abs=0.01)
 
     def test_sku(self):
         item = make_dlt_pro_serverless()
-        assert _get_sku_type(item, 'aws') == 'DELTA_LIVE_TABLES_SERVERLESS'
+        assert _get_sku_type(item, 'aws') == 'JOBS_SERVERLESS_COMPUTE'
 
     def test_is_serverless(self):
         assert _is_serverless_workload(make_dlt_pro_serverless()) is True
@@ -147,12 +147,12 @@ class TestVectorSearchCalc:
     def test_dbu_per_hour(self):
         item = make_vector_search_standard()
         dbu, warnings = _calculate_dbu_per_hour(item, 'aws')
-        # 5M / 2M divisor = 2.5 units, 2.5 * 4.0 = 10.0
-        assert dbu == pytest.approx(10.0, abs=0.5)
+        # ceil(5M / 2M) = ceil(2.5) = 3 units, 3 * 4.0 = 12.0
+        assert dbu == pytest.approx(12.0, abs=0.01)
 
     def test_sku(self):
         item = make_vector_search_standard()
-        assert _get_sku_type(item, 'aws') == 'VECTOR_SEARCH_ENDPOINT'
+        assert _get_sku_type(item, 'aws') == 'SERVERLESS_REAL_TIME_INFERENCE'
 
     def test_is_serverless(self):
         assert _is_serverless_workload(make_vector_search_standard()) is True

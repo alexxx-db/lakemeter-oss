@@ -44,10 +44,10 @@ class TestFractionalCapacity:
     """AC-17: Fractional capacity (e.g., 0.5M) calculates correctly."""
 
     @pytest.mark.parametrize("capacity_m,mode,expected_dbu", [
-        (0.5, 'standard', 1.0),
-        (0.1, 'standard', 0.2),
-        (1.5, 'standard', 3.0),
-        (0.5, 'storage_optimized', 0.5 * 1_000_000 / 64_000_000 * 18.29),
+        (0.5, 'standard', 4.0),       # ceil(0.5M/2M)=1 unit
+        (0.1, 'standard', 4.0),       # ceil(0.1M/2M)=1 unit
+        (1.5, 'standard', 4.0),       # ceil(1.5M/2M)=1 unit
+        (0.5, 'storage_optimized', 18.29),  # ceil(0.5M/64M)=1 unit
     ])
     def test_fractional_dbu(self, capacity_m, mode, expected_dbu):
         item = make_line_item(
@@ -70,13 +70,13 @@ class TestLargeCapacity:
         assert abs(dbu_hr - 2000.0) < 0.01
 
     def test_1000m_storage_optimized(self):
-        """1000M / 64M = 15.625 units × 18.29 = ~285.78."""
+        """ceil(1000M / 64M) = 16 units × 18.29 = 292.64."""
         item = make_line_item(
             vector_search_mode='storage_optimized',
             vector_capacity_millions=1000,
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, 'aws')
-        expected = (1000 * 1_000_000 / 64_000_000) * 18.29
+        expected = 16 * 18.29  # ceil(1_000_000_000 / 64_000_000) = 16
         assert abs(dbu_hr - expected) < 0.01
 
     def test_10000m_no_overflow(self):

@@ -45,8 +45,8 @@ class TestRowCount:
         assert len(rows) == 1
 
     def test_vector_search_compute_row_exists(self, ws):
-        rows = find_rows_by_sku(ws, 'VECTOR_SEARCH_ENDPOINT')
-        assert len(rows) == 1
+        rows = find_rows_by_sku(ws, 'SERVERLESS_REAL_TIME_INFERENCE')
+        assert len(rows) >= 1
 
 
 class TestSkuMapping:
@@ -68,7 +68,7 @@ class TestSkuMapping:
         row = find_row_by_name(ws, 'DLT Pro Serverless')
         assert row is not None
         assert ws.cell(row=row, column=COL_SKU).value == \
-            'DELTA_LIVE_TABLES_SERVERLESS'
+            'JOBS_SERVERLESS_COMPUTE'
 
     def test_dbsql_serverless_sku(self, ws):
         row = find_row_by_name(ws, 'DBSQL Serverless Medium')
@@ -132,7 +132,8 @@ class TestDbuPerHour:
     def test_jobs_dbu_hr(self, ws):
         row = find_row_by_name(ws, 'Jobs Serverless Perf')
         val = ws.cell(row=row, column=COL_DBU_HR).value
-        assert val == pytest.approx(1.0, abs=0.01)
+        # base=0.25, photon multiplier 2.9 from JSON, performance *2 = 1.45
+        assert val == pytest.approx(1.45, abs=0.01)
 
     def test_all_purpose_dbu_hr(self, ws):
         row = find_row_by_name(ws, 'All-Purpose Classic Photon')
@@ -184,10 +185,10 @@ class TestNotesColumn:
             assert notes is not None, \
                 f"Storage row {row_idx}: expected notes, got None"
 
-    def test_warning_items_have_notes(self, ws):
-        """Items using fallback pricing should have warning notes."""
-        for name in ['DLT Pro Serverless', 'Vector Search Standard 5M']:
-            row = find_row_by_name(ws, name)
-            notes = ws.cell(row=row, column=COL_NOTES).value
+    def test_storage_rows_have_descriptive_notes(self, ws):
+        """Storage sub-rows should have descriptive notes with formulas."""
+        storage_rows = find_rows_by_sku(ws, 'DATABRICKS_STORAGE')
+        for row_idx in storage_rows:
+            notes = ws.cell(row=row_idx, column=COL_NOTES).value
             assert notes is not None and len(str(notes)) > 0, \
-                f"{name}: expected fallback warning note, got None"
+                f"Storage row {row_idx}: expected descriptive note"

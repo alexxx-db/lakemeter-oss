@@ -109,7 +109,7 @@ class TestDLTExcelE2EFormulas:
         sku1 = ws.cell(row=start, column=COL_SKU).value
         sku2 = ws.cell(row=start + 1, column=COL_SKU).value
         assert sku1 == "DLT_CORE_COMPUTE"
-        assert sku2 == "DELTA_LIVE_TABLES_SERVERLESS"
+        assert sku2 == "JOBS_SERVERLESS_COMPUTE"
 
     def test_dbus_mo_has_formula(self, dlt_workbook):
         """Col 16 (DBUs/Mo) should contain a formula =P*L for hourly items."""

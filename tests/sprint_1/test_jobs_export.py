@@ -75,7 +75,7 @@ class TestCalculateDBUPerHour:
         assert len(warnings) == 0
 
     def test_classic_photon_doubles(self):
-        """Photon: (1.0 + 1.0×2) × 2 = 6.0 DBU/hr."""
+        """Photon: (1.0 + 1.0×2) × 2.9 = 8.7 DBU/hr."""
         item = make_line_item(
             workload_type="JOBS",
             driver_node_type="i3.xlarge",
@@ -85,12 +85,12 @@ class TestCalculateDBUPerHour:
             serverless_enabled=False,
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(6.0)
+        assert dbu_hr == pytest.approx(8.7)
 
     def test_serverless_standard_no_photon_flag(self):
         """
         Serverless always has photon built-in (BUG-S1-5 fix).
-        Backend: base(3.0) × 2 (photon always) × 1 (standard) = 6.0
+        Backend: base(3.0) × 2.9 (photon always, from dbu-multipliers.json) × 1 (standard) = 8.7
         """
         item = make_line_item(
             workload_type="JOBS",
@@ -102,12 +102,12 @@ class TestCalculateDBUPerHour:
             serverless_mode="standard",
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(6.0)
+        assert dbu_hr == pytest.approx(8.7)
 
     def test_serverless_standard_with_photon_flag(self):
         """
         Backend: serverless with photon_enabled=True.
-        base(3.0) × 2 (photon) × 1 (standard) = 6.0
+        base(3.0) × 2.9 (photon, from dbu-multipliers.json) × 1 (standard) = 8.7
         """
         item = make_line_item(
             workload_type="JOBS",
@@ -119,10 +119,10 @@ class TestCalculateDBUPerHour:
             serverless_mode="standard",
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(6.0)
+        assert dbu_hr == pytest.approx(8.7)
 
     def test_serverless_performance(self):
-        """Serverless performance: base(3.0) × 2 (photon always) × 2 (performance) = 12.0."""
+        """Serverless performance: base(3.0) × 2.9 (photon always) × 2 (performance) = 17.4."""
         item = make_line_item(
             workload_type="JOBS",
             driver_node_type="i3.xlarge",
@@ -133,10 +133,10 @@ class TestCalculateDBUPerHour:
             serverless_mode="performance",
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(12.0)
+        assert dbu_hr == pytest.approx(17.4)
 
     def test_serverless_performance_with_photon(self):
-        """Serverless performance + photon: base(3.0) × 2 × 2 = 12.0."""
+        """Serverless performance + photon: base(3.0) × 2.9 × 2 = 17.4."""
         item = make_line_item(
             workload_type="JOBS",
             driver_node_type="i3.xlarge",
@@ -147,7 +147,7 @@ class TestCalculateDBUPerHour:
             serverless_mode="performance",
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(12.0)
+        assert dbu_hr == pytest.approx(17.4)
 
     def test_fallback_dbu_rates_when_no_instance(self):
         """Unknown instance types fall back to driver=0.25, worker=0.5."""
@@ -333,11 +333,11 @@ class TestExportRowCalculation:
         assert hours == pytest.approx(730.0)
 
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # base(3.0) × photon(2) × performance(2) = 12.0
-        assert dbu_hr == pytest.approx(12.0)
+        # base(3.0) × photon(2.9) × performance(2) = 17.4
+        assert dbu_hr == pytest.approx(17.4)
 
         monthly_dbus = dbu_hr * hours
-        assert monthly_dbus == pytest.approx(8760.0)
+        assert monthly_dbus == pytest.approx(12702.0)
 
         sku = _get_sku_type(item, "aws")
         assert sku == "JOBS_SERVERLESS_COMPUTE"
@@ -346,7 +346,7 @@ class TestExportRowCalculation:
         assert dbu_price == pytest.approx(0.35)
 
         dbu_cost = monthly_dbus * dbu_price
-        assert dbu_cost == pytest.approx(3066.0)
+        assert dbu_cost == pytest.approx(4445.7)
 
         assert _is_serverless_workload(item) is True
 
@@ -366,14 +366,14 @@ class TestExportRowCalculation:
         assert hours == pytest.approx(110.0)
 
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(6.0)  # 3.0 × 2
+        assert dbu_hr == pytest.approx(8.7)  # 3.0 × 2.9
 
         monthly_dbus = dbu_hr * hours
-        assert monthly_dbus == pytest.approx(660.0)
+        assert monthly_dbus == pytest.approx(957.0)
 
         sku = _get_sku_type(item, "aws")
         assert sku == "JOBS_COMPUTE_(PHOTON)"
 
         dbu_price, _ = _get_dbu_price("aws", "us-east-1", "PREMIUM", sku)
         dbu_cost = monthly_dbus * dbu_price
-        assert dbu_cost == pytest.approx(99.0)  # 660 × $0.15
+        assert dbu_cost == pytest.approx(143.55)  # 957 × $0.15

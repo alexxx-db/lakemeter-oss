@@ -91,14 +91,15 @@ class TestBugS1_3_IntegrationTestExists:
 
 
 class TestBugS1_5_ServerlessPhotonFixed:
-    """BUG-S1-5: Frontend always applies photon 2x for serverless.
+    """BUG-S1-5: Frontend always applies photon for serverless.
     Backend previously only applied photon when photon_enabled=True.
-    FIXED: Backend now always applies photon 2x for serverless (built-in).
+    FIXED: Backend now always applies photon for serverless (built-in).
+    Photon multiplier is read from dbu-multipliers.json (2.9x for AWS).
     Regression: verify serverless always gets photon regardless of flag.
     """
 
     def test_serverless_always_applies_photon(self):
-        """Backend serverless applies photon 2x regardless of photon_enabled flag."""
+        """Backend serverless applies photon regardless of photon_enabled flag."""
         from app.routes.export import _calculate_dbu_per_hour
 
         without_flag = make_line_item(
@@ -137,9 +138,9 @@ class TestBugS1_5_ServerlessPhotonFixed:
         )
         classic_dbu, _ = _calculate_dbu_per_hour(classic_item, "aws")
         serverless_dbu, _ = _calculate_dbu_per_hour(serverless_item, "aws")
-        # Serverless standard = base × 2 (photon) × 1 (standard mode)
-        assert serverless_dbu == pytest.approx(classic_dbu * 2), \
-            f"Serverless should be 2x classic (photon built-in): {serverless_dbu} vs {classic_dbu}"
+        # Serverless standard = base × 2.9 (photon from dbu-multipliers.json) × 1 (standard mode)
+        assert serverless_dbu == pytest.approx(classic_dbu * 2.9), \
+            f"Serverless should be 2.9x classic (photon built-in): {serverless_dbu} vs {classic_dbu}"
 
     def test_classic_without_photon_no_multiplier(self):
         """Classic without photon_enabled should NOT get 2x multiplier."""
@@ -157,9 +158,9 @@ class TestBugS1_5_ServerlessPhotonFixed:
         )
         dbu_no, _ = _calculate_dbu_per_hour(classic_no_photon, "aws")
         dbu_yes, _ = _calculate_dbu_per_hour(classic_with_photon, "aws")
-        # Classic with photon should be exactly 2x classic without
-        assert dbu_yes == pytest.approx(dbu_no * 2), \
-            f"Classic photon should be 2x base: {dbu_yes} vs {dbu_no}"
+        # Classic with photon should be exactly 2.9x classic without (from dbu-multipliers.json)
+        assert dbu_yes == pytest.approx(dbu_no * 2.9), \
+            f"Classic photon should be 2.9x base: {dbu_yes} vs {dbu_no}"
         # And without photon should be less than with
         assert dbu_no < dbu_yes, "Classic without photon should have lower DBU/hr"
 

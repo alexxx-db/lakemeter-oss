@@ -423,12 +423,12 @@ class TestExcelStaticValues:
         assert sheet.cell(row=ds + 4, column=4).value == 'Serverless'
 
     def test_dbu_per_hour_values(self, all_four_configs_excel):
-        """DBU/Hr: Classic=3.0, Photon=6.0, SL Std=6.0, SL Perf=12.0."""
+        """DBU/Hr: Classic=3.0, Photon=8.7, SL Std=8.7, SL Perf=17.4."""
         sheet, ds = all_four_configs_excel
         assert sheet.cell(row=ds + 1, column=16).value == pytest.approx(3.0)
-        assert sheet.cell(row=ds + 2, column=16).value == pytest.approx(6.0)
-        assert sheet.cell(row=ds + 3, column=16).value == pytest.approx(6.0)
-        assert sheet.cell(row=ds + 4, column=16).value == pytest.approx(12.0)
+        assert sheet.cell(row=ds + 2, column=16).value == pytest.approx(8.7)
+        assert sheet.cell(row=ds + 3, column=16).value == pytest.approx(8.7)
+        assert sheet.cell(row=ds + 4, column=16).value == pytest.approx(17.4)
 
     def test_hours_per_month_values(self, all_four_configs_excel):
         """Hours: run-based=110, direct=110, direct=110, direct=730."""

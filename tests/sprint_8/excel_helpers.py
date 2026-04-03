@@ -62,8 +62,8 @@ def find_data_rows(ws, sku_filter=None):
 
 
 def find_vs_compute_row(ws):
-    """Find Vector Search compute row (VECTOR_SEARCH_ENDPOINT)."""
-    rows = find_data_rows(ws, 'VECTOR_SEARCH_ENDPOINT')
+    """Find Vector Search compute row (SERVERLESS_REAL_TIME_INFERENCE)."""
+    rows = find_data_rows(ws, 'SERVERLESS_REAL_TIME_INFERENCE')
     return rows[0] if rows else None
 
 

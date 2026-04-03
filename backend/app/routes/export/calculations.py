@@ -1,6 +1,7 @@
 """Calculation functions for export (hours, DBU/hr, serverless detection)."""
 from .pricing import (
     INSTANCE_DBU_RATES, VECTOR_SEARCH_RATES, MODEL_SERVING_RATES,
+    _get_photon_multiplier,
 )
 
 
@@ -72,9 +73,18 @@ def _calc_compute_dbu(item, cloud, wt, warnings):
     num_workers = int(item.num_workers or 0)
     base_dbu = float(driver_dbu) + (float(worker_dbu) * num_workers)
 
+    # Determine the base SKU for photon multiplier lookup
+    edition = (item.dlt_edition or 'CORE').upper() if wt == 'DLT' else ''
+    if wt == 'DLT':
+        sku_base = f'DLT_{edition}_COMPUTE'
+    elif wt == 'ALL_PURPOSE':
+        sku_base = 'ALL_PURPOSE_COMPUTE'
+    else:
+        sku_base = 'JOBS_COMPUTE'
+
     if item.serverless_enabled:
-        base_dbu *= 2  # Serverless always has photon built-in (2x)
-        # ALL_PURPOSE Serverless only supports Performance mode (always 2x)
+        photon_mult = _get_photon_multiplier(cloud, sku_base)
+        base_dbu *= photon_mult
         if wt == 'ALL_PURPOSE':
             mode_multiplier = 2
         else:
@@ -82,7 +92,8 @@ def _calc_compute_dbu(item, cloud, wt, warnings):
         return base_dbu * mode_multiplier, warnings
 
     if item.photon_enabled:
-        base_dbu *= 2
+        photon_mult = _get_photon_multiplier(cloud, sku_base)
+        base_dbu *= photon_mult
     return base_dbu, warnings
 
 
@@ -104,10 +115,16 @@ def _calc_dbsql_dbu(item, warnings):
 
 
 def _calc_vector_search_dbu(item, cloud, warnings):
-    """Calculate DBU/hr for Vector Search workloads."""
-    capacity = max(float(item.vector_capacity_millions or 0), 0)
-    if capacity == 0:
-        warnings.append("Vector capacity not specified, using 0")
+    """Calculate DBU/hr for Vector Search workloads.
+
+    Uses CEILING(capacity / divisor) to determine endpoint units, matching
+    the frontend's costCalculation.ts.  Defaults capacity to 1M vectors
+    when not specified (same as frontend default).
+    """
+    import math
+    capacity = float(item.vector_capacity_millions or 1)  # Default 1, matching frontend
+    if capacity <= 0:
+        capacity = 1
     mode = item.vector_search_mode or 'standard'
     key = f"{cloud}:{mode}"
     info = VECTOR_SEARCH_RATES.get(key, {})
@@ -115,13 +132,14 @@ def _calc_vector_search_dbu(item, cloud, warnings):
         warnings.append(f"Vector Search rates not found for {key}, using defaults")
     dbu_rate = info.get('dbu_rate', 4.0 if mode == 'standard' else 18.29)
     divisor = info.get('input_divisor', 2000000)
-    units = capacity * 1_000_000 / divisor if divisor else 0
+    vectors_total = capacity * 1_000_000
+    units = math.ceil(vectors_total / divisor) if divisor else 0
     return units * dbu_rate, warnings
 
 
 def _calc_model_serving_dbu(item, cloud, warnings):
     """Calculate DBU/hr for Model Serving workloads."""
-    gpu_type = item.model_serving_gpu_type or 'cpu'
+    gpu_type = (item.model_serving_gpu_type or 'cpu').lower()
     key = f"{cloud}:{gpu_type}"
     info = MODEL_SERVING_RATES.get(key, {})
     if not info:

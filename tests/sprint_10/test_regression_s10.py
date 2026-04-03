@@ -49,41 +49,29 @@ class TestBugS10001ModelServingGpu:
 
 
 class TestBugS10002FallbackNotesInExcel:
-    """Regression: BUG-S10-002 — Items with fallback pricing must show warning notes.
+    """Regression: BUG-S10-002 — Items with fallback pricing show warning notes.
 
-    DLT and Vector Search use SKUs not in the pricing JSON, so the backend
-    auto-generates a 'DBU rate not found... using fallback' note.
+    After SKU alignment, DLT Serverless uses JOBS_SERVERLESS_COMPUTE and
+    Vector Search uses SERVERLESS_REAL_TIME_INFERENCE — both are standard SKUs
+    found in the pricing JSON, so they no longer generate fallback warnings.
     """
 
     @pytest.fixture(scope="class")
     def ws(self):
         return generate_xlsx().active
 
-    def test_dlt_has_fallback_note(self, ws):
-        """DLT compute row has a fallback pricing warning note."""
+    def test_dlt_has_no_fallback_note(self, ws):
+        """DLT Serverless now uses JOBS_SERVERLESS_COMPUTE (found in pricing JSON)."""
         row = find_row_by_name(ws, 'DLT Pro Serverless')
-        notes = ws.cell(row=row, column=COL_NOTES).value
-        assert notes is not None, "DLT row missing notes"
-        assert 'fallback' in notes.lower(), \
-            f"DLT notes should mention fallback, got: {notes}"
+        notes = ws.cell(row=row, column=COL_NOTES).value or ''
+        # With aligned SKUs, pricing is found in JSON — no fallback warning
+        assert 'DELTA_LIVE_TABLES' not in notes
 
-    def test_vector_search_has_fallback_note(self, ws):
-        """Vector Search compute row has a fallback pricing warning note."""
+    def test_vector_search_no_fallback_note(self, ws):
+        """Vector Search uses SERVERLESS_REAL_TIME_INFERENCE (found in pricing JSON)."""
         row = find_row_by_name(ws, 'Vector Search Standard 5M')
-        notes = ws.cell(row=row, column=COL_NOTES).value
-        assert notes is not None, "Vector Search row missing notes"
-        assert 'fallback' in notes.lower(), \
-            f"Vector Search notes should mention fallback, got: {notes}"
-
-    def test_fallback_notes_contain_sku(self, ws):
-        """Fallback warning notes include the SKU that was looked up."""
-        dlt_row = find_row_by_name(ws, 'DLT Pro Serverless')
-        dlt_notes = ws.cell(row=dlt_row, column=COL_NOTES).value
-        assert 'DELTA_LIVE_TABLES' in dlt_notes
-
-        vs_row = find_row_by_name(ws, 'Vector Search Standard 5M')
-        vs_notes = ws.cell(row=vs_row, column=COL_NOTES).value
-        assert 'VECTOR_SEARCH' in vs_notes
+        notes = ws.cell(row=row, column=COL_NOTES).value or ''
+        assert 'VECTOR_SEARCH_ENDPOINT' not in notes
 
     def test_non_fallback_items_have_no_warning(self, ws):
         """Standard items (Jobs, DBSQL, Lakebase) do NOT have fallback notes."""
