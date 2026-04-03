@@ -1009,6 +1009,12 @@ if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
     if PRICING_DIR.exists():
         app.mount("/static/pricing", StaticFiles(directory=PRICING_DIR), name="pricing")
         log_info(f"Pricing bundle found at {PRICING_DIR}")
+
+    # Mount documentation site (Docusaurus build)
+    DOCS_DIR = STATIC_DIR / "docs"
+    if DOCS_DIR.exists():
+        app.mount("/docs", StaticFiles(directory=DOCS_DIR, html=True), name="docs")
+        log_info(f"Documentation site mounted at /docs/")
     
     # Serve static files at root (favicon, etc.)
     @app.get("/favicon.ico")

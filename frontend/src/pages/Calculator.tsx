@@ -16,7 +16,6 @@ import {
   CurrencyDollarIcon,
   ServerStackIcon,
   ExclamationTriangleIcon,
-  BuildingOfficeIcon,
   PlayCircleIcon,
   CircleStackIcon,
   ArrowsRightLeftIcon,
@@ -38,7 +37,6 @@ import {
 } from '../api/client'
 import { saveAs } from 'file-saver'
 import WorkloadForm from '../components/WorkloadForm'
-import SearchableSelect from '../components/SearchableSelect'
 import type { LineItem } from '../types'
 import {
   getInstanceDBURate as getBundleInstanceDBURate,

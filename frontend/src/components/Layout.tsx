@@ -410,7 +410,7 @@ export default function Layout() {
                       </div>
                       
                       <a
-                        href="https://docs.google.com/document/d/1ca8Nn-44ObcLnskQ0XsKwSS3CRe-jbqJNdiK3i-ItoA/edit?tab=t.0"
+                        href="/docs/"
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => setIsHelpOpen(false)}
@@ -419,7 +419,7 @@ export default function Layout() {
                         <DocumentTextIcon className="w-4 h-4 text-blue-500" />
                         <div>
                           <p className="font-medium">Documentation</p>
-                          <p className="text-xs text-[var(--text-muted)]">Beta release notes</p>
+                          <p className="text-xs text-[var(--text-muted)]">User guides & reference</p>
                         </div>
                       </a>
                       

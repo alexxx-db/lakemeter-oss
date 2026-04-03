@@ -48,6 +48,24 @@ mkdir -p backend/static
 cp -r frontend/dist/* backend/static/
 echo -e "${GREEN}✓ Frontend copied to backend/static${NC}"
 
+# Step 2b: Build documentation site
+echo -e "\n${YELLOW}Step 2b: Building documentation site...${NC}"
+if [ -d "$SCRIPT_DIR/docs-site" ]; then
+    cd "$SCRIPT_DIR/docs-site"
+    npm ci --silent 2>/dev/null || npm install --silent
+    npm run build 2>/dev/null
+    if [ -d "build" ]; then
+        mkdir -p "$SCRIPT_DIR/backend/static/docs"
+        cp -r build/* "$SCRIPT_DIR/backend/static/docs/"
+        echo -e "${GREEN}✓ Documentation built and copied to backend/static/docs${NC}"
+    else
+        echo -e "${YELLOW}⚠ Documentation build failed - skipping${NC}"
+    fi
+    cd "$SCRIPT_DIR"
+else
+    echo -e "${YELLOW}⚠ docs-site directory not found - skipping documentation${NC}"
+fi
+
 # Step 3: Verify the bundle
 echo -e "\n${YELLOW}Step 3: Verifying bundle...${NC}"
 if [ -f "backend/static/index.html" ]; then
