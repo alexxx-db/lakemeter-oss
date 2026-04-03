@@ -1,38 +1,49 @@
-# Sprint 3 Contract: DLT/SDP (Spark Declarative Pipelines) — AI Assistant Tests
+# Sprint 3 Contract: VECTOR_SEARCH + MODEL_SERVING + LAKEBASE Parity
 
 ## Acceptance Criteria
 
-### DLT Pro Serverless Proposal
-- [ ] AC-1: AI proposes `workload_type=DLT` when asked for a CDC pipeline with Pro edition
-- [ ] AC-2: `dlt_edition` contains "PRO" (case-insensitive)
-- [ ] AC-3: `serverless_enabled=true` when serverless is requested
-- [ ] AC-4: `workload_name` is non-empty (>= 3 chars)
-- [ ] AC-5: `reason` populated (>= 10 chars)
-- [ ] AC-6: `notes` populated (>= 1 char)
-- [ ] AC-7: `proposal_id` present for confirm/reject flow
+### Vector Search
+- [ ] Standard mode: all capacity levels (1M, 2M, 3M, 5M, 10M, 50M) produce matching DBU/hr between frontend and backend
+- [ ] Storage-optimized mode: all capacity levels (1M, 64M, 100M, 200M) produce matching DBU/hr
+- [ ] CEILING math for unit calculation matches exactly (frontend `Math.ceil` vs backend `math.ceil`)
+- [ ] Storage sub-row: free storage = units × 20 GB, billable = max(0, total - free), cost = billable × $0.023/GB
+- [ ] Storage sub-row written correctly in Excel with proper DSU/GB notes
+- [ ] SKU = SERVERLESS_REAL_TIME_INFERENCE for all Vector Search configs
+- [ ] Monthly cost = DBU/hr × hours × $/DBU (within $0.01 tolerance)
 
-### DLT Core Edition Variant
-- [ ] AC-8: "basic DLT pipeline" prompt → `dlt_edition` contains "CORE"
-- [ ] AC-9: `workload_type=DLT` (not JOBS or other type)
+### Model Serving
+- [ ] CPU: DBU/hr matches (1.0 DBU/hr on AWS)
+- [ ] GPU Small T4: DBU/hr matches (10.48 DBU/hr on AWS)
+- [ ] GPU Medium A10G 1x: DBU/hr matches (20.0 DBU/hr on AWS)
+- [ ] GPU Medium A10G 4x: DBU/hr matches (112.0 DBU/hr on AWS)
+- [ ] GPU Medium A10G 8x: DBU/hr matches (290.8 DBU/hr on AWS)
+- [ ] GPU XLarge A100 40GB 8x: DBU/hr matches (538.4 DBU/hr on AWS)
+- [ ] GPU XLarge A100 80GB 8x: DBU/hr matches (628.0 DBU/hr on AWS)
+- [ ] Case-insensitive GPU type lookup in backend
+- [ ] SKU = SERVERLESS_REAL_TIME_INFERENCE for all Model Serving configs
+- [ ] Monthly costs match within $0.01 tolerance
 
-### DLT Advanced Edition Variant
-- [ ] AC-10: "Advanced DLT pipeline with full monitoring" → `dlt_edition` contains "ADVANCED"
-- [ ] AC-11: `workload_type=DLT`
-
-### Common Fields for All DLT Proposals
-- [ ] AC-12: `serverless_enabled` is explicitly set (not None)
-- [ ] AC-13: For classic compute, `photon_enabled` field is set
-- [ ] AC-14: For classic compute, node type(s) are populated
-- [ ] AC-15: Scheduling fields present (runs_per_day/hours_per_month)
+### Lakebase
+- [ ] Basic CU computation: DBU/hr = CU × HA_nodes (tested at 1, 2, 4, 8, 16 CU)
+- [ ] HA node multiplication correct for 1, 2, 3 nodes
+- [ ] Storage DSU pricing: cost = GB × 15 DSU/GB × $0.023/DSU
+- [ ] Storage sub-row in Excel has correct format and notes
+- [ ] Edge cases: CU=0, storage=0, max storage (8192 GB)
+- [ ] SKU = DATABASE_SERVERLESS_COMPUTE for all Lakebase configs
+- [ ] Total cost = compute DBU cost + storage cost (within $0.01 tolerance)
 
 ## Test Plan
 
-- **Module-scoped fixtures**: 3 AI calls total (PRO serverless, CORE basic, ADVANCED)
-- **3-message sequences**: Primary prompt → detailed follow-up → explicit proposal request
-- **Pattern**: Follow Sprint 1/2 conventions — TestDltProposalBasic class for shared tests, separate classes for edition variants
+- Unit tests: Extend `tests/parity/test_parity_vector_search.py`, `test_parity_model_serving.py`, `test_parity_lakebase.py`
+- Add `frontend_calc.py` helper for Vector Search storage cost
+- Test storage sub-row values via `write_storage_subrow` function
+- Regression: run full `pytest` including Sprint 1 and Sprint 2 tests
 
-## Files to Create
+## Files Expected to Change
 
-- `tests/ai_assistant/sprint_3/__init__.py`
-- `tests/ai_assistant/sprint_3/conftest.py`
-- `tests/ai_assistant/sprint_3/test_dlt_proposal.py`
+- `tests/parity/test_parity_vector_search.py` — new storage and edge case tests
+- `tests/parity/test_parity_model_serving.py` — all GPU types + cost tests
+- `tests/parity/test_parity_lakebase.py` — HA combos, storage edge cases, total cost
+- `tests/parity/frontend_calc.py` — add `fe_vector_search_storage_cost` helper
+- `backend/app/routes/export/excel_item_helpers.py` — fix if any mismatches found
+- `backend/app/routes/export/calculations.py` — fix if any mismatches found

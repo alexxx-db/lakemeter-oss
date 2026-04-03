@@ -1,51 +1,63 @@
-# Sprint 3 Handoff: DLT/SDP — Iteration 3 (File Split)
+# Sprint 3 Handoff: VECTOR_SEARCH + MODEL_SERVING + LAKEBASE Parity
 
-## What Changed (Iteration 3)
+## What Was Built
 
-Split `test_dlt_proposal.py` (262 lines) into 4 per-variant files to address the evaluator's sole remaining deduction (Code Quality: 9.0 — file over 200-line guideline).
+Comprehensive parity tests for the three remaining serverless workload types, verifying that backend Excel export calculations exactly match frontend cost formulas.
 
-### Files Changed
+### Vector Search (18 tests)
+- **Standard mode**: 1M, 2M (boundary), 3M (ceiling), 5M, 10M, 50M vectors
+- **Storage-optimized mode**: 1M, 64M (boundary), 100M, 200M vectors
+- **Storage sub-rows**: within free tier, exceeds free tier, zero storage, storage-optimized free tier, large billable
+- **Total cost**: compute DBU cost + storage cost combined verification
 
-| File | Lines | Action |
-|------|------:|--------|
-| `tests/ai_assistant/sprint_3/conftest.py` | 58 | **Rewritten** — now contains 4 module-scoped fixtures (moved from test file) |
-| `tests/ai_assistant/sprint_3/test_dlt_pro.py` | 55 | **New** — 9 tests for DLT Pro serverless |
-| `tests/ai_assistant/sprint_3/test_dlt_core.py` | 72 | **New** — 10 tests for DLT Core classic |
-| `tests/ai_assistant/sprint_3/test_dlt_advanced.py` | 51 | **New** — 8 tests for DLT Advanced |
-| `tests/ai_assistant/sprint_3/test_dlt_negative.py` | 18 | **New** — 2 negative discrimination tests |
-| `tests/ai_assistant/sprint_3/prompts.py` | 71 | **Unchanged** — prompt constants |
-| `tests/ai_assistant/sprint_3/test_dlt_proposal.py` | — | **Deleted** — replaced by 4 per-variant files |
+### Model Serving (17 tests)
+- **All 7 AWS GPU types**: cpu (1.0), gpu_small_t4 (10.48), gpu_medium_a10g_1x (20.0), gpu_medium_a10g_4x (112.0), gpu_medium_a10g_8x (290.8), gpu_xlarge_a100_40gb_8x (538.4), gpu_xlarge_a100_80gb_8x (628.0)
+- **Case-insensitive**: GPU_SMALL_T4 → gpu_small_t4
+- **Run-based usage**: 10 runs/day × 30 min × 22 days
+- **Parametrized cost matrix**: all 7 GPU types verified in one parametrized test
 
-### Design Decision
+### Lakebase (23 tests)
+- **CU sizes**: 1, 2, 4, 8, 16 CU
+- **HA nodes**: 1, 2, 3 nodes with parametrized CU×nodes combinations
+- **Storage DSU pricing**: 100, 500, 1000, 8192 GB (max)
+- **Total cost**: compute + storage combined
+- **Run-based usage**: 8 runs/day × 60 min × 22 days
+- **Edge cases**: CU=0, storage=None, zero storage
 
-Module-scoped fixtures moved to `conftest.py`. Each test file uses exactly one fixture, so each AI call happens once per variant — identical behavior to the monolithic file (4 total AI calls).
-
-## Prior Iteration Fixes (all still intact)
-
-- **BUG-S3-001** (iter 3): Hardened `DLT_ADVANCED_FINAL` prompt
-- **BUG-S3-002** (iter 3): Added `test_scheduling_fields_present` to Core → 15/15 ACs
-- **BUG-S3-003** (iter 4): FMAPI tool_use/tool_result conversion fix in ai_client.py + ai_agent.py
+### Frontend calc helper
+- Added `fe_vector_search_storage_cost()` to `tests/parity/frontend_calc.py`
 
 ## How to Test
 
 ```bash
-cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
-source .venv/bin/activate
-python -m pytest tests/ai_assistant/sprint_3/ -v
+# Run Sprint 3 parity tests only
+pytest tests/parity/test_parity_vector_search.py tests/parity/test_parity_model_serving.py tests/parity/test_parity_lakebase.py -v
+
+# Run all parity tests
+pytest tests/parity/ -v
+
+# Run full suite
+pytest tests/ -v
 ```
 
 ## Test Results
 
-### Sprint 3: 29 passed, 0 failed (215.96s)
-### Sprint 1+2 Regression: 31 passed, 0 failed (294.91s)
-
-**Zero regressions. All 60 tests pass.**
-
-## Acceptance Criteria: 15/15 PASS (unchanged)
-
-All original ACs remain passing. Negative tests are bonus coverage beyond contract.
+- `pytest` exit code: 0
+- Tests: **1884 passed** (was 1838 before Sprint 3 → +46 new tests)
+- Sprint 3 specific: **58 new tests** (18 VS + 17 MS + 23 LB)
+- No mismatches found — backend and frontend calculations are aligned
 
 ## Known Limitations
 
-- Negative test adds a 4th AI call per run (~30s additional runtime)
-- Tests are non-deterministic: DLT Core may choose serverless — classic-specific tests properly `pytest.skip`
+- No backend code changes were needed — the existing export code already matched the frontend formulas for these three workload types
+- Tests verify against `aws` cloud/`us-east-1` region/`PREMIUM` tier; other cloud/region combos use same formulas (only rates differ)
+- Storage sub-row Excel rendering is tested via calculation logic, not by generating actual Excel files (deferred to Sprint 5 formula audit)
+
+## Files Changed
+
+- `tests/parity/test_parity_vector_search.py` — rewritten with 18 comprehensive tests (was 4)
+- `tests/parity/test_parity_model_serving.py` — rewritten with 17 comprehensive tests (was 4)
+- `tests/parity/test_parity_lakebase.py` — rewritten with 23 comprehensive tests (was 4)
+- `tests/parity/frontend_calc.py` — added `fe_vector_search_storage_cost()` helper
+- `harness/contracts/sprint-3.md` — sprint contract
+- `harness/state.json` — updated phase and action

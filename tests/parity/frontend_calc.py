@@ -60,6 +60,19 @@ def fe_vector_search_dbu_per_hour(*, capacity_millions=1, mode='standard',
     return units * dbu_rate
 
 
+def fe_vector_search_storage_cost(*, storage_gb, units_used):
+    """Frontend Vector Search storage cost (matches costCalculation.ts).
+
+    Free storage = units_used × 20 GB
+    Billable = max(0, total - free)
+    Cost = billable × $0.023/GB/month
+    """
+    free_gb = units_used * 20
+    billable_gb = max(0, storage_gb - free_gb)
+    price_per_gb = 0.023
+    return billable_gb * price_per_gb
+
+
 def fe_model_serving_dbu_per_hour(*, gpu_dbu_rate):
     """Frontend Model Serving DBU/hr (direct rate lookup)."""
     return gpu_dbu_rate
