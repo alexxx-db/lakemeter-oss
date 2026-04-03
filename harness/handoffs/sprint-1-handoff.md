@@ -1,34 +1,36 @@
-# Sprint 1 Handoff: Getting Started & Introduction Overhaul (Iteration 4)
+# Sprint 1 Handoff: Getting Started & Introduction Overhaul (Iteration 5 — Final)
 
 ## What Was Built
 
-### Pages (created in iterations 1-2, refined in 3-4)
+### Pages (created in iterations 1-2, refined in 3-5)
 - **`docs-site/docs/intro.md`** — Landing page with audience routing, feature table, quick start
-- **`docs-site/docs/user-guide/getting-started.md`** — 5-minute tutorial with real workload examples
-- **`docs-site/docs/user-guide/end-to-end-workflow.md`** — Complete create-to-export workflow
-- **`docs-site/docs/user-guide/quick-reference.md`** — Concise reference for all 9 workload types
-- **`docs-site/sidebars.ts`** — Reorganized sidebar into 3 categories
+- **`docs-site/docs/user-guide/getting-started.md`** — 5-minute tutorial with real workload examples (Jobs + DBSQL)
+- **`docs-site/docs/user-guide/end-to-end-workflow.md`** — Complete create-to-export workflow with cost interpretation
+- **`docs-site/docs/user-guide/quick-reference.md`** — Concise reference for all 9 workload types with accurate config fields
+- **`docs-site/sidebars.ts`** — Reorganized sidebar into 3 categories (Getting Started, Workload Guides, Features)
 
-## Iteration 4 Fixes (deep UI label + default verification)
+## Iteration 5 Fixes (final accuracy pass)
 
-### UI field name accuracy (verified against WorkloadForm.tsx)
-1. **"Driver Node Type" → "Driver Instance Type"** — matches UI label at WorkloadForm.tsx:1132
-2. **"Worker Node Type" → "Worker Instance Type"** — matches UI label at WorkloadForm.tsx:1228
-3. **"Number of Workers" → "Worker Count"** — matches UI label at WorkloadForm.tsx:1243
-4. **"Warehouse Size" → "Size"** — matches UI label at WorkloadForm.tsx:1382
-5. **"Set Warehouse Type to Serverless" → "Leave the Serverless checkbox checked"** — the UI uses a checkbox toggle (WorkloadForm.tsx:1332-1347), not a dropdown
-6. **"DLT Edition" → "SDP Edition"** — matches UI label at WorkloadForm.tsx:1314 (Spark Declarative Pipelines)
+1. **Lakebase CU default: "--" → "1"** — code default is `lakebase_cu: 1` (WorkloadForm.tsx:517)
+2. **Lakebase Storage default: "--" → "0"** — code default is `lakebase_storage_gb: 0` (WorkloadForm.tsx:518)
+3. **FMAPI Proprietary Rate Type options updated** — added "Batch Inference" and "Provisioned Scaling" to match available code options (WorkloadForm.tsx:1800-1821), with note that availability depends on model
 
-### Default value corrections (verified against WorkloadForm.tsx defaults)
-7. **Worker Pricing default: "On-demand" → "Spot Instances"** — code default is `worker_pricing_tier: 'spot'` (WorkloadForm.tsx:486,532)
-8. **Number of Workers default: 1 → 2** — code default is `num_workers: 2` (WorkloadForm.tsx:499,548)
-9. **Runs Per Day default: "--" → "1"** — code default is `runs_per_day: 1` (WorkloadForm.tsx:481,527)
-10. **Avg Runtime default: "--" → "30"** — code default is `avg_runtime_minutes: 30` (WorkloadForm.tsx:482,528)
+## Accuracy Verification Summary (Iterations 1-5)
 
-### Getting-started tutorial refinements
-11. Added "(the default)" annotations on pricing tier instructions to clarify which values are pre-set
-12. Added "(leave unchecked)" clarification for Photon toggle
-13. Updated "configure compute" step to reference the Driver Node and Worker Nodes cards as they appear in the UI
+All field labels, defaults, and options verified against `WorkloadForm.tsx` source code:
+
+| Area | Status | Verified Against |
+|------|--------|-----------------|
+| Compute fields (Driver/Worker Instance Type, Worker Count) | ✅ | WorkloadForm.tsx:1132, 1228, 1243 |
+| Compute defaults (Spot, 2 workers, 1 run/day, 30 min) | ✅ | WorkloadForm.tsx:486, 499, 481-482 |
+| DBSQL (Serverless checkbox, Size, Number of Clusters) | ✅ | WorkloadForm.tsx:1332-1347, 1382, 1394 |
+| DBSQL warehouse sizes and DBU rates | ✅ | Fallback values from codebase |
+| DLT (SDP Edition label) | ✅ | WorkloadForm.tsx:1314 |
+| Model Serving (Endpoint Type, Number of Endpoints) | ✅ | WorkloadForm.tsx:1589, 1603 |
+| Vector Search (Vector Search Type, Capacity, Storage) | ✅ | WorkloadForm.tsx:1544, 1555, 1568 |
+| FMAPI Databricks (Model, Rate Type, Quantity) | ✅ | WorkloadForm.tsx:1621, 1640, 1662 |
+| FMAPI Proprietary (Provider, Model, Endpoint Type, Context Length, Rate Type, Quantity) | ✅ | WorkloadForm.tsx:1703, 1721, 1752, 1764, 1794, 1831 |
+| Lakebase (Capacity Units, Number of Nodes, Storage) | ✅ | WorkloadForm.tsx:1861, 1874, 1886 |
 
 ## How to Test
 
@@ -40,19 +42,12 @@
    ```bash
    cd docs-site && npm run serve
    ```
-3. Navigate to http://localhost:3000/docs/user-guide/quick-reference and verify:
-   - Field names match the actual Lakemeter UI: "Driver Instance Type", "Worker Instance Type", "Worker Count", "Size", "SDP Edition"
-   - Defaults match: Worker Pricing = Spot Instances, Worker Count = 2, Runs Per Day = 1, Avg Runtime = 30, Days Per Month = 22
-   - DBSQL shows "Serverless" as a checkbox description, not a warehouse type dropdown option
-   - DBSQL Size default shows "Small (12 DBU/hr)"
-   - DBSQL warehouse DBU rates table is correct: 2X-Small=4, X-Small=6, Small=12, Medium=24, Large=40, X-Large=80, 2X-Large=144, 3X-Large=272, 4X-Large=528
-
-4. Navigate to http://localhost:3000/docs/user-guide/getting-started and verify:
-   - Step 5 references "Driver Node" and "Worker Nodes" cards
-   - Field labels match: "Driver Instance Type", "Worker Instance Type", "Worker Count"
-   - Pricing tier instructions note "(the default)" for pre-set values
-   - DBSQL step says "Leave the Serverless checkbox checked"
-   - All internal links resolve
+3. Verify at http://localhost:3000:
+   - **intro page** (`/`): audience routing links resolve, feature table is accurate
+   - **getting-started** (`/docs/user-guide/getting-started`): field labels match UI, defaults annotated correctly
+   - **end-to-end-workflow** (`/docs/user-guide/end-to-end-workflow`): all steps are logical, cost components table is accurate
+   - **quick-reference** (`/docs/user-guide/quick-reference`): all 9 workload types covered, field names match UI, defaults match code
+   - All internal links resolve with no 404s
 
 ## Build Results
 
@@ -66,13 +61,13 @@
 
 ## Known Limitations
 
-- DBSQL warehouse DBU rates shown are the fallback/default values from the codebase. The actual live API may return different rates for specific cloud/region combinations, but these are the canonical values.
-- Model Serving GPU/endpoint types are loaded dynamically from the API; the doc lists representative examples (CPU, T4, A10G) rather than exhaustive options.
+- DBSQL warehouse DBU rates shown are the fallback/default values from the codebase. The actual live API may return different rates for specific cloud/region combinations.
+- Model Serving GPU/endpoint types are loaded dynamically from the API; the doc lists representative examples (CPU, T4, A10G).
 - DLT edition options (Core, Pro, Advanced) come from the backend API dynamically; the doc lists the fallback defaults.
+- FMAPI model lists are dynamic — the docs describe the field structure, not an exhaustive model catalog.
 
-## Files Changed
+## Files Changed (Iteration 5)
 
-- `docs-site/docs/user-guide/quick-reference.md` (10 field name and default fixes)
-- `docs-site/docs/user-guide/getting-started.md` (6 field name and UI interaction fixes)
+- `docs-site/docs/user-guide/quick-reference.md` (3 fixes: Lakebase defaults, FMAPI Proprietary rate types)
 - `harness/handoffs/sprint-1-handoff.md` (updated)
 - `harness/state.json` (updated)

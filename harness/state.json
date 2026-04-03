@@ -15,7 +15,7 @@
     "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 1 iter 4 BUILD complete. Fixed 10 accuracy issues: 6 UI field name mismatches (Driver/Worker Node Type→Instance Type, Number of Workers→Worker Count, Warehouse Size→Size, Warehouse Type dropdown→Serverless checkbox, DLT Edition→SDP Edition) and 4 default value errors (Worker Pricing On-demand→Spot, Worker Count 1→2, Runs Per Day --→1, Avg Runtime --→30). All verified against WorkloadForm.tsx source. Build passes 0 errors. 1969 tests pass (84 pre-existing coverage structure failures unrelated to docs).",
+  "last_action": "Sprint 1 iter 5 (FINAL) BUILD complete. Fixed 3 remaining accuracy issues: Lakebase CU default (--→1), Lakebase Storage default (--→0), FMAPI Proprietary Rate Type options (added Batch Inference, Provisioned Scaling). All field labels, defaults, and options verified against WorkloadForm.tsx across all 9 workload types. Build passes 0 errors. 1969 tests pass (84 pre-existing coverage structure failures unrelated to docs).",
   "sprints_completed": [],
   "dynamically_added_sprints": [],
   "feature_sprints_since_doc_sprint": 0,
@@ -23,7 +23,7 @@
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 4,
+  "current_iteration": 5,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",

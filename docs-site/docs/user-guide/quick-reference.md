@@ -124,16 +124,16 @@ These workloads share a common configuration pattern:
 | **Model** | Specific model (GPT-4, Claude, Gemini, etc.) |
 | **Endpoint Type** | Global or In-Geo |
 | **Context Length** | All, Short, or Long (affects pricing for some models) |
-| **Rate Type** | Input tokens, output tokens, cache read, cache write |
+| **Rate Type** | Input Token, Output Token, Cache Read, Cache Write, Batch Inference, Provisioned Scaling (availability depends on model) |
 | **Quantity (millions)** | Token volume |
 
 ### Lakebase
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| **Capacity Units (CU)** | Compute units: 1, 2, 4, or 8 CU | -- |
+| **Capacity Units (CU)** | Compute units: 1, 2, 4, or 8 CU | 1 |
 | **Number of Nodes** | 1 = primary only, 2-3 = primary + read replicas (HA) | 1 |
-| **Storage (GB)** | Database storage capacity (0-8192 GB) | -- |
+| **Storage (GB)** | Database storage capacity (0-8192 GB) | 0 |
 | **Hours Per Month** | Instance uptime | Default: 730 (24/7) |
 
 ## Cost formula summary
