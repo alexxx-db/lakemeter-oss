@@ -1,101 +1,66 @@
-# Sprint 5 Handoff: Admin Guide Accuracy & Update
+# Sprint 5 Handoff: Admin Guide Accuracy & Update (Iteration 2)
 
 ## What Was Built
 
-All 8 admin guide pages were audited against the current codebase and rewritten for accuracy:
+### Iteration 1 (prior)
+All 8 admin guide pages were audited against the current codebase and rewritten for accuracy. See iteration 1 handoff for full details.
 
-### deployment.md
-- Updated `app.yaml` snippet to match actual root-level config (includes `DB_PORT`, `DB_SSLMODE`, SP key names)
-- Documented `deploy.sh` as the primary deployment method with its 4-step flow (frontend build, docs build, verify, deploy)
-- Added build-only mode when `DATABRICKS_HOST` is not set
-- Noted that `/docs` and `/redoc` are disabled in production
-- Documented both root `app.yaml` (full-repo) and `backend/app.yaml` (backend-only) variants
+### Iteration 2 (this iteration)
+Thorough verification pass of all 8 admin guide pages against source code. One significant gap found and fixed:
 
-### configuration.md
-- Rebuilt environment variable table to match `app/config.py` Settings class exactly
-- Separated `valueFrom` (app resource references) from `value` (hardcoded) variables
-- Added local development variables (`DATABRICKS_CONFIG_PROFILE`, `DATABASE_URL`)
-- Replaced stale "secret scope keys" section with accurate SP credential flow
-- Documented connection pool configuration (pool_size=5, max_overflow=10, pool_recycle=900)
+**api-reference.md — Added ~20 missing frontend convenience endpoints:**
+- `GET /api` — API root info
+- `GET /api/v1/regions?cloud=` — Regions by cloud from SKU region map
+- `GET /api/v1/reference/clouds` — Cloud providers with regions from DB
+- `GET /api/v1/reference/tiers` — Pricing tiers
+- `GET /api/v1/instances/types?cloud=` and `/reference/instance-types/{cloud}` — Instance types
+- `GET /api/v1/instances/families` — Instance family categories
+- `GET /api/v1/instances/vm-costs` — VM cost proxy to external API
+- `GET /api/v1/dbsql/warehouse-sizes` and `/reference/dbsql-sizes` — DBSQL sizes
+- `GET /api/v1/dbsql/warehouse-types` — Warehouse types
+- `GET /api/v1/dlt/editions` and `/reference/dlt-editions` — DLT editions
+- `GET /api/v1/serverless/modes` — Serverless mode options
+- `GET /api/v1/model-serving/gpu-types?cloud=` and `/reference/model-serving-gpu-types/{cloud}` — GPU types
+- `GET /api/v1/photon/multipliers?cloud=` — Photon multipliers
+- `GET /api/v1/fmapi/databricks-models/list` — FMAPI model list
+- `GET /api/v1/reference/fmapi-models` — Foundation models (legacy)
+- `GET /api/v1/reference/fmapi-databricks` — FMAPI Databricks config
+- `GET /api/v1/reference/fmapi-proprietary` — FMAPI Proprietary config
+- `GET /api/v1/pricing/dbu-rates?cloud=&region=&tier=` — DBU rate lookup
+- `GET /api/v1/pricing/product-types?cloud=&region=&tier=` — Product types
 
-### installer.md
-- Verified all 9 steps against `install_lakemeter.py` source code
-- Added `--dry-run` and `--non-interactive` CLI flags (were missing)
-- Updated Step 2 config parameters to match `gather_config()` (7 params, not 4)
-- Updated Step 4 to list all 9 application tables created
-- Updated Step 5 with correct file-to-table mapping
-- Added Step 9b (configure app resources) documentation
+These endpoints are defined directly in `main.py` (not via routers) and were not covered in the iteration 1 API reference, which only documented router-based endpoints.
 
-### architecture.md
-- Updated backend structure to show all actual directories: `auth/` (token_manager, databricks_auth), 11 models, 9 route files, modular export (11 files)
-- Updated frontend structure with all actual files: `SearchableSelect.tsx`, `EstimateDetail.tsx`, `TestCalculations.tsx`, `useTheme.ts`
-- Added auth layer to system architecture diagram
-- Updated data layer to show all 11 model types
-- Updated AI assistant flow with `/chat/{id}/state` and `/chat/{id}/confirm-workload`
-
-### permissions.md
-- Updated token lifecycle to match `database.py` behavior: pool_recycle=900s (15 min), engine refresh every 30 min, auto-recovery on auth errors
-- Cross-referenced `token_manager.py` and `database.py` for accurate refresh intervals
-- Content was already largely accurate — minor updates for consistency
-
-### api-reference.md
-- Added 20+ missing endpoints discovered from source code grep:
-  - `GET /api/v1/estimates/me/info`
-  - `POST /api/v1/line-items/{id}/clone`
-  - `GET /api/v1/chat/{id}/state`
-  - `POST /api/v1/chat/{id}/confirm-workload`
-  - All `/api/v1/vm-pricing/*` endpoints (6 endpoints)
-  - All `/api/v1/reference/*` endpoints (12 endpoints including `/pricing-bundle/status`, `/pricing-bundle/regenerate`)
-  - `GET /api/v1/export/estimates/excel` (bulk export)
-  - All 4 debug endpoints
-  - User CRUD endpoints (`POST`, `GET by ID`, `GET by email`, `PUT`)
-- Added router prefix annotations for each section
-- Noted production `/docs` and `/redoc` availability
-
-### troubleshooting.md
-- Added debug endpoint documentation (`/debug/database`, `/debug/external-api`, `/debug/headers`, `/debug/database/refresh`)
-- Replaced stale "password in secret scope" troubleshooting with OAuth token-based approach
-- Added CORS configuration troubleshooting
-- Added API docs visibility section
-- Removed reference to non-existent "auth redirect loop" issue
-
-### database.md
-- Completely rewritten `estimates` table with 5 missing columns: `customer_name`, `discount_config`, `original_prompt`, `is_deleted`, `updated_by`
-- Completely rewritten `line_items` table with all workload-specific columns from `models/line_item.py`: `serverless_enabled`, `serverless_mode`, `dlt_edition`, all `dbsql_*` fields, all `vector_search_*` fields, `model_serving_gpu_type`, all `fmapi_*` fields, all `lakebase_*` fields, pricing tier/payment option fields, `workload_config` JSON
-- Updated `users` table with `role` and `last_login_at` columns
-- Added 5 missing tables: `templates`, `sharing`, `conversation_messages`, `decision_records`, and 13 pricing sync tables
-- Updated `ref_workload_types` with all UI configuration flags from `models/workload_type.py`
-- Replaced password-based DB access example with OAuth token-based approach
-- Added indexes section
+### Verification Results (All 8 Pages)
+- **deployment.md** — Verified against `deploy.sh` and both `app.yaml` files. Accurate.
+- **configuration.md** — Verified against `app/config.py` Settings class. All env vars match.
+- **installer.md** — Verified against `install_lakemeter.py`. 9-step flow matches.
+- **architecture.md** — Verified against actual file tree (`backend/app/` routes, models, auth, services, schemas). All directories and files match.
+- **permissions.md** — Verified against `token_manager.py` and `database.py`. Token lifecycle accurate.
+- **api-reference.md** — Fixed. Now documents all endpoints from both routers and `main.py`.
+- **troubleshooting.md** — Verified debug endpoints exist in `main.py`. All 4 debug endpoints documented.
+- **database.md** — Verified against `models/line_item.py` and other model files. All columns match.
 
 ## How to Test
 
-- **Docs build**: `cd docs-site && npm run build` (verified — builds cleanly)
-- **Navigate**: Open any admin guide page in the built docs and verify content
-- **Cross-reference**: Compare any admin guide page against the source file it documents
+- **Docs build**: `cd docs-site && npm run build` (verified — builds cleanly, zero errors)
+- **Navigate**: Open any admin guide page and cross-reference against the source file it documents
+- **API reference**: Compare the new "Frontend Data Endpoints" section against `grep -n "@app.get" backend/app/main.py`
 
 ## Test Results
 
 - `npm run build`: SUCCESS (zero errors, zero warnings)
-- `pytest`: 1969 passed, 84 failed (all pre-existing), 2 skipped (143s)
+- `pytest`: 1969 passed, 84 failed (all pre-existing in `test_workload_coverage.py`), 2 skipped (142s)
 - No new test failures introduced
 
 ## Known Limitations
 
-- Screenshots are not included (this is a documentation content sprint, not a visual QA sprint)
-- Debug endpoints may not be accessible in production (some require specific headers)
-- The database.md pricing sync tables section lists tables created by the installer but doesn't detail every column
+- Screenshots are not included (documentation content sprint)
+- The frontend convenience endpoints in `main.py` have some overlap/duplication with router-based endpoints in `routes/reference.py` — this is by design for frontend store compatibility
+- Some GPU DBU rates in `main.py` hardcoded endpoints may not exactly match values in the Lakebase `sync_product_serverless_rates` table (hardcoded fallbacks vs. DB values)
 
 ## Files Changed
 
-- `docs-site/docs/admin-guide/deployment.md` — rewritten
-- `docs-site/docs/admin-guide/configuration.md` — rewritten
-- `docs-site/docs/admin-guide/installer.md` — rewritten
-- `docs-site/docs/admin-guide/architecture.md` — rewritten
-- `docs-site/docs/admin-guide/permissions.md` — updated
-- `docs-site/docs/admin-guide/api-reference.md` — rewritten (20+ endpoints added)
-- `docs-site/docs/admin-guide/troubleshooting.md` — rewritten
-- `docs-site/docs/admin-guide/database.md` — rewritten (5 tables added, all schemas updated)
-- `harness/contracts/sprint-5.md` — new
-- `harness/handoffs/sprint-5-handoff.md` — new
-- `harness/state.json` — updated
+- `docs-site/docs/admin-guide/api-reference.md` — Added "Frontend Data Endpoints" section with ~20 missing endpoints
+- `harness/handoffs/sprint-5-handoff.md` — Updated
+- `harness/state.json` — Updated

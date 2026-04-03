@@ -612,6 +612,140 @@ Forces a database engine refresh with a new OAuth token.
 
 ---
 
+## Frontend Data Endpoints
+
+These convenience endpoints are defined directly in `main.py` and provide reference data used by the frontend store. Many overlap with the router-based `/api/v1/reference/*` endpoints but return data in formats optimized for the frontend UI.
+
+### API Root
+
+```
+GET /api
+```
+
+Returns API name, version, and description.
+
+### Cloud Providers with Regions
+
+```
+GET /api/v1/reference/clouds
+```
+
+Returns cloud providers (AWS, Azure, GCP) with their available regions, queried from the `sync_ref_sku_region_map` table. Falls back to hardcoded defaults if the database is unavailable.
+
+### Regions by Cloud
+
+```
+GET /api/v1/regions?cloud=AWS
+```
+
+Returns all regions for a specific cloud provider from the SKU region map.
+
+### Pricing Tiers
+
+```
+GET /api/v1/reference/tiers
+```
+
+Returns Standard, Premium, and Enterprise tier options.
+
+### Instance Types
+
+```
+GET /api/v1/instances/types?cloud=AWS
+GET /api/v1/reference/instance-types/{cloud}
+```
+
+Both return instance types with vCPU, memory, DBU rate, and family info. The `/reference/` variant uses a path parameter. Queries `sync_ref_instance_dbu_rates` with fallback to hardcoded lists.
+
+### Instance Families
+
+```
+GET /api/v1/instances/families
+```
+
+Returns: `["General Purpose", "Compute Optimized", "Memory Optimized", "Storage Optimized", "GPU"]`
+
+### VM Costs
+
+```
+GET /api/v1/instances/vm-costs?cloud=AWS&region=us-east-1&instance_type=m5.xlarge
+```
+
+Proxies to the external Lakemeter pricing API. Optional query params: `pricing_tier`, `payment_option`.
+
+### DBSQL Warehouse Sizes
+
+```
+GET /api/v1/dbsql/warehouse-sizes
+GET /api/v1/reference/dbsql-sizes
+```
+
+Both return the 9 DBSQL warehouse sizes (2X-Small through 4X-Large) with DBU/hour rates.
+
+### DBSQL Warehouse Types
+
+```
+GET /api/v1/dbsql/warehouse-types
+```
+
+Returns: `["CLASSIC", "PRO", "SERVERLESS"]`
+
+### DLT Editions
+
+```
+GET /api/v1/dlt/editions
+GET /api/v1/reference/dlt-editions
+```
+
+Both return Core, Pro, and Advanced editions. The `/reference/` variant also includes `dbu_multiplier`.
+
+### Serverless Modes
+
+```
+GET /api/v1/serverless/modes
+```
+
+Returns standard (1.0x) and performance (1.3x) modes.
+
+### Model Serving GPU Types (by cloud)
+
+```
+GET /api/v1/model-serving/gpu-types?cloud=AWS
+GET /api/v1/reference/model-serving-gpu-types/{cloud}
+```
+
+Returns GPU types with DBU/hour rates. Available types vary by cloud.
+
+### Photon Multipliers
+
+```
+GET /api/v1/photon/multipliers?cloud=AWS&sku_type=JOBS
+```
+
+Returns Photon multipliers by SKU type. Optional `sku_type` filter.
+
+### FMAPI Model Lists
+
+```
+GET /api/v1/fmapi/databricks-models/list
+GET /api/v1/reference/fmapi-models
+GET /api/v1/reference/fmapi-databricks
+GET /api/v1/reference/fmapi-proprietary
+```
+
+Various views of available foundation models. `/reference/fmapi-databricks` includes model types, inference types, and per-type model lists. `/reference/fmapi-proprietary` includes providers, endpoint types, and context lengths.
+
+### Pricing Data
+
+```
+GET /api/v1/pricing/dbu-rates?cloud=AWS&region=us-east-1&tier=PREMIUM
+GET /api/v1/pricing/product-types?cloud=AWS&region=us-east-1&tier=PREMIUM
+```
+
+`/dbu-rates` returns DBU prices per product type for a cloud/region/tier combination. Optional `product_type` filter returns a single rate. `/product-types` returns the list of available product type strings.
+
+---
+
 ## Health Check
 
 ```

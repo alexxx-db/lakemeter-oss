@@ -10,7 +10,7 @@
   "remaining_spec_items": [
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 5 iter 1 BUILD complete. All 8 admin guide pages rewritten against source code. Docs build clean. 1969 tests pass (84 pre-existing failures, unchanged). Handoff written.",
+  "last_action": "Sprint 5 iter 2 BUILD complete. Verified all 8 admin guide pages against source code. Added 20+ missing frontend convenience endpoints to api-reference.md. Docs build clean. 1969 tests pass (84 pre-existing failures, unchanged).",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -47,10 +47,10 @@
   "last_install_test": 3,
   "last_integration_test": 3,
   "context_resets": 0,
-  "current_iteration": 1,
+  "current_iteration": 2,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",
-  "last_updated": "2026-04-04T05:00:00",
+  "last_updated": "2026-04-04T05:15:00",
   "score_trajectory": []
 }
