@@ -22,7 +22,7 @@ Before opening Lakemeter, decide:
 
 | Tier | Available Workloads | Typical Use |
 |------|-------------------|-------------|
-| **Standard** | Jobs, All-Purpose, DLT, DBSQL (Classic) | Basic data engineering |
+| **Standard** | Jobs, All-Purpose, DLT, DBSQL (Classic, Pro) | Basic data engineering |
 | **Premium** | All Standard + DBSQL Serverless, Model Serving, Vector Search, FMAPI, Lakebase | Most production deployments |
 | **Enterprise** | Same as Premium with enhanced SLAs | Large-scale, regulated workloads |
 

@@ -45,7 +45,7 @@ You land on the **Calculator** page -- an empty estimate ready for workloads.
 7. Configure usage:
    - **Runs Per Day:** `2`
    - **Avg Runtime (minutes):** `45`
-   - **Days Per Month:** `30`
+   - **Days Per Month:** `30` (the default is 22 business days — change it to 30 since this ETL runs every day including weekends)
 
 8. Click **Save**.
 

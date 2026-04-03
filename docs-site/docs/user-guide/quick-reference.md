@@ -13,7 +13,7 @@ A concise reference for all 9 workload types in Lakemeter. Use this page to quic
 | **Jobs** | Batch compute for ETL, ML training, data processing | Scheduled or triggered pipelines that run and terminate | Standard |
 | **All-Purpose** | Interactive compute for notebooks and development | Ad-hoc analysis, prototyping, development clusters | Standard |
 | **DLT** | Delta Live Tables declarative data pipelines | Managed ETL with built-in data quality and monitoring | Standard |
-| **DBSQL** | SQL analytics warehouses | BI dashboards, SQL queries, analyst workloads | Standard (Classic), Premium (Serverless) |
+| **DBSQL** | SQL analytics warehouses | BI dashboards, SQL queries, analyst workloads | Standard (Classic/Pro), Premium (Serverless) |
 | **Model Serving** | Real-time ML model inference endpoints | Deploying custom ML models for online predictions | Premium |
 | **Vector Search** | Managed vector database | Similarity search, RAG applications, embeddings | Premium |
 | **FMAPI (Databricks)** | Foundation Model API for open-source models | Llama, DBRX, Mixtral via Databricks-hosted endpoints | Premium |
