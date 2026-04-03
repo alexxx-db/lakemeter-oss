@@ -4,6 +4,8 @@ sidebar_position: 8
 
 # All-Purpose Compute
 
+> **Lakemeter UI name:** All Purpose Compute
+
 All-Purpose Compute is for interactive notebooks, development clusters, and ad-hoc analysis. Like Jobs, it supports **Classic** and **Serverless** modes -- but with key differences in pricing and how usage is measured.
 
 ## When to use All-Purpose
@@ -98,8 +100,12 @@ All-Purpose Serverless **always runs in Performance mode** -- there is no Standa
 | **Worker Instance Type** | VM size for the Spark executors | -- (select from list) |
 | **Number of Workers** | Cluster size | 2 |
 | **Photon** | Hardware-accelerated engine (2x DBU multiplier) | Off |
-| **Driver Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | On-Demand |
-| **Worker Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | Spot |
+| **Driver Pricing Tier** | Spot Instances, On-Demand, 1-Year Reserved, or 3-Year Reserved | On-Demand |
+| **Worker Pricing Tier** | Spot Instances, On-Demand, 1-Year Reserved, or 3-Year Reserved | Spot |
+
+:::tip AWS Reserved Payment Options
+When you select a Reserved tier on AWS, an additional **Payment Option** field appears with choices: No Upfront, Partial Upfront, or All Upfront. This field is not shown for Azure or GCP.
+:::
 
 ### Usage fields
 

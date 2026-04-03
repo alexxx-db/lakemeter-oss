@@ -4,6 +4,8 @@ sidebar_position: 7
 
 # Jobs Compute
 
+> **Lakemeter UI name:** Lakeflow Jobs
+
 Jobs is the workload type for batch processing, ETL workflows, and scheduled data pipelines. It supports both **Classic** (you manage the cluster) and **Serverless** (Databricks manages everything) modes.
 
 ## When to use Jobs
@@ -105,10 +107,12 @@ These fields appear when Serverless is **off**:
 | **Worker Instance Type** | VM size for the Spark executor nodes | -- (select from list) |
 | **Number of Workers** | How many worker nodes in the cluster | 2 |
 | **Photon** | Enables the hardware-accelerated Spark engine. Increases the DBU rate (2.9x on AWS, 2.5x on Azure/GCP) but often halves runtime for compatible workloads. | Off |
-| **Driver Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | On-Demand |
-| **Worker Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | Spot |
+| **Driver Pricing Tier** | Spot Instances, On-Demand, 1-Year Reserved, or 3-Year Reserved | On-Demand |
+| **Worker Pricing Tier** | Spot Instances, On-Demand, 1-Year Reserved, or 3-Year Reserved | Spot |
 
-When you select a **Reserved** tier on AWS, an additional **Payment Option** field appears with choices: No Upfront, Partial Upfront, or All Upfront.
+:::tip AWS Reserved Payment Options
+When you select a **1-Year Reserved** or **3-Year Reserved** tier on AWS, an additional **Payment Option** field appears with choices: No Upfront, Partial Upfront, or All Upfront. This field is not shown for Azure or GCP.
+:::
 
 ### Serverless mode fields
 
@@ -171,7 +175,7 @@ Total       = DBU Cost  (no VM costs)
 
 ## Common mistakes
 
-- **Setting workers to 0**: A cluster with 0 workers runs everything on the driver node -- fine for tiny jobs, but most production workloads need at least 2 workers for parallel processing.
+- **Using only 1 worker**: With 1 worker, parallelism is limited. Most production workloads benefit from at least 2-4 workers. The minimum in Lakemeter is 1.
 - **Forgetting Photon increases DBUs**: If your cost estimate is nearly 3x what you expected (on AWS), check whether Photon is enabled. The higher DBU rate (2.9x on AWS) is intentional -- compare total cost (including shorter runtime) rather than just the DBU rate.
 - **Serverless with Performance mode for simple ETL**: Performance mode (2x multiplier) is for latency-sensitive workloads. Standard mode is usually sufficient and cheaper for batch ETL.
 - **Comparing Classic and Serverless by DBU rate alone**: Serverless has higher $/DBU but zero VM costs and zero startup time. Compare total monthly cost, not just the DBU price.

@@ -14,7 +14,7 @@
     "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 2 iter 2 BUILD complete. Fixed critical Photon multiplier accuracy: Jobs/DLT use 2.9x (AWS) or 2.5x (Azure/GCP), NOT 2.0x as previously documented. All-Purpose correctly 2.0x. Recalculated all worked examples. Docs build passes. 1969 tests pass (85 pre-existing failures unrelated to docs).",
+  "last_action": "Sprint 2 iter 3 BUILD complete. Fixed display name accuracy (Lakeflow Jobs, All Purpose Compute, Lakeflow SDP), pricing tier labels to match exact UI text, added AWS Payment Option documentation to all three guides, fixed inaccurate '0 workers' tip. All SKUs verified against pricing bundle. Docs build passes. 1969 tests pass (84 pre-existing failures).",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -30,10 +30,10 @@
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 2,
+  "current_iteration": 3,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",
-  "last_updated": "2026-04-04T02:30:00",
+  "last_updated": "2026-04-04T02:15:00",
   "score_trajectory": []
 }

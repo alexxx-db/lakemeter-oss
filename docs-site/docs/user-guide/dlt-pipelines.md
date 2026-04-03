@@ -4,6 +4,8 @@ sidebar_position: 10
 
 # Delta Live Tables (DLT)
 
+> **Lakemeter UI name:** Lakeflow Spark Declarative Pipelines (SDP)
+
 Delta Live Tables is Databricks' declarative ETL framework for building reliable, automated data pipelines. Lakemeter supports cost estimation for all three editions -- **Core**, **Pro**, and **Advanced** -- in both **Classic** and **Serverless** modes.
 
 ## When to use DLT
@@ -72,22 +74,17 @@ These are example rates for illustration. Actual $/DBU and VM prices depend on y
 
 ## Choosing an edition
 
-DLT has three editions with progressively more features:
-
 | Feature | Core | Pro | Advanced |
 |---------|:----:|:---:|:--------:|
-| Pipeline orchestration and auto-scaling | Yes | Yes | Yes |
 | Change Data Capture (CDC) | No | Yes | Yes |
 | Advanced monitoring | Basic | Enhanced | Full |
 | Data quality expectations | No | No | Yes |
-| Photon support | Yes | Yes | Yes |
-| Serverless support | Yes | Yes | Yes |
 
-**When to pick each:**
+All editions support pipeline orchestration, auto-scaling, Photon, and Serverless.
 
-- **Core** -- Simple ETL that reads from files or tables, transforms, and writes. No CDC needed. Lowest cost.
-- **Pro** -- You need CDC (tracking inserts, updates, deletes from a source), or you want enhanced monitoring for operational pipelines. Most common choice.
-- **Advanced** -- Mission-critical pipelines where you need data quality expectations (assertions that fail the pipeline if data does not meet standards). Highest cost.
+- **Core** -- Simple ETL without CDC. Lowest cost.
+- **Pro** -- CDC and enhanced monitoring. Most common choice.
+- **Advanced** -- Data quality expectations (assertions). Highest cost.
 
 :::tip
 The edition selector in the UI is labeled **"SDP Edition"** (Spark Declarative Pipelines). Core, Pro, and Advanced correspond to increasing levels of DLT features and pricing.
@@ -111,8 +108,12 @@ The edition selector in the UI is labeled **"SDP Edition"** (Spark Declarative P
 | **Worker Instance Type** | VM size for the workers | -- (select from list) |
 | **Number of Workers** | Cluster size | 2 |
 | **Photon** | Hardware-accelerated engine (2.9x DBU multiplier on AWS, 2.5x on Azure/GCP) | Off |
-| **Driver Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | On-Demand |
-| **Worker Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | Spot |
+| **Driver Pricing Tier** | Spot Instances, On-Demand, 1-Year Reserved, or 3-Year Reserved | On-Demand |
+| **Worker Pricing Tier** | Spot Instances, On-Demand, 1-Year Reserved, or 3-Year Reserved | Spot |
+
+:::tip AWS Reserved Payment Options
+When you select a Reserved tier on AWS, an additional **Payment Option** field appears with choices: No Upfront, Partial Upfront, or All Upfront. This field is not shown for Azure or GCP.
+:::
 
 ### Usage fields
 
@@ -124,9 +125,7 @@ DLT supports two input methods:
 |-------|-------------|---------|
 | **Hours Per Month** | Total pipeline uptime | 0 |
 
-Common values: 730 (24/7 streaming), 176 (business hours), 44 (light usage).
-
-**Run-Based (for scheduled pipelines):**
+Common values: 730 (24/7 streaming), 176 (business hours), 44 (light usage). **Run-Based (for scheduled pipelines):**
 
 | Field | Description | Default |
 |-------|-------------|---------|
@@ -145,7 +144,7 @@ VM Cost     = (Driver $/hr + Worker $/hr x Workers) x Hours/Month
 Total       = DBU Cost + VM Cost
 ```
 
-The $/DBU rate depends on your edition (Core, Pro, or Advanced) and whether Photon is enabled. The Photon multiplier is cloud-specific: **2.9x** on AWS, **2.5x** on Azure/GCP.
+The $/DBU rate depends on edition and Photon. The Photon multiplier is cloud-specific: **2.9x** on AWS, **2.5x** on Azure/GCP.
 
 ### Serverless
 
@@ -174,17 +173,17 @@ When Serverless is enabled, the edition selector is hidden in the UI because the
 
 ## Tips
 
-- **DLT Serverless pricing is edition-independent**: If cost is your primary concern and you were choosing between Core and Pro Serverless, it does not matter -- the price is the same. Pick the edition based on features, not cost, when using Serverless.
-- **Classic edition pricing varies significantly**: Core is the cheapest, Advanced is the most expensive. If you do not need CDC or data quality expectations, stick with Core Classic to save money.
-- **Photon for DLT is almost always worth it**: DLT pipelines are inherently data-processing-heavy. Photon's higher DBU rate (2.9x on AWS, 2.5x on Azure/GCP) is usually offset by significantly faster execution, resulting in fewer total hours billed.
-- **Continuous vs scheduled**: For pipelines that only need to process data a few times a day, use run-based scheduling (e.g., 4 runs/day x 15 min). Reserve continuous (730 hours) for true streaming use cases.
+- **DLT Serverless pricing is edition-independent**: All editions use the same Serverless rate. Pick edition based on features, not cost, when using Serverless.
+- **Classic edition pricing varies significantly**: Core is cheapest, Advanced most expensive. Stick with Core Classic if you don't need CDC or data quality expectations.
+- **Photon for DLT is almost always worth it**: Photon's higher DBU rate (2.9x AWS, 2.5x Azure/GCP) is usually offset by faster execution and fewer total hours billed.
+- **Continuous vs scheduled**: Use run-based scheduling for batch pipelines (e.g., 4 runs/day x 15 min). Reserve 730 hours for true streaming.
 
 ## Common mistakes
 
-- **Choosing Advanced "just in case"**: Advanced edition costs significantly more than Core or Pro in Classic mode. Only choose it if you actually need data quality expectations. You can always upgrade later.
-- **Assuming edition affects Serverless cost**: All DLT Serverless workloads use `JOBS_SERVERLESS_COMPUTE` pricing. Switching from Core to Pro Serverless changes nothing in the cost estimate.
-- **Setting 730 hours for a batch pipeline**: If your pipeline runs 4 times a day for 15 minutes each, that is only 22 hours/month -- not 730. Use run-based input to calculate accurately.
-- **Forgetting the Photon multiplier**: Like Jobs, Photon increases the DBU rate by 2.9x (AWS) or 2.5x (Azure/GCP). This is reflected in the cost but is offset by faster processing. Compare total cost with and without Photon, not just the DBU rate.
+- **Choosing Advanced "just in case"**: Advanced costs significantly more in Classic mode. Only choose it if you need data quality expectations.
+- **Assuming edition affects Serverless cost**: All DLT Serverless uses `JOBS_SERVERLESS_COMPUTE` pricing. Edition has no effect on Serverless cost.
+- **Setting 730 hours for a batch pipeline**: If your pipeline runs 4x/day for 15 min each, that is 22 hrs/month, not 730. Use run-based input.
+- **Forgetting the Photon multiplier**: Photon increases DBUs by 2.9x (AWS) or 2.5x (Azure/GCP). Compare total cost, not just DBU rate.
 
 ## Excel export
 
