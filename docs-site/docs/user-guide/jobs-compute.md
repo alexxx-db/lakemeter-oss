@@ -45,20 +45,24 @@ Hours/Month = (Runs Per Day x Avg Runtime / 60) x Days Per Month
 
 **2. DBU rate per hour**
 
-Each m5d.xlarge has a DBU rate of approximately 1.0 DBU/hr. With 1 driver + 4 workers and Photon enabled (2x multiplier):
+Each m5d.xlarge has a DBU rate of approximately 1.0 DBU/hr. With 1 driver + 4 workers and Photon enabled:
 
 ```
 DBU/Hour = (Driver DBU + Worker DBU x Workers) x Photon Multiplier
-         = (1.0 + 1.0 x 4) x 2.0
-         = 5.0 x 2.0
-         = 10.0 DBU/hour
+         = (1.0 + 1.0 x 4) x 2.9
+         = 5.0 x 2.9
+         = 14.5 DBU/hour
 ```
+
+:::info Photon multiplier varies by cloud
+The Photon multiplier for Jobs is **2.9x on AWS** and **2.5x on Azure/GCP**. This example uses the AWS rate. Lakemeter loads the correct multiplier automatically from the pricing bundle based on your cloud selection.
+:::
 
 **3. Monthly DBUs and cost**
 
 ```
-Monthly DBUs = DBU/Hour x Hours/Month = 10.0 x 45 = 450 DBUs
-DBU Cost     = 450 x $0.30/DBU (example Photon rate) = $135.00
+Monthly DBUs = DBU/Hour x Hours/Month = 14.5 x 45 = 652.5 DBUs
+DBU Cost     = 652.5 x $0.15/DBU (example Jobs Photon rate) = $97.88
 ```
 
 **4. VM infrastructure cost**
@@ -75,7 +79,7 @@ VM Cost = (Driver $/hr + Worker $/hr x Workers) x Hours/Month
 **5. Total monthly cost**
 
 ```
-Total = DBU Cost + VM Cost = $135.00 + $21.06 = $156.06/month
+Total = DBU Cost + VM Cost = $97.88 + $21.06 = $118.94/month
 ```
 
 :::note
@@ -100,7 +104,7 @@ These fields appear when Serverless is **off**:
 | **Driver Instance Type** | VM size for the Spark driver node | -- (select from list) |
 | **Worker Instance Type** | VM size for the Spark executor nodes | -- (select from list) |
 | **Number of Workers** | How many worker nodes in the cluster | 2 |
-| **Photon** | Enables the hardware-accelerated Spark engine. Doubles the DBU rate but often halves runtime for compatible workloads. | Off |
+| **Photon** | Enables the hardware-accelerated Spark engine. Increases the DBU rate (2.9x on AWS, 2.5x on Azure/GCP) but often halves runtime for compatible workloads. | Off |
 | **Driver Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | On-Demand |
 | **Worker Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | Spot |
 
@@ -133,20 +137,20 @@ VM Cost     = (Driver $/hr + Worker $/hr x Workers) x Hours/Month
 Total       = DBU Cost + VM Cost
 ```
 
-- **Photon Multiplier** is 2.0 when Photon is on, 1.0 when off
+- **Photon Multiplier** depends on your cloud: **2.9x** on AWS, **2.5x** on Azure/GCP. When Photon is off, the multiplier is 1.0.
 - DBU rates come from the instance type (e.g., m5d.xlarge = ~1.0 DBU/hr)
 - If an instance type is not found in the pricing data, Lakemeter uses a fallback of 0.5 DBU/hr
 
 ### Serverless
 
 ```
-DBU/Hour    = (Driver DBU Rate + Worker DBU Rate x Workers) x 2 x Serverless Multiplier
+DBU/Hour    = (Driver DBU Rate + Worker DBU Rate x Workers) x Photon Multiplier x Serverless Multiplier
 Hours/Month = (Runs Per Day x Runtime / 60) x Days Per Month
 DBU Cost    = DBU/Hour x Hours/Month x $/DBU
 Total       = DBU Cost  (no VM costs)
 ```
 
-- Photon is always applied (x2)
+- Photon is always applied for Serverless. The multiplier is cloud-specific: **2.9x** on AWS, **2.5x** on Azure/GCP.
 - **Serverless Multiplier**: 1.0 for Standard mode, 2.0 for Performance mode
 - The $/DBU rate comes from the `JOBS_SERVERLESS_COMPUTE` SKU
 
@@ -161,14 +165,14 @@ Total       = DBU Cost  (no VM costs)
 ## Tips
 
 - **Classic vs Serverless**: Classic gives you control over instance types and is usually cheaper for long-running, predictable workloads. Serverless eliminates startup time and management overhead -- good for short, frequent jobs or when you want zero infrastructure management.
-- **Photon**: Enable Photon for data-heavy Spark workloads (aggregations, joins, ETL). It doubles the DBU rate but often cuts runtime by 50% or more, resulting in similar or lower total cost. It has less impact on simple Python/ML workloads.
+- **Photon**: Enable Photon for data-heavy Spark workloads (aggregations, joins, ETL). It increases the DBU rate by 2.9x (AWS) or 2.5x (Azure/GCP), but often cuts runtime by 50% or more, resulting in similar or lower total cost. It has less impact on simple Python/ML workloads.
 - **Spot pricing for workers**: The default worker tier is Spot, which is significantly cheaper than On-Demand. Spot is a good choice for batch jobs that can tolerate occasional interruptions. Use On-Demand for the driver to keep the job coordinator stable.
 - **Days Per Month**: The default is 22 (business days). Change this to 30 or 31 for jobs that run on weekends too.
 
 ## Common mistakes
 
 - **Setting workers to 0**: A cluster with 0 workers runs everything on the driver node -- fine for tiny jobs, but most production workloads need at least 2 workers for parallel processing.
-- **Forgetting Photon doubles DBUs**: If your cost estimate seems twice what you expected, check whether Photon is enabled. The higher DBU rate is intentional -- compare total cost (including shorter runtime) rather than just the DBU rate.
+- **Forgetting Photon increases DBUs**: If your cost estimate is nearly 3x what you expected (on AWS), check whether Photon is enabled. The higher DBU rate (2.9x on AWS) is intentional -- compare total cost (including shorter runtime) rather than just the DBU rate.
 - **Serverless with Performance mode for simple ETL**: Performance mode (2x multiplier) is for latency-sensitive workloads. Standard mode is usually sufficient and cheaper for batch ETL.
 - **Comparing Classic and Serverless by DBU rate alone**: Serverless has higher $/DBU but zero VM costs and zero startup time. Compare total monthly cost, not just the DBU price.
 

@@ -35,16 +35,20 @@ Use DLT when you need **managed, declarative data pipelines** with built-in data
 
 ```
 DBU/Hour = (Driver DBU + Worker DBU x Workers) x Photon Multiplier
-         = (1.0 + 1.0 x 3) x 2.0
-         = 4.0 x 2.0
-         = 8.0 DBU/hour
+         = (1.0 + 1.0 x 3) x 2.9
+         = 4.0 x 2.9
+         = 11.6 DBU/hour
 ```
+
+:::info Photon multiplier varies by cloud
+The Photon multiplier for DLT is **2.9x on AWS** and **2.5x on Azure/GCP**. This example uses the AWS rate. Lakemeter loads the correct multiplier automatically from the pricing bundle.
+:::
 
 **2. Monthly DBUs and cost**
 
 ```
-Monthly DBUs = 8.0 x 730 = 5,840 DBUs
-DBU Cost     = 5,840 x $0.38/DBU (example DLT Pro Photon rate) = $2,219.20
+Monthly DBUs = 11.6 x 730 = 8,468 DBUs
+DBU Cost     = 8,468 x $0.25/DBU (example DLT Pro Photon rate) = $2,117.00
 ```
 
 **3. VM cost**
@@ -59,7 +63,7 @@ VM Cost = (Driver $/hr + Worker $/hr x Workers) x Hours/Month
 **4. Total**
 
 ```
-Total = $2,219.20 + $560.64 = $2,779.84/month
+Total = $2,117.00 + $560.64 = $2,677.64/month
 ```
 
 :::note
@@ -106,7 +110,7 @@ The edition selector in the UI is labeled **"SDP Edition"** (Spark Declarative P
 | **Driver Instance Type** | VM size for the driver | -- (select from list) |
 | **Worker Instance Type** | VM size for the workers | -- (select from list) |
 | **Number of Workers** | Cluster size | 2 |
-| **Photon** | Hardware-accelerated engine (2x DBU multiplier) | Off |
+| **Photon** | Hardware-accelerated engine (2.9x DBU multiplier on AWS, 2.5x on Azure/GCP) | Off |
 | **Driver Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | On-Demand |
 | **Worker Pricing Tier** | On-Demand, Spot, Reserved 1yr, or Reserved 3yr | Spot |
 
@@ -141,17 +145,17 @@ VM Cost     = (Driver $/hr + Worker $/hr x Workers) x Hours/Month
 Total       = DBU Cost + VM Cost
 ```
 
-The $/DBU rate depends on your edition (Core, Pro, or Advanced) and whether Photon is enabled.
+The $/DBU rate depends on your edition (Core, Pro, or Advanced) and whether Photon is enabled. The Photon multiplier is cloud-specific: **2.9x** on AWS, **2.5x** on Azure/GCP.
 
 ### Serverless
 
 ```
-DBU/Hour    = (Driver DBU Rate + Worker DBU Rate x Workers) x 2 x Serverless Multiplier
+DBU/Hour    = (Driver DBU Rate + Worker DBU Rate x Workers) x Photon Multiplier x Serverless Multiplier
 DBU Cost    = DBU/Hour x Hours/Month x $/DBU
 Total       = DBU Cost  (no VM costs)
 ```
 
-- Photon is always applied (x2)
+- Photon is always applied for Serverless. The multiplier is cloud-specific: **2.9x** on AWS, **2.5x** on Azure/GCP.
 - **Serverless Multiplier**: 1.0 for Standard, 2.0 for Performance
 
 :::caution Important
@@ -172,7 +176,7 @@ When Serverless is enabled, the edition selector is hidden in the UI because the
 
 - **DLT Serverless pricing is edition-independent**: If cost is your primary concern and you were choosing between Core and Pro Serverless, it does not matter -- the price is the same. Pick the edition based on features, not cost, when using Serverless.
 - **Classic edition pricing varies significantly**: Core is the cheapest, Advanced is the most expensive. If you do not need CDC or data quality expectations, stick with Core Classic to save money.
-- **Photon for DLT is almost always worth it**: DLT pipelines are inherently data-processing-heavy. Photon's 2x DBU rate is usually offset by significantly faster execution, resulting in fewer total hours billed.
+- **Photon for DLT is almost always worth it**: DLT pipelines are inherently data-processing-heavy. Photon's higher DBU rate (2.9x on AWS, 2.5x on Azure/GCP) is usually offset by significantly faster execution, resulting in fewer total hours billed.
 - **Continuous vs scheduled**: For pipelines that only need to process data a few times a day, use run-based scheduling (e.g., 4 runs/day x 15 min). Reserve continuous (730 hours) for true streaming use cases.
 
 ## Common mistakes
@@ -180,7 +184,7 @@ When Serverless is enabled, the edition selector is hidden in the UI because the
 - **Choosing Advanced "just in case"**: Advanced edition costs significantly more than Core or Pro in Classic mode. Only choose it if you actually need data quality expectations. You can always upgrade later.
 - **Assuming edition affects Serverless cost**: All DLT Serverless workloads use `JOBS_SERVERLESS_COMPUTE` pricing. Switching from Core to Pro Serverless changes nothing in the cost estimate.
 - **Setting 730 hours for a batch pipeline**: If your pipeline runs 4 times a day for 15 minutes each, that is only 22 hours/month -- not 730. Use run-based input to calculate accurately.
-- **Forgetting the Photon multiplier**: Like Jobs, Photon doubles the DBU rate. This is reflected in the cost but is offset by faster processing. Compare total cost with and without Photon, not just the DBU rate.
+- **Forgetting the Photon multiplier**: Like Jobs, Photon increases the DBU rate by 2.9x (AWS) or 2.5x (Azure/GCP). This is reflected in the cost but is offset by faster processing. Compare total cost with and without Photon, not just the DBU rate.
 
 ## Excel export
 
