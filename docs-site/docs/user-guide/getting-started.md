@@ -34,14 +34,14 @@ You land on the **Calculator** page -- an empty estimate ready for workloads.
 2. Set **Workload Type** to **Jobs**.
 3. Set **Workload Name** to `ETL Pipeline`.
 4. Leave **Serverless** toggled off (we want classic compute for this example).
-5. Configure compute:
-   - **Driver Node Type:** `m5d.xlarge`
-   - **Worker Node Type:** `m5d.xlarge`
-   - **Number of Workers:** `4`
-   - **Photon:** Off
-6. Configure pricing:
-   - **Driver Pricing Tier:** On-Demand
-   - **Worker Pricing Tier:** Spot
+5. Configure compute (in the Driver Node and Worker Nodes cards):
+   - **Driver Instance Type:** `m5d.xlarge`
+   - **Worker Instance Type:** `m5d.xlarge`
+   - **Worker Count:** `4`
+   - **Photon:** Off (leave unchecked)
+6. Configure pricing (within each card):
+   - **Driver Pricing Tier:** On-Demand (the default)
+   - **Worker Pricing Tier:** Spot Instances (the default)
 7. Configure usage:
    - **Runs Per Day:** `2`
    - **Avg Runtime (minutes):** `45`
@@ -56,8 +56,8 @@ You land on the **Calculator** page -- an empty estimate ready for workloads.
 1. Click **Add Workload** again.
 2. Set **Workload Type** to **DBSQL**.
 3. Set **Workload Name** to `Analytics Warehouse`.
-4. Set **Warehouse Type** to **Serverless**.
-5. Set **Warehouse Size** to **Small** (12 DBU/hr).
+4. Leave the **Serverless** checkbox checked (this is the default).
+5. Set **Size** to **Small** (12 DBU/hr).
 6. Set **Number of Clusters** to `1`.
 7. Configure usage:
    - **Hours Per Month:** `220` (roughly 10 hrs/day x 22 business days)

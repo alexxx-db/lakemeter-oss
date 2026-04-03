@@ -41,25 +41,25 @@ These workloads share a common configuration pattern:
 | **Serverless** | Toggle on for Databricks-managed compute, off for classic | Off |
 | **Serverless Mode** | Standard or Performance (Performance uses 2x DBU rate) | Standard |
 | **Photon** | Hardware-accelerated engine (classic mode only) | Off |
-| **Driver Node Type** | VM instance for the driver (classic only) | -- |
-| **Worker Node Type** | VM instance for workers (classic only) | -- |
-| **Number of Workers** | Worker node count (classic only) | 1 |
-| **Driver Pricing** | On-demand, 1-year reserved, 3-year reserved | On-demand |
-| **Worker Pricing** | Spot, On-demand, 1-year reserved, 3-year reserved | On-demand |
+| **Driver Instance Type** | VM instance for the driver (classic only) | -- |
+| **Worker Instance Type** | VM instance for workers (classic only) | -- |
+| **Worker Count** | Number of worker nodes (classic only) | 2 |
+| **Driver Pricing Tier** | On-Demand, 1-Year Reserved, 3-Year Reserved | On-Demand |
+| **Worker Pricing Tier** | Spot Instances, On-Demand, 1-Year Reserved, 3-Year Reserved | Spot Instances |
 | **Payment Option** | No upfront, partial upfront, all upfront (reserved only) | No upfront |
 
-**DLT-specific:**
+**DLT-specific (classic mode only):**
 
 | Field | Description | Options |
 |-------|-------------|---------|
-| **DLT Edition** | Feature tier for the pipeline | Core, Pro, Advanced |
+| **SDP Edition** | Feature tier for the pipeline (Core, Pro, Advanced). Hidden when Serverless is enabled. | Core, Pro, Advanced |
 
 **Usage fields (Jobs):**
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| **Runs Per Day** | Number of job executions daily | -- |
-| **Avg Runtime (minutes)** | Average duration of each run | -- |
+| **Runs Per Day** | Number of job executions daily | 1 |
+| **Avg Runtime (minutes)** | Average duration of each run | 30 |
 | **Days Per Month** | Active days per month | 22 |
 
 **Usage fields (All-Purpose, DLT):**
@@ -72,8 +72,8 @@ These workloads share a common configuration pattern:
 
 | Field | Description | Options |
 |-------|-------------|---------|
-| **Warehouse Type** | Classic, Pro, or Serverless | Classic, Pro, Serverless |
-| **Warehouse Size** | Determines DBU/hr consumption | 2X-Small (4 DBU/hr) through 4X-Large |
+| **Serverless** | Checkbox to enable Serverless SQL (Premium+ only). When off, choose Pro or Classic. | On (Serverless) |
+| **Size** | Determines DBU/hr consumption | Small (12 DBU/hr) |
 | **Number of Clusters** | Concurrent cluster count for scaling | 1+ |
 | **Hours Per Month** | Warehouse uptime | -- |
 
