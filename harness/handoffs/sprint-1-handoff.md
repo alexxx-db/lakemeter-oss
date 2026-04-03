@@ -1,50 +1,48 @@
-# Sprint 1 Handoff: Excel Export SKU & Rate Alignment
+# Sprint 1 Handoff: Automated Parity Test Framework
 
 ## What Was Built
 
-Fixed 7 bugs in the backend Excel export module to align SKU type mappings, fallback rates, photon multiplier logic, and FMAPI context defaults with the frontend UI:
+Parametrized parity test suite comparing backend export calculations against frontend `costCalculation.ts` formulas for all 9 workload types.
 
-- **Bug 1**: DLT Serverless SKU → `JOBS_SERVERLESS_COMPUTE` (was `DELTA_LIVE_TABLES_SERVERLESS`)
-- **Bug 2**: FMAPI Proprietary context_length default → `'long'` for all providers (was `'all'` for non-Google)
-- **Bug 3**: Added `_get_photon_multiplier()` reading from `dbu-multipliers.json` with warning on fallback (was hardcoded `*= 2`)
-- **Bug 4/5**: Photon multiplier now uses actual JSON values (2.9 for AWS) instead of hardcoded 2.0
-- **Bug 6**: FALLBACK_DBU_PRICES aligned: DLT_SERVERLESS 0.30 (was 0.50), Lakebase 0.48 (was 0.40)
-- **Bug 7**: Removed `VECTOR_SEARCH_ENDPOINT`, added `DLT_*_(PHOTON)`, `GOOGLE_MODEL_SERVING`, `SERVERLESS_REAL_TIME_INFERENCE_LAUNCH`
-- **VS Calc**: Vector Search units now use `math.ceil()` matching frontend
+### Files Created
+| File | Purpose |
+|------|---------|
+| `tests/parity/__init__.py` | Package marker |
+| `tests/parity/conftest.py` | Shared fixtures: pricing data loader, `make_item()` factory |
+| `tests/parity/frontend_calc.py` | Python reimplementation of frontend formulas (9 functions) |
+| `tests/parity/test_parity_jobs.py` | JOBS: classic, photon, serverless standard/performance (6 tests) |
+| `tests/parity/test_parity_allpurpose.py` | ALL_PURPOSE: classic, photon, serverless (3 tests) |
+| `tests/parity/test_parity_dlt.py` | DLT: Core classic, Pro photon, Advanced serverless (3 tests) |
+| `tests/parity/test_parity_dbsql.py` | DBSQL: Classic Small, Pro Medium 2-cluster, Serverless 4XL & 2XS (4 tests) |
+| `tests/parity/test_parity_vector_search.py` | VS: standard 1M/3M/5M ceiling, storage_optimized 100M (4 tests) |
+| `tests/parity/test_parity_model_serving.py` | MS: CPU, T4, A10G, case-insensitive GPU type (4 tests) |
+| `tests/parity/test_parity_fmapi_databricks.py` | FMAPI-DB: bge-large input, gemma output, provisioned scaling (3 tests) |
+| `tests/parity/test_parity_fmapi_proprietary.py` | FMAPI-Prop: OpenAI gpt-5-1, Anthropic claude-sonnet, Google gemini (4 tests) |
+| `tests/parity/test_parity_lakebase.py` | Lakebase: basic CU, HA 3-node, storage 500GB, zero storage (4 tests) |
 
-## Files Changed
-
-### Backend (production code)
-- `backend/app/routes/export/pricing.py` — SKU mappings, fallback prices, new `_get_photon_multiplier()`, `DBU_MULTIPLIERS` loader
-- `backend/app/routes/export/calculations.py` — Photon multiplier from JSON, VS ceiling calc, gpu_type `.lower()`
-
-### New Tests
-- `tests/sprint_sku_alignment/` — 64 new tests: SKU resolution (33), fallback prices (24), FMAPI context (9), photon warning (2)
-
-### Updated Tests
-- `tests/regression/test_sprint_1_bugs.py` — Photon multiplier 2.0 → 2.9
-- `tests/regression/test_sprint_3_bugs.py` — DLT SKU assertions aligned to fixed behavior
-- `tests/sprint_1/test_jobs_export.py`, `test_jobs_excel_export.py` — Photon values
-- `tests/sprint_3/test_dlt_export_calc.py`, `test_dlt_excel_export.py`, `test_dlt_export_sku.py`, `test_dlt_disc_pricing.py`, `test_dlt_excel_e2e_formulas.py` — DLT SKU + photon
-- `tests/sprint_8/test_vs_dbu_calc.py`, `test_vs_edge_cases.py`, `test_vs_excel_compute.py`, `test_vs_excel_storage.py`, `test_vs_sku_pricing.py`, `vs_calc_helpers.py`, `excel_helpers.py` — VS ceiling + SKU
-- `tests/sprint_9/test_lb_sku_pricing.py`, `test_lb_excel_storage.py` — Lakebase rates
-- `tests/sprint_10/test_combined_calc.py`, `test_excel_structure.py`, `test_excel_formulas.py`, `test_regression_s10.py` — Combined fixes
+### Test Coverage
+- **35 parity test cases** across 9 workload types (exceeds 27 minimum)
+- Each test verifies: DBU/hr, SKU type, DBU price, monthly cost
+- Tests load real pricing data from `backend/static/pricing/*.json`
+- Storage cost verified for LAKEBASE and VECTOR_SEARCH
 
 ## How to Test
 
 ```bash
+# Run parity tests only
 cd /Users/steven.tan/Desktop/Ent\ 1\ -\ Q4\ FY\ 2026\ Team\ Project/lakemeter_app
-source .venv/bin/activate
-python -m pytest tests/ -q
+python3 -m pytest tests/parity/ -v
+
+# Run full suite (verify no regressions)
+python3 -m pytest -q
 ```
 
 ## Test Results
-
-- `pytest` exit code: 0
-- Tests: **1714 passed**, 0 failed
-- Duration: ~144s
+- `pytest tests/parity/` exit code: 0
+- Parity tests: **35 passed** in 1.0s
+- Full suite: **1749 passed** in 144.6s (0 failures, 0 regressions)
 
 ## Known Limitations
-
-- Photon multiplier values are cloud-specific (AWS=2.9, Azure=2.5). Tests only validate AWS.
-- `DELTA_LIVE_TABLES_SERVERLESS` key remains in `FALLBACK_DBU_PRICES` for backward compatibility but is no longer returned by `_get_sku_type`.
+- Parity tests focus on AWS cloud only (Azure/GCP parity deferred to Sprint 4)
+- VM cost parity not tested (not applicable for serverless workloads; classic VM cost is instance pricing, not calculation logic)
+- Frontend calc reimplementation (`frontend_calc.py`) is a Python translation, not an automated TS-to-Python transpilation

@@ -1,30 +1,21 @@
 {
   "status": "IN_PROGRESS",
-  "app_name": "lakemeter-export-installer-fix",
+  "app_name": "lakemeter-export-parity",
   "workspace_dir": "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app",
   "quality_target": 9.0,
   "current_phase": "BUILD_AGENT",
   "spec_complete": true,
   "current_sprint": 1,
-  "planned_sprints": 5,
+  "planned_sprints": 4,
   "remaining_spec_items": [
-    "Sprint 2: Excel Export \u2014 Calculation Parity Tests",
-    "Sprint 3: Installer \u2014 Pre-flight Checks & Secret Scope",
-    "Sprint 4: Installer \u2014 App.yaml & Permissions",
-    "Sprint 5: Integration Testing & Validation"
-  ],
-  "sprints_completed": [
-    {
-      "sprint": 1,
-      "feature": "Excel Export \u2014 SKU & Rate Alignment",
-      "score": null,
-      "iterations": 1,
-      "trajectory": [],
-      "tests": 1714
-    }
+    "Sprint 1: Automated Parity Test Framework — parametrized pytest comparing backend export calculations to frontend costCalculation.ts for all 9 workload types",
+    "Sprint 2: Installer Pre-Flight Checks — auto-create secrets scope, prompt for SP credentials, validate deps, --dry-run and --non-interactive flags",
+    "Sprint 3: App Config & Database Permissions — fix DATABRICKS_HOST to empty for auto-inject, add GRANT USAGE/CONNECT ON DATABASE for SP",
+    "Sprint 4: End-to-End Integration Validation — full export round-trip, pricing integrity, cross-cloud parity, regression sweep, >=120 total tests"
   ],
   "dynamically_added_sprints": [],
-  "feature_sprints_since_doc_sprint": 1,
+  "sprints_completed": [],
+  "feature_sprints_since_doc_sprint": 0,
   "last_doc_sprint": 0,
   "last_install_test": 0,
   "last_integration_test": 0,
@@ -33,6 +24,5 @@
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd backend && python -m uvicorn app.main:app --reload --port 8000",
-  "last_action": "Sprint 1 BUILD complete. 7 bugs fixed, 64 new tests, 1714 total passing. Ready for VISUAL_QA.",
-  "last_updated": "2026-04-03T16:30:00"
+  "last_updated": "2026-04-03T16:15:00"
 }
