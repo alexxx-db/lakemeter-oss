@@ -151,8 +151,8 @@ class TestAllPurposeCalculateDBUPerHour:
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
         assert len(warnings) == 2  # Both driver and worker not found
-        # Fallback: driver=0.25 + worker=0.5*4 = 2.25
-        assert dbu_hr == pytest.approx(2.25)
+        # Fallback: driver=0.5 + worker=0.5*4 = 2.5 (matching frontend)
+        assert dbu_hr == pytest.approx(2.5)
 
     def test_num_workers_defaults_to_0(self):
         """Backend defaults num_workers=None to 0 (FIXED: was 1)."""

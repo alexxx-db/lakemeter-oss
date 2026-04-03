@@ -19,6 +19,7 @@ def make_line_item(**kwargs):
         "dbsql_num_clusters": None,
         "vector_search_mode": None,
         "vector_capacity_millions": None,
+        "vector_search_storage_gb": None,
         "model_serving_gpu_type": None,
         "fmapi_provider": None,
         "fmapi_model": None,
@@ -134,12 +135,13 @@ def make_fmapi_proprietary():
 
 
 def make_vector_search_standard():
-    """Vector Search Standard — 5M vectors, 730 hrs/month."""
+    """Vector Search Standard — 5M vectors, 50GB storage, 730 hrs/month."""
     return make_line_item(
         workload_type="VECTOR_SEARCH",
         workload_name="Vector Search Standard 5M",
         vector_search_mode="standard",
         vector_capacity_millions=5,
+        vector_search_storage_gb=50,
         hours_per_month=730,
         display_order=7,
     )

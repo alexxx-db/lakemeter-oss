@@ -19,6 +19,7 @@ def make_line_item(**kwargs):
         "dbsql_num_clusters": None,
         "vector_search_mode": "standard",
         "vector_capacity_millions": 2,
+        "vector_search_storage_gb": 0,
         "model_serving_gpu_type": None,
         "fmapi_provider": None,
         "fmapi_model": None,

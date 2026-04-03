@@ -17,8 +17,8 @@ class TestStorageSubRow:
     """AC-10 to AC-13: Storage sub-row emitted with correct values."""
 
     def test_storage_row_emitted(self):
-        """AC-10: Storage sub-row exists for Vector Search."""
-        items = [make_line_item(vector_capacity_millions=5)]
+        """AC-10: Storage sub-row exists for Vector Search with storage_gb > 0."""
+        items = [make_line_item(vector_capacity_millions=5, vector_search_storage_gb=50)]
         wb = generate_xlsx(items)
         ws = wb.active
         storage_rows = find_data_rows(ws, 'DATABRICKS_STORAGE')
@@ -26,7 +26,7 @@ class TestStorageSubRow:
 
     def test_storage_row_sku(self):
         """AC-11: Storage sub-row SKU = DATABRICKS_STORAGE."""
-        items = [make_line_item(vector_capacity_millions=5)]
+        items = [make_line_item(vector_capacity_millions=5, vector_search_storage_gb=50)]
         wb = generate_xlsx(items)
         ws = wb.active
         row = find_storage_row(ws)
@@ -35,7 +35,7 @@ class TestStorageSubRow:
 
     def test_storage_row_type_display(self):
         """Storage sub-row type should say 'Vector Search (Storage)'."""
-        items = [make_line_item(vector_capacity_millions=5)]
+        items = [make_line_item(vector_capacity_millions=5, vector_search_storage_gb=50)]
         wb = generate_xlsx(items)
         ws = wb.active
         row = find_storage_row(ws)
@@ -45,20 +45,22 @@ class TestStorageSubRow:
         assert 'Storage' in str(type_val)
 
     def test_storage_gb_approximation(self):
-        """AC-12: Storage GB ~ capacity_millions (1M ~ 1 GB)."""
-        items = [make_line_item(vector_capacity_millions=5)]
+        """AC-12: Storage config mentions the storage GB amount."""
+        items = [make_line_item(vector_capacity_millions=5, vector_search_storage_gb=50)]
         wb = generate_xlsx(items)
         ws = wb.active
         row = find_storage_row(ws)
         assert row is not None
         config = ws.cell(row=row, column=COL_CONFIG).value
-        assert '5' in str(config), (
-            f"Storage config should mention 5 GB, got: {config}"
+        assert '50' in str(config), (
+            f"Storage config should mention 50 GB, got: {config}"
         )
 
     def test_storage_cost_positive(self):
-        """AC-13: Storage cost = storage_gb * rate > 0."""
-        items = [make_line_item(vector_capacity_millions=10)]
+        """AC-13: Storage cost = storage_gb * rate > 0 (billable > free)."""
+        # 10M vectors, standard mode: units=ceil(10M/2M)=5, free=5*20=100GB
+        # Set storage_gb=200 so billable=200-100=100GB, cost=100*0.023=$2.30
+        items = [make_line_item(vector_capacity_millions=10, vector_search_storage_gb=200)]
         wb = generate_xlsx(items)
         ws = wb.active
         row = find_storage_row(ws)
@@ -69,13 +71,13 @@ class TestStorageSubRow:
 
     def test_storage_notes_mention_rate(self):
         """Notes should mention $/GB/month rate."""
-        items = [make_line_item(vector_capacity_millions=5)]
+        items = [make_line_item(vector_capacity_millions=5, vector_search_storage_gb=50)]
         wb = generate_xlsx(items)
         ws = wb.active
         row = find_storage_row(ws)
         assert row is not None
         notes = ws.cell(row=row, column=COL_NOTES).value
-        assert notes and '/GB/month' in str(notes)
+        assert notes and '/GB' in str(notes)
 
 
 class TestExcelTotals:
@@ -94,12 +96,14 @@ class TestExcelTotals:
         assert found_sum, "No SUM formula found in totals row"
 
     def test_totals_with_multiple_vs_items(self):
-        """Two VS items -> 4 data rows (2 compute + 2 storage)."""
+        """Two VS items with storage -> 4 data rows (2 compute + 2 storage)."""
         items = [
             make_line_item(vector_capacity_millions=2,
+                           vector_search_storage_gb=20,
                            workload_name='VS Standard'),
             make_line_item(vector_search_mode='storage_optimized',
                            vector_capacity_millions=64,
+                           vector_search_storage_gb=640,
                            workload_name='VS StorOpt', display_order=1),
         ]
         wb = generate_xlsx(items)

@@ -33,15 +33,14 @@ class TestRowCount:
 
     def test_total_data_rows(self, ws):
         rows = find_all_data_rows(ws)
-        # 9 workload items + 1 Lakebase storage sub-row = 10
-        # (Vector Search storage sub-row not yet implemented in export)
-        assert len(rows) == 10, f"Expected 10 data rows, got {len(rows)}"
+        # 9 workload items + 1 Lakebase storage + 1 VS storage = 11
+        assert len(rows) == 11, f"Expected 11 data rows, got {len(rows)}"
 
     def test_lakebase_storage_row_exists(self, ws):
         storage_rows = find_rows_by_sku(ws, 'DATABRICKS_STORAGE')
-        # Only Lakebase has a storage sub-row; Vector Search storage not yet in export
-        assert len(storage_rows) >= 1, \
-            f"Expected >=1 DATABRICKS_STORAGE rows, got {len(storage_rows)}"
+        # Lakebase + Vector Search both have storage sub-rows
+        assert len(storage_rows) >= 2, \
+            f"Expected >=2 DATABRICKS_STORAGE rows, got {len(storage_rows)}"
 
     def test_lakebase_compute_row_exists(self, ws):
         rows = find_rows_by_sku(ws, 'DATABASE_SERVERLESS_COMPUTE')

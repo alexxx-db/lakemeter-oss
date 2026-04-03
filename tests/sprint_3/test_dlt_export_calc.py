@@ -116,7 +116,7 @@ class TestDLTCalculateDBUPerHour:
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
         assert len(warnings) == 2
-        assert dbu_hr == pytest.approx(2.25)  # 0.25 + 0.5*4
+        assert dbu_hr == pytest.approx(2.5)  # 0.5 + 0.5*4 (matching frontend)
 
     @pytest.mark.parametrize("edition", ["CORE", "PRO", "ADVANCED"])
     def test_dbu_per_hour_same_for_all_editions(self, edition):

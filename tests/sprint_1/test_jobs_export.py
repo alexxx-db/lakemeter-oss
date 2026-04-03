@@ -150,7 +150,7 @@ class TestCalculateDBUPerHour:
         assert dbu_hr == pytest.approx(17.4)
 
     def test_fallback_dbu_rates_when_no_instance(self):
-        """Unknown instance types fall back to driver=0.25, worker=0.5."""
+        """Unknown instance types fall back to driver=0.5, worker=0.5 (matching frontend)."""
         item = make_line_item(
             workload_type="JOBS",
             driver_node_type="unknown.type",
@@ -160,7 +160,7 @@ class TestCalculateDBUPerHour:
             serverless_enabled=False,
         )
         dbu_hr, warnings = _calculate_dbu_per_hour(item, "aws")
-        expected = 0.25 + (0.5 * 2)  # 1.25
+        expected = 0.5 + (0.5 * 2)  # 1.5
         assert dbu_hr == pytest.approx(expected)
         assert len(warnings) == 2  # Both driver and worker warnings
 

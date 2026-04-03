@@ -66,7 +66,7 @@ def _calc_compute_dbu(item, cloud, wt, warnings):
             worker_dbu = cloud_instances[item.worker_node_type].get('dbu_rate', 0.5)
             worker_found = True
     if not driver_found and item.driver_node_type:
-        warnings.append(f"Driver DBU rate not found for {item.driver_node_type}, using 0.25")
+        warnings.append(f"Driver DBU rate not found for {item.driver_node_type}, using 0.5")
     if not worker_found and item.worker_node_type:
         warnings.append(f"Worker DBU rate not found for {item.worker_node_type}, using 0.5")
 

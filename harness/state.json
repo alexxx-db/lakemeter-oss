@@ -21,13 +21,13 @@
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 1,
+  "current_iteration": 2,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd backend && uvicorn app.main:app --reload --port 8000",
   "live_app_url": "https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com",
   "test_estimate_id": "4a3be3ef-1300-458b-890b-755b008e5940",
   "dev_server_port": 8000,
-  "last_updated": "2026-04-03T17:00:00",
-  "last_action": "Sprint 1 Build complete. Fixed driver DBU fallback (0.25→0.5), added 9 new tests, fixed Vector Search AttributeError. 170/170 tests pass."
+  "last_updated": "2026-04-03T17:15:00",
+  "last_action": "Sprint 1 iter 2 Build complete. Fixed 11 test failures: driver fallback warning message, 3 fallback test expectations, 6 VS storage sub-row tests, 2 row count tests. 1762/1762 tests pass."
 }
