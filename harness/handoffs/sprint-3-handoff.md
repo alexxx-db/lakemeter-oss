@@ -1,4 +1,4 @@
-# Sprint 3 Handoff: Workload Guides — SQL, AI/ML, and Lakebase (Iteration 2)
+# Sprint 3 Handoff: Workload Guides — SQL, AI/ML, and Lakebase (Iteration 3)
 
 ## What Was Built (Iteration 1)
 
@@ -60,6 +60,19 @@ Transformed into a decision guide with quick decision table, category breakdown,
 - **Context length descriptions reordered**: Listed Long first (as default), then Short, then All — matching actual usage priority
 - **Added note**: "Not all models support all context lengths — Lakemeter automatically filters available options based on the selected model"
 
+## What Was Fixed (Iteration 3)
+
+### FMAPI Proprietary — Added Cache Read/Cache Write Rate Types
+- **Added `cache_read` and `cache_write` to rate types table**: The UI shows 4 rate types (Input Token, Output Token, Cache Read, Cache Write) but the docs only documented 2. Added descriptions explaining prompt caching use case.
+- **Added prompt caching tip**: Explained when cache_read/cache_write are useful and that Cache Read rates are typically much lower than Input Token rates.
+- **Updated info box**: Changed "Add one for input tokens and another for output tokens" to also mention Cache Read/Cache Write line items.
+
+### Model Serving — Added Number of Endpoints Field
+- **Added `Number of Endpoints` to config reference**: The UI shows this field (WorkloadForm.tsx line 1603-1612) but the docs omitted it. Added note that the field is for planning purposes and does not multiply cost calculation — each endpoint should be a separate workload entry.
+
+### Lakebase — Removed Duplicate Tip
+- **Removed duplicate "Start with 1 CU" tip**: The Tips section had two nearly identical bullets about starting with 1 CU. Merged into a single tip that covers both development use and scaling guidance.
+
 ### Verification Summary
 All pricing numbers re-verified against pricing bundle JSONs:
 - DBSQL: Small=12, Medium=24 DBU/hr; Classic $0.22, Pro $0.55, Serverless $0.70 ✓
@@ -74,8 +87,9 @@ All pricing numbers re-verified against pricing bundle JSONs:
 
 - Start: `cd docs-site && npm run start`
 - Navigate to: http://localhost:3000
-- Check Lakebase guide: verify CU options listed as 1/2/4/8, no mention of 0.5 CU or backup retention
-- Check FMAPI Proprietary guide: verify default context length listed as "Long", context length table reordered
+- Check FMAPI Proprietary guide: verify rate types table includes Cache Read and Cache Write, prompt caching tip present
+- Check Model Serving guide: verify Number of Endpoints field in config reference table
+- Check Lakebase guide: verify only one "Start with 1 CU" tip (no duplicate)
 - Verify all worked examples still have correct numbers
 - Test sidebar navigation between Compute Workloads and AI/ML & Data Services
 
@@ -85,16 +99,16 @@ All pricing numbers re-verified against pricing bundle JSONs:
 - `pytest`: 1,969 passed, 84 failed (pre-existing), 2 skipped
 - All 84 failures are pre-existing structural/coverage tests, unchanged from iteration 1
 
-## Files Changed (Iteration 2 only)
+## Files Changed (Iteration 3 only)
 
 | File | Action |
 |------|--------|
-| `docs-site/docs/user-guide/lakebase.md` | Fixed CU sizes, removed backup retention, removed 0.5 CU |
-| `docs-site/docs/user-guide/fmapi-proprietary.md` | Fixed context length default and descriptions |
+| `docs-site/docs/user-guide/fmapi-proprietary.md` | Added cache_read/cache_write rate types, prompt caching tip, updated info box |
+| `docs-site/docs/user-guide/model-serving.md` | Added Number of Endpoints to config reference |
+| `docs-site/docs/user-guide/lakebase.md` | Removed duplicate "Start with 1 CU" tip |
 
 ## Known Limitations
 
-- $/DBU rates in examples use fallback rates for AWS/us-east-1/Premium. Actual rates vary by cloud/region/tier -- noted with disclaimer in each guide.
+- $/DBU rates in examples use fallback rates for AWS/us-east-1/Premium. Actual rates vary by cloud/region/tier — noted with disclaimer in each guide.
 - VM costs for DBSQL Classic/Pro use default estimates rather than actual instance pricing.
-- FMAPI Proprietary cache_read/cache_write rate types are not covered (rate types exist in pricing bundle but aren't prominently featured in UI).
-- Model Serving `num_endpoints` field exists in UI but is not used in backend cost calculations -- intentionally omitted from docs.
+- `batch_inference` rate type exists in the UI code but is not prominently documented — it uses token-based rates with batch pricing and is a less common use case.

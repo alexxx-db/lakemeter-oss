@@ -12,7 +12,7 @@
     "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 3 iter 2 BUILD complete. Fixed Lakebase CU sizes (1/2/4/8 not 0.5-112), removed backup retention from config reference (hidden field), fixed FMAPI Proprietary context length default (Long not All), reordered context length descriptions. All pricing numbers re-verified against pricing bundles. Docs build passes. 1969 tests pass (84 pre-existing failures).",
+  "last_action": "Sprint 3 iter 3 BUILD complete. Added cache_read/cache_write rate types to FMAPI Proprietary docs (UI shows 4 rate types, docs only had 2). Added Number of Endpoints field to Model Serving config reference. Removed duplicate tip in Lakebase. All changes verified against source code. Docs build passes. 1969 tests pass (84 pre-existing failures).",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -35,7 +35,7 @@
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 2,
+  "current_iteration": 3,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",

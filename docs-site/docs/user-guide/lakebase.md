@@ -132,10 +132,9 @@ Total = Compute Cost + Storage Cost
 
 ## Tips
 
-- **Start with 1 CU for development**: A single CU with 1 node is sufficient for development and testing. Scale up for production based on query load.
+- **Start with 1 CU for development**: A single CU with 1 node is sufficient for development and testing. Scale to 2, 4, or 8 CU based on query load and concurrency.
 - **Use 2 nodes for production**: A read replica provides both read scaling and automatic failover. The 2x compute cost is worth it for production reliability.
 - **Storage is cheap relative to compute**: 500 GB costs ~$172/month, while even 1 CU at 730 hours costs ~$292. Optimize CU size first.
-- **Start with 1 CU**: The smallest CU option is ideal for development and light workloads. Scale to 2, 4, or 8 CU based on query load and concurrency.
 
 ## Common mistakes
 
