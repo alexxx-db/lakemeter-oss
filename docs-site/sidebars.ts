@@ -17,7 +17,7 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Workload Guides',
+      label: 'Compute Workloads',
       collapsed: false,
       items: [
         'user-guide/workloads',
@@ -25,6 +25,13 @@ const sidebars: SidebarsConfig = {
         'user-guide/all-purpose-compute',
         'user-guide/dlt-pipelines',
         'user-guide/dbsql-warehouses',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'AI/ML & Data Services',
+      collapsed: false,
+      items: [
         'user-guide/model-serving',
         'user-guide/vector-search',
         'user-guide/fmapi-databricks',

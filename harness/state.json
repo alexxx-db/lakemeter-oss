@@ -5,16 +5,14 @@
   "quality_target": 9.0,
   "current_phase": "BUILD_AGENT",
   "spec_complete": true,
-  "current_sprint": 2,
+  "current_sprint": 3,
   "planned_sprints": 6,
   "remaining_spec_items": [
-    "Sprint 2: Workload Guides — Compute Workloads (Jobs, All-Purpose, DLT)",
-    "Sprint 3: Workload Guides — SQL, AI/ML, and Lakebase",
     "Sprint 4: AI Assistant, Export, & Calculation Reference",
     "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 2 iter 4 BUILD complete. Fixed All-Purpose Serverless example rate ($0.70→$0.75/DBU, matching actual ALL_PURPOSE_SERVERLESS_COMPUTE bundle rate for AWS us-east-1 Premium). Added Photon multiplier info box to All-Purpose guide (2.0x all clouds, unlike Jobs/DLT). Fixed DLT Run-Based heading formatting. All example $/DBU rates now verified against actual pricing bundle data. Docs build passes. 1969 tests pass (84 pre-existing failures).",
+  "last_action": "Sprint 3 iter 1 BUILD complete. Rewrote 6 workload guides (DBSQL, Model Serving, Vector Search, FMAPI Databricks, FMAPI Proprietary, Lakebase) with real-world scenarios, worked examples with verified numbers, configuration references, tips, and common mistakes. Restructured sidebar into Compute Workloads and AI/ML & Data Services categories. Rewrote workloads overview as decision guide. Docs build passes. 1969 tests pass (84 pre-existing failures).",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -22,18 +20,25 @@
       "debt": true,
       "trajectory": [],
       "iterations": 0
+    },
+    {
+      "sprint": 2,
+      "score": 0.0,
+      "debt": true,
+      "trajectory": [],
+      "iterations": 0
     }
   ],
   "dynamically_added_sprints": [],
-  "feature_sprints_since_doc_sprint": 1,
+  "feature_sprints_since_doc_sprint": 2,
   "last_doc_sprint": 0,
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 4,
+  "current_iteration": 1,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",
-  "last_updated": "2026-04-04T02:15:00",
+  "last_updated": "2026-04-04T03:30:00",
   "score_trajectory": []
 }
