@@ -1,5 +1,5 @@
 """Item-level calculation and storage sub-row helpers for Excel export."""
-from .pricing import _get_dbu_price, _get_fmapi_dbu_per_million
+from .pricing import _get_dbu_price, _get_fmapi_dbu_per_million, FMAPI_PROP_FALLBACK_RATES
 from .calculations import _calculate_hours_per_month
 from .excel_row_writer import write_data_row
 
@@ -9,6 +9,20 @@ TOKEN_TYPE_DISPLAY = {
     'input_token': 'Input', 'input': 'Input',
     'output_token': 'Output', 'output': 'Output',
     'cache_read': 'Cache Read', 'cache_write': 'Cache Write',
+    'batch_inference': 'Batch',
+}
+
+# Fallback DBU/1M token rates for FMAPI_DATABRICKS — matches frontend costCalculation.ts
+# These are much lower than proprietary rates (Databricks OSS models are cheaper)
+FMAPI_DB_FALLBACK_RATES = {
+    'input_token': 1.0, 'input': 1.0,
+    'output_token': 3.0, 'output': 3.0,
+}
+
+# Fallback DBU/hr rates for FMAPI_DATABRICKS provisioned — matches frontend costCalculation.ts
+FMAPI_DB_PROVISIONED_FALLBACK = {
+    'provisioned_scaling': 200,
+    'provisioned_entry': 50,
 }
 
 
@@ -22,16 +36,30 @@ def calc_item_values(item, is_fmapi_token, is_fmapi_provisioned,
         token_qty = float(item.fmapi_quantity or 0)
         dbu_per_m, found = _get_fmapi_dbu_per_million(item, cloud)
         if not found:
+            # Use workload-appropriate fallback rates matching frontend
+            rate_type = item.fmapi_rate_type or 'input_token'
+            wt = item.workload_type or ''
+            if wt == 'FMAPI_DATABRICKS':
+                dbu_per_m = FMAPI_DB_FALLBACK_RATES.get(rate_type, 1.0)
+            else:
+                dbu_per_m = FMAPI_PROP_FALLBACK_RATES.get(rate_type, 21.43)
             auto_notes.append(
-                f"FMAPI rate not found for {item.fmapi_model or 'unknown model'}")
+                f"FMAPI rate not found for {item.fmapi_model or 'unknown model'}, using fallback {dbu_per_m}")
         token_type = TOKEN_TYPE_DISPLAY.get(item.fmapi_rate_type, 'Input')
         return 0, token_qty, dbu_per_m, token_qty * dbu_per_m, token_type
     elif is_fmapi_provisioned:
         hours = float(item.fmapi_quantity or 0)
         dbu_hr, found = _get_fmapi_dbu_per_million(item, cloud)
         if not found:
+            # Use workload-appropriate provisioned fallback matching frontend
+            rate_type = item.fmapi_rate_type or 'provisioned_scaling'
+            wt = item.workload_type or ''
+            if wt == 'FMAPI_DATABRICKS':
+                dbu_hr = FMAPI_DB_PROVISIONED_FALLBACK.get(rate_type, 200)
+            else:
+                dbu_hr = 150  # Frontend proprietary provisioned fallback
             auto_notes.append(
-                f"FMAPI rate not found for {item.fmapi_model or 'unknown model'}")
+                f"FMAPI rate not found for {item.fmapi_model or 'unknown model'}, using fallback {dbu_hr}")
         return hours, 0, 0, dbu_hr * hours, ''
     else:
         hours = _calculate_hours_per_month(item)
@@ -40,20 +68,41 @@ def calc_item_values(item, is_fmapi_token, is_fmapi_provisioned,
 
 def write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
                          type_display, size_attr):
-    """Write a storage sub-row for Lakebase or Vector Search."""
+    """Write a storage sub-row for Lakebase or Vector Search.
+
+    Lakebase uses DSU pricing: 1 GB = 15 DSU, cost = DSU × $0.023/DSU/month.
+    Vector Search uses standard storage pricing: cost = GB × $/GB/month.
+    """
     if size_attr == 'lakebase_storage_gb':
         storage_gb = float(item.lakebase_storage_gb or 0)
+        # Lakebase: DSU pricing (15 DSU per GB, $0.023 per DSU)
+        dsu_per_gb = 15
+        total_dsu = storage_gb * dsu_per_gb
+        price_per_dsu = 0.023
+        storage_cost = total_dsu * price_per_dsu
+        storage_rate = price_per_dsu  # Rate shown in the column
         config = f'Storage: {storage_gb:.0f} GB'
-    else:
+        notes = f'{storage_gb:.0f} GB × {dsu_per_gb} DSU/GB × ${price_per_dsu}/DSU = ${storage_cost:.2f}/mo'
+    elif size_attr == 'vector_search_storage_gb':
+        import math
+        storage_gb = float(item.vector_search_storage_gb or 0)
         capacity_m = float(item.vector_capacity_millions or 1)
-        storage_gb = capacity_m
-        config = f'Storage: ~{storage_gb:.1f} GB ({capacity_m:.0f}M vectors)'
-
-    storage_rate, _ = _get_dbu_price(cloud, region, tier, 'DATABRICKS_STORAGE')
-    storage_cost = storage_gb * storage_rate
-    approx = '~' if size_attr != 'lakebase_storage_gb' else ''
-    precision = '1' if size_attr != 'lakebase_storage_gb' else '0'
-    notes = f'${storage_rate}/GB/month × {approx}{storage_gb:.{precision}f} GB'
+        mode = (item.vector_search_mode or 'standard').lower()
+        divisor = 64_000_000 if mode == 'storage_optimized' else 2_000_000
+        units = math.ceil(capacity_m * 1_000_000 / divisor) if divisor else 0
+        free_gb = units * 20
+        billable_gb = max(0, storage_gb - free_gb)
+        price_per_gb = 0.023
+        storage_cost = billable_gb * price_per_gb
+        storage_rate = price_per_gb
+        config = f'Storage: {storage_gb:.0f} GB (free: {free_gb} GB)'
+        notes = f'{storage_gb:.0f} GB total, {free_gb} GB free ({units} units × 20 GB), {billable_gb:.0f} GB billable × ${price_per_gb}/GB = ${storage_cost:.2f}/mo'
+    else:
+        storage_gb = 0
+        storage_rate = 0.023
+        storage_cost = 0
+        config = 'Storage: 0 GB'
+        notes = ''
 
     name = getattr(item, 'workload_name', f'Workload {idx + 1}') or f'Workload {idx + 1}'
     storage_row = {

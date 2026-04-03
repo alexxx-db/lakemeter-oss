@@ -194,6 +194,11 @@ FMAPI_PROP_FALLBACK_RATES = {
 
 
 def _is_fmapi_hourly(item, cloud: str) -> bool:
-    """Check if FMAPI rate is hourly (provisioned) vs token-based."""
+    """Check if FMAPI rate is hourly (provisioned) vs token-based.
+
+    Note: batch_inference is token-based (DBU per 1M tokens), not hourly.
+    Only provisioned_scaling and provisioned_entry are hourly billing.
+    This matches the frontend costCalculation.ts logic.
+    """
     rate_type = item.fmapi_rate_type or 'input_token'
-    return rate_type in ('provisioned_scaling', 'provisioned_entry', 'batch_inference')
+    return rate_type in ('provisioned_scaling', 'provisioned_entry')

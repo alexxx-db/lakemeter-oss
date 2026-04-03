@@ -126,9 +126,9 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier):
     is_fmapi = wt in ('FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY')
     is_fmapi_token = is_fmapi and item.fmapi_rate_type in (
         'input_token', 'output_token', 'input', 'output',
-        'cache_read', 'cache_write')
+        'cache_read', 'cache_write', 'batch_inference')
     is_fmapi_provisioned = is_fmapi and item.fmapi_rate_type in (
-        'provisioned_scaling', 'provisioned_entry', 'batch_inference')
+        'provisioned_scaling', 'provisioned_entry')
 
     auto_notes = list(dbu_warnings)
     if not dbu_rate_found:

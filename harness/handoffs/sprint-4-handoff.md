@@ -1,53 +1,48 @@
-# Sprint 4 Handoff: DBSQL AI Assistant E2E Tests — Iteration 1
+# Sprint 4 Handoff: FMAPI_DATABRICKS + FMAPI_PROPRIETARY Parity
 
 ## What Was Built
 
-AI assistant end-to-end tests for DBSQL (Databricks SQL) workload proposals. Tests verify the AI correctly proposes DBSQL workloads with Serverless, Pro, and Classic warehouse types from natural language.
+### Bug Fixes (3 parity gaps fixed)
 
-### Files Created
+1. **`batch_inference` misclassification** — Backend treated `batch_inference` as provisioned/hourly, but frontend treats it as token-based (DBU per 1M tokens). Fixed in both `pricing.py` (`_is_fmapi_hourly`) and `excel_builder.py` (moved from provisioned check to token check). Affects 84 proprietary rate entries.
 
-| File | Lines | Purpose |
-|------|------:|---------|
-| `tests/ai_assistant/sprint_4/__init__.py` | 0 | Package marker |
-| `tests/ai_assistant/sprint_4/prompts.py` | 74 | 4 prompt sequences (serverless, pro, classic, negative) |
-| `tests/ai_assistant/sprint_4/conftest.py` | 55 | 4 module-scoped fixtures (1 AI call each) |
-| `tests/ai_assistant/sprint_4/test_dbsql_serverless.py` | 62 | 9 tests: type, warehouse_type, size, clusters, name, reason, notes, proposal_id |
-| `tests/ai_assistant/sprint_4/test_dbsql_pro.py` | 56 | 8 tests: type, warehouse_type, size (large+), clusters, name, reason, proposal_id |
-| `tests/ai_assistant/sprint_4/test_dbsql_classic.py` | 50 | 7 tests: type, warehouse_type, size, clusters, name, reason, proposal_id |
-| `tests/ai_assistant/sprint_4/test_dbsql_negative.py` | 16 | 2 tests: non-DBSQL request should not produce DBSQL |
+2. **FMAPI_DATABRICKS token fallback rates** — Backend was using proprietary-level fallbacks (21.43/321.43 for input/output) instead of matching frontend's Databricks-specific fallbacks (1.0/3.0). Added `FMAPI_DB_FALLBACK_RATES` dict in `excel_item_helpers.py`.
 
-### AI Calls
+3. **FMAPI_DATABRICKS provisioned fallback rates** — Backend returned 0 when provisioned rate not found in JSON. Frontend falls back to 200 (scaling) / 50 (entry). Added `FMAPI_DB_PROVISIONED_FALLBACK` dict in `excel_item_helpers.py`.
 
-4 total AI conversations (module-scoped fixtures):
-1. Serverless Medium warehouse for BI dashboards
-2. Pro Large warehouse with 2 clusters for analytics
-3. Classic Small warehouse for legacy integration
-4. Interactive compute (negative — should produce ALL_PURPOSE, not DBSQL)
+### Files Modified
+- `backend/app/routes/export/pricing.py` — Removed `batch_inference` from `_is_fmapi_hourly()`
+- `backend/app/routes/export/excel_builder.py` — Added `batch_inference` to token-based check
+- `backend/app/routes/export/excel_item_helpers.py` — Added Databricks-specific fallback rates for tokens and provisioned; updated `calc_item_values()` to select fallback based on workload type
+- `tests/parity/test_parity_fmapi_databricks.py` — Expanded from 3 to 35 tests
+- `tests/parity/test_parity_fmapi_proprietary.py` — Expanded from 4 to 39 tests
+
+### Test Coverage (74 new FMAPI parity tests)
+
+**FMAPI_DATABRICKS (35 tests):**
+- 8 input_token tests (all LLM + embedding models: bge-large, gte, gemma, llama-3-1-8b, llama-3-3-70b, llama-4-maverick, gpt-oss-20b, gpt-oss-120b)
+- 6 output_token tests (all LLMs with output rates)
+- 8 provisioned tests (scaling + entry for multiple models, asymmetric rates, provisioned-only models llama-3-2-1b/3b)
+- 6 SKU parametrized tests (all assert SERVERLESS_REAL_TIME_INFERENCE)
+- 7 edge case tests (zero qty, unknown model fallbacks for input/output/provisioned_scaling/provisioned_entry, large qty)
+
+**FMAPI_PROPRIETARY (39 tests):**
+- 10 OpenAI tests (gpt-5, gpt-5-1, gpt-5-mini, gpt-5-nano across input/output/cache_read/cache_write/batch_inference, global + in_geo)
+- 11 Anthropic tests (claude-sonnet-4-5, claude-haiku-4-5, claude-opus-4, claude-opus-4-1, claude-opus-4-5, claude-sonnet-4, claude-sonnet-3-7, claude-sonnet-4-1 across output/cache_read/cache_write/batch_inference, global + in_geo, short + long context)
+- 6 Google tests (gemini-2-5-flash, gemini-2-5-pro across input/output, long + short context, global + in_geo)
+- 3 SKU parametrized tests (OPENAI/ANTHROPIC/GEMINI_MODEL_SERVING)
+- 7 edge case tests (zero qty, unknown model fallbacks for all token types, batch_inference regression, context_length fallback to 'all', large qty)
+- 2 cross-provider comparison tests (different rates across providers, global vs in_geo pricing)
 
 ## How to Test
-
-```bash
-cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
-source .venv/bin/activate
-python -m pytest tests/ai_assistant/sprint_4/ -v
-```
+- `pytest tests/parity/test_parity_fmapi_databricks.py tests/parity/test_parity_fmapi_proprietary.py -v`
+- `pytest tests/parity/ -v` — full parity regression (237 tests)
 
 ## Test Results
-
-### Sprint 4: 26 passed, 0 failed (177.14s)
-### Sprint 1-3 Regression: 60 passed, 0 failed (497.98s)
-
-**Zero regressions. All 86 AI assistant tests pass.**
-
-## Acceptance Criteria: 13/13 PASS
-
-- AC-1 through AC-7 (Serverless): All PASS
-- AC-8 through AC-10 (Pro): All PASS
-- AC-11 (Classic): PASS
-- AC-12 through AC-13 (Negative): PASS
+- `pytest tests/parity/` exit code: 0
+- Tests: 237 passed (74 FMAPI + 163 prior workload tests)
+- No regressions in any other workload type
 
 ## Known Limitations
-
-- Tests are non-deterministic: AI may choose slightly different sizes or cluster counts
-- Each test run requires ~3 minutes for 4 AI conversations (module-scoped fixtures minimize calls)
-- Pro test accepts Large or bigger (AI may upsize based on analytics use case)
+- Fallback rates are hardcoded — if Databricks changes pricing, the fallbacks in both frontend and backend need to be updated in sync
+- `batch_inference` for FMAPI_DATABRICKS does not exist in the pricing JSON (only proprietary has it), so no test for that specific combination
