@@ -47,6 +47,7 @@ const sidebars: SidebarsConfig = {
         'user-guide/ai-assistant',
         'user-guide/exporting',
         'user-guide/calculation-reference',
+        'user-guide/faq',
       ],
     },
   ],
