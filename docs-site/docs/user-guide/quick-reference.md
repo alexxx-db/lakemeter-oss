@@ -60,7 +60,7 @@ These workloads share a common configuration pattern:
 |-------|-------------|---------|
 | **Runs Per Day** | Number of job executions daily | -- |
 | **Avg Runtime (minutes)** | Average duration of each run | -- |
-| **Days Per Month** | Active days per month | 30 |
+| **Days Per Month** | Active days per month | 22 |
 
 **Usage fields (All-Purpose, DLT):**
 
@@ -82,38 +82,39 @@ These workloads share a common configuration pattern:
 | Size | DBU/hr |
 |------|--------|
 | 2X-Small | 4 |
-| X-Small | 8 |
+| X-Small | 6 |
 | Small | 12 |
 | Medium | 24 |
 | Large | 40 |
-| X-Large | 64 |
-| 2X-Large | 128 |
-| 3X-Large | 256 |
-| 4X-Large | 512 |
+| X-Large | 80 |
+| 2X-Large | 144 |
+| 3X-Large | 272 |
+| 4X-Large | 528 |
 
 ### Model Serving
 
 | Field | Description | Options |
 |-------|-------------|---------|
-| **GPU Type** | Compute tier for the endpoint | CPU, GPU Small (T4), GPU Medium (A10G 1x), GPU Large (A10G 4x), etc. |
+| **Endpoint Type** | Compute tier for the endpoint | CPU, GPU Small (T4), GPU Medium (A10G 1x), GPU Large (A10G 4x), etc. |
+| **Number of Endpoints** | Concurrent endpoint instances | 1+ |
 | **Hours Per Month** | Endpoint uptime | Default: 730 (24/7) |
 
 ### Vector Search
 
 | Field | Description | Options |
 |-------|-------------|---------|
-| **Mode** | Standard or Storage Optimized | Standard, Storage Optimized |
-| **Vector Capacity (millions)** | Number of vectors the index can hold | -- |
-| **Storage (GB)** | Storage capacity | -- |
+| **Vector Search Type** | Standard (4 DBU/hr per 2M vectors) or Storage Optimized (18.29 DBU/hr per 64M vectors) | Standard |
+| **Capacity (M vectors)** | Number of vectors in millions | 1 |
+| **Storage (GB)** | Additional storage capacity (20 GB free per endpoint unit, $0.023/GB/mo above) | 0 |
 | **Hours Per Month** | Service uptime | Default: 730 (24/7) |
 
 ### FMAPI (Databricks models)
 
 | Field | Description |
 |-------|-------------|
-| **Model** | Databricks-hosted model (e.g., Llama, DBRX, Mixtral) |
-| **Rate Type** | Input tokens, output tokens, provisioned scaling, provisioned entry |
-| **Quantity (millions)** | Volume of tokens or provisioned units |
+| **Model** | Databricks-hosted model (e.g., Llama, DBRX, Mixtral) — LLMs and Embedding models |
+| **Rate Type** | Token-based (input token, output token) or Provisioned (provisioned scaling, provisioned entry) |
+| **Quantity** | For token-based: millions of tokens/month. For provisioned: hours/month (730 = 24/7) |
 
 ### FMAPI (Proprietary models)
 
@@ -130,8 +131,8 @@ These workloads share a common configuration pattern:
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| **CU Size** | Compute units (0.5, 1-32 autoscaling, 36-112 fixed) | -- |
-| **Number of Nodes** | 1 = primary only, 2-3 = primary + read replicas | 1 |
+| **Capacity Units (CU)** | Compute units: 1, 2, 4, or 8 CU | -- |
+| **Number of Nodes** | 1 = primary only, 2-3 = primary + read replicas (HA) | 1 |
 | **Storage (GB)** | Database storage capacity (0-8192 GB) | -- |
 | **Hours Per Month** | Instance uptime | Default: 730 (24/7) |
 
@@ -142,7 +143,7 @@ These workloads share a common configuration pattern:
 | **Classic compute** (Jobs, All-Purpose, DLT) | (DBU/hr x hours/month x $/DBU) + (VM $/hr x hours/month) |
 | **Serverless compute** (Jobs, All-Purpose, DLT, DBSQL) | DBU/hr x hours/month x $/DBU (VM cost included) |
 | **DBSQL Classic/Pro** | (Warehouse DBU/hr x clusters x hours/month x $/DBU) + VM costs |
-| **Model Serving** | GPU DBU/hr x hours/month x $/DBU |
+| **Model Serving** | Endpoint DBU/hr x endpoints x hours/month x $/DBU |
 | **Vector Search** | Endpoint units x DBU/unit x hours/month x $/DBU |
 | **FMAPI** | Token quantity (M) x DBU per M tokens x $/DBU |
 | **Lakebase** | (CU x nodes x hours/month x $/DBU) + storage costs |
