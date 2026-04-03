@@ -87,6 +87,6 @@ Some workload types are only available on **Premium** or **Enterprise** tiers. I
 Common things to verify:
 1. **Hours/Month** — 730 means 24/7 operation. For business-hours-only usage, ~176 hours (8 hrs × 22 days) is more realistic.
 2. **Number of workers** — Each worker multiplies both DBU and VM costs.
-3. **Photon** — Doubles the DBU rate. Make sure it's enabled only if you plan to use it.
+3. **Photon** — Increases the DBU rate by a multiplier that depends on the workload type and cloud provider (2.9x for Jobs/DLT on AWS, 2.5x on Azure/GCP, 2.0x for All-Purpose). Make sure it's enabled only if you plan to use it.
 4. **Serverless vs Classic** — Serverless has no VM costs but higher DBU rates. Classic has both.
 5. **Discount** — The export shows list prices by default. Apply your discount in the Excel file.

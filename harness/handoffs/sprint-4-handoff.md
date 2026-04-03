@@ -1,83 +1,98 @@
-# Sprint 4 Handoff: AI Assistant, Export, & Calculation Reference (Iteration 2)
+# Sprint 4 Handoff: AI Assistant, Export, & Calculation Reference (Iteration 4)
 
-## What Was Built (Iteration 1) + Fixed (Iteration 2)
+## What Was Built (Iter 1-3) + Fixed (Iteration 4)
 
-### AI Assistant Guide (`docs-site/docs/user-guide/ai-assistant.md`)
-- Complete rewrite with 4 concrete conversation examples:
-  1. Creating a single workload from natural language
-  2. Generating a complete multi-workload estimate
-  3. Optimizing an existing estimate
-  4. Getting a GenAI architecture recommendation (RAG chatbot)
-- Documents all 5 agent tools in a reference table — **verified against `backend/app/services/ai_agent.py`**:
-  - `propose_workload`, `ask_clarifying_questions`, `get_estimate_summary`, `analyze_estimate`, `propose_genai_architecture`
-- Explains both Home Mode (Q&A) and Estimate Mode (full tool use)
-- Documents the Confirm/Edit/Cancel workflow for AI-proposed workloads
-- Notes on conversation history limits and streaming
+### Iteration 4: Comprehensive Source Code Verification + Accuracy Fixes
 
-### Export Guide (`docs-site/docs/user-guide/exporting.md`)
-- Complete rewrite documenting the full Excel export structure:
-  - 6 sections: Header, Workloads Table, Multi-Row Workloads, Cost Summary, Legend, Assumptions
-  - 30-column layout — **verified against `backend/app/routes/export/excel_columns.py` (NUM_COLS = 30)**
-  - Color-coded header explanation — **verified against `excel_formats.py`**
-  - Formatting: frozen panes, formulas, currency, landscape — **verified against `excel_builder.py`**
-- File naming: `Databricks_Estimate_{name}_{YYYYMMDD}.xlsx` — **verified against `routes.py`**
-- Multi-row workloads for Lakebase and Vector Search — **verified against `excel_item_helpers.py`**
+Performed exhaustive verification of all 4 Sprint 4 pages against backend source code, pricing data files, and frontend calculation logic. Used parallel subagent exploration to verify every claim.
 
-### Calculation Reference (`docs-site/docs/user-guide/calculation-reference.md`)
-- 4 fully worked examples with real pricing data
-- **Iteration 2 fix**: Corrected Lakebase CU range from "0.5 to 112" to "1, 2, 4, or 8" — **verified against `WorkloadForm.tsx:1867-1870`**
-- Updated Lakebase nodes description to "1, 2 (primary + 1 read replica), or 3 (primary + 2 read replicas)"
-- All DBSQL warehouse size DBU mappings verified against `calculations.py:102-104`
-- Vector Search divisor/rate values verified against `vector-search-rates.json`
-- Serverless multiplier logic verified against `calculations.py:85-92`
+### Fix 1: FAQ — Photon Multiplier Description
 
-### FAQ Page (`docs-site/docs/user-guide/faq.md`) — NEW
-- 13 questions across 5 categories
-- All internal links cross-checked
-- Added to sidebar under Features category
+**Problem**: FAQ troubleshooting section stated "Photon — Doubles the DBU rate." This is only accurate for All-Purpose compute. Jobs and DLT use different multipliers.
+
+**Correction**: Updated to "Increases the DBU rate by a multiplier that depends on the workload type and cloud provider (2.9x for Jobs/DLT on AWS, 2.5x on Azure/GCP, 2.0x for All-Purpose)."
+
+**Verified against**: `backend/static/pricing/dbu-multipliers.json`:
+- `aws:JOBS_COMPUTE:photon` = 2.9
+- `aws:DLT_CORE_COMPUTE:photon` = 2.9
+- `aws:ALL_PURPOSE_COMPUTE:photon` = 2.0
+- `azure:JOBS_COMPUTE:photon` = 2.5
+- `gcp:JOBS_COMPUTE:photon` = 2.5
+
+### Fix 2: Export Guide — Legend Section Colors
+
+**Problem**: The Legend description listed Orange as one of the legend items. The actual Excel export's Legend section (`excel_sections.py:write_legend`) does NOT include Orange — it only documents Blue, Cyan, Pink, Green, Purple, and a Serverless note.
+
+**Correction**: Updated legend description to match actual Excel output. Added clarifying note that Orange headers are used for workload identity columns but aren't listed in the Legend section.
+
+**Verified against**: `backend/app/routes/export/excel_sections.py` lines 82-96.
+
+## Verification Summary (Iteration 4)
+
+All claims across all 4 Sprint 4 pages verified against source code:
+
+| Page | Claims Verified | Issues Found | Status |
+|------|----------------|--------------|--------|
+| AI Assistant | 5 tools (names match), 2 modes, trim_threshold=25, max_recent=15, no edit capability | 0 | ✓ All accurate |
+| Export | Sheet name, filename format, 30 columns, bulk export, color coding, frozen panes, multi-row workloads, assumptions section, legend section | 1 (legend colors) | ✓ Fixed |
+| Calculation Reference | All 4 worked examples, all formula references, all SKU names, all pricing rates | 0 | ✓ All accurate |
+| FAQ | 10 Q&A answers, workload type table, tier descriptions, troubleshooting tips | 1 (Photon description) | ✓ Fixed |
+
+### Pricing Data Verified
+
+| Claim | Source File | Value | Match |
+|-------|-----------|-------|-------|
+| JOBS_COMPUTE_(PHOTON) AWS us-east-1 Premium | dbu-rates.json | $0.15/DBU | ✓ |
+| JOBS_SERVERLESS_COMPUTE AWS us-east-1 Premium | dbu-rates.json | $0.35/DBU | ✓ |
+| SERVERLESS_SQL_COMPUTE AWS us-east-1 Premium | dbu-rates.json | $0.70/DBU | ✓ |
+| SERVERLESS_REAL_TIME_INFERENCE AWS us-east-1 Premium | dbu-rates.json | $0.07/DBU | ✓ |
+| DATABASE_SERVERLESS_COMPUTE AWS us-east-1 Premium | dbu-rates.json | $0.40/DBU | ✓ |
+| Jobs Photon multiplier AWS | dbu-multipliers.json | 2.9x | ✓ |
+| All-Purpose Photon multiplier | dbu-multipliers.json | 2.0x | ✓ |
+| i3.xlarge DBU rate | instance-dbu-rates.json | 1.0 DBU/hr | ✓ |
+| i3.xlarge VM price | vm_pricing.py | $0.312/hr | ✓ |
+| Llama 3.1 8B input rate | fmapi-databricks-rates.json | 2.143 DBU/1M | ✓ |
+| Llama 3.1 8B output rate | fmapi-databricks-rates.json | 6.429 DBU/1M | ✓ |
+| DBSQL Medium size DBU | dbsql-rates.json | 24 DBU/hr | ✓ |
+| Vector Search Standard divisor | vector-search-rates.json | 2,000,000 | ✓ |
+| Vector Search Storage Opt divisor | vector-search-rates.json | 64,000,000 | ✓ |
+| Lakebase DSU pricing | excel_item_helpers.py | 15 DSU/GB × $0.023/DSU | ✓ |
+| Lakebase max storage | ai_agent.py | 8,192 GB | ✓ |
+| AI trim_threshold | ai_agent.py:1272 | 25 | ✓ |
+| AI max_recent_messages | ai_agent.py:1272 | 15 | ✓ |
+
+### Calculation Logic Verified
+
+| Formula | Source | Match |
+|---------|--------|-------|
+| Jobs Classic DBU/hr = (driver + worker×n) × photon | costCalculation.ts | ✓ |
+| Jobs Serverless DBU/hr = (driver + worker×n) × photon × mode | costCalculation.ts | ✓ |
+| DBSQL DBU/hr = size_map[size] × clusters | costCalculation.ts | ✓ |
+| Lakebase DBU/hr = CU × nodes | costCalculation.ts | ✓ |
+| Vector Search units = ceil(capacity/divisor) | costCalculation.ts | ✓ |
+| DLT Serverless uses JOBS_SERVERLESS_COMPUTE SKU | costCalculation.ts:171 | ✓ |
+
+## Files Changed (Iteration 4)
+
+| File | Change |
+|------|--------|
+| `docs-site/docs/user-guide/faq.md` | Fixed Photon multiplier description from "Doubles" to accurate variable multiplier |
+| `docs-site/docs/user-guide/exporting.md` | Fixed legend section to match actual Excel output colors |
 
 ## How to Test
 
 1. Start docs dev server: `cd docs-site && npm run start`
-2. Navigate to each page:
-   - **AI Assistant** (`/user-guide/ai-assistant`): 4 conversation examples, tool table
-   - **Exporting** (`/user-guide/exporting`): Column group table, multi-row explanation, use cases
-   - **Calculation Reference** (`/user-guide/calculation-reference`): 4 worked examples, Lakebase section now shows correct CU sizes (1, 2, 4, 8)
-   - **FAQ** (`/user-guide/faq`): 13 Q&A items, all internal links resolve
-3. Sidebar: FAQ appears under Features after Calculation Reference
+2. Check pages:
+   - **FAQ** (`/user-guide/faq`): Troubleshooting section, item #3 about Photon now shows accurate multiplier values
+   - **Exporting** (`/user-guide/exporting`): Legend section now matches actual Excel output
+   - **Calculation Reference** (`/user-guide/calculation-reference`): All 4 worked examples unchanged (verified accurate)
+   - **AI Assistant** (`/user-guide/ai-assistant`): Unchanged (verified accurate)
 
 ## Test Results
 
 - `npm run build`: **PASS** (zero errors, zero warnings)
 - `pytest`: **1969 passed**, 84 failed (pre-existing `test_workload_coverage.py` failures — sprint-numbered test directory checks, scheduled for Sprint 6)
 - No new test failures introduced
-
-## Iteration 2 Changes
-
-| File | Change |
-|------|--------|
-| `docs-site/docs/user-guide/calculation-reference.md` | Fixed Lakebase CU range: "0.5 to 112" → "1, 2, 4, or 8"; updated nodes description |
-
-## Source Code Verification Summary
-
-All doc claims verified against source code in iteration 2:
-
-| Claim | Verified Against | Status |
-|-------|-----------------|--------|
-| 5 AI assistant tools | `backend/app/services/ai_agent.py` TOOLS array | ✓ |
-| 30 export columns | `excel_columns.py` NUM_COLS = 30 | ✓ |
-| Color coding (6 colors) | `excel_formats.py` header formats | ✓ |
-| File naming convention | `export/routes.py` line 38 | ✓ |
-| Frozen panes, landscape | `excel_builder.py` lines 46-49 | ✓ |
-| Formula-based cells | `excel_row_writer.py` | ✓ |
-| DBSQL size→DBU mapping | `calculations.py` lines 102-104 | ✓ |
-| Vector Search rates | `vector-search-rates.json` | ✓ |
-| Lakebase CU sizes | `WorkloadForm.tsx` lines 1867-1870 | ✓ (FIXED) |
-| Lakebase storage: 15 DSU × $0.023 | `ai_agent.py` line 1118 | ✓ |
-| Lakebase max storage: 8192 GB | `WorkloadForm.tsx` line 1890 | ✓ |
-| Serverless multiplier logic | `calculations.py` lines 85-92 | ✓ |
-| Photon multiplier = 2.0 | `calculations.py` line 86 | ✓ |
-| Fallback DBU = 0.5 | `calculations.py` lines 56-57 | ✓ |
 
 ## Known Limitations
 

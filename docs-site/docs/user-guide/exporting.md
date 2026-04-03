@@ -67,13 +67,14 @@ Below the workloads table, a summary section shows:
 
 ### 5. Legend
 
-A color-coded legend explaining what each column group means:
-- **Orange** — Main workload identifiers
-- **Blue** — DBU calculation columns
-- **Cyan** — Token configuration (FMAPI workloads)
-- **Pink** — Discount-related columns
-- **Green** — VM cost columns
-- **Purple** — Total cost columns
+A color-coded legend explaining the column groups:
+- **Blue** — DBU-related costs (Databricks compute units)
+- **Cyan** — Token-based pricing (FMAPI workloads)
+- **Pink** — Discount pricing (discounted DBU rate and cost)
+- **Green** — VM infrastructure costs (cloud provider)
+- **Purple** — Total cost (DBU + VM combined)
+
+Orange headers are used for general workload identity columns (name, type, configuration, SKU, notes) but are not listed in the legend section.
 
 ### 6. Assumptions & Notes
 
