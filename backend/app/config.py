@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     
     # Lakebase Database Configuration
-    db_host: str = "instance-364041a4-0aae-44df-bbc6-37ac84169dfe.database.cloud.databricks.com"
-    db_user: str = "junyi.tiong@databricks.com"
+    db_host: str = ""
+    db_user: str = ""
     db_name: str = "lakemeter_pricing"
     db_port: int = 5432
     db_sslmode: str = "require"
