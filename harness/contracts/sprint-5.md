@@ -1,49 +1,52 @@
-# Sprint 5 Contract: MODEL_SERVING — AI Assistant Proposal Tests
-
-## Scope
-
-Test that the AI assistant correctly interprets natural language requests for model serving endpoints and produces valid `MODEL_SERVING` workload proposals with the right fields.
+# Sprint 5 Contract: Cross-Workload Regression + Excel Formula Audit
 
 ## Acceptance Criteria
 
-### GPU Medium Variant (Primary)
-- [ ] AC-1: `workload_type` == `MODEL_SERVING`
-- [ ] AC-2: `model_serving_type` contains "gpu_medium" or equivalent
-- [ ] AC-3: `hours_per_month` approximately matches requested value (~200)
-- [ ] AC-4: `workload_name` is descriptive (length >= 3)
-- [ ] AC-5: `reason` populated (length >= 10)
-- [ ] AC-6: `notes` populated
-- [ ] AC-7: `proposal_id` present for confirm/reject flow
+### AC-1: Full Regression Sweep (All 9 Workload Types × Multiple Configs)
+- [ ] Every workload type tested with at least 2 configurations (classic/photon/serverless variants)
+- [ ] JOBS: classic, photon, serverless standard, serverless performance
+- [ ] ALL_PURPOSE: classic, photon, serverless
+- [ ] DLT: Core/Pro/Advanced × classic/serverless
+- [ ] DBSQL: Classic/Pro/Serverless × multiple sizes
+- [ ] MODEL_SERVING: CPU, GPU small, GPU medium
+- [ ] FMAPI_DATABRICKS: input tokens, output tokens, batch inference, provisioned
+- [ ] FMAPI_PROPRIETARY: OpenAI/Anthropic/Google × input/output tokens
+- [ ] VECTOR_SEARCH: standard, storage-optimized (with and without storage)
+- [ ] LAKEBASE: various CU sizes and HA node counts
+- [ ] All DBU/hr, hours, total DBU, $/DBU, and total cost calculations verified
 
-### CPU Variant
-- [ ] AC-8: `workload_type` == `MODEL_SERVING`
-- [ ] AC-9: `model_serving_type` contains "cpu"
-- [ ] AC-10: `hours_per_month` present and > 0
-- [ ] AC-11: `model_serving_scale_to_zero` is boolean when present
+### AC-2: Excel Formula Value Verification
+- [ ] Every formula cell's cached value matches the formula's expected result
+- [ ] DBUs/Mo formula: token items =N*O, hourly items =P*L — cached value matches
+- [ ] DBU Rate (Disc.) formula: =R*(1-S) — cached value matches
+- [ ] DBU Cost (List) formula: =Q*R — cached value matches
+- [ ] DBU Cost (Disc.) formula: =Q*T — cached value matches
+- [ ] Driver VM Total: =W*L — cached value matches
+- [ ] Worker VM Total: =X*L*I — cached value matches
+- [ ] Total VM: =Y+Z — cached value matches
+- [ ] Total Cost (List): =U+AA — cached value matches
+- [ ] Total Cost (Disc.): =V+AA — cached value matches
 
-### GPU Small Variant
-- [ ] AC-12: `workload_type` == `MODEL_SERVING`
-- [ ] AC-13: `model_serving_type` contains "gpu_small"
-- [ ] AC-14: `hours_per_month` present and > 0
+### AC-3: Totals Row SUM Formula Verification
+- [ ] Totals row SUM range spans ALL data rows including storage sub-rows
+- [ ] SUM of DBUs/Mo, DBU Cost List, DBU Cost Disc, VM costs, Total costs verified
+- [ ] Sum of cached data row values equals the totals row cached value (within $0.01)
 
-### Negative Discrimination — Non-Model-Serving Requests
-- [ ] AC-15: Interactive compute request → NOT `MODEL_SERVING` (should be `ALL_PURPOSE`)
-- [ ] AC-16: Batch ETL request → NOT `MODEL_SERVING` (should be `JOBS` or `DLT`)
+### AC-4: Cost Summary Section Verification
+- [ ] Monthly row references correct totals row cells
+- [ ] Annual row = Monthly × 12 for every column
+- [ ] DBU summary total matches totals row DBUs/Mo
 
-## Prompt Variants (5 total, 5 AI calls)
+### AC-5: Cross-Cloud Regression
+- [ ] All 9 workload types produce valid results for aws, azure, gcp
+- [ ] No NaN, #REF!, or broken values in any cloud configuration
 
-1. **GPU Medium A10G** — "Deploy a model serving endpoint with GPU medium A10G, running 200 hours a month"
-2. **CPU Only** — "CPU-only model serving endpoint for lightweight inference, 500 hours a month"
-3. **GPU Small T4** — "GPU small T4 endpoint for real-time embeddings, 300 hours a month"
-4. **Negative: Interactive** — Interactive notebook cluster request (should NOT be MODEL_SERVING)
-5. **Negative: Batch ETL** — Batch ETL pipeline request (should NOT be MODEL_SERVING)
+### AC-6: All Existing Tests Pass
+- [ ] Full `pytest tests/` suite passes with 0 failures
 
 ## Test Plan
 
-- 4 test files: `test_model_serving_gpu_medium.py`, `test_model_serving_cpu.py`, `test_model_serving_gpu_small.py`, `test_model_serving_negative.py`
-- Module-scoped fixtures (one AI call per variant, shared across tests)
-- Multi-message escalation pattern (primary → followup → final) per established sprint pattern
-- Each test file: 5-8 focused assertions
-
-## Production Readiness Items This Sprint
-- N/A (testing-only run)
+- New test file: `tests/sprint_5/test_regression_all_workloads.py` — multi-config regression
+- New test file: `tests/sprint_5/test_formula_values.py` — formula cached value verification
+- New test file: `tests/sprint_5/test_cost_summary.py` — cost summary and totals verification
+- Run existing `tests/parity/` and `tests/sprint_10/` as regression baseline
