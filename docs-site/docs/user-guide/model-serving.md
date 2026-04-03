@@ -136,13 +136,13 @@ This difference is by design -- the frontend provides a UX-friendly default, whi
 
 - **Start with CPU for testing**: CPU endpoints cost ~$0.07/hr in DBUs and are ideal for validating your model deployment before scaling to GPU.
 - **Match GPU to model size**: Small models (< 1B parameters) run well on T4. Medium models (1-7B) need A10G. Large models (7B+) require A100. Over-provisioning wastes money.
-- **24/7 vs on-demand**: If your endpoint serves real-time traffic, 730 hours is correct. If it only handles batch inference during business hours, use 176 hours (or run-based) to avoid paying for idle time.
+- **24/7 vs on-demand**: If your endpoint serves real-time traffic, 730 hours is correct. If it only handles batch inference during business hours, enter 176 hours to avoid paying for idle time.
 - **Cross-cloud comparison**: GPU rates differ by cloud. Create duplicate estimates for each cloud to compare -- a T4 on AWS may cost differently than on Azure.
 
 ## Common mistakes
 
 - **Choosing the largest GPU "just in case"**: A100 80GB 8x costs hundreds of DBUs/hour. Start with the smallest GPU that meets your latency and throughput requirements, then scale up if needed.
-- **Forgetting run-based usage mode**: If your model serves 100 requests/day taking 2 minutes each, that is only ~73 hours/month -- not 730. Using the wrong hours input inflates cost by 10x.
+- **Overestimating hours for intermittent usage**: If your model serves 100 requests/day taking 2 minutes each, that is only ~73 hours/month -- not 730. Calculate your actual usage hours and enter them directly. Using 730 hours for intermittent usage inflates cost by 10x.
 - **Expecting VM costs**: Model Serving is always serverless. If you see $0 in the VM Cost column, that is correct.
 - **Comparing $/DBU across workload types**: Model Serving uses `SERVERLESS_REAL_TIME_INFERENCE` at $0.07/DBU, which is much lower than DBSQL or Jobs. The total cost depends on DBU/hour x hours, not just the per-DBU rate.
 
@@ -156,7 +156,7 @@ Each Model Serving workload appears as one row in the exported spreadsheet:
 | Mode | Serverless (always) |
 | SKU | `SERVERLESS_REAL_TIME_INFERENCE` |
 | DBU/Hour | GPU rate from pricing lookup |
-| Hours/Month | Direct value or run-based calculation |
+| Hours/Month | Direct hours value |
 | Monthly DBUs | DBU/Hour x Hours/Month |
 | DBU Cost (List) | At list price |
 | DBU Cost (Discounted) | At negotiated rate |

@@ -12,7 +12,7 @@
     "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 3 iter 4 BUILD complete. Fixed 4 accuracy issues: (1) Model Serving docs falsely documented run-based UI fields that don't exist, (2) Lakebase docs implied run-based UI fields, (3) FMAPI Databricks listed Batch Inference in rate types table but it's not in UI dropdown, (4) Workloads overview said 'most workloads' support run-based but only 4/9 do. All fixes verified against WorkloadForm.tsx source. Docs build passes. 1969 tests pass (84 pre-existing failures).",
+  "last_action": "Sprint 3 iter 5 BUILD complete (max iterations). Fixed 4 remaining run-based references: (1) Model Serving tips said '(or run-based)', (2) Model Serving common mistakes referenced 'run-based usage mode', (3) Model Serving excel export said 'run-based calculation', (4) Lakebase excel export said 'run-based calculation'. All 6 guides now consistently document only the input modes that actually exist in the UI. Docs build passes. 1969 tests pass (84 pre-existing failures).",
   "sprints_completed": [
     {
       "sprint": 1,
@@ -35,7 +35,7 @@
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 4,
+  "current_iteration": 5,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",

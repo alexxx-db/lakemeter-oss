@@ -155,6 +155,27 @@ All fixes verified by reading WorkloadForm.tsx source code:
 | `docs-site/docs/user-guide/fmapi-databricks.md` | Removed Batch Inference row, fixed group labels to match UI |
 | `docs-site/docs/user-guide/workloads.md` | Clarified which workloads support run-based vs direct hours |
 
+## What Was Fixed (Iteration 5)
+
+### Model Serving — Removed remaining run-based references
+- **Tips section**: Removed "(or run-based)" from the 24/7 vs on-demand tip, since Model Serving only supports direct hours input
+- **Common mistakes section**: Changed "Forgetting run-based usage mode" to "Overestimating hours for intermittent usage" — run-based is not available for Model Serving, so the guidance now focuses on correctly calculating and entering hours
+- **Excel export table**: Changed "Direct value or run-based calculation" to "Direct hours value" for Hours/Month column
+
+### Lakebase — Removed remaining run-based reference
+- **Excel export table**: Changed "Direct value or run-based calculation" to "Direct hours value" for Hours/Month column
+
+### Verification
+- `npm run build`: Passes with zero errors
+- `pytest`: 1,969 passed, 84 failed (pre-existing), 2 skipped — same as all prior iterations
+
+## Files Changed (Iteration 5 only)
+
+| File | Action |
+|------|--------|
+| `docs-site/docs/user-guide/model-serving.md` | Removed 3 remaining run-based references in tips, common mistakes, and excel export |
+| `docs-site/docs/user-guide/lakebase.md` | Removed 1 remaining run-based reference in excel export table |
+
 ## Known Limitations
 
 - $/DBU rates in examples use fallback rates for AWS/us-east-1/Premium. Actual rates vary by cloud/region/tier — noted with disclaimer in each guide.

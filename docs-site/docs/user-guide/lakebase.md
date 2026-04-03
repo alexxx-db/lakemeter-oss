@@ -158,7 +158,7 @@ Lakebase workloads export as **two rows** per line item:
 | Mode | Serverless (always) |
 | SKU | `DATABASE_SERVERLESS_COMPUTE` |
 | DBU/Hour | CU x nodes |
-| Hours/Month | Direct value or run-based calculation |
+| Hours/Month | Direct hours value |
 | Monthly DBUs | DBU/Hour x Hours/Month |
 | DBU Cost | Monthly DBUs x $/DBU |
 | VM Cost | $0 (always serverless) |
