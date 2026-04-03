@@ -5,27 +5,35 @@
   "quality_target": 9.0,
   "current_phase": "BUILD_AGENT",
   "spec_complete": true,
-  "current_sprint": 1,
+  "current_sprint": 2,
   "planned_sprints": 6,
   "remaining_spec_items": [
-    "Sprint 1: Getting Started & Introduction Overhaul",
     "Sprint 2: Workload Guides — Compute Workloads (Jobs, All-Purpose, DLT)",
     "Sprint 3: Workload Guides — SQL, AI/ML, and Lakebase",
     "Sprint 4: AI Assistant, Export, & Calculation Reference",
     "Sprint 5: Admin Guide Accuracy & Update",
     "Sprint 6: Testing Docs Cleanup, Navigation Polish, Build Verification"
   ],
-  "last_action": "Sprint 1 iter 5 (FINAL) BUILD complete. Fixed 3 remaining accuracy issues: Lakebase CU default (--→1), Lakebase Storage default (--→0), FMAPI Proprietary Rate Type options (added Batch Inference, Provisioned Scaling). All field labels, defaults, and options verified against WorkloadForm.tsx across all 9 workload types. Build passes 0 errors. 1969 tests pass (84 pre-existing coverage structure failures unrelated to docs).",
-  "sprints_completed": [],
+  "last_action": "Sprint 2 iter 1 BUILD complete. Rewrote Jobs, All-Purpose, and DLT guides with real-world scenarios, worked examples, verified config tables, tips, and common mistakes. Fixed defaults: Workers 0→2, DLT Edition Core→Pro, label DLT Edition→SDP Edition. Removed generic screenshots and Verified Parity sections. Docs build passes with zero errors. 1969 tests pass (84 pre-existing coverage failures unrelated to docs).",
+  "sprints_completed": [
+    {
+      "sprint": 1,
+      "score": 0.0,
+      "debt": true,
+      "trajectory": [],
+      "iterations": 0
+    }
+  ],
   "dynamically_added_sprints": [],
-  "feature_sprints_since_doc_sprint": 0,
+  "feature_sprints_since_doc_sprint": 1,
   "last_doc_sprint": 0,
   "last_install_test": 0,
   "last_integration_test": 0,
   "context_resets": 0,
-  "current_iteration": 5,
+  "current_iteration": 1,
   "min_iterations_before_debt": 4,
   "max_iterations": 5,
   "dev_server_command": "cd docs-site && npm run start",
-  "last_updated": "2026-04-04T01:15:00"
+  "last_updated": "2026-04-04T02:30:00",
+  "score_trajectory": []
 }
