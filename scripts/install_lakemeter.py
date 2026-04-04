@@ -102,14 +102,61 @@ def prompt_choice(label: str, options: list[str], default: int = 0) -> str:
 # Step 1: Validate Prerequisites
 # ===================================================================
 def validate_prerequisites(profile: str) -> dict:
-    """Check CLI, SDK, and workspace connectivity. Returns workspace client."""
+    """Check CLI, SDK, dependencies, and workspace connectivity."""
+    import shutil
+    import subprocess
+
+    # Check Python version
+    if sys.version_info < (3, 10):
+        log_err(f"Python 3.10+ required (found {sys.version})")
+        sys.exit(1)
+    log_ok(f"Python {sys.version_info.major}.{sys.version_info.minor}")
+
+    # Check required Python packages
+    missing_pkgs = []
+    for pkg, import_name in [("databricks-sdk", "databricks.sdk"),
+                              ("psycopg2-binary", "psycopg2"),
+                              ("requests", "requests")]:
+        try:
+            __import__(import_name)
+        except ImportError:
+            missing_pkgs.append(pkg)
+    if missing_pkgs:
+        log_err(f"Missing Python packages: {', '.join(missing_pkgs)}")
+        log_info(f"Install with: pip install {' '.join(missing_pkgs)}")
+        sys.exit(1)
+    log_ok("Required Python packages installed")
+
+    # Check Node.js/npm (needed for frontend build during deploy)
+    if not shutil.which("node"):
+        log_warn("Node.js not found — frontend build will be skipped during deploy")
+    elif not shutil.which("npm"):
+        log_warn("npm not found — frontend build will be skipped during deploy")
+    else:
+        result = subprocess.run(["node", "--version"], capture_output=True, text=True)
+        log_ok(f"Node.js {result.stdout.strip()}")
+
+    # Check Databricks CLI
+    if not shutil.which("databricks"):
+        log_err("Databricks CLI not found. Install: pip install databricks-cli")
+        sys.exit(1)
+    log_ok("Databricks CLI found")
+
+    # Check pricing data directory
+    if not PRICING_DIR.exists() or not any(PRICING_DIR.glob("*.json")):
+        log_err(f"Pricing data not found at {PRICING_DIR}")
+        log_info("Ensure you cloned the full repository including backend/static/pricing/")
+        sys.exit(1)
+    pricing_count = len(list(PRICING_DIR.glob("*.json")))
+    log_ok(f"Pricing data: {pricing_count} JSON files")
+
+    # Connect to workspace
     from databricks.sdk import WorkspaceClient
     from databricks.sdk.config import Config
 
     config = Config(profile=profile)
     w = WorkspaceClient(config=config)
 
-    # Verify connectivity
     try:
         me = w.current_user.me()
         log_ok(f"Authenticated as {me.user_name}")
@@ -123,9 +170,21 @@ def validate_prerequisites(profile: str) -> dict:
 # ===================================================================
 # Step 2: Gather Configuration
 # ===================================================================
-def gather_config(ctx: dict) -> dict:
+def gather_config(ctx: dict, non_interactive: bool = False) -> dict:
     """Interactive prompts to configure the installation."""
     print(f"\n{BOLD}=== Lakemeter Installation Configuration ==={NC}\n")
+
+    if non_interactive:
+        log_info("Non-interactive mode — using all defaults")
+        return {
+            "instance_name": "lakemeter-customer",
+            "db_name": DEFAULT_DB_NAME,
+            "app_name": "lakemeter",
+            "cu_size": DEFAULT_CU_SIZE,
+            "secrets_scope": "lakemeter-secrets",
+            "sp_client_id_key": "sp_clientid",
+            "sp_secret_key": "sp_secret",
+        }
 
     instance_name = prompt_input("Lakebase instance name", "lakemeter-customer")
     db_name = prompt_input("Database name", DEFAULT_DB_NAME)
@@ -305,6 +364,53 @@ def run_setup_sql(ctx: dict, instance_info: dict, cfg: dict):
     """)
     log_ok("discount_config column added")
 
+    # --- Migrate line_items to current schema ---
+    # Add any columns that may be missing from older installations
+    migration_columns = [
+        ("display_order", "INT"),
+        ("serverless_enabled", "BOOLEAN DEFAULT false"),
+        ("serverless_mode", "VARCHAR(20)"),
+        ("photon_enabled", "BOOLEAN DEFAULT false"),
+        ("driver_node_type", "VARCHAR(100)"),
+        ("worker_node_type", "VARCHAR(100)"),
+        ("num_workers", "INT"),
+        ("dlt_edition", "VARCHAR(20)"),
+        ("dbsql_warehouse_type", "VARCHAR(20)"),
+        ("dbsql_warehouse_size", "VARCHAR(20)"),
+        ("dbsql_num_clusters", "INT DEFAULT 1"),
+        ("dbsql_vm_pricing_tier", "VARCHAR(20)"),
+        ("dbsql_vm_payment_option", "VARCHAR(20)"),
+        ("vector_search_mode", "VARCHAR(50)"),
+        ("vector_capacity_millions", "DECIMAL(10,2)"),
+        ("vector_search_storage_gb", "DECIMAL(10,2)"),
+        ("model_serving_gpu_type", "VARCHAR(50)"),
+        ("fmapi_provider", "VARCHAR(50)"),
+        ("fmapi_model", "VARCHAR(100)"),
+        ("fmapi_endpoint_type", "VARCHAR(20)"),
+        ("fmapi_context_length", "VARCHAR(20)"),
+        ("fmapi_rate_type", "VARCHAR(20)"),
+        ("fmapi_quantity", "BIGINT"),
+        ("lakebase_cu", "NUMERIC(5,1)"),
+        ("lakebase_storage_gb", "INT"),
+        ("lakebase_ha_nodes", "INT DEFAULT 1"),
+        ("lakebase_backup_retention_days", "INT DEFAULT 7"),
+        ("runs_per_day", "INT"),
+        ("avg_runtime_minutes", "INT"),
+        ("days_per_month", "INT DEFAULT 30"),
+        ("hours_per_month", "DECIMAL(10,2)"),
+        ("driver_pricing_tier", "VARCHAR(20)"),
+        ("worker_pricing_tier", "VARCHAR(20)"),
+        ("driver_payment_option", "VARCHAR(20)"),
+        ("worker_payment_option", "VARCHAR(20)"),
+        ("workload_config", "JSON"),
+    ]
+    for col_name, col_type in migration_columns:
+        try:
+            cur.execute(f"ALTER TABLE lakemeter.line_items ADD COLUMN IF NOT EXISTS {col_name} {col_type}")
+        except Exception:
+            pass  # Column may already exist with different type
+    log_ok("line_items schema migration complete")
+
     # --- Lakebase CU sizes ---
     cur.execute("ALTER TABLE lakemeter.line_items DROP CONSTRAINT IF EXISTS chk_lakebase_cu")
     cur.execute("ALTER TABLE lakemeter.line_items ALTER COLUMN lakebase_cu TYPE NUMERIC(5,1)")
@@ -411,34 +517,57 @@ def _create_tables_inline(cur):
             description TEXT
         );
         CREATE TABLE IF NOT EXISTS lakemeter.line_items (
-            line_item_id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-            estimate_id TEXT NOT NULL REFERENCES lakemeter.estimates(estimate_id) ON DELETE CASCADE,
-            workload_name TEXT NOT NULL,
-            workload_type TEXT NOT NULL REFERENCES lakemeter.ref_workload_types(workload_type),
-            cloud TEXT NOT NULL DEFAULT 'AWS',
-            instance_type TEXT,
-            num_instances INTEGER DEFAULT 1,
-            hours_per_month NUMERIC DEFAULT 730,
-            utilization NUMERIC DEFAULT 1.0,
-            is_photon BOOLEAN DEFAULT FALSE,
-            is_serverless BOOLEAN DEFAULT FALSE,
-            dbsql_warehouse_type TEXT,
-            dbsql_warehouse_size TEXT,
-            jobs_light BOOLEAN DEFAULT FALSE,
-            lakebase_cu NUMERIC(5,1) DEFAULT 1,
-            lakebase_nodes INTEGER DEFAULT 1,
-            model_serving_gpu_type TEXT,
-            model_serving_num_gpus INTEGER DEFAULT 1,
-            model_serving_workload_size TEXT DEFAULT 'Small',
-            model_serving_scale_to_zero BOOLEAN DEFAULT TRUE,
-            vector_search_endpoint_type TEXT DEFAULT 'standard',
-            vector_search_num_indexes INTEGER DEFAULT 1,
-            fmapi_model TEXT,
-            fmapi_requests_per_month NUMERIC DEFAULT 0,
-            fmapi_avg_input_tokens NUMERIC DEFAULT 500,
-            fmapi_avg_output_tokens NUMERIC DEFAULT 200,
-            fmapi_endpoint_type TEXT DEFAULT 'foundation_model',
-            storage_gb NUMERIC DEFAULT 0,
+            line_item_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            estimate_id UUID NOT NULL REFERENCES lakemeter.estimates(estimate_id) ON DELETE CASCADE,
+            display_order INT,
+            workload_name VARCHAR(255) NOT NULL,
+            workload_type VARCHAR(50) NOT NULL,
+            cloud VARCHAR(20),
+            -- Compute config
+            serverless_enabled BOOLEAN DEFAULT false,
+            serverless_mode VARCHAR(20),
+            photon_enabled BOOLEAN DEFAULT false,
+            driver_node_type VARCHAR(100),
+            worker_node_type VARCHAR(100),
+            num_workers INT,
+            -- DLT config
+            dlt_edition VARCHAR(20),
+            -- DBSQL config
+            dbsql_warehouse_type VARCHAR(20),
+            dbsql_warehouse_size VARCHAR(20),
+            dbsql_num_clusters INT DEFAULT 1,
+            dbsql_vm_pricing_tier VARCHAR(20),
+            dbsql_vm_payment_option VARCHAR(20),
+            -- Vector Search config
+            vector_search_mode VARCHAR(50),
+            vector_capacity_millions DECIMAL(10,2),
+            vector_search_storage_gb DECIMAL(10,2) CHECK (vector_search_storage_gb >= 0),
+            -- Model Serving config
+            model_serving_gpu_type VARCHAR(50),
+            -- FMAPI config
+            fmapi_provider VARCHAR(50),
+            fmapi_model VARCHAR(100),
+            fmapi_endpoint_type VARCHAR(20),
+            fmapi_context_length VARCHAR(20),
+            fmapi_rate_type VARCHAR(20),
+            fmapi_quantity BIGINT,
+            -- Lakebase config
+            lakebase_cu NUMERIC(5,1),
+            lakebase_storage_gb INT,
+            lakebase_ha_nodes INT DEFAULT 1,
+            lakebase_backup_retention_days INT DEFAULT 7,
+            -- Usage/frequency
+            runs_per_day INT,
+            avg_runtime_minutes INT,
+            days_per_month INT DEFAULT 30,
+            hours_per_month DECIMAL(10,2),
+            -- VM pricing
+            driver_pricing_tier VARCHAR(20),
+            worker_pricing_tier VARCHAR(20),
+            driver_payment_option VARCHAR(20),
+            worker_payment_option VARCHAR(20),
+            -- Extensible config
+            workload_config JSON,
             notes TEXT,
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
@@ -968,17 +1097,42 @@ def configure_sp_access(ctx: dict, instance_info: dict, cfg: dict):
     w = ctx["client"]
     host = ctx["host"]
 
-    # Get SP client ID from secrets
+    # Ensure secrets scope exists (auto-create if missing)
+    scope = cfg["secrets_scope"]
+    try:
+        w.secrets.list_secrets(scope=scope)
+        log_ok(f"Secrets scope '{scope}' exists")
+    except Exception:
+        log_info(f"Secrets scope '{scope}' not found — creating...")
+        try:
+            w.secrets.create_scope(scope=scope)
+            log_ok(f"Secrets scope '{scope}' created")
+        except Exception as e2:
+            if "already exists" not in str(e2).lower():
+                log_err(f"Cannot create secrets scope: {e2}")
+                sys.exit(1)
+
+    # Get SP client ID from secrets (prompt if missing)
     try:
         sp_client_id = w.dbutils.secrets.get(
-            scope=cfg["secrets_scope"], key=cfg["sp_client_id_key"]
+            scope=scope, key=cfg["sp_client_id_key"]
         )
-    except Exception as e:
-        log_err(f"Cannot read SP client ID from secrets scope '{cfg['secrets_scope']}': {e}")
-        log_info("Ensure the secrets scope exists with SP credentials.")
-        log_info(f"  databricks secrets put-secret {cfg['secrets_scope']} {cfg['sp_client_id_key']}")
-        log_info(f"  databricks secrets put-secret {cfg['secrets_scope']} {cfg['sp_secret_key']}")
-        sys.exit(1)
+    except Exception:
+        log_warn(f"SP client ID not found in {scope}:{cfg['sp_client_id_key']}")
+        sp_client_id = prompt_input("Enter Service Principal Client ID", "").strip()
+        if not sp_client_id:
+            log_err("SP client ID is required")
+            sys.exit(1)
+        w.secrets.put_secret(scope=scope, key=cfg["sp_client_id_key"],
+                             string_value=sp_client_id)
+        log_ok(f"SP client ID stored in {scope}:{cfg['sp_client_id_key']}")
+
+        # Also prompt for SP secret since it's likely missing too
+        sp_secret_val = prompt_input("Enter Service Principal Secret", "").strip()
+        if sp_secret_val:
+            w.secrets.put_secret(scope=scope, key=cfg["sp_secret_key"],
+                                 string_value=sp_secret_val)
+            log_ok(f"SP secret stored in {scope}:{cfg['sp_secret_key']}")
 
     log_info(f"Service Principal ID: {sp_client_id}")
 
@@ -1035,6 +1189,10 @@ def configure_sp_access(ctx: dict, instance_info: dict, cfg: dict):
     conn = get_owner_connection(ctx, instance_info, cfg)
     conn.autocommit = True
     cur = conn.cursor()
+
+    cur.execute(f'GRANT USAGE ON DATABASE {cfg["db_name"]} TO "{sp_client_id}"')
+    cur.execute(f'GRANT CONNECT ON DATABASE {cfg["db_name"]} TO "{sp_client_id}"')
+    log_ok("Database-level permissions granted")
 
     cur.execute(f'GRANT USAGE ON SCHEMA {DEFAULT_SCHEMA} TO "{sp_client_id}"')
     cur.execute(
@@ -1169,6 +1327,67 @@ env:
 
 
 # ===================================================================
+# Step 9b: Configure Databricks App Resources
+# ===================================================================
+def configure_app_resources(ctx: dict, instance_info: dict, cfg: dict):
+    """Create workspace secrets and configure app resources for valueFrom references.
+
+    Databricks Apps app.yaml uses 'valueFrom' to read env vars from app-level
+    resources. Each resource maps to a workspace secret (scope:key). This step
+    ensures the secrets exist and the app resources are configured so the app
+    can read its configuration at startup.
+    """
+    w = ctx["client"]
+    scope = cfg["secrets_scope"]
+    app_name = cfg["app_name"]
+
+    # 1. Create workspace secrets for config values (idempotent — overwrites if exists)
+    config_secrets = {
+        "secrets-scope-name": scope,
+        "lakebase-instance-name": instance_info["name"],
+    }
+    # lakebase-host, lakebase-user, lakebase-database should already exist from earlier steps
+    for key, value in config_secrets.items():
+        try:
+            w.secrets.put_secret(scope=scope, key=key, string_value=value)
+            log_info(f"Secret {scope}:{key} set")
+        except Exception as e:
+            log_warn(f"Could not set secret {key}: {e}")
+
+    # 2. Define resource mappings: valueFrom name -> scope:key
+    resource_map = {
+        f"{scope}-scope": ("secrets-scope-name", "Secrets scope name"),
+        f"{app_name}-lakebase-instance": ("lakebase-instance-name", "Lakebase instance name"),
+        f"{app_name}-db-host": ("lakebase-host", "Database host"),
+        f"{app_name}-db-user": ("lakebase-user", "Database user"),
+        f"{app_name}-db-name": ("lakebase-database", "Database name"),
+    }
+
+    # 3. Configure app resources via REST API
+    import requests
+    resources = []
+    for name, (secret_key, desc) in resource_map.items():
+        resources.append({
+            "name": name,
+            "description": desc,
+            "secret": {"scope": scope, "key": secret_key, "permission": "READ"},
+        })
+
+    host = ctx["host"].rstrip("/")
+    headers = w.config.authenticate()
+    resp = requests.patch(
+        f"{host}/api/2.0/apps/{app_name}",
+        headers=headers,
+        json={"resources": resources},
+    )
+    if resp.status_code == 200:
+        log_ok(f"App resources configured ({len(resources)} resources)")
+    else:
+        log_warn(f"Failed to configure app resources: {resp.status_code} {resp.text[:200]}")
+        log_info("You may need to set resources manually in the Databricks Apps UI → Environment tab")
+
+
+# ===================================================================
 # Step 10: Deploy App
 # ===================================================================
 def deploy_app(ctx: dict, cfg: dict):
@@ -1218,6 +1437,14 @@ def main():
         "--skip-provision", action="store_true",
         help="Skip Lakebase provisioning (use existing instance)",
     )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Validate config and show plan without making changes",
+    )
+    parser.add_argument(
+        "--non-interactive", action="store_true",
+        help="Use all defaults, no prompts (for CI/CD pipelines)",
+    )
     args = parser.parse_args()
 
     TOTAL_STEPS = 9
@@ -1232,7 +1459,17 @@ def main():
 
     # Step 2: Gather config
     log_step(2, TOTAL_STEPS, "Gathering configuration")
-    cfg = gather_config(ctx)
+    cfg = gather_config(ctx, non_interactive=args.non_interactive)
+
+    if args.dry_run:
+        print(f"\n{BOLD}=== DRY RUN — No changes will be made ==={NC}")
+        print(f"  Instance:  {CYAN}{cfg['instance_name']}{NC}")
+        print(f"  Database:  {CYAN}{cfg['db_name']}{NC}")
+        print(f"  App:       {CYAN}{cfg['app_name']}{NC}")
+        print(f"  CU Size:   {CYAN}{cfg['cu_size']}{NC}")
+        print(f"  Scope:     {CYAN}{cfg['secrets_scope']}{NC}")
+        print(f"\n{GREEN}Dry run complete. Remove --dry-run to execute.{NC}")
+        return
 
     # Step 3: Provision Lakebase
     log_step(3, TOTAL_STEPS, "Provisioning Lakebase instance")
@@ -1269,6 +1506,10 @@ def main():
     log_step(9, TOTAL_STEPS, "Generating app configuration")
     generate_app_config(ctx, instance_info, cfg)
 
+    # Step 9b: Configure app resources (so valueFrom references resolve)
+    log_info("Configuring Databricks App resources...")
+    configure_app_resources(ctx, instance_info, cfg)
+
     # Optional: Deploy
     if not args.skip_deploy:
         log_step(10, TOTAL_STEPS, "Deploying application")
@@ -1283,14 +1524,9 @@ def main():
     print(f"  DB Host:   {CYAN}{instance_info['host']}{NC}")
     print(f"  App Name:  {CYAN}{cfg['app_name']}{NC}")
     print(f"\n  Next steps:")
-    print(f"  1. Create Databricks App resources (if not auto-created):")
-    print(f"     databricks apps create {cfg['app_name']} --profile {args.profile}")
-    print(f"  2. Set app resource values:")
-    print(f"     {cfg['app_name']}-db-host = {instance_info['host']}")
-    print(f"     {cfg['app_name']}-db-name = {cfg['db_name']}")
-    print(f"     {cfg['app_name']}-lakebase-instance = {instance_info['name']}")
-    print(f"  3. Deploy: databricks apps deploy {cfg['app_name']} --profile {args.profile}")
-    print(f"  4. Run permission tests:")
+    print(f"  1. Verify the app is running:")
+    print(f"     databricks apps get {cfg['app_name']} --profile {args.profile}")
+    print(f"  2. Run permission tests:")
     print(f"     pytest tests/test_lakebase_permissions.py -v")
     print()
 
