@@ -1,44 +1,40 @@
-# Sprint 4 Contract: AI Assistant, Export, & Calculation Reference
+# Sprint 4 Contract: Workflow GIFs
 
 ## Acceptance Criteria
 
-### AI Assistant Guide
-- [ ] Opens with a real conversation example showing the assistant proposing a workload
-- [ ] Documents both Home Mode (Q&A only) and Estimate Mode (full tool use)
-- [ ] Lists all 5 agent tools with plain-language descriptions
-- [ ] Includes 3+ complete conversation examples with realistic user prompts and AI responses
-- [ ] Documents the "Apply to Estimate" and "Confirm Workload" workflows
-- [ ] Mentions streaming responses, conversation history limits, and the caution about verifying pricing
+- [ ] 6 GIF files exist in `docs-site/static/img/gifs/`:
+  1. `creating-estimate.gif` — New Estimate flow (click New, fill form, submit)
+  2. `adding-workload.gif` — Add Workload flow (click Add, select type, configure, save)
+  3. `drag-and-drop.gif` — Workload reordering via drag-and-drop
+  4. `ai-assistant.gif` — AI chat interaction with tool calls
+  5. `export-excel.gif` — Export button click and download
+  6. `cost-summary.gif` — Expand/collapse workload costs and hover tooltips
+- [ ] Each GIF is a valid GIF89a file (correct magic bytes)
+- [ ] Each GIF is non-trivial (>50KB — not a blank placeholder)
+- [ ] Each GIF is optimized (<5MB per file)
+- [ ] Width target: ~800px
+- [ ] No real customer names visible in any GIF frame
+- [ ] GIF directory contains exactly 6 files (no extras)
+- [ ] All validation tests pass
 
-### Export Guide
-- [ ] Explains the full 30-column Excel layout with grouped descriptions
-- [ ] Documents what each section of the exported file contains (header, workloads table, cost summary, legend, assumptions)
-- [ ] Covers multi-row workloads (Lakebase, Vector Search storage sub-rows)
-- [ ] Includes 2+ use cases (RFP response, internal planning, vendor comparison)
-- [ ] Describes formatting: color-coded headers, frozen panes, formulas
-- [ ] Documents both single-estimate and bulk export options
-- [ ] File naming convention documented
+## GIF Capture Approach
 
-### Calculation Reference
-- [ ] 3-4 fully worked examples with real numbers showing step-by-step calculations
-- [ ] Example 1: Jobs Classic compute (instance types, DBU rates, hours, VM costs)
-- [ ] Example 2: DBSQL Serverless warehouse (size mapping, hours, no VM costs)
-- [ ] Example 3: FMAPI token-based pricing (input/output tokens, DBU conversion)
-- [ ] Example 4: Classic vs Serverless comparison for the same workload
-- [ ] Each example shows the final monthly and annual cost
-- [ ] Removes sprint-numbered verification references ("Sprint 1", "Sprint 2")
+GIFs are captured from the live app at `https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com` using browser automation. The Build Agent:
+1. Ensures `docs-site/static/img/gifs/` directory exists
+2. Creates a Python capture utility script for recording browser interactions as GIF
+3. Creates the 6 GIF files by recording browser workflows
+4. Writes comprehensive validation tests
 
-### FAQ Page
-- [ ] Contains 10+ questions a new user would ask
-- [ ] Covers: what is Lakemeter, pricing accuracy, cloud/region/tier, workload types, AI assistant, export, discounts, sharing, calculation methodology
-- [ ] Each answer is concise (2-4 sentences) with links to detailed pages
-- [ ] Added to sidebar under Features category
+The Visual QA Agent will verify each GIF's visual content and accuracy.
 
 ## Test Plan
-- `cd docs-site && npm run build` must succeed with zero errors
-- All internal links resolve (Docusaurus throws on broken links)
-- Sidebar renders FAQ in the correct position
+
+- **File validation**: existence, GIF89a magic bytes, size bounds (50KB–5MB), count = 6
+- **Naming convention**: all files match expected names exactly
+- **No customer name violations**: filenames don't contain forbidden names
+- **Path readiness**: GIF paths resolve correctly for Docusaurus static assets
 
 ## Production Readiness Items
-- Remove sprint-numbered references from calculation reference
-- Ensure all cross-links between the 4 pages work
+
+- GIF files in `docs-site/static/img/gifs/` per spec file structure
+- File sizes optimized for web delivery (<5MB each)
