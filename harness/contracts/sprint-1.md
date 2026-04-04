@@ -1,21 +1,24 @@
-# Sprint 1 Contract: Getting Started & Introduction Overhaul
+# Sprint 1 Contract: Screenshot Audit & Core Screenshot Re-capture
 
 ## Acceptance Criteria
 
-- [ ] `intro.md` rewritten as compelling landing page with clear value proposition, audience routing (end users, admins, test engineers), and feature highlights
-- [ ] `getting-started.md` rewritten as complete 5-minute tutorial using real values: AWS us-east-1 Premium, 3 Jobs workloads with specific instance types and usage patterns, showing exact cost calculations
-- [ ] New `user-guide/end-to-end-workflow.md` page covering: create estimate → add workloads → configure → review costs → export Excel → interpret spreadsheet
-- [ ] New `user-guide/quick-reference.md` page with table of all 9 workload types, their purpose, key config fields, tier requirements, and when to use each
-- [ ] `sidebars.ts` updated to include new pages in logical order
-- [ ] All internal links resolve (no broken links)
+- [ ] All 46 existing screenshots audited for: customer name violations, number overflow, stale UI
+- [ ] Audit report written to `harness/audit/screenshot-audit-report.md` with per-file status and action
+- [ ] Validation test suite at `tests/docs_media/` that:
+  - Verifies all image refs in doc pages point to existing files
+  - Validates no zero-byte or missing screenshot files
+  - Checks alt text is present for every image reference
+- [ ] Screenshot capture checklist created with exact steps for 8 core screenshots
+- [ ] Directory structure prepared: `docs-site/static/img/gifs/`, `docs-site/static/video/`
+- [ ] Doc page alt text reviewed and updated where needed for core screenshots
 - [ ] `cd docs-site && npm run build` succeeds with zero errors
-- [ ] All field names and options verified against current frontend/backend source code
 
 ## Test Plan
 
-- Build verification: `cd docs-site && npm run build` exits 0
-- Link verification: no broken link warnings during build
-- Content verification: all workload type names match `WorkloadType` enum, all field names match `LineItem` model, all tier restrictions match frontend logic
+- `tests/docs_media/test_image_references.py` — all markdown `![...](/img/...)` refs resolve to files
+- `tests/docs_media/test_screenshot_audit.py` — audit report exists and covers all 46 screenshots
+- `tests/docs_media/test_docs_build.py` — docs site builds without broken link errors
 
 ## Production Readiness Items This Sprint
-- None (documentation-only sprint)
+- Directory structure for GIFs and video prepared
+- Audit report establishes baseline for all future sprints
