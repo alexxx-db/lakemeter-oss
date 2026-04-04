@@ -554,7 +554,7 @@ export default function Estimates() {
               }}
             >
               <BuildingOfficeIcon className="w-4 h-4" />
-              <span className="truncate flex-1 text-left">
+              <span className="truncate flex-1 text-left" title={accountFilter === 'all' ? 'All Accounts' : accountFilter}>
                 {accountFilter === 'all' ? 'All Accounts' : accountFilter}
               </span>
               <span className="text-xs opacity-60 ml-1">
@@ -606,7 +606,7 @@ export default function Estimates() {
                         )}
                         style={{ color: accountFilter === name ? '#FF3621' : 'var(--text-primary)' }}
                       >
-                        <span className="truncate">{name}</span>
+                        <span className="truncate" title={name}>{name}</span>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-xs opacity-60">{accountCounts[name] || 0}</span>
                           {accountFilter === name && <CheckIcon className="w-4 h-4" />}
@@ -778,11 +778,11 @@ export default function Estimates() {
                       />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                      <p className="font-medium truncate" style={{ color: 'var(--text-primary)' }} title={estimate.estimate_name}>
                         {estimate.estimate_name}
                       </p>
                       {/* Mobile-only: show account on small screens */}
-                      <p className="sm:hidden text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                      <p className="sm:hidden text-xs truncate" style={{ color: 'var(--text-muted)' }} title={estimate.customer_name || ''}>
                         {estimate.customer_name || '—'}
                       </p>
                     </div>
@@ -790,7 +790,7 @@ export default function Estimates() {
                   
                   {/* Account Name */}
                   <div className="hidden sm:block col-span-2">
-                    <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
+                    <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }} title={estimate.customer_name || ''}>
                       {estimate.customer_name || '—'}
                     </p>
                 </div>

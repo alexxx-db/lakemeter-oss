@@ -812,7 +812,7 @@ I can assist you with:
                 <DocumentPlusIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm text-[var(--text-primary)] truncate">
+                <div className="font-medium text-sm text-[var(--text-primary)] truncate" title={currentEstimate.estimate_name || currentEstimate.name || 'Estimate'}>
                   {currentEstimate.estimate_name || currentEstimate.name || 'Estimate'}
                 </div>
                 <div className="flex items-center gap-1 text-[10px] text-[var(--text-muted)] flex-wrap">

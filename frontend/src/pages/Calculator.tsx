@@ -1782,6 +1782,7 @@ export default function Calculator() {
                     markAsChanged()
                   }}
                   placeholder="Untitled Estimate"
+                  title={formData.estimate_name}
                   className="text-xl font-semibold bg-transparent border-none p-0 focus:ring-0 w-full min-w-[200px] text-[var(--text-primary)] placeholder-[var(--text-muted)]"
                 />
                 {currentEstimate && (
@@ -1857,7 +1858,7 @@ export default function Calculator() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-sm text-[var(--text-primary)]">Configuration</h3>
-                  <p className="text-[11px] text-[var(--text-muted)] truncate">
+                  <p className="text-[11px] text-[var(--text-muted)] truncate" title={`${formData.cloud.toUpperCase()} • ${formData.region || 'No region'} • ${formData.tier ? formData.tier.charAt(0).toUpperCase() + formData.tier.slice(1) : 'No tier'}${formData.customer_name ? ` • ${formData.customer_name}` : ''}`}>
                     {formData.cloud.toUpperCase()} • {formData.region || 'No region'} • {formData.tier ? formData.tier.charAt(0).toUpperCase() + formData.tier.slice(1) : 'No tier'}
                     {formData.customer_name && ` • ${formData.customer_name}`}
                   </p>
@@ -2362,7 +2363,7 @@ export default function Calculator() {
                               </div>
                               <div className="min-w-0">
                                 <p className="font-semibold text-[var(--text-primary)] text-sm truncate" title={item.workload_name}>{item.workload_name}</p>
-                                <p className="text-xs text-[var(--text-muted)] truncate">{typeName}</p>
+                                <p className="text-xs text-[var(--text-muted)] truncate" title={typeName}>{typeName}</p>
                               </div>
                             </div>
                             
@@ -2414,7 +2415,7 @@ export default function Calculator() {
                               
                               {/* Other details - simple text */}
                               {structuredConfig.details.length > 0 && (
-                                <span className="text-[11px] text-[var(--text-secondary)] truncate">
+                                <span className="text-[11px] text-[var(--text-secondary)] truncate" title={structuredConfig.details.join(' · ')}>
                                   {structuredConfig.details.join(' · ')}
                                 </span>
                               )}

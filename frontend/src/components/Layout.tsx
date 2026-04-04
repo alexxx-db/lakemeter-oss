@@ -316,7 +316,7 @@ export default function Layout() {
                   }}
                 >
                   <UserCircleIcon className="w-4 h-4" />
-                  <span className="text-sm hidden md:inline max-w-[150px] truncate">
+                  <span className="text-sm hidden md:inline max-w-[150px] truncate" title={currentUser.full_name || currentUser.email}>
                     {currentUser.full_name || currentUser.email.split('@')[0]}
                   </span>
                 </div>
