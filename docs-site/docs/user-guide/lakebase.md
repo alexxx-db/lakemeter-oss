@@ -8,6 +8,12 @@ sidebar_position: 16
 
 Lakebase is Databricks' managed PostgreSQL-compatible transactional database. Unlike compute workloads, Lakebase has two independent cost components: **compute** (CU-based) and **storage** (DSU-based), which appear as separate rows in the Excel export.
 
+![Lakebase documentation page](/img/guides/lakebase-guide.png)
+*The Lakebase guide — compute units, storage pricing, and dual-row Excel export explained.*
+
+![Lakebase worked cost example](/img/guides/lakebase-worked-example.png)
+*Worked example showing separate compute and storage cost calculations.*
+
 ## When to use Lakebase
 
 Use Lakebase when you need a **managed transactional database** for your Databricks application -- CRUD operations, user data, application state, or any workload that needs PostgreSQL compatibility. If you need analytics/BI queries over large datasets, see [DBSQL](/user-guide/dbsql-warehouses) instead.

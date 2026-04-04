@@ -4,6 +4,12 @@ sidebar_position: 10
 
 # Frequently Asked Questions
 
+![FAQ documentation page](/img/guides/faq-guide.png)
+*The FAQ page — answers to the most common questions about Lakemeter, organized by topic.*
+
+![Workload decision table](/img/guides/faq-workload-table.png)
+*Quick reference table for choosing the right workload type.*
+
 ## General
 
 ### What is Lakemeter?

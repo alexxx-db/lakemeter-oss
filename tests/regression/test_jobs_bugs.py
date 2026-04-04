@@ -73,14 +73,14 @@ class TestBugS1_3_IntegrationTestExists:
 
     def test_integration_test_file_exists(self):
         integration_path = os.path.join(
-            os.path.dirname(__file__), '..', 'sprint_1', 'test_jobs_export_integration.py'
+            os.path.dirname(__file__), '..', 'export', 'jobs', 'test_jobs_export_integration.py'
         )
         assert os.path.exists(integration_path), \
             "Integration test file test_jobs_export_integration.py must exist"
 
     def test_integration_test_has_endpoint_tests(self):
         integration_path = os.path.join(
-            os.path.dirname(__file__), '..', 'sprint_1', 'test_jobs_export_integration.py'
+            os.path.dirname(__file__), '..', 'export', 'jobs', 'test_jobs_export_integration.py'
         )
         with open(integration_path) as f:
             content = f.read()

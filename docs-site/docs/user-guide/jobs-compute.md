@@ -8,6 +8,9 @@ sidebar_position: 7
 
 Jobs is the workload type for batch processing, ETL workflows, and scheduled data pipelines. It supports both **Classic** (you manage the cluster) and **Serverless** (Databricks manages everything) modes.
 
+![Calculator page showing workloads with cost breakdown](/img/calculator-overview.png)
+*The Calculator page with configured workloads — Jobs workloads appear in the list with their individual cost displayed.*
+
 ## When to use Jobs
 
 Use Jobs when you have workloads that **start, run, and stop** on a schedule or trigger -- things like nightly data ingestion, hourly aggregation pipelines, or ML training runs. If you need an always-on interactive environment instead, see [All-Purpose Compute](/user-guide/all-purpose-compute).

@@ -8,6 +8,12 @@ sidebar_position: 12
 
 Model Serving provides fully managed, real-time inference endpoints for deploying ML models at scale. You select a GPU type, and Databricks handles provisioning, scaling, and infrastructure. Costs are based on the GPU type's DBU rate and endpoint uptime.
 
+![Model Serving documentation page](/img/guides/model-serving-guide.png)
+*The Model Serving guide — GPU selection, DBU rates, and real-world cost example for inference endpoints.*
+
+![Model Serving worked cost example](/img/guides/model-serving-worked-example.png)
+*Worked example showing GPU type comparison and monthly cost calculation.*
+
 ## When to use Model Serving
 
 Use Model Serving when you need to **deploy a custom ML model** (fine-tuned LLM, classification model, recommendation engine) as a REST API endpoint. If you want to call pre-built foundation models (Llama, Claude, GPT) without deploying your own endpoint, see [FMAPI — Databricks Models](/user-guide/fmapi-databricks) or [FMAPI — Proprietary Models](/user-guide/fmapi-proprietary) instead.

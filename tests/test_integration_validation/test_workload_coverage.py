@@ -1,88 +1,144 @@
 """Integration validation: verify all 9 workload types have test coverage.
 
-Maps each workload type to its corresponding test sprint and validates
-that each sprint contains calculation, export, and edge-case tests.
+Maps each workload type to its corresponding test directory under tests/export/
+and tests/ai_assistant/, and validates that each has calculation, export, and
+edge-case tests. Tests are organized by feature/domain, not by sprint number.
 """
 import json
-import os
 from pathlib import Path
 
 import pytest
 
 TESTS_ROOT = Path(__file__).resolve().parent.parent
-PRICING_DIR = Path(__file__).resolve().parent.parent.parent / "backend" / "static" / "pricing"
+PRICING_DIR = (
+    Path(__file__).resolve().parent.parent.parent
+    / "backend"
+    / "static"
+    / "pricing"
+)
 
-# Canonical mapping: workload type → test sprint directory
-WORKLOAD_SPRINT_MAP = {
-    "JOBS": "sprint_1",
-    "ALL_PURPOSE": "sprint_2",
-    "DLT": "sprint_3",
-    "DBSQL": "sprint_4",
-    "MODEL_SERVING": "sprint_5",
-    "FMAPI_DATABRICKS": "sprint_6",
-    "FMAPI_PROPRIETARY": "sprint_7",
-    "VECTOR_SEARCH": "sprint_8",
-    "LAKEBASE": "sprint_9",
+# Canonical mapping: workload type → export test directory name
+WORKLOAD_EXPORT_DIR_MAP = {
+    "JOBS": "jobs",
+    "ALL_PURPOSE": "all_purpose",
+    "DLT": "dlt",
+    "DBSQL": "dbsql",
+    "MODEL_SERVING": "model_serving",
+    "FMAPI_DATABRICKS": "fmapi_databricks",
+    "FMAPI_PROPRIETARY": "fmapi_proprietary",
+    "VECTOR_SEARCH": "vector_search",
+    "LAKEBASE": "lakebase",
 }
 
-# Multi-workload sprints
-MULTI_WORKLOAD_SPRINTS = {
-    "sprint_10": "Multi-workload combined scenarios",
-    "sprint_11": "Multi-workload ML pipeline (VS + FMAPI_PROP + MS)",
+# Canonical mapping: workload type → AI assistant test directory name
+WORKLOAD_AI_DIR_MAP = {
+    "JOBS": "jobs",
+    "ALL_PURPOSE": "all_purpose",
+    "DLT": "dlt",
+    "DBSQL": "dbsql",
+    "MODEL_SERVING": "model_serving",
+    "FMAPI_DATABRICKS": "fmapi_databricks",
+    "FMAPI_PROPRIETARY": "fmapi_proprietary",
+    "VECTOR_SEARCH": "vector_search",
+    "LAKEBASE": "lakebase",
+}
+
+# Multi-workload / cross-workload test directories
+MULTI_WORKLOAD_DIRS = {
+    "cross_workload": "Cross-workload combined scenarios",
+    "sku_alignment": "SKU alignment across workloads",
 }
 
 
 class TestWorkloadCoverage:
-    """Verify every workload type has dedicated test coverage."""
+    """Verify every workload type has dedicated export test coverage."""
 
-    @pytest.mark.parametrize("workload,sprint_dir", WORKLOAD_SPRINT_MAP.items())
-    def test_workload_has_test_directory(self, workload, sprint_dir):
-        d = TESTS_ROOT / sprint_dir
-        assert d.is_dir(), f"No test directory for {workload}: tests/{sprint_dir}"
+    @pytest.mark.parametrize(
+        "workload,export_dir", WORKLOAD_EXPORT_DIR_MAP.items()
+    )
+    def test_workload_has_export_test_directory(self, workload, export_dir):
+        d = TESTS_ROOT / "export" / export_dir
+        assert d.is_dir(), (
+            f"No export test directory for {workload}: tests/export/{export_dir}"
+        )
 
-    @pytest.mark.parametrize("workload,sprint_dir", WORKLOAD_SPRINT_MAP.items())
-    def test_workload_has_calculation_tests(self, workload, sprint_dir):
-        d = TESTS_ROOT / sprint_dir
+    @pytest.mark.parametrize(
+        "workload,export_dir", WORKLOAD_EXPORT_DIR_MAP.items()
+    )
+    def test_workload_has_calculation_tests(self, workload, export_dir):
+        d = TESTS_ROOT / "export" / export_dir
         calc_keywords = ("calc", "rate", "sku", "pricing", "dbu")
         calc_files = [
-            f for f in d.glob("test_*.py")
+            f
+            for f in d.glob("test_*.py")
             if any(kw in f.name.lower() for kw in calc_keywords)
         ]
         assert len(calc_files) >= 1, (
-            f"No calculation/pricing test files for {workload} in tests/{sprint_dir}. "
+            f"No calculation/pricing test files for {workload} in "
+            f"tests/export/{export_dir}. "
             f"Files: {[f.name for f in d.glob('test_*.py')]}"
         )
 
-    @pytest.mark.parametrize("workload,sprint_dir", WORKLOAD_SPRINT_MAP.items())
-    def test_workload_has_export_tests(self, workload, sprint_dir):
-        d = TESTS_ROOT / sprint_dir
+    @pytest.mark.parametrize(
+        "workload,export_dir", WORKLOAD_EXPORT_DIR_MAP.items()
+    )
+    def test_workload_has_export_tests(self, workload, export_dir):
+        d = TESTS_ROOT / "export" / export_dir
+        export_keywords = ("export", "excel")
         export_files = [
-            f for f in d.glob("test_*.py")
-            if "export" in f.name.lower() or "excel" in f.name.lower()
+            f
+            for f in d.glob("test_*.py")
+            if any(kw in f.name.lower() for kw in export_keywords)
         ]
         assert len(export_files) >= 1, (
-            f"No export/excel test files for {workload} in tests/{sprint_dir}. "
+            f"No export/excel test files for {workload} in "
+            f"tests/export/{export_dir}. "
             f"Files: {[f.name for f in d.glob('test_*.py')]}"
         )
 
 
 class TestMultiWorkloadCoverage:
-    """Verify multi-workload scenario tests exist."""
+    """Verify cross-workload and multi-workload scenario tests exist."""
 
-    @pytest.mark.parametrize("sprint_dir,desc", MULTI_WORKLOAD_SPRINTS.items())
-    def test_multi_workload_dir_exists(self, sprint_dir, desc):
-        d = TESTS_ROOT / sprint_dir
-        assert d.is_dir(), f"Missing multi-workload test dir: tests/{sprint_dir} ({desc})"
+    @pytest.mark.parametrize(
+        "dir_name,desc", MULTI_WORKLOAD_DIRS.items()
+    )
+    def test_multi_workload_dir_exists(self, dir_name, desc):
+        d = TESTS_ROOT / "export" / dir_name
+        assert d.is_dir(), (
+            f"Missing multi-workload test dir: tests/export/{dir_name} ({desc})"
+        )
 
-    def test_sprint_10_has_cross_workload_tests(self):
-        d = TESTS_ROOT / "sprint_10"
-        cross = [f for f in d.glob("test_*.py") if "cross" in f.name.lower()]
-        assert len(cross) >= 1, "Sprint 10 should have cross-workload tests"
+    def test_cross_workload_has_combined_tests(self):
+        d = TESTS_ROOT / "export" / "cross_workload"
+        combined = [
+            f
+            for f in d.glob("test_*.py")
+            if "combined" in f.name.lower() or "cross" in f.name.lower()
+        ]
+        assert len(combined) >= 1, (
+            "tests/export/cross_workload/ should have combined/cross tests"
+        )
 
-    def test_sprint_11_has_regression_tests(self):
-        d = TESTS_ROOT / "sprint_11"
-        reg = [f for f in d.glob("test_*.py") if "regression" in f.name.lower()]
-        assert len(reg) >= 1, "Sprint 11 should have regression tests"
+    def test_ai_multi_workload_tests(self):
+        d = TESTS_ROOT / "ai_assistant" / "multi_workload"
+        assert d.is_dir(), (
+            "Missing AI assistant multi-workload test dir"
+        )
+        test_files = list(d.glob("test_*.py"))
+        assert len(test_files) >= 1, (
+            "AI assistant multi_workload dir should have test files"
+        )
+
+    def test_ai_ml_pipeline_tests(self):
+        d = TESTS_ROOT / "ai_assistant" / "ml_pipeline"
+        assert d.is_dir(), (
+            "Missing AI assistant ML pipeline test dir"
+        )
+        test_files = list(d.glob("test_*.py"))
+        assert len(test_files) >= 1, (
+            "AI assistant ml_pipeline dir should have test files"
+        )
 
 
 class TestPricingDataCoverage:
@@ -125,27 +181,37 @@ class TestPricingDataCoverage:
     def test_manifest_total_entries_positive(self):
         manifest = json.loads((PRICING_DIR / "manifest.json").read_text())
         total = manifest.get("total_entries", 0)
-        assert total > 1000, f"Expected 1000+ total pricing entries, got {total}"
+        assert total > 1000, (
+            f"Expected 1000+ total pricing entries, got {total}"
+        )
 
 
 class TestAIAssistantCoverage:
     """Verify AI assistant tests cover workload types."""
 
-    def test_ai_sprint1_jobs_tests(self):
-        d = TESTS_ROOT / "ai_assistant" / "sprint_1"
-        assert d.is_dir(), "Missing AI assistant sprint_1 tests (JOBS)"
-        test_files = list(d.glob("test_*.py"))
-        assert len(test_files) >= 1
+    @pytest.mark.parametrize(
+        "workload,ai_dir", WORKLOAD_AI_DIR_MAP.items()
+    )
+    def test_ai_workload_has_test_directory(self, workload, ai_dir):
+        d = TESTS_ROOT / "ai_assistant" / ai_dir
+        assert d.is_dir(), (
+            f"Missing AI assistant test dir for {workload}: "
+            f"tests/ai_assistant/{ai_dir}"
+        )
 
-    def test_ai_sprint2_allpurpose_tests(self):
-        d = TESTS_ROOT / "ai_assistant" / "sprint_2"
-        assert d.is_dir(), "Missing AI assistant sprint_2 tests (ALL_PURPOSE)"
+    @pytest.mark.parametrize(
+        "workload,ai_dir", WORKLOAD_AI_DIR_MAP.items()
+    )
+    def test_ai_workload_has_tests(self, workload, ai_dir):
+        d = TESTS_ROOT / "ai_assistant" / ai_dir
         test_files = list(d.glob("test_*.py"))
-        assert len(test_files) >= 1
+        assert len(test_files) >= 1, (
+            f"No test files for {workload} in tests/ai_assistant/{ai_dir}"
+        )
 
 
 class TestRegressionCoverage:
-    """Verify regression tests exist from prior sprints."""
+    """Verify regression tests exist covering key workload areas."""
 
     def test_regression_dir_has_tests(self):
         d = TESTS_ROOT / "regression"
@@ -154,7 +220,46 @@ class TestRegressionCoverage:
             f"Expected >= 3 regression test files, got {len(test_files)}"
         )
 
-    @pytest.mark.parametrize("sprint_num", [1, 2, 3, 4])
-    def test_sprint_regression_file_exists(self, sprint_num):
-        p = TESTS_ROOT / "regression" / f"test_sprint_{sprint_num}_bugs.py"
-        assert p.is_file(), f"Missing regression file for sprint {sprint_num}"
+    def test_regression_covers_jobs(self):
+        d = TESTS_ROOT / "regression"
+        jobs_files = [
+            f for f in d.glob("test_*.py") if "jobs" in f.name.lower()
+        ]
+        assert len(jobs_files) >= 1, (
+            "Missing regression tests covering jobs workload"
+        )
+
+    def test_regression_covers_dlt_or_dbsql(self):
+        d = TESTS_ROOT / "regression"
+        dlt_dbsql_files = [
+            f
+            for f in d.glob("test_*.py")
+            if "dlt" in f.name.lower() or "dbsql" in f.name.lower()
+        ]
+        assert len(dlt_dbsql_files) >= 1, (
+            "Missing regression tests covering DLT/DBSQL workloads"
+        )
+
+    def test_regression_covers_fmapi(self):
+        d = TESTS_ROOT / "regression"
+        fmapi_files = [
+            f for f in d.glob("test_*.py") if "fmapi" in f.name.lower()
+        ]
+        assert len(fmapi_files) >= 1, (
+            "Missing regression tests covering FMAPI workloads"
+        )
+
+    def test_regression_covers_vector_model_lakebase(self):
+        d = TESTS_ROOT / "regression"
+        vml_files = [
+            f
+            for f in d.glob("test_*.py")
+            if any(
+                kw in f.name.lower()
+                for kw in ("vector", "model", "lakebase")
+            )
+        ]
+        assert len(vml_files) >= 1, (
+            "Missing regression tests covering vector search/model serving/"
+            "lakebase workloads"
+        )

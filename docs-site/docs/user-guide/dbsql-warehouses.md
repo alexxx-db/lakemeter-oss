@@ -8,6 +8,12 @@ sidebar_position: 11
 
 DBSQL provides SQL analytics warehouses for business intelligence, reporting, and ad-hoc queries. It supports **Classic**, **Pro**, and **Serverless** warehouse types across 9 sizes, from 2X-Small to 4X-Large.
 
+![DBSQL Warehouses documentation page](/img/guides/dbsql-warehouses-guide.png)
+*The DBSQL guide — real-world scenario, worked cost example, and configuration reference for Classic, Pro, and Serverless warehouses.*
+
+![DBSQL worked cost example](/img/guides/dbsql-worked-example.png)
+*Step-by-step cost calculation showing DBU rates, warehouse sizing, and monthly totals.*
+
 ## When to use DBSQL
 
 Use DBSQL when you need a **SQL-first analytics environment** -- dashboards, scheduled reports, BI tool connections (Tableau, Power BI, dbt), or ad-hoc SQL queries. Unlike Jobs or All-Purpose Compute, DBSQL pricing is based on fixed **warehouse sizes** rather than individual instance types. If you need a general-purpose Spark cluster for notebooks or Python/Scala workloads, see [All-Purpose Compute](/user-guide/all-purpose-compute).

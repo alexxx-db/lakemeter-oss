@@ -34,19 +34,13 @@ EOF
 npm ci --silent 2>/dev/null || npm install --silent
 npm run build
 
-if [ ! -d "dist" ]; then
-    echo -e "${RED}Error: Frontend build failed - dist directory not found${NC}"
+# Vite outputs directly to ../backend/static/ (configured in vite.config)
+cd "$SCRIPT_DIR"
+if [ ! -f "backend/static/index.html" ]; then
+    echo -e "${RED}Error: Frontend build failed - backend/static/index.html not found${NC}"
     exit 1
 fi
 echo -e "${GREEN}✓ Frontend built successfully${NC}"
-
-# Step 2: Copy frontend build to backend
-echo -e "\n${YELLOW}Step 2: Copying frontend to backend/static...${NC}"
-cd "$SCRIPT_DIR"
-rm -rf backend/static
-mkdir -p backend/static
-cp -r frontend/dist/* backend/static/
-echo -e "${GREEN}✓ Frontend copied to backend/static${NC}"
 
 # Step 2b: Build documentation site
 echo -e "\n${YELLOW}Step 2b: Building documentation site...${NC}"

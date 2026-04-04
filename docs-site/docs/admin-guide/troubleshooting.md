@@ -6,6 +6,9 @@ sidebar_position: 5
 
 Common issues and their solutions when running Lakemeter.
 
+![Troubleshooting guide documentation page](/img/guides/admin-troubleshooting-guide.png)
+*The Troubleshooting guide — common issues organized by category with diagnostic commands.*
+
 ## Application Won't Start
 
 ### Check App Status

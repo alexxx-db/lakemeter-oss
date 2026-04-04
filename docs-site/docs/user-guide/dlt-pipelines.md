@@ -8,6 +8,9 @@ sidebar_position: 10
 
 Delta Live Tables is Databricks' declarative ETL framework for building reliable, automated data pipelines. Lakemeter supports cost estimation for all three editions -- **Core**, **Pro**, and **Advanced** -- in both **Classic** and **Serverless** modes.
 
+![Workload configuration in Lakemeter calculator](/img/workload-expanded-config.png)
+*Expanding a workload reveals its full configuration — DLT pipelines show edition, cluster size, and Photon settings.*
+
 ## When to use DLT
 
 Use DLT when you need **managed, declarative data pipelines** with built-in data quality checks, automatic dependency management, and pipeline monitoring. If you just need simple batch jobs without the DLT framework, [Jobs](/user-guide/jobs-compute) is simpler and often cheaper.

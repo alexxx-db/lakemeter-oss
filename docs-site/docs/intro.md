@@ -58,4 +58,7 @@ You are deploying Lakemeter for your team or integrating it with other systems.
 4. Review the cost breakdown
 5. Export to Excel
 
+![Lakemeter estimates list — create and manage your cost estimates](/img/home-page.png)
+*The Lakemeter home page showing your estimates with cloud provider, region, and AI assistant panel.*
+
 Ready for the full walkthrough? See the [5-Minute Tutorial](/user-guide/getting-started).

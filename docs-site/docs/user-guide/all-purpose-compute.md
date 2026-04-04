@@ -8,6 +8,9 @@ sidebar_position: 8
 
 All-Purpose Compute is for interactive notebooks, development clusters, and ad-hoc analysis. Like Jobs, it supports **Classic** and **Serverless** modes -- but with key differences in pricing and how usage is measured.
 
+![Estimate with configured workloads and cost summary](/img/estimate-with-workloads.png)
+*Lakemeter showing workloads with live cost calculation — All-Purpose Compute appears alongside other workload types.*
+
 ## When to use All-Purpose
 
 Use All-Purpose when you need an **always-on or frequently-used** interactive environment -- data scientists exploring data in notebooks, developers testing code, or analysts running ad-hoc queries. If your workload runs on a schedule and then stops, [Jobs](/user-guide/jobs-compute) is a better fit.

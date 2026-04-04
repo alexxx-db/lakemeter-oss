@@ -1,108 +1,133 @@
-# Lakemeter Excel Export Parity Fix — Product Spec
+# Lakemeter Documentation Overhaul — Product Spec
 
-## Overview
+## Vision
 
-Lakemeter is a Databricks cost estimation tool. The frontend calculates costs in `costCalculation.ts` and displays them in the UI. The backend independently calculates costs in `backend/app/routes/export/` and writes them to Excel exports. These two calculation paths have diverged, producing mismatched numbers. This project systematically tests EVERY workload type and configuration against the live app, identifies EVERY mismatch, and fixes them ALL so the Excel export is pixel-perfect with the UI.
+Complete documentation media overhaul for the Lakemeter Databricks cost estimation app. Every screenshot re-captured with sanitized data (no real customer names, no number overflow), 6 workflow GIFs added, 1 tutorial video created, and all doc pages updated to embed the new media. The result is a polished, demo-ready documentation site that can be shown to any customer without data privacy concerns.
 
-This is a **tool improvement project** — sprints are improvement areas (workload groups), not new features. The "app" is the existing Lakemeter; the evaluator verifies fixes by comparing live UI numbers against exported Excel cells.
+## Scope
 
-## Test Environment
+This is a **documentation media** project — no application code changes. The app is already running at `https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com`. The docs site lives in `docs-site/` (Docusaurus).
 
-- **Live app URL**: https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com
-- **Test estimate ID**: `4a3be3ef-1300-458b-890b-755b008e5940`
-- **Comparison methodology**: Open browser → read UI costs → download Excel → compare cell-by-cell
-- **Tolerance**: $0.01 (matching existing parity test tolerance)
+## Critical Rules
 
-## Code Architecture (Existing)
+1. **NEVER include real customer names** in any screenshot or GIF. No "Maya", no real account names. Use ONLY: "QA Test Account", "Demo Corp", "Sample Account", "Acme Industries", "Test Workspace".
+2. **Fix number overflow** — the Cost Summary DBU/VM cost grid cells had overflow issues (fixed in code). Fresh screenshots will show correct rendering.
+3. **All media captured from the live deployed app** at the URL above (requires Databricks OAuth).
+4. **Use Chrome DevTools MCP** for all browser-based capture.
 
-- **Frontend calculations**: `frontend/src/utils/costCalculation.ts` (571 lines)
-- **Frontend pricing lookup**: `frontend/src/utils/pricingBundle.ts` (603 lines)
-- **Backend export package**: `backend/app/routes/export/`
-  - `pricing.py` — JSON loading, SKU resolution, DBU price lookup
-  - `calculations.py` — DBU/hr and hours/month calculations
-  - `excel_builder.py` — Workbook assembly orchestrator
-  - `excel_item_helpers.py` — Per-item value calculation + storage sub-rows
-  - `excel_row_writer.py` — Cell and formula writing (30-column layout)
-  - `excel_columns.py` — Column definitions
-  - `excel_sections.py` — Totals, summary, legend sections
-- **Static pricing JSON**: `backend/static/pricing/` (9 JSON files)
-- **Existing parity tests**: `tests/parity/` (Python reimplementation of FE formulas + 9 test files)
+## Current State
 
-## Comparison Points Per Workload
+- **Doc pages**: 38 files across `docs/user-guide/`, `docs/admin-guide/`, `docs/testing/`
+- **Existing screenshots**: 46 PNG files in `docs-site/static/img/` and `docs-site/static/img/guides/`
+- **Image references in docs**: 61 `![...](/img/...)` references across 38 files
+- **Existing GIFs**: 0
+- **Existing videos**: 0
 
-For each workload item, compare these values between UI and Excel:
-1. **DBU/hr** — the computed DBU rate per hour
-2. **$/DBU** — the price per DBU (from pricing JSON lookup)
-3. **Hours/month** — computed from config or direct input
-4. **Monthly DBUs** — DBU/hr × Hours/month
-5. **Monthly DBU cost** — Monthly DBUs × $/DBU
-6. **VM cost** (where applicable) — driver + worker VM costs
-7. **Total monthly cost** — DBU cost + VM cost
-8. **SKU product type** — correct SKU used for pricing lookup
-9. **Configuration details** — instance types, worker counts, sizes displayed correctly
+## Data Sanitization Rules
 
-For FMAPI workloads (token-based billing), additionally compare:
-- Token quantity (millions)
-- DBU per 1M tokens rate
-- Total DBUs
-- Monthly cost
+Before capturing ANY screenshot or GIF:
+1. Create test estimates using ONLY these names: "QA Test Account", "Demo Corp - AWS Estimate", "Sample Analytics Platform", "Acme Industries - Production"
+2. Delete or rename any estimates with real customer names
+3. Verify the Cost Summary panel renders numbers without overflow
+4. Use consistent, realistic-looking configuration values
 
-For storage sub-rows (Vector Search, Lakebase), compare:
-- Storage quantity
-- Storage rate
-- Storage cost
+## Deliverables by Sprint
 
-## Features by Sprint
+### Sprint 1: Screenshot Audit & Test Data Setup + Core Screenshots
+- Audit all 46 existing screenshots for customer name violations and number overflow
+- Log every screenshot that needs re-capture with reason (name violation, overflow, stale UI)
+- Set up sanitized test data in the live app (create demo estimates with safe names)
+- Verify Cost Summary panel renders correctly (no overflow)
+- Re-capture the 8 core screenshots (`static/img/*.png` — non-guides):
+  - `home-page.png`, `login-page.png`, `estimates-list.png`, `calculator-overview.png`
+  - `all-workloads-overview.png`, `workload-expanded-config.png`, `estimate-with-workloads.png`, `workload-calculation-detail.png`
+- Update any doc pages that reference these core screenshots if alt text needs fixing
 
-### Sprint 1: JOBS + ALL_PURPOSE Parity (Classic/Photon/Serverless)
-- Browser-test all JOBS configurations: classic, photon, serverless (standard + performance mode)
-- Browser-test all ALL_PURPOSE configurations: classic, photon, serverless
-- Compare DBU/hr, $/DBU, monthly DBU, total cost for each
-- Fix all mismatches in backend export code
-- Update parity tests to cover any new edge cases found
+### Sprint 2: User Guide Screenshots (Part 1) — Workload Types
+- Re-capture guide screenshots for workload type pages:
+  - `getting-started-page.png`, `overview-page.png`, `workloads-overview-page.png`
+  - `dbsql-warehouses-guide.png`, `dbsql-worked-example.png`
+  - `model-serving-guide.png`, `model-serving-worked-example.png`
+  - `vector-search-guide.png`, `vector-search-worked-example.png`
+  - `fmapi-databricks-guide.png`, `fmapi-databricks-worked-example.png`
+  - `fmapi-proprietary-guide.png`, `fmapi-proprietary-worked-example.png`
+  - `lakebase-guide.png`, `lakebase-worked-example.png`
+- Verify each screenshot matches its doc page context and alt text
 
-### Sprint 2: DLT + DBSQL Parity (All Editions/Types/Sizes)
-- Browser-test DLT: Core/Pro/Advanced × Classic/Photon/Serverless
-- Browser-test DBSQL: Classic/Pro/Serverless × all warehouse sizes (2X-Small through 4X-Large)
-- Compare all cost components for each configuration
-- Fix all mismatches — pay special attention to DLT edition-specific photon multipliers and DBSQL size-specific DBU rates
-- Update parity tests
+### Sprint 3: User Guide Screenshots (Part 2) + Admin Screenshots
+- Re-capture remaining user guide screenshots:
+  - `ai-assistant-guide.png`, `ai-assistant-tools.png`
+  - `export-guide.png`, `export-excel-structure.png`
+  - `calculation-reference-guide.png`, `calculation-worked-example.png`
+  - `faq-guide.png`, `faq-workload-table.png`
+- Re-capture all admin guide screenshots:
+  - `admin-deployment-guide.png`, `admin-configuration-guide.png`
+  - `admin-api-reference-guide.png`, `admin-architecture-guide.png`
+  - `admin-database-guide.png`, `admin-database-schema.png`
+  - `admin-permissions-guide.png`, `admin-troubleshooting-guide.png`
 
-### Sprint 3: VECTOR_SEARCH + MODEL_SERVING + LAKEBASE Parity
-- Browser-test Vector Search: Standard/Storage-Optimized modes, various capacity levels
-- Browser-test Model Serving: CPU/T4/A10G/A100 GPU types
-- Browser-test Lakebase: various CU sizes, HA node counts, storage amounts
-- Compare compute costs AND storage sub-row costs
-- Fix all mismatches — special attention to ceiling/rounding in Vector Search, storage DSU calculations in Lakebase
-- Update parity tests
+### Sprint 4: Workflow GIFs
+- Create 6 workflow GIFs (10-15 seconds each, 800px wide, optimized file size <5MB each):
+  1. **creating-estimate.gif** — click New Estimate, fill form, submit, land on calculator
+  2. **adding-workload.gif** — click Add Workload, select type, configure, save
+  3. **drag-and-drop.gif** — drag workloads to reorder in the list
+  4. **ai-assistant.gif** — type a question, see response with tool calls
+  5. **export-excel.gif** — click Export, download completes
+  6. **cost-summary.gif** — expand/collapse workload costs, hover tooltips
+- Store all GIFs in `docs-site/static/img/gifs/`
+- Each GIF must use sanitized data only
 
-### Sprint 4: FMAPI_DATABRICKS + FMAPI_PROPRIETARY Parity (All Models/Providers/Token Types)
-- Browser-test FMAPI Databricks: various models × input/output/cache tokens × provisioned modes
-- Browser-test FMAPI Proprietary: OpenAI/Anthropic/Google × various models × input/output/cache tokens
-- Compare token quantities, DBU/1M rates, total DBUs, monthly costs
-- Fix all mismatches — special attention to provider name normalization (Google→GEMINI), fallback rates, context length handling
-- Update parity tests
+### Sprint 5: Tutorial Video + Doc Page Updates
+- Record 1 tutorial video (2-3 minutes) showing end-to-end Getting Started flow:
+  - Login → Create estimate → Add 2 workloads (Jobs + DBSQL) → Review costs → Ask AI → Export
+  - Use sanitized data throughout
+  - Store in `docs-site/static/video/getting-started-tutorial.mp4`
+- Update all doc pages to embed GIFs at relevant sections:
+  - `getting-started.md` — embed creating-estimate GIF + tutorial video
+  - `workloads.md` — embed adding-workload GIF
+  - `creating-estimates.md` — embed creating-estimate GIF + drag-and-drop GIF
+  - `ai-assistant.md` — embed AI assistant GIF
+  - `exporting.md` — embed export GIF
+  - `end-to-end-workflow.md` — embed tutorial video
+  - `overview.md` — embed cost summary GIF
+- Add `<video>` embed for the tutorial video
 
-### Sprint 5: Cross-Workload Regression + Excel Formula Audit
-- Re-test ALL 9 workload types after all fixes to catch any regressions
-- Audit Excel formulas: verify every `=` formula in the spreadsheet produces the correct result (not just the cached value)
-- Verify totals row sums all line items correctly
-- Verify cost summary section matches
-- Run full parity test suite (`pytest tests/parity/`)
-- Fix any remaining issues
+### Sprint 6: Docs Site Build Verification & Final Polish
+- Run `cd docs-site && npm run build` — verify zero errors
+- Check all image/GIF/video paths resolve correctly
+- Verify no broken links (`onBrokenLinks: 'throw'` in Docusaurus config)
+- Verify all 61+ image references point to updated files
+- Check dark mode rendering of all embedded media
+- Final audit: grep all screenshots for any remaining customer name references in alt text
+- Verify GIF file sizes are reasonable (<5MB each)
+- Verify video file size is reasonable (<50MB)
+- Update `intro.md` landing page if needed to showcase new media
 
-## Acceptance Criteria (Global)
+## Technical Notes
 
-- Every workload type's Excel export matches UI costs within $0.01 tolerance
-- All existing parity tests pass
-- New parity tests added for any configurations that were previously untested
-- No regressions: fixing one workload must not break another
-- Excel formulas (not just cached values) produce correct results when recalculated
+- **Screenshot format**: PNG, captured at 1280px viewport width for consistency
+- **GIF format**: Optimized GIF, 800px wide, 10-15fps, <5MB each
+- **Video format**: MP4 (H.264), 1280x720, <50MB
+- **Browser**: Chrome via Chrome DevTools MCP
+- **App URL**: `https://lakemeter-e2e-v2-335310294452632.aws.databricksapps.com`
+- **Auth**: Databricks OAuth (handled by browser session)
+- **Docs site**: Docusaurus v3, dark mode default, builds with `npm run build` in `docs-site/`
 
-## References
+## File Locations
 
-- Frontend cost formulas: `frontend/src/utils/costCalculation.ts`
-- Backend export: `backend/app/routes/export/`
-- Static pricing: `backend/static/pricing/`
-- Existing parity tests: `tests/parity/`
-- Sprint 10 cross-workload tests: `tests/sprint_10/`
+```
+docs-site/
+├── static/
+│   ├── img/
+│   │   ├── *.png                         # Core app screenshots (8 files)
+│   │   ├── guides/*.png                  # Guide-specific screenshots (38 files)
+│   │   └── gifs/*.gif                    # NEW: Workflow GIFs (6 files)
+│   └── video/
+│       └── getting-started-tutorial.mp4  # NEW: Tutorial video
+├── docs/
+│   ├── intro.md                          # Landing page
+│   ├── user-guide/*.md                   # User-facing docs (update with GIF/video embeds)
+│   ├── admin-guide/*.md                  # Admin docs (screenshots only)
+│   └── testing/*.md                      # Test docs (screenshots only)
+└── docusaurus.config.ts
+```

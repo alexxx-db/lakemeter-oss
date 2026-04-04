@@ -8,6 +8,12 @@ sidebar_position: 14
 
 Vector Search provides managed vector database endpoints for similarity search, powering RAG (Retrieval Augmented Generation) applications, recommendation systems, and semantic search. Lakemeter supports cost estimation for **Standard** and **Storage-Optimized** endpoint types.
 
+![Vector Search documentation page](/img/guides/vector-search-guide.png)
+*The Vector Search guide — endpoint types, vector capacity calculation, and free storage tier explained.*
+
+![Vector Search worked cost example](/img/guides/vector-search-worked-example.png)
+*Worked example showing CEILING-based unit calculation, DBU costs, and storage tier breakdown.*
+
 ## When to use Vector Search
 
 Use Vector Search when you need a **managed vector database** for storing and querying embeddings -- things like RAG chatbots, document retrieval, product recommendations, or image similarity search. If you need to call a language model directly (not store embeddings), see [FMAPI — Databricks Models](/user-guide/fmapi-databricks) instead.

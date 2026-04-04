@@ -6,6 +6,9 @@ sidebar_position: 7
 
 Lakemeter uses a **Service Principal (SP)** with OAuth M2M (machine-to-machine) authentication to connect to Lakebase from the Databricks App. This guide documents the critical configuration requirements and a common pitfall that causes authentication failures.
 
+![Permissions guide documentation page](/img/guides/admin-permissions-guide.png)
+*The Permissions guide — OAuth M2M flow, Service Principal setup, and token management.*
+
 ## Why OAuth M2M?
 
 Databricks Apps run as managed services — there is no interactive user session to provide credentials. The app authenticates to Lakebase by:

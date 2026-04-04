@@ -6,6 +6,9 @@ sidebar_position: 2
 
 Lakemeter is configured through environment variables in `app.yaml` and Service Principal credentials stored in a Databricks secret scope.
 
+![Configuration guide documentation page](/img/guides/admin-configuration-guide.png)
+*The Configuration guide — environment variables, secret scopes, and runtime settings.*
+
 ## Environment Variables
 
 Set these in `app.yaml` under the `env` section. Variables marked `valueFrom` are resolved at runtime by Databricks Apps from app resource references.

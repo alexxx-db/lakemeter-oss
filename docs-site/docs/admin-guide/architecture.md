@@ -6,6 +6,9 @@ sidebar_position: 5
 
 Lakemeter is built as a full-stack application on the Databricks platform, using FastAPI for the backend, React for the frontend, and Lakebase (managed PostgreSQL) for persistent storage.
 
+![Architecture documentation page](/img/guides/admin-architecture-guide.png)
+*The Architecture guide — system diagram, backend structure, and module organization.*
+
 ## System Architecture
 
 ```

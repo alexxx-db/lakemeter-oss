@@ -6,6 +6,9 @@ sidebar_position: 4
 
 Lakemeter exposes a REST API at `/api/v1/`. All endpoints require authentication through Databricks Apps SSO.
 
+![API Reference documentation page](/img/guides/admin-api-reference-guide.png)
+*The API Reference — all REST endpoints organized by resource with request/response details.*
+
 ## Base URL
 
 ```

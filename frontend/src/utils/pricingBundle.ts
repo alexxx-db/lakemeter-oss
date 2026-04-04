@@ -451,8 +451,9 @@ const SKU_TO_WORKLOAD_MAP: Record<string, string> = {
  * All possible workload types for fallback.
  */
 const ALL_WORKLOAD_TYPES = [
-  'JOBS', 'ALL_PURPOSE', 'DLT', 'DBSQL', 
-  'VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'
+  'JOBS', 'ALL_PURPOSE', 'DLT', 'DBSQL',
+  'VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE',
+  'DATABRICKS_APPS'
 ]
 
 /**
@@ -537,7 +538,12 @@ export function getAvailableWorkloadTypesForRegion(
   
   // Lakebase: check if DATABASE_SERVERLESS_COMPUTE exists in dbuRates for this region
   // (already handled by SKU_TO_WORKLOAD_MAP above, but ensure it's covered)
-  
+
+  // Databricks Apps: uses ALL_PURPOSE_SERVERLESS_COMPUTE — available wherever ALL_PURPOSE is
+  if (availableWorkloads.has('ALL_PURPOSE')) {
+    availableWorkloads.add('DATABRICKS_APPS')
+  }
+
   return Array.from(availableWorkloads).sort()
 }
 

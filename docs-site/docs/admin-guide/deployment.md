@@ -6,6 +6,9 @@ sidebar_position: 1
 
 Lakemeter is deployed as a **Databricks App** — a managed web application running on the Databricks platform with built-in SSO authentication.
 
+![Deployment guide documentation page](/img/guides/admin-deployment-guide.png)
+*The Deployment guide — architecture diagram, deploy.sh workflow, and app.yaml configuration.*
+
 ## Architecture
 
 ```

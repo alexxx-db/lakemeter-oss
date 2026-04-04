@@ -6,6 +6,12 @@ sidebar_position: 9
 
 This page documents the exact cost calculation formulas Lakemeter uses for each workload type, along with fully worked examples using real pricing data.
 
+![Calculation Reference documentation page](/img/guides/calculation-reference-guide.png)
+*The Calculation Reference — general cost pattern and formula structure for all 9 workload types.*
+
+![Worked cost example](/img/guides/calculation-worked-example.png)
+*Step-by-step worked example with real pricing data showing Jobs Classic with Photon.*
+
 ## General Pattern
 
 All Databricks workload costs follow a common structure:

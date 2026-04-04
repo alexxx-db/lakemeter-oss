@@ -154,7 +154,7 @@ class TestBugS10005TestSuiteTimeout:
 
     def test_pyproject_ignores_ai_tests(self):
         """pyproject.toml addopts must include --ignore=tests/ai_assistant."""
-        root = os.path.join(os.path.dirname(__file__), '..', '..')
+        root = os.path.join(os.path.dirname(__file__), '..', '..', '..')
         pyproject = os.path.join(root, 'pyproject.toml')
         with open(pyproject) as f:
             content = f.read()
@@ -164,7 +164,7 @@ class TestBugS10005TestSuiteTimeout:
     def test_ai_conftest_has_fmapi_skip(self):
         """AI conftest auto-skips when FMAPI is unreachable."""
         ai_conftest = os.path.join(
-            os.path.dirname(__file__), '..', 'ai_assistant', 'conftest.py'
+            os.path.dirname(__file__), '..', '..', 'ai_assistant', 'conftest.py'
         )
         with open(ai_conftest) as f:
             content = f.read()
@@ -174,12 +174,21 @@ class TestBugS10005TestSuiteTimeout:
             "AI conftest must have autouse skip fixture"
 
     def test_default_pytest_collects_no_ai_tests(self):
-        """Default pytest --collect-only should find 0 ai_assistant tests."""
+        """Default pytest --collect-only should not collect tests FROM ai_assistant/."""
         import subprocess
         result = subprocess.run(
             ['python', '-m', 'pytest', '--collect-only', '-q'],
             capture_output=True, text=True,
-            cwd=os.path.join(os.path.dirname(__file__), '..', '..'),
+            cwd=os.path.join(os.path.dirname(__file__), '..', '..', '..'),
         )
-        assert 'ai_assistant' not in result.stdout, \
-            f"AI tests leaked into default collection: {result.stdout[:500]}"
+        # Check that no test lines start with the ai_assistant directory path.
+        # Other tests may reference "ai_assistant" in their parametrized IDs
+        # (e.g., test_suite_completeness checking directory existence), so we
+        # only flag lines that are actual ai_assistant test module collections.
+        ai_test_lines = [
+            line for line in result.stdout.splitlines()
+            if line.startswith('tests/ai_assistant/')
+        ]
+        assert len(ai_test_lines) == 0, (
+            f"AI tests leaked into default collection: {ai_test_lines[:5]}"
+        )

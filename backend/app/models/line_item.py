@@ -43,7 +43,7 @@ class LineItem(Base):
     # Vector Search Configuration
     vector_search_mode = Column(String(20))  # standard, storage_optimized
     vector_capacity_millions = Column(Integer)
-    # vector_search_storage_gb = Column(Integer)  # TODO: Add column to database first
+    vector_search_storage_gb = Column(Integer)
     
     # Model Serving Configuration
     model_serving_gpu_type = Column(String(50))  # cpu, gpu_small_t4, gpu_medium_a10g_1x, etc.

@@ -13,7 +13,6 @@ env:
   - name: "CORS_ORIGINS"
     value: ""
     
-  # Databricks workspace (auto-populated by Databricks Apps)
   - name: "DATABRICKS_HOST"
     value: "{{databricks_host}}"
 

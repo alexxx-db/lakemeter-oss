@@ -1,48 +1,51 @@
-# Sprint 3 Contract: Workload Guides — SQL, AI/ML, and Lakebase
+# Sprint 3 Contract: User Guide Screenshots (Part 2) + Admin Screenshots
 
 ## Acceptance Criteria
 
-- [ ] DBSQL guide rewritten with real-world scenario, worked example with actual numbers, configuration reference verified against source, tips, common mistakes
-- [ ] Model Serving guide rewritten with same treatment
-- [ ] Vector Search guide rewritten with same treatment, CEILING function explained clearly
-- [ ] FMAPI Databricks guide rewritten with same treatment, token vs provisioned pricing explained
-- [ ] FMAPI Proprietary guide rewritten with same treatment, all 3 providers documented with model lists
-- [ ] Lakebase guide rewritten with same treatment, dual-row export (compute + storage) explained
-- [ ] Sidebar restructured: "Compute Workloads" (workloads overview, Jobs, All-Purpose, DLT, DBSQL) and "AI/ML & Data Services" (Model Serving, Vector Search, FMAPI Databricks, FMAPI Proprietary, Lakebase)
-- [ ] Workloads overview rewritten as a decision guide ("Which workload type do I need?")
-- [ ] All field names verified against WorkloadForm.tsx
-- [ ] All $/DBU rates verified against pricing bundle JSONs
-- [ ] All formulas verified against costCalculation.ts
-- [ ] Generic reused screenshots removed (calculator-overview.png, all-workloads-overview.png references)
-- [ ] Docs site builds cleanly: `cd docs-site && npm run build` passes
-- [ ] Each guide follows the established Sprint 2 pattern: scenario → worked example → config reference → formula → tips → common mistakes → Excel export
+- [ ] All 8 user-guide Part 2 screenshots exist in `docs-site/static/img/guides/`:
+  - `ai-assistant-guide.png`, `ai-assistant-tools.png`
+  - `export-guide.png`, `export-excel-structure.png`
+  - `calculation-reference-guide.png`, `calculation-worked-example.png`
+  - `faq-guide.png`, `faq-workload-table.png`
+- [ ] All 8 admin-guide screenshots exist in `docs-site/static/img/guides/`:
+  - `admin-deployment-guide.png`, `admin-configuration-guide.png`
+  - `admin-api-reference-guide.png`, `admin-architecture-guide.png`
+  - `admin-database-guide.png`, `admin-database-schema.png`
+  - `admin-permissions-guide.png`, `admin-troubleshooting-guide.png`
+- [ ] Each screenshot is referenced in its corresponding doc page with markdown image syntax
+- [ ] Each reference has descriptive alt text (>=10 characters)
+- [ ] Each reference has an italic caption line (starts with `*`) immediately below
+- [ ] No forbidden customer names ("Maya", "Merchant", "Commerci") in alt text or captions
+- [ ] Screenshot files are non-empty and reasonably sized (10KB–2MB)
+- [ ] Validation tests written covering all 16 screenshots (file, reference, caption, sanitization)
+- [ ] Full test suite passes (`pytest` exit code 0)
 
-## Format Pattern (from Sprint 2)
+## Screenshot-to-Doc-Page Mapping
 
-Each guide follows this structure:
-1. UI name callout (> **Lakemeter UI name:** ...)
-2. When to use — context and use case
-3. Real-world example with specific numbers
-4. Step-by-step calculation breakdown
-5. Configuration reference table
-6. How costs are calculated (formula boxes)
-7. SKU mapping
-8. Tips (3-4 bullets)
-9. Common mistakes (3-4 bullets)
-10. Excel export columns
-
-## Verified Pricing Data for Examples
-
-- DBSQL: Small=12 DBU/hr, Medium=24 DBU/hr; Classic $0.22, Pro $0.55, Serverless $0.70
-- Model Serving: CPU=1.0, T4=10.48, A10G 1x=20.0 DBU/hr; SKU $0.07
-- Vector Search: Standard=4.0 DBU/hr (divisor 2M), Storage-Optimized=18.29 (divisor 64M)
-- FMAPI DB: llama-3-3-70b input=7.143, output=21.429 DBU/1M; provisioned_scaling=342.857 DBU/hr
-- FMAPI Prop: claude-sonnet-4-5 global/long input=85.714, output=321.429 DBU/1M
-- Lakebase: DATABASE_SERVERLESS_COMPUTE=$0.40/DBU; storage=15 DSU/GB × $0.023/DSU
-- SERVERLESS_REAL_TIME_INFERENCE: $0.07/DBU
+| Screenshot | Doc Page |
+|-----------|----------|
+| `ai-assistant-guide.png` | `user-guide/ai-assistant.md` |
+| `ai-assistant-tools.png` | `user-guide/ai-assistant.md` |
+| `export-guide.png` | `user-guide/exporting.md` |
+| `export-excel-structure.png` | `user-guide/exporting.md` |
+| `calculation-reference-guide.png` | `user-guide/calculation-reference.md` |
+| `calculation-worked-example.png` | `user-guide/calculation-reference.md` |
+| `faq-guide.png` | `user-guide/faq.md` |
+| `faq-workload-table.png` | `user-guide/faq.md` |
+| `admin-deployment-guide.png` | `admin-guide/deployment.md` |
+| `admin-configuration-guide.png` | `admin-guide/configuration.md` |
+| `admin-api-reference-guide.png` | `admin-guide/api-reference.md` |
+| `admin-architecture-guide.png` | `admin-guide/architecture.md` |
+| `admin-database-guide.png` | `admin-guide/database.md` |
+| `admin-database-schema.png` | `admin-guide/database.md` |
+| `admin-permissions-guide.png` | `admin-guide/permissions.md` |
+| `admin-troubleshooting-guide.png` | `admin-guide/troubleshooting.md` |
 
 ## Test Plan
 
+- File existence and size validation (16 screenshots × 3 checks + 1 count = 49 tests)
+- Doc page reference validation (16 screenshots × 3 checks = 48 tests)
+- Customer name sanitization (16 tests)
+- Total: ~113 tests
+- Full test suite: `pytest` exit code 0
 - Docs site build: `cd docs-site && npm run build` — zero errors
-- Existing pytest suite: all tests must still pass
-- Manual verification: all internal links resolve, no broken references

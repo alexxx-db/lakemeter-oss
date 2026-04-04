@@ -1,22 +1,28 @@
-# Sprint 1 Handoff: Screenshot Audit & Test Data Setup
+# Sprint 1 Handoff: Screenshot Audit & Test Data Setup (Iteration 2)
 
 ## What Was Built
 
-### Audit Report
-- **`harness/audit/screenshot-audit-report.md`** — Comprehensive audit of all 39 screenshots (8 core + 31 guides). Visually inspected every image for customer name violations, number overflow, and stale UI. Found 2 critical violations (real customer name "Maya Merchant") and 1 quality issue (cluttered debug data).
+### Iteration 1
+- **`harness/audit/screenshot-audit-report.md`** — Comprehensive audit of all 39 screenshots (8 core + 31 guides). Found 2 critical violations (real customer name "Maya Merchant") and 1 quality issue (cluttered debug data).
+- **`harness/audit/capture-checklist.md`** — Step-by-step checklist for re-capturing the 3 flagged screenshots.
+- **`tests/docs_media/`** — 183 validation tests for image references, audit report, and docs build.
+- **`docs-site/static/img/gifs/`** and **`docs-site/static/video/`** — Directory structure for future GIFs and video.
 
-### Capture Checklist
-- **`harness/audit/capture-checklist.md`** — Step-by-step checklist for re-capturing the 3 core screenshots that need updating (home-page.png, estimates-list.png, all-workloads-overview.png), including pre-capture data sanitization steps.
+### Iteration 2 — Fixed 84 Test Failures
+The 84 failures were caused by stale integration validation tests (`test_workload_coverage.py` and `test_suite_completeness.py`) that expected sprint-number-based test directories (`tests/sprint_1/`, `tests/sprint_2/`, ...) which never existed. Tests are organized by feature/domain (`tests/export/jobs/`, `tests/ai_assistant/jobs/`, etc.).
 
-### Validation Test Suite (183 tests)
-- **`tests/docs_media/test_image_references.py`** — Validates all 61 markdown `![...](/img/...)` references resolve to existing files, checks alt text is present and non-empty, verifies core screenshots are referenced, checks file sizes.
-- **`tests/docs_media/test_screenshot_audit.py`** — Validates audit report exists and covers all 39 screenshots, verifies all core and guide screenshot files exist, checks directory structure (gifs/, video/).
-- **`tests/docs_media/test_docs_build.py`** — Validates docs site builds (`npm run build`) without errors, checks package.json has build script.
-- **`tests/docs_media/conftest.py`** — Shared fixtures and path constants.
+**Files fixed:**
 
-### Directory Structure
-- **`docs-site/static/img/gifs/`** — Created for Sprint 4 workflow GIFs
-- **`docs-site/static/video/`** — Created for Sprint 5 tutorial video
+1. **`tests/test_integration_validation/test_workload_coverage.py`** — Rewrote to validate against actual `tests/export/<workload>/` and `tests/ai_assistant/<workload>/` structure instead of `tests/sprint_N/`. Updated regression coverage checks to look for feature-area-named files instead of `test_sprint_N_bugs.py`.
+
+2. **`tests/test_integration_validation/test_suite_completeness.py`** — Rewrote to validate `tests/export/<workload>/` directories, `tests/ai_assistant/<workload>/` directories, and support dirs (`regression`, `test_installation`, `test_integration_validation`, `docs_media`). Updated conftest, file count, and `__init__.py` checks to match actual structure.
+
+3. **`tests/export/cross_workload/test_regression_s10.py`** — Fixed 3 relative path bugs in `TestBugS10005TestSuiteTimeout`:
+   - `../..` → `../../..` for project root (pyproject.toml lookup)
+   - `../ai_assistant/` → `../../ai_assistant/` for conftest path
+   - `test_default_pytest_collects_no_ai_tests` assertion changed from string-contains to line-prefix check (avoids false positives from parametrized test IDs that mention "ai_assistant")
+
+4. **`tests/regression/test_jobs_bugs.py`** — Fixed path from `../sprint_1/test_jobs_export_integration.py` to `../export/jobs/test_jobs_export_integration.py`.
 
 ## Audit Summary
 
@@ -30,42 +36,26 @@
 2. **`estimates-list.png`** — CRITICAL: Shows "Maya Merchant Commerci..." (real customer name)
 3. **`all-workloads-overview.png`** — WARN: Cluttered with 25+ debug/test workload entries
 
-### Alt Text Review
-All 61 image references across 38 doc files have descriptive, non-empty alt text. No updates needed.
-
 ## How to Test
 
-1. Run the validation tests:
-   ```bash
-   cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
-   pytest tests/docs_media/ -v
-   ```
-2. Build the docs site:
-   ```bash
-   cd docs-site && npm run build
-   ```
+```bash
+cd "/Users/steven.tan/Desktop/Ent 1 - Q4 FY 2026 Team Project/lakemeter_app"
+pytest --tb=short
+```
 
 ## Test Results
 
-- `pytest tests/docs_media/`: **183 passed**, 1 warning (custom mark)
-- `npm run build`: exit code **0**, zero errors
+- `pytest`: **2275 passed**, 2 skipped, 1 warning, **0 failed**
+- `npm run build` (docs-site): exit code 0, zero errors
 
 ## Known Limitations
 
-- The 3 screenshots flagged for re-capture (home-page, estimates-list, all-workloads-overview) still contain the violations. Re-capture requires browser access to the live app via Chrome DevTools MCP, which is handled by the Visual QA Agent.
-- The `login-page.png` shows "GCP fe-vending-machine Account (FEVM)" — this is an internal workspace name, not a customer name. Flagged as acceptable but could be refreshed for cleanliness.
+- The 3 screenshots flagged for re-capture still contain violations. Re-capture requires browser access to the live app, handled by Visual QA Agent.
+- `login-page.png` shows internal workspace name — acceptable but could be refreshed.
 
 ## Files Changed
 
-- `harness/contracts/sprint-1.md` (updated for media overhaul spec)
-- `harness/audit/screenshot-audit-report.md` (new)
-- `harness/audit/capture-checklist.md` (new)
-- `tests/docs_media/__init__.py` (new)
-- `tests/docs_media/conftest.py` (new)
-- `tests/docs_media/test_image_references.py` (new)
-- `tests/docs_media/test_screenshot_audit.py` (new)
-- `tests/docs_media/test_docs_build.py` (new)
-- `docs-site/static/img/gifs/` (new directory)
-- `docs-site/static/video/` (new directory)
-- `harness/handoffs/sprint-1-handoff.md` (updated)
-- `harness/state.json` (updated)
+- `tests/test_integration_validation/test_workload_coverage.py` (rewritten)
+- `tests/test_integration_validation/test_suite_completeness.py` (rewritten)
+- `tests/export/cross_workload/test_regression_s10.py` (3 path fixes)
+- `tests/regression/test_jobs_bugs.py` (1 path fix)

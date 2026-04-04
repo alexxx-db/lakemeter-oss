@@ -1,20 +1,28 @@
-# Lakemeter Docs Overhaul — Progress
+# Lakemeter Documentation Overhaul — Progress
 
 ## Quality Target: 9.0/10
 
 ## Sprint Status
 
-| Sprint | Feature | Status | Score | Tests | Iterations | Decision |
-|--------|---------|--------|-------|-------|------------|----------|
-| 1 | Getting Started & Introduction Overhaul | PENDING | — | — | 0 | — |
-| 2 | Workload Guides — Compute (Jobs, All-Purpose, DLT) | PENDING | — | — | 0 | — |
-| 3 | Workload Guides — SQL, AI/ML, Lakebase | PENDING | — | — | 0 | — |
-| 4 | AI Assistant, Export, & Calculation Reference | IN PROGRESS | — | 1969 pass / 84 pre-existing fail | 2 | EVALUATING |
-| 5 | Admin Guide Accuracy & Update | PENDING | — | — | 0 | — |
-| 6 | Testing Docs Cleanup, Navigation Polish, Build | PENDING | — | — | 0 | — |
+| Sprint | Feature | Status | Score | Screenshots | GIFs | Video | Iterations |
+|--------|---------|--------|-------|-------------|------|-------|------------|
+| 1 | Screenshot Audit & Test Data Setup + Core Screenshots | PENDING | — | 0/8 | — | — | 0 |
+| 2 | User Guide Screenshots (Part 1) — Workload Types | PENDING | — | 0/15 | — | — | 0 |
+| 3 | User Guide Screenshots (Part 2) + Admin Screenshots | PENDING | — | 0/16 | — | — | 0 |
+| 4 | Workflow GIFs | PENDING | — | — | 0/6 | — | 0 |
+| 5 | Tutorial Video + Doc Page Updates | PENDING | — | — | — | 0/1 | 0 |
+| 6 | Docs Site Build Verification & Final Polish | PENDING | — | — | — | — | 0 |
 
-## Notes
-- Spec written 2026-04-04
-- 45 existing docs pages across user-guide, admin-guide, testing sections
-- Key issues: reused screenshots, no practical examples, sprint-numbered test docs, stale admin guide
-- Build verification required each sprint: `cd docs-site && npm run build`
+## Media Totals
+
+- **Screenshots re-captured**: 0 / 46
+- **GIFs created**: 0 / 6
+- **Videos created**: 0 / 1
+- **Doc pages updated with GIF/video embeds**: 0 / 7
+
+## Data Sanitization Checklist
+
+- [ ] Test data created in live app with sanitized names
+- [ ] All estimates use sanitized names only (no real customer names)
+- [ ] Cost Summary panel verified (no number overflow)
+- [ ] All 46 existing screenshots audited for customer name violations

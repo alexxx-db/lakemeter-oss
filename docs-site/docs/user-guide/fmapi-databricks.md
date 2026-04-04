@@ -8,6 +8,12 @@ sidebar_position: 13
 
 Foundation Model APIs (FMAPI) let you access open-source models hosted by Databricks -- such as Llama, DBRX, Gemma, and embedding models -- through pay-per-token or provisioned-throughput pricing. Unlike compute workloads, FMAPI pricing is based on **token volume** or **reserved throughput capacity**, not compute hours.
 
+![FMAPI Databricks documentation page](/img/guides/fmapi-databricks-guide.png)
+*The FMAPI Databricks guide — token-based and provisioned throughput pricing with worked cost examples.*
+
+![FMAPI Databricks worked cost example](/img/guides/fmapi-databricks-worked-example.png)
+*Worked example showing input/output token costs and provisioned throughput comparison.*
+
 ## When to use FMAPI Databricks
 
 Use FMAPI Databricks when you want to call **open-source models hosted on Databricks** without managing your own serving infrastructure. This includes LLMs (Llama, DBRX, Gemma, GPT-OSS) and embedding models (BGE, GTE). If you need commercial models from Anthropic, OpenAI, or Google, see [FMAPI — Proprietary Models](/user-guide/fmapi-proprietary) instead. If you are deploying your own custom model, see [Model Serving](/user-guide/model-serving).

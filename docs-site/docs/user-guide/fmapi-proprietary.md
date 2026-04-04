@@ -8,6 +8,12 @@ sidebar_position: 15
 
 FMAPI for proprietary models lets you access commercial LLMs -- Claude (Anthropic), GPT (OpenAI), and Gemini (Google) -- through Databricks with pay-per-token pricing. Unlike Databricks-hosted open-source models, proprietary model pricing varies significantly by **provider**, **model**, **endpoint type**, and **context length**.
 
+![FMAPI Proprietary documentation page](/img/guides/fmapi-proprietary-guide.png)
+*The FMAPI Proprietary guide — provider/model selection, endpoint types, context lengths, and cache read/write rates.*
+
+![FMAPI Proprietary worked cost example](/img/guides/fmapi-proprietary-worked-example.png)
+*Worked example showing Claude Sonnet 4.5 token costs with global vs in-geo endpoint comparison.*
+
 ## When to use FMAPI Proprietary
 
 Use FMAPI Proprietary when you want to call **commercial LLMs through Databricks** rather than directly through the provider's API. Databricks routes the requests and bills through your Databricks account using DBUs. If you need open-source models (Llama, DBRX, BGE), see [FMAPI — Databricks Models](/user-guide/fmapi-databricks) instead.

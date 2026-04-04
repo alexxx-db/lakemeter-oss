@@ -6,6 +6,12 @@ sidebar_position: 3
 
 Lakemeter uses **Lakebase** (Databricks' managed PostgreSQL) as its transactional database. This page covers the schema design and data management.
 
+![Database guide documentation page](/img/guides/admin-database-guide.png)
+*The Database guide — schema overview and application table definitions.*
+
+![Database schema details](/img/guides/admin-database-schema.png)
+*Column definitions, relationships, and data types for the core tables.*
+
 ## Schema Overview
 
 All tables live in the `lakemeter` schema within the `lakemeter_pricing` database.

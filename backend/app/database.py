@@ -22,21 +22,29 @@ Base = declarative_base()
 
 
 def _get_database_url() -> str:
-    """Build database URL from token manager."""
+    """Build database URL from env var or token manager."""
+    import os
+
+    # Check for direct DATABASE_URL first (local dev)
+    direct_url = os.getenv("DATABASE_URL")
+    if direct_url:
+        log_info("Using DATABASE_URL environment variable for database connection")
+        return direct_url
+
     from app.auth.token_manager import token_manager
-    
+
     if not token_manager:
         raise Exception("Token manager not initialized. Check DATABRICKS_HOST and DATABRICKS_SECRETS_SCOPE.")
-    
+
     params = token_manager.get_connection_params()
-    
+
     if not params["password"]:
         raise Exception("No valid OAuth token available. Run 'databricks auth login' to authenticate.")
-    
+
     # URL-encode credentials
     encoded_user = quote_plus(params["user"])
     encoded_password = quote_plus(params["password"])
-    
+
     return (
         f"postgresql://{encoded_user}:{encoded_password}"
         f"@{params['host']}:{params['port']}/{params['dbname']}"
