@@ -6,6 +6,9 @@ sidebar_position: 2
 
 This tutorial walks you through creating a real cost estimate from scratch. By the end, you will have a complete estimate for a data platform with two workloads on AWS, ready to export.
 
+![Getting Started tutorial page](/img/guides/getting-started-page.png)
+*The 5-Minute Tutorial — step-by-step guide to creating your first cost estimate with two workloads.*
+
 ## What we are building
 
 A cost estimate for a mid-size data platform running on **AWS us-east-1** with the **Premium** tier:
@@ -27,6 +30,9 @@ A cost estimate for a mid-size data platform running on **AWS us-east-1** with t
 4. Click **Create**.
 
 You land on the **Calculator** page -- an empty estimate ready for workloads.
+
+![Lakemeter calculator page with workloads and cost summary](/img/calculator-overview.png)
+*The Calculator page showing configured workloads with live cost summary and AI assistant panel on the right.*
 
 ## Step 2: Add the ETL Pipeline workload (Jobs)
 
@@ -77,6 +83,9 @@ Back on the Calculator page, you can see:
 :::tip
 Click on a workload to expand or edit it. Costs recalculate instantly when you change any parameter -- try adjusting the number of workers or warehouse size to see the impact.
 :::
+
+![Estimate with multiple workloads configured](/img/estimate-with-workloads.png)
+*An estimate with multiple workloads showing individual costs and the total cost summary.*
 
 ## Step 5: Export to Excel
 

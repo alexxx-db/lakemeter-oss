@@ -1,54 +1,58 @@
-# Sprint 2 Contract: Workload Guides — Compute Workloads (Jobs, All-Purpose, DLT)
+# Sprint 2 Contract: User Guide Screenshots (Part 1) — Workload Types
+
+## Scope
+
+Re-capture 15 guide screenshots for workload type doc pages. Verify all doc pages reference them correctly with accurate alt text and captions. Write validation tests.
 
 ## Acceptance Criteria
 
-### Jobs Compute Guide
-- [ ] Opens with a real-world scenario ("You're estimating a nightly ETL pipeline...")
-- [ ] Includes a fully worked example with actual numbers showing step-by-step cost calculation
-- [ ] Configuration table has correct field names, descriptions, and defaults verified against WorkloadForm.tsx
-- [ ] Default for Number of Workers is 2 (frontend default), not 0
-- [ ] Default for DLT edition is Pro (frontend default), not Core
-- [ ] Driver Pricing Tier default is On-Demand, Worker Pricing Tier default is Spot
-- [ ] Tips section: when to use Classic vs Serverless, when to enable Photon
-- [ ] Common mistakes section
-- [ ] Removes generic reused screenshot (`calculator-overview.png`)
-- [ ] Defines "DBU" on first use
-- [ ] Explains tier restrictions (Serverless requires Premium+) in plain English
-- [ ] Removes "Verified Parity" section (internal testing detail, not user-facing)
+### Screenshot Files (15 files in `docs-site/static/img/guides/`)
 
-### All-Purpose Compute Guide
-- [ ] Opens with a real-world scenario ("Your data science team needs a shared development cluster...")
-- [ ] Includes a worked example with numbers for both Classic and Serverless
-- [ ] Configuration table verified against source code
-- [ ] Explains Performance mode lock for All-Purpose Serverless clearly
-- [ ] Tips: when Serverless saves money vs Classic
-- [ ] Common mistakes section
-- [ ] Removes generic screenshot
-- [ ] Removes "Verified Parity" section
+- [ ] `getting-started-page.png` exists and is non-empty
+- [ ] `overview-page.png` exists and is non-empty
+- [ ] `workloads-overview-page.png` exists and is non-empty
+- [ ] `dbsql-warehouses-guide.png` exists and is non-empty
+- [ ] `dbsql-worked-example.png` exists and is non-empty
+- [ ] `model-serving-guide.png` exists and is non-empty
+- [ ] `model-serving-worked-example.png` exists and is non-empty
+- [ ] `vector-search-guide.png` exists and is non-empty
+- [ ] `vector-search-worked-example.png` exists and is non-empty
+- [ ] `fmapi-databricks-guide.png` exists and is non-empty
+- [ ] `fmapi-databricks-worked-example.png` exists and is non-empty
+- [ ] `fmapi-proprietary-guide.png` exists and is non-empty
+- [ ] `fmapi-proprietary-worked-example.png` exists and is non-empty
+- [ ] `lakebase-guide.png` exists and is non-empty
+- [ ] `lakebase-worked-example.png` exists and is non-empty
 
-### DLT Pipelines Guide
-- [ ] Opens with a real-world scenario ("You're building a streaming data pipeline...")
-- [ ] Includes a worked example with numbers
-- [ ] Configuration table verified — UI label is "SDP Edition" not "DLT Edition"
-- [ ] Explains that DLT Serverless uses Jobs Serverless pricing (all editions same rate)
-- [ ] Explains that edition selector is hidden when Serverless is enabled
-- [ ] Edition comparison table with practical guidance on when to choose each
-- [ ] Tips and common mistakes
-- [ ] Removes generic screenshot (`estimate-with-workloads.png`)
-- [ ] Removes "Verified Parity" section
+### Doc Page References
 
-### Cross-cutting
-- [ ] All three guides use consistent structure and tone matching Sprint 1's style
-- [ ] All field names and defaults match WorkloadForm.tsx (lines 448-490)
-- [ ] Language is friendly, practical, concise — no jargon without explanation
+- [ ] Each of the 15 screenshots is referenced in its corresponding doc page
+- [ ] All image references have descriptive, accurate alt text (not generic)
+- [ ] All image references have caption text (italic line below the image)
+- [ ] `getting-started.md` references `getting-started-page.png`
+- [ ] `overview.md` references `overview-page.png`
+- [ ] No customer names appear in alt text or captions
+
+### Validation Tests
+
+- [ ] `tests/docs_media/test_sprint2_guide_screenshots.py` validates all 15 screenshots
+- [ ] Tests verify: file existence, non-empty, reasonable size, doc page references
+- [ ] Tests verify: alt text quality (non-empty, descriptive, no customer names)
+- [ ] Tests verify: caption text exists for each screenshot
+
+### Build
+
 - [ ] `cd docs-site && npm run build` succeeds with zero errors
+- [ ] Full `pytest` suite passes
 
 ## Test Plan
-- Docs site build: `cd docs-site && npm run build` — zero errors
-- Manual review: each worked example calculation is arithmetically correct
-- Field verification: every field name and default matches WorkloadForm.tsx source
+
+- `pytest tests/docs_media/` — all Sprint 2 tests pass
+- `pytest` — full suite passes (2275+ tests)
+- `cd docs-site && npm run build` — zero errors
 
 ## Files to Change
-- `docs-site/docs/user-guide/jobs-compute.md` — full rewrite
-- `docs-site/docs/user-guide/all-purpose-compute.md` — full rewrite
-- `docs-site/docs/user-guide/dlt-pipelines.md` — full rewrite
+
+- `docs-site/docs/user-guide/getting-started.md` — add `getting-started-page.png` reference
+- `docs-site/docs/user-guide/overview.md` — add `overview-page.png` reference
+- `tests/docs_media/test_sprint2_guide_screenshots.py` — new validation tests
