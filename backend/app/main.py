@@ -230,7 +230,22 @@ def debug_database_refresh():
     else:
         result["token_refresh"] = "SKIPPED - token_manager not initialized"
     
-    # Step 2: Refresh database engine
+    # Step 2: Show connection params before attempting
+    if token_manager:
+        try:
+            params = token_manager.get_connection_params()
+            result["connection_params"] = {
+                "host": params.get("host", "?"),
+                "port": params.get("port", "?"),
+                "user": params.get("user", "?"),
+                "dbname": params.get("dbname", "?"),
+                "sslmode": params.get("sslmode", "?"),
+                "password_length": len(params.get("password", "") or ""),
+            }
+        except Exception as e:
+            result["connection_params"] = f"ERROR: {str(e)}"
+
+    # Step 3: Refresh database engine
     try:
         success = refresh_engine()
         if success:

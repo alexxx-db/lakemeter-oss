@@ -108,10 +108,7 @@ def create_line_item(
         LineItem.estimate_id == line_item.estimate_id
     ).count()
     
-    # Filter out fields not yet in database
     item_data = line_item.model_dump()
-    item_data.pop('vector_search_storage_gb', None)  # TODO: Remove when column is added to database
-    
     db_item = LineItem(**item_data)
     if db_item.display_order == 0:
         db_item.display_order = max_order
@@ -160,7 +157,6 @@ def update_line_item(
     _check_estimate_access(item.estimate_id, current_user, db, require_edit=True)
     
     update_data = line_item_update.model_dump(exclude_unset=True)
-    update_data.pop('vector_search_storage_gb', None)  # TODO: Remove when column is added to database
     for field, value in update_data.items():
         setattr(item, field, value)
     
