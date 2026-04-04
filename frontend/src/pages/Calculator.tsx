@@ -26,7 +26,9 @@ import {
   Squares2X2Icon,
   ListBulletIcon,
   XMarkIcon,
-  CalculatorIcon
+  CalculatorIcon,
+  BarsArrowDownIcon,
+  BarsArrowUpIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -447,6 +449,8 @@ export default function Calculator() {
   
   // Workloads view mode: 'table' (default), 'cards' (compact), 'expanded'
   const [workloadsViewMode, setWorkloadsViewMode] = useState<'cards' | 'expanded' | 'table'>('table')
+  const [sortField, setSortField] = useState<'order' | 'name' | 'type' | 'cost'>('order')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   
   // Bulk selection for delete
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
@@ -1064,25 +1068,25 @@ export default function Calculator() {
         dbuPerHour = vectorUnitsUsed * vectorModeDBURate
         monthlyDBUs = dbuPerHour * hoursPerMonth
         
-        // TODO: Storage calculation for Vector Search - waiting for database column
+        // Storage calculation for Vector Search
         // Free Storage = units_used × 20 GB
         // Billable Storage = MAX(0, storage_gb - free_storage_gb)
         // Storage Cost = billable_storage_gb × price_per_gb_per_month ($0.023/GB/month)
-        // const vectorStorageGB = effectiveItem.vector_search_storage_gb || 0
-        // const vectorFreeStorageGB = vectorUnitsUsed * 20
-        // const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
-        // const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
-        // const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
-        // 
-        // if (vectorStorageGB > 0) {
-        //   storageCost = vectorStorageCost
-        //   storageDetails = {
-        //     totalStorageGB: vectorStorageGB,
-        //     freeStorageGB: vectorFreeStorageGB,
-        //     billableStorageGB: vectorBillableStorageGB,
-        //     pricePerGB: vectorStoragePricePerGB
-        //   }
-        // }
+        const vectorStorageGB = effectiveItem.vector_search_storage_gb || 0
+        const vectorFreeStorageGB = vectorUnitsUsed * 20
+        const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
+        const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
+        const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
+
+        if (vectorStorageGB > 0) {
+          storageCost = vectorStorageCost
+          storageDetails = {
+            totalStorageGB: vectorStorageGB,
+            freeStorageGB: vectorFreeStorageGB,
+            billableStorageGB: vectorBillableStorageGB,
+            pricePerGB: vectorStoragePricePerGB
+          }
+        }
         break
       
       case 'MODEL_SERVING':
@@ -1296,6 +1300,35 @@ export default function Calculator() {
     setLocalCalculatedCosts(costs)
   }, [lineItems, pendingFormEdits, formData.cloud, formData.region, formData.tier, setLocalCalculatedCosts, getVMPrice, vmPricingMap, getInstanceDbuRate, instanceDbuRateMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
   
+  // Sorted line items
+  const sortedLineItems = useMemo(() => {
+    const items = [...lineItems]
+    if (sortField === 'order') {
+      items.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+    } else if (sortField === 'name') {
+      items.sort((a, b) => (a.workload_name || '').localeCompare(b.workload_name || ''))
+    } else if (sortField === 'type') {
+      items.sort((a, b) => (a.workload_type || '').localeCompare(b.workload_type || ''))
+    } else if (sortField === 'cost') {
+      items.sort((a, b) => {
+        const costA = calculateItemCost(a).totalCost
+        const costB = calculateItemCost(b).totalCost
+        return costA - costB
+      })
+    }
+    if (sortDirection === 'desc') items.reverse()
+    return items
+  }, [lineItems, sortField, sortDirection, calculateItemCost])
+
+  const handleSort = (field: 'order' | 'name' | 'type' | 'cost') => {
+    if (sortField === field) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection(field === 'cost' ? 'desc' : 'asc')
+    }
+  }
+
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {
       toast.error('Enter an estimate name')
@@ -2173,16 +2206,25 @@ export default function Calculator() {
                           />
                         </div>
                       )}
-                      <div className={clsx(isBulkSelectMode ? "col-span-3" : "col-span-4")}>Workload</div>
-                      <div className={clsx(isBulkSelectMode ? "col-span-4" : "col-span-4")}>Configuration</div>
-                      <div className="col-span-4"></div>
+                      <button onClick={() => handleSort('name')} className={clsx("flex items-center gap-1 cursor-pointer hover:text-[var(--text-primary)] transition-colors", isBulkSelectMode ? "col-span-3" : "col-span-4")}>
+                        Workload
+                        {sortField === 'name' && (sortDirection === 'asc' ? <BarsArrowUpIcon className="w-3 h-3" /> : <BarsArrowDownIcon className="w-3 h-3" />)}
+                      </button>
+                      <button onClick={() => handleSort('type')} className={clsx("flex items-center gap-1 cursor-pointer hover:text-[var(--text-primary)] transition-colors", isBulkSelectMode ? "col-span-4" : "col-span-4")}>
+                        Configuration
+                        {sortField === 'type' && (sortDirection === 'asc' ? <BarsArrowUpIcon className="w-3 h-3" /> : <BarsArrowDownIcon className="w-3 h-3" />)}
+                      </button>
+                      <button onClick={() => handleSort('cost')} className="col-span-4 flex items-center gap-1 justify-end cursor-pointer hover:text-[var(--text-primary)] transition-colors">
+                        Cost
+                        {sortField === 'cost' && (sortDirection === 'asc' ? <BarsArrowUpIcon className="w-3 h-3" /> : <BarsArrowDownIcon className="w-3 h-3" />)}
+                      </button>
                     </div>
                     
                     {/* Rows */}
-                    {lineItems.map((item) => {
+                    {sortedLineItems.map((item) => {
                       // Create effective item that merges saved data with pending edits for real-time preview
                       const pendingEdits = pendingFormEdits[item.line_item_id]
-                      const effectiveItem: LineItem = pendingEdits 
+                      const effectiveItem: LineItem = pendingEdits
                         ? { ...item, ...pendingEdits } as LineItem
                         : item
                       
@@ -2319,7 +2361,7 @@ export default function Calculator() {
                                 <TypeIcon className={clsx("w-4 h-4", typeConfig.color)} />
                               </div>
                               <div className="min-w-0">
-                                <p className="font-semibold text-[var(--text-primary)] text-sm truncate">{item.workload_name}</p>
+                                <p className="font-semibold text-[var(--text-primary)] text-sm truncate" title={item.workload_name}>{item.workload_name}</p>
                                 <p className="text-xs text-[var(--text-muted)] truncate">{typeName}</p>
                               </div>
                             </div>
@@ -2585,13 +2627,17 @@ export default function Calculator() {
                                   const dbuPrice = costs.dbuPrice || 0
                                   const dbuPriceDisplay = dbuPrice.toFixed(2)
                                   
-                                    // Vector Search formula (without storage - TODO: add when database column exists)
+                                    // Vector Search formula (with storage)
                                     if (wType === 'VECTOR_SEARCH') {
                                       const capacity = effectiveItem.vector_capacity_millions || 1
                                       const mode = effectiveItem.vector_search_mode || 'standard'
                                       const divisor = mode === 'storage_optimized' ? 64 : 2
                                       const unitsUsed = Math.ceil(capacity / divisor)
                                       const dbuPerUnit = mode === 'storage_optimized' ? 18.29 : 4
+                                      const vsStorageGB = effectiveItem.vector_search_storage_gb || 0
+                                      const vsFreeStorageGB = unitsUsed * 20
+                                      const vsBillableStorageGB = Math.max(0, vsStorageGB - vsFreeStorageGB)
+                                      const vsStorageCost = vsBillableStorageGB * 0.023
                                       return (
                                         <div className="space-y-1">
                                           {/* Hours calculation (if run-based) */}
@@ -2623,9 +2669,30 @@ export default function Calculator() {
                                             <span>=</span>
                                             <span className="text-blue-500 font-semibold">{formatCurrency(costs.dbuCost)}</span>
                                           </div>
+                                          {vsStorageGB > 0 && (
+                                            <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+                                              <span className="text-purple-600 font-semibold">Storage:</span>
+                                              <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{vsStorageGB} GB</span>
+                                              <span>−</span>
+                                              <span>{vsFreeStorageGB} GB free</span>
+                                              <span className="text-[var(--text-muted)]">({unitsUsed} units × 20GB)</span>
+                                              <span>=</span>
+                                              <span className="font-semibold">{vsBillableStorageGB} GB</span>
+                                              <span>×</span>
+                                              <span>$0.023/GB</span>
+                                              <span>=</span>
+                                              <span className="text-purple-500 font-semibold">{formatCurrency(vsStorageCost)}</span>
+                                            </div>
+                                          )}
                                           <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
                                             <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
                                             <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                            {vsStorageGB > 0 && (
+                                              <>
+                                                <span>+</span>
+                                                <span className="text-purple-500">{formatCurrency(vsStorageCost)}</span>
+                                              </>
+                                            )}
                                             <span>=</span>
                                             <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                           </div>
@@ -3028,7 +3095,7 @@ export default function Calculator() {
                 )}
                 
                 {/* Card Views (Compact and Expanded) */}
-                {workloadsViewMode !== 'table' && lineItems.map((item, index) => {
+                {workloadsViewMode !== 'table' && sortedLineItems.map((item, index) => {
                   // Create effective item that merges saved data with pending edits for real-time preview
                   const pendingEdits = pendingFormEdits[item.line_item_id]
                   const effectiveItem: LineItem = pendingEdits 
@@ -3080,7 +3147,7 @@ export default function Calculator() {
                               <h4 className={clsx(
                                 "font-semibold truncate text-[var(--text-primary)]",
                                 workloadsViewMode === 'cards' && !isExpanded && "text-sm"
-                              )}>{item.workload_name}</h4>
+                              )} title={item.workload_name}>{item.workload_name}</h4>
                               {(item.serverless_enabled || (item.workload_type === 'DBSQL' && item.dbsql_warehouse_type === 'SERVERLESS')) && (
                                 <span className="badge badge-teal">Serverless</span>
                               )}
@@ -3256,13 +3323,17 @@ export default function Calculator() {
                                 const dbuPriceDisplay = dbuPrice.toFixed(2)
                                 
                                 // Special workloads
-                                // Vector Search formula (without storage - TODO: add when database column exists)
+                                // Vector Search formula (with storage)
                                 if (wType === 'VECTOR_SEARCH') {
                                   const capacity = effectiveItem.vector_capacity_millions || 1
                                   const mode = effectiveItem.vector_search_mode || 'standard'
                                   const divisor = mode === 'storage_optimized' ? 64 : 2
                                   const unitsUsed = Math.ceil(capacity / divisor)
                                   const dbuPerUnit = mode === 'storage_optimized' ? 18.29 : 4
+                                  const vsStorageGB = effectiveItem.vector_search_storage_gb || 0
+                                  const vsFreeStorageGB = unitsUsed * 20
+                                  const vsBillableStorageGB = Math.max(0, vsStorageGB - vsFreeStorageGB)
+                                  const vsStorageCost = vsBillableStorageGB * 0.023
                                   return (
                                     <div className="space-y-1">
                                       <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
@@ -3276,9 +3347,30 @@ export default function Calculator() {
                                         <span>=</span>
                                         <span className="text-blue-500 font-semibold">{formatCurrency(costs.dbuCost)}</span>
                                       </div>
+                                      {vsStorageGB > 0 && (
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+                                          <span className="text-purple-600 font-semibold">Storage:</span>
+                                          <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{vsStorageGB} GB</span>
+                                          <span>−</span>
+                                          <span>{vsFreeStorageGB} GB free</span>
+                                          <span className="text-[var(--text-muted)]">({unitsUsed} units × 20GB)</span>
+                                          <span>=</span>
+                                          <span className="font-semibold">{vsBillableStorageGB} GB</span>
+                                          <span>×</span>
+                                          <span>$0.023/GB</span>
+                                          <span>=</span>
+                                          <span className="text-purple-500 font-semibold">{formatCurrency(vsStorageCost)}</span>
+                                        </div>
+                                      )}
                                       <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
                                         <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
                                         <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
+                                        {vsStorageGB > 0 && (
+                                          <>
+                                            <span>+</span>
+                                            <span className="text-purple-500">{formatCurrency(vsStorageCost)}</span>
+                                          </>
+                                        )}
                                         <span>=</span>
                                         <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
                                       </div>
