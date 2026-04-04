@@ -6,11 +6,23 @@ sidebar_position: 3
 
 This guide covers the complete Lakemeter workflow from creating an estimate to interpreting the exported Excel report. Follow this when you need to produce a cost estimate for a customer proposal, internal planning exercise, or vendor comparison.
 
+## Video walkthrough
+
+<video controls width="100%" preload="metadata" aria-label="End-to-end workflow tutorial showing the complete Lakemeter process from estimate creation through export">
+  <source src="/video/getting-started-tutorial.mp4" type="video/mp4" />
+  Your browser does not support the video tag. <a href="/video/getting-started-tutorial.mp4">Download the tutorial video</a>.
+</video>
+
+*Full walkthrough: create an estimate, add workloads, configure compute and usage, review costs, and export the report.*
+
 ## Overview
 
 ```
 Create Estimate → Add Workloads → Configure Each Workload → Review Costs → Export Excel → Interpret Report
 ```
+
+![Lakemeter home page with estimates list](/img/home-page.png)
+*Start from the Lakemeter home page — click **New Estimate** to begin building a cost estimate.*
 
 ## 1. Plan your estimate
 

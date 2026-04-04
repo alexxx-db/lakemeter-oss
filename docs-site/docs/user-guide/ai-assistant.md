@@ -6,6 +6,15 @@ sidebar_position: 5
 
 Lakemeter includes a built-in AI assistant powered by Claude that can answer pricing questions, configure workloads, and generate entire estimates from a natural language description.
 
+![AI Assistant documentation page](/img/guides/ai-assistant-guide.png)
+*The AI Assistant guide — two modes, five specialized tools, and conversation examples.*
+
+![AI Assistant tools reference](/img/guides/ai-assistant-tools.png)
+*The five tools the AI assistant uses to propose workloads, analyze estimates, and answer questions.*
+
+![AI Assistant in action — type a question, see the response with tool calls](/img/gifs/ai-assistant.gif)
+*Animated: asking the AI assistant to add a workload — it proposes a configuration you can confirm, edit, or cancel.*
+
 ## How It Works
 
 The assistant appears as a chat panel on the right side of the screen. It has access to Lakemeter's full pricing database and can create workloads directly in your estimate — no manual form-filling required.

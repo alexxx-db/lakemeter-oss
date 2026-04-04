@@ -5,11 +5,9 @@
   "quality_target": 9.0,
   "current_phase": "BUILD_AGENT",
   "spec_complete": true,
-  "current_sprint": 4,
+  "current_sprint": 5,
   "planned_sprints": 6,
   "remaining_spec_items": [
-    "Sprint 4: Workflow GIFs \u2014 create 6 workflow GIFs (create estimate, add workload, drag-and-drop, AI assistant, export, cost summary)",
-    "Sprint 5: Tutorial Video + Doc Page Updates \u2014 record getting-started tutorial video, update 7 doc pages with GIF/video embeds",
     "Sprint 6: Docs Site Build Verification & Final Polish \u2014 build docs site, verify all media paths, final audit"
   ],
   "sprints_completed": [
@@ -39,10 +37,19 @@
         9.7
       ],
       "iterations": 1
+    },
+    {
+      "sprint": 4,
+      "score": 9.4,
+      "debt": false,
+      "trajectory": [
+        9.4
+      ],
+      "iterations": 1
     }
   ],
   "dynamically_added_sprints": [],
-  "feature_sprints_since_doc_sprint": 0,
+  "feature_sprints_since_doc_sprint": 2,
   "last_doc_sprint": 3,
   "last_install_test": 3,
   "last_integration_test": 3,
@@ -63,7 +70,7 @@
     "Acme Industries",
     "Test Workspace"
   ],
-  "last_action": "Sprint 4 iteration 1 build complete. Created 6 workflow GIFs (creating-estimate, adding-workload, drag-and-drop, ai-assistant, export-excel, cost-summary). All GIFs are valid GIF89a, 800x600px, 51-67KB. Wrote 63 validation tests. All 2565 tests passing.",
-  "last_updated": "2026-04-04T18:30:00",
+  "last_action": "Sprint 5 iteration 1 build complete. Created tutorial video placeholder (MP4), updated 7 doc pages with GIF/video embeds (7 GIF embeds + 2 video embeds), wrote 49 validation tests. All 2628 tests passing.",
+  "last_updated": "2026-04-04T19:30:00",
   "score_trajectory": []
 }

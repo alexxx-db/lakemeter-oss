@@ -6,6 +6,15 @@ sidebar_position: 6
 
 Lakemeter exports your estimates to professionally formatted Excel spreadsheets — ready for RFP responses, procurement reviews, internal planning, or vendor comparisons.
 
+![Export guide documentation page](/img/guides/export-guide.png)
+*The Export guide — single and bulk export workflows with file naming conventions.*
+
+![Excel spreadsheet structure](/img/guides/export-excel-structure.png)
+*Detailed breakdown of the Excel export: header, workload table, cost summary, legend, and assumptions.*
+
+![Exporting an estimate to Excel — click Export, download completes](/img/gifs/export-excel.gif)
+*Animated: exporting an estimate — click the Export button and the Excel file downloads automatically.*
+
 ## How to Export
 
 ### Single Estimate

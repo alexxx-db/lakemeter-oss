@@ -12,6 +12,9 @@ Lakemeter is a web-based cost estimation tool for the Databricks platform. It al
 ![Lakemeter home page showing estimates list](/img/home-page.png)
 *The Lakemeter home page — manage your estimates, filter by cloud provider, and access the AI assistant.*
 
+![Cost summary panel — expand and collapse workload costs, hover for tooltips](/img/gifs/cost-summary.gif)
+*Animated: the cost summary panel in action — expand workload costs and hover over values to see detailed breakdowns.*
+
 ## What You Can Do
 
 ### Create Estimates

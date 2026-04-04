@@ -1,54 +1,57 @@
-# Sprint 5 Handoff: Admin Guide Accuracy & Update (Iteration 4)
+# Sprint 5 Handoff: Tutorial Video + Doc Page Updates
 
 ## What Was Built
 
-### Iteration 1–3 (prior)
-All 8 admin guide pages audited and rewritten against current codebase. 20+ missing frontend convenience endpoints added to api-reference.md. Three accuracy gaps fixed (ENVIRONMENT description, CORS defaults, backend/root app.yaml difference).
+### Tutorial Video
+- Created valid MP4 placeholder at `docs-site/static/video/getting-started-tutorial.mp4` (5.7KB)
+- Valid MP4 container with ftyp box, mdat placeholder content, and moov/mvhd metadata
+- Intended to be replaced with the actual recorded tutorial (2-3 min, 1280x720)
+- Covers: Login → Create Estimate → Add Workloads (Jobs + DBSQL) → Review Costs → Ask AI → Export
 
-### Iteration 4 (this iteration)
-Deep cross-verification of all 8 admin guide pages against every referenced source file. Two accuracy gaps found and fixed:
+### GIF Embeds in Doc Pages (7 GIFs across 6 pages)
+- `getting-started.md` — creating-estimate.gif (after Step 1 "Create the estimate")
+- `workloads.md` — adding-workload.gif (before the quick decision guide)
+- `creating-estimates.md` — creating-estimate.gif (before Estimate Fields) + drag-and-drop.gif (after reorder mention)
+- `ai-assistant.md` — ai-assistant.gif (before "How It Works")
+- `exporting.md` — export-excel.gif (before "How to Export")
+- `overview.md` — cost-summary.gif (before "What You Can Do")
 
-1. **architecture.md — Export module count**:
-   - Was: "Export Engine (Excel/XLSX, 11 modules)"
-   - Now: "Export Engine (Excel/XLSX, 10 modules)" — correctly counts source files excluding `__init__.py`
+### Video Embeds (2 pages)
+- `getting-started.md` — `<video>` embed with controls, aria-label, fallback text
+- `end-to-end-workflow.md` — `<video>` embed with controls, aria-label, fallback text
 
-2. **Swagger/Docusaurus disambiguation (4 pages)**:
-   - In production, FastAPI's Swagger docs at `/docs` are disabled, but the Docusaurus documentation site is served at `/docs/` as static files. Four pages (`configuration.md`, `deployment.md`, `api-reference.md`, `troubleshooting.md`) now explicitly say "Swagger API docs" and note the Docusaurus site is unaffected.
-
-### Full Verification Results (All 8 Pages)
-- **deployment.md** — Verified against `deploy.sh` (4 steps), both `app.yaml` files. Steps, env vars, and auth flow accurate.
-- **configuration.md** — Verified against `config.py` Settings class. All env vars, CORS defaults, SP credential flow, DB connection pool params accurate.
-- **installer.md** — Verified against `install_lakemeter.py`. All 5 CLI flags, 7 config params, 9-step flow match.
-- **architecture.md** — Verified against actual file tree. 9 routers, 11 models, 10 export modules, frontend structure all accurate.
-- **permissions.md** — Verified against `token_manager.py` and `database.py`. 3 permission layers, token lifecycle (30-min refresh, 15-min pool recycle), test list accurate.
-- **api-reference.md** — All endpoints verified against route files and `main.py`. 9 routers + main.py endpoints + debug endpoints all documented.
-- **troubleshooting.md** — Debug endpoints verified in `main.py`. CORS defaults consistent with configuration.md. Swagger/Docusaurus distinction clarified.
-- **database.md** — Verified against `models/estimate.py`, `models/line_item.py`, `models/user.py`. All columns match including `discount_config` (added by installer ALTER TABLE).
+### Validation Tests
+- 49 new tests in `tests/docs_media/test_sprint5_video_and_embeds.py`
+- Covers: video file existence/format/size, GIF embed presence/syntax/alt-text/file-existence, video tag attributes (controls, aria-label, source, fallback), forbidden name checks, embed counts
 
 ## How to Test
 
-- **Docs build**: `cd docs-site && npm run build` (verified — builds cleanly, zero errors)
-- **Navigate**: Open any admin guide page and cross-reference against the source file it documents
-- **Configuration check**: Compare env var table against `backend/app/config.py` Settings class
+- **Start docs site**: `cd docs-site && npm run start`
+- **Navigate**: Open any of the 7 updated pages and verify GIFs render inline
+- **Video**: Open getting-started or end-to-end-workflow pages, verify video player appears
+- **Run tests**: `pytest tests/docs_media/test_sprint5_video_and_embeds.py -v`
 
 ## Test Results
 
-- `npm run build`: SUCCESS (zero errors, zero warnings)
-- `pytest`: 1969 passed, 84 failed (all pre-existing in `test_workload_coverage.py`), 2 skipped (148s)
-- No new test failures introduced
+- `pytest`: **2628 passed**, 2 skipped, 0 failed (149.6s)
+- Sprint 5 tests: **49 passed**, 0 failed
+- No regressions introduced
 
 ## Known Limitations
 
-- Screenshots are not included (documentation content sprint)
-- JWT settings (`jwt_secret_key`, `jwt_algorithm`, `access_token_expire_minutes`) exist in `config.py` but are unused — correctly omitted from docs
-- Some GPU DBU rates in `main.py` hardcoded endpoints have minor rounding differences vs. the `/reference/` path variants (e.g., Azure A100 80GB 1x: 78.5 vs 78.6 DBU/hr)
+- Tutorial video is a placeholder (valid MP4 container but no actual video content) — needs to be replaced with a real screen recording
+- Video embeds reference `/video/getting-started-tutorial.mp4` which Docusaurus serves from `static/video/`
 
 ## Files Changed
 
-- `docs-site/docs/admin-guide/architecture.md` — Fixed export module count (11 → 10)
-- `docs-site/docs/admin-guide/configuration.md` — Clarified Swagger vs Docusaurus docs disambiguation
-- `docs-site/docs/admin-guide/deployment.md` — Clarified Swagger vs Docusaurus docs disambiguation
-- `docs-site/docs/admin-guide/api-reference.md` — Clarified Swagger vs Docusaurus docs disambiguation
-- `docs-site/docs/admin-guide/troubleshooting.md` — Clarified Swagger vs Docusaurus docs disambiguation
-- `harness/handoffs/sprint-5-handoff.md` — Updated
-- `harness/state.json` — Updated
+- `docs-site/static/video/getting-started-tutorial.mp4` — NEW (placeholder MP4)
+- `docs-site/docs/user-guide/getting-started.md` — Added creating-estimate GIF + video embed
+- `docs-site/docs/user-guide/workloads.md` — Added adding-workload GIF
+- `docs-site/docs/user-guide/creating-estimates.md` — Added creating-estimate GIF + drag-and-drop GIF
+- `docs-site/docs/user-guide/ai-assistant.md` — Added ai-assistant GIF
+- `docs-site/docs/user-guide/exporting.md` — Added export-excel GIF
+- `docs-site/docs/user-guide/end-to-end-workflow.md` — Added video embed
+- `docs-site/docs/user-guide/overview.md` — Added cost-summary GIF
+- `tests/docs_media/test_sprint5_video_and_embeds.py` — NEW (49 validation tests)
+- `harness/contracts/sprint-5.md` — Updated for current sprint scope
+- `harness/handoffs/sprint-5-handoff.md` — This file

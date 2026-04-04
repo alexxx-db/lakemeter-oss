@@ -6,6 +6,12 @@ sidebar_position: 4
 
 Lakemeter supports 9 workload types covering the full Databricks platform. This page helps you choose the right one for your use case.
 
+![All workloads in a Lakemeter estimate](/img/all-workloads-overview.png)
+*A Lakemeter estimate showing multiple workload types with their individual costs and configuration summaries.*
+
+![Adding a workload — select type, configure parameters, and save](/img/gifs/adding-workload.gif)
+*Animated: adding a new workload to an estimate — choose the workload type, configure compute and usage, then save.*
+
 ## Quick decision guide
 
 | I need to... | Use this workload | Guide |

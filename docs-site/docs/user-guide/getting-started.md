@@ -9,6 +9,15 @@ This tutorial walks you through creating a real cost estimate from scratch. By t
 ![Getting Started tutorial page](/img/guides/getting-started-page.png)
 *The 5-Minute Tutorial — step-by-step guide to creating your first cost estimate with two workloads.*
 
+## Video walkthrough
+
+<video controls width="100%" preload="metadata" aria-label="Getting Started tutorial video showing the end-to-end workflow: login, create estimate, add workloads, review costs, use AI assistant, and export to Excel">
+  <source src="/video/getting-started-tutorial.mp4" type="video/mp4" />
+  Your browser does not support the video tag. <a href="/video/getting-started-tutorial.mp4">Download the tutorial video</a>.
+</video>
+
+*End-to-end tutorial: create an estimate, add Jobs and DBSQL workloads, review costs, ask the AI assistant, and export to Excel.*
+
 ## What we are building
 
 A cost estimate for a mid-size data platform running on **AWS us-east-1** with the **Premium** tier:
@@ -30,6 +39,9 @@ A cost estimate for a mid-size data platform running on **AWS us-east-1** with t
 4. Click **Create**.
 
 You land on the **Calculator** page -- an empty estimate ready for workloads.
+
+![Creating an estimate in Lakemeter — click New Estimate, fill the form, and submit](/img/gifs/creating-estimate.gif)
+*Animated: creating a new estimate — fill in name, cloud, region, and tier, then click Create.*
 
 ![Lakemeter calculator page with workloads and cost summary](/img/calculator-overview.png)
 *The Calculator page showing configured workloads with live cost summary and AI assistant panel on the right.*
