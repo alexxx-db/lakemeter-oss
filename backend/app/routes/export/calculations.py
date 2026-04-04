@@ -125,8 +125,9 @@ def _calc_vector_search_dbu(item, cloud, warnings):
     capacity = float(item.vector_capacity_millions or 1)  # Default 1, matching frontend
     if capacity <= 0:
         capacity = 1
-    mode = (item.vector_search_mode or 'standard').lower()
-    key = f"{cloud}:{mode}"
+    mode = (item.vector_search_mode or 'standard').strip().lower()
+    cloud_lc = cloud.strip().lower() if cloud else 'aws'
+    key = f"{cloud_lc}:{mode}"
     info = VECTOR_SEARCH_RATES.get(key, {})
     if not info:
         warnings.append(f"Vector Search rates not found for {key}, using defaults")
