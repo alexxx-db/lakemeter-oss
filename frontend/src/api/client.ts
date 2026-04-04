@@ -150,6 +150,14 @@ export const deleteLineItem = async (id: string): Promise<void> => {
   await api.delete(`/line-items/${id}`)
 }
 
+export const reorderLineItems = async (estimateId: string, itemIds: string[]): Promise<void> => {
+  await api.post('/line-items/reorder', itemIds, { params: { estimate_id: estimateId } })
+}
+
+export const reorderEstimates = async (estimateIds: string[]): Promise<void> => {
+  await api.post('/estimates/reorder', estimateIds)
+}
+
 // ============================================================================
 // Workload Types (from Lakebase database)
 // ============================================================================

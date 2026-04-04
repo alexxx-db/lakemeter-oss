@@ -24,6 +24,7 @@ class Estimate(Base):
     version = Column(Integer, default=1)
     template_id = Column(UUID(as_uuid=True), ForeignKey("lakemeter.templates.template_id"))
     original_prompt = Column(Text)
+    display_order = Column(Integer, default=0)
     is_deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

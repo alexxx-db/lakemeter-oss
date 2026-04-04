@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import { CSS } from '@dnd-kit/utilities'
 import {
   PlusIcon,
   ArrowDownTrayIcon,
@@ -28,13 +32,15 @@ import {
   XMarkIcon,
   CalculatorIcon,
   BarsArrowDownIcon,
-  BarsArrowUpIcon
+  BarsArrowUpIcon,
+  Bars3Icon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { useStore } from '../store/useStore'
-import { 
+import {
   exportEstimateToExcel,
+  reorderLineItems as apiReorderLineItems,
   type RegionResponse
 } from '../api/client'
 import { saveAs } from 'file-saver'
@@ -347,6 +353,22 @@ interface CostBreakdown {
     totalDSU?: number       // Lakebase
     pricePerDSU?: number    // Lakebase
   }
+}
+
+function SortableRow({ id, disabled, children }: { id: string; disabled?: boolean; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled })
+  return (
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 50 : undefined, position: 'relative' as const }} {...attributes}>
+      <div className="flex items-stretch">
+        {!disabled && (
+          <div {...listeners} className="flex items-center px-1 cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-secondary)] touch-none" title="Drag to reorder">
+            <Bars3Icon className="w-3.5 h-3.5" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">{children}</div>
+      </div>
+    </div>
+  )
 }
 
 export default function Calculator() {
@@ -1329,6 +1351,42 @@ export default function Calculator() {
     }
   }
 
+  // DnD for workload reordering
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  )
+  const isDragEnabled = sortField === 'order'
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id || !id) return
+
+    const oldIndex = sortedLineItems.findIndex(i => i.line_item_id === active.id)
+    const newIndex = sortedLineItems.findIndex(i => i.line_item_id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    // Reorder locally
+    const reordered = [...sortedLineItems]
+    const [moved] = reordered.splice(oldIndex, 1)
+    reordered.splice(newIndex, 0, moved)
+
+    // Update display_order in store
+    const { lineItems: storeItems } = useStore.getState()
+    const updatedItems = storeItems.map(item => {
+      const newOrder = reordered.findIndex(r => r.line_item_id === item.line_item_id)
+      return newOrder >= 0 ? { ...item, display_order: newOrder } : item
+    })
+    useStore.setState({ lineItems: updatedItems })
+
+    // Persist to backend
+    try {
+      await apiReorderLineItems(id, reordered.map(i => i.line_item_id))
+    } catch {
+      toast.error('Failed to save reorder')
+    }
+  }, [sortedLineItems, id])
+
   const handleSave = async () => {
     if (!formData.estimate_name.trim()) {
       toast.error('Enter an estimate name')
@@ -2222,6 +2280,8 @@ export default function Calculator() {
                     </div>
                     
                     {/* Rows */}
+                    <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis]}>
+                    <SortableContext items={sortedLineItems.map(i => i.line_item_id)} strategy={verticalListSortingStrategy}>
                     {sortedLineItems.map((item) => {
                       // Create effective item that merges saved data with pending edits for real-time preview
                       const pendingEdits = pendingFormEdits[item.line_item_id]
@@ -2328,8 +2388,8 @@ export default function Calculator() {
                       const structuredConfig = getStructuredConfig()
                       
                       return (
-                        <div 
-                          key={item.line_item_id}
+                        <SortableRow key={item.line_item_id} id={item.line_item_id} disabled={!isDragEnabled}>
+                        <div
                           ref={(el) => { workloadRefs.current[item.line_item_id] = el }}
                         >
                           {/* Row */}
@@ -3090,11 +3150,14 @@ export default function Calculator() {
                             </div>
                           )}
                         </div>
+                        </SortableRow>
                       )
                     })}
+                    </SortableContext>
+                    </DndContext>
                   </div>
                 )}
-                
+
                 {/* Card Views (Compact and Expanded) */}
                 {workloadsViewMode !== 'table' && sortedLineItems.map((item, index) => {
                   // Create effective item that merges saved data with pending edits for real-time preview

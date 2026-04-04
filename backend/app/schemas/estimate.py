@@ -59,12 +59,14 @@ class EstimateListResponse(BaseModel):
     """Schema for listing estimates."""
     estimate_id: UUID
     estimate_name: str
+    customer_name: Optional[str] = None
     cloud: Optional[str] = None
     region: Optional[str] = None
     tier: Optional[str] = None
     status: Optional[str] = None
     version: int
     line_item_count: int = 0
+    display_order: int = 0
     created_at: datetime
     updated_at: datetime
 

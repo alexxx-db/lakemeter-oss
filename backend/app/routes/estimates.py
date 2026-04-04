@@ -101,6 +101,7 @@ def list_estimates(
             status=e.status,
             version=e.version,
             line_item_count=line_count,
+            display_order=e.display_order or 0,
             created_at=e.created_at,
             updated_at=e.updated_at
         )
@@ -205,6 +206,25 @@ def _get_estimate_for_user(
         raise HTTPException(status_code=404, detail="Estimate not found")
     
     return estimate
+
+
+@router.post("/reorder", status_code=200)
+def reorder_estimates(
+    estimate_ids: List[UUID],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reorder estimates for the current user."""
+    for index, eid in enumerate(estimate_ids):
+        estimate = db.query(Estimate).filter(
+            Estimate.estimate_id == eid,
+            Estimate.owner_user_id == current_user.user_id,
+            Estimate.is_deleted == False
+        ).first()
+        if estimate:
+            estimate.display_order = index
+    db.commit()
+    return {"message": "Estimates reordered successfully"}
 
 
 @router.get("/{estimate_id}", response_model=EstimateResponse)
@@ -472,3 +492,5 @@ def clone_estimate(
     db.commit()
     db.refresh(new_estimate)
     return new_estimate
+
+

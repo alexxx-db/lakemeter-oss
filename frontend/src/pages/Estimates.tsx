@@ -1,8 +1,12 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  PlusIcon, 
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import { CSS } from '@dnd-kit/utilities'
+import {
+  PlusIcon,
   ArrowDownTrayIcon,
   TrashIcon,
   DocumentDuplicateIcon,
@@ -14,12 +18,13 @@ import {
   CheckIcon,
   XMarkIcon,
   Squares2X2Icon,
-  BuildingOfficeIcon
+  BuildingOfficeIcon,
+  Bars3Icon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { useStore } from '../store/useStore'
-import { exportAllEstimatesToExcel, exportEstimateToExcel } from '../api/client'
+import { exportAllEstimatesToExcel, exportEstimateToExcel, reorderEstimates as apiReorderEstimates } from '../api/client'
 import { saveAs } from 'file-saver'
 
 // ============================================================================
@@ -38,7 +43,7 @@ const tierBadges: Record<string, { label: string; bg: string; text: string }> = 
   standard: { label: 'Standard', bg: 'rgba(107, 114, 128, 0.15)', text: '#6b7280' }
 }
 
-type SortOption = 'updated' | 'name' | 'workloads'
+type SortOption = 'updated' | 'name' | 'workloads' | 'custom'
 type CloudFilter = 'all' | 'aws' | 'azure' | 'gcp'
 
 // ============================================================================
@@ -132,7 +137,8 @@ function SortDropdown({ sortBy, setSortBy }: SortDropdownProps) {
   const options: { value: SortOption; label: string }[] = [
     { value: 'updated', label: 'Recently Modified' },
     { value: 'name', label: 'Name (A-Z)' },
-    { value: 'workloads', label: 'Workload Count' }
+    { value: 'workloads', label: 'Workload Count' },
+    { value: 'custom', label: 'Custom (Drag)' }
   ]
   
   const selectedOption = options.find(o => o.value === sortBy)
@@ -196,6 +202,22 @@ function SortDropdown({ sortBy, setSortBy }: SortDropdownProps) {
 // Main Component
 // ============================================================================
 
+function SortableEstimateRow({ id, disabled, children }: { id: string; disabled?: boolean; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled })
+  return (
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 50 : undefined, position: 'relative' as const }} {...attributes}>
+      <div className="flex items-stretch">
+        {!disabled && (
+          <div {...listeners} className="flex items-center px-1 cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-secondary)] touch-none" title="Drag to reorder">
+            <Bars3Icon className="w-3.5 h-3.5" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">{children}</div>
+      </div>
+    </div>
+  )
+}
+
 export default function Estimates() {
   const navigate = useNavigate()
   const { estimates, isLoading, fetchEstimates, deleteEstimate, duplicateEstimate } = useStore()
@@ -221,6 +243,13 @@ export default function Estimates() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   
+  // DnD for estimate reordering
+  const estimateDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  )
+  const isEstimateDragEnabled = sortBy === 'custom'
+
   // Fetch estimates on mount
   useEffect(() => {
     fetchEstimates()
@@ -308,11 +337,42 @@ export default function Estimates() {
       case 'workloads':
         result.sort((a, b) => (b.line_item_count || 0) - (a.line_item_count || 0))
         break
+      case 'custom':
+        result.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+        break
     }
     
     return result
   }, [estimates, searchQuery, cloudFilter, sortBy, accountFilter])
-  
+
+  // DnD handler for estimate reordering
+  const handleEstimateDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = filteredEstimates.findIndex(e => e.estimate_id === active.id)
+    const newIndex = filteredEstimates.findIndex(e => e.estimate_id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    // Reorder locally
+    const reordered = arrayMove(filteredEstimates, oldIndex, newIndex)
+
+    // Update display_order in store
+    const { estimates: storeEstimates } = useStore.getState()
+    const updatedEstimates = storeEstimates.map(est => {
+      const newOrder = reordered.findIndex(r => r.estimate_id === est.estimate_id)
+      return newOrder >= 0 ? { ...est, display_order: newOrder } : est
+    })
+    useStore.setState({ estimates: updatedEstimates })
+
+    // Persist to backend
+    try {
+      await apiReorderEstimates(reordered.map(e => e.estimate_id))
+    } catch {
+      toast.error('Failed to save reorder')
+    }
+  }, [filteredEstimates])
+
   // Handlers
   const handleDelete = (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation()
@@ -721,12 +781,14 @@ export default function Estimates() {
           
           {/* Table Body */}
           <div className="divide-y" style={{ borderColor: 'var(--border-primary)' }}>
+            <DndContext sensors={estimateDndSensors} collisionDetection={closestCenter} onDragEnd={handleEstimateDragEnd} modifiers={[restrictToVerticalAxis]}>
+            <SortableContext items={filteredEstimates.map(e => e.estimate_id)} strategy={verticalListSortingStrategy}>
             {filteredEstimates.map((estimate, index) => {
               const isSelected = selectedIds.has(estimate.estimate_id)
               
               return (
+            <SortableEstimateRow key={estimate.estimate_id} id={estimate.estimate_id} disabled={!isEstimateDragEnabled}>
             <motion.div
-              key={estimate.estimate_id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: index * 0.015 }}
@@ -882,8 +944,11 @@ export default function Estimates() {
                     )}
               </div>
             </motion.div>
+            </SortableEstimateRow>
               )
             })}
+            </SortableContext>
+            </DndContext>
           </div>
           
           {/* Table Footer */}

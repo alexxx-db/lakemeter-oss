@@ -46,6 +46,7 @@ export interface EstimateListItem {
   status?: string
   version: number
   line_item_count: number
+  display_order?: number
   created_at: string
   updated_at: string
 }
@@ -84,7 +85,7 @@ export interface LineItem {
   // Vector Search Configuration
   vector_search_mode?: string | null
   vector_capacity_millions?: number | null
-  // vector_search_storage_gb?: number | null  // TODO: Add column to database first
+  vector_search_storage_gb?: number | null
   
   // Model Serving Configuration
   model_serving_gpu_type?: string | null
