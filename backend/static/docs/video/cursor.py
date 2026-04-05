@@ -76,3 +76,59 @@ async def click_on(page, locator, pause=500, timeout=5000):
         await locator.click(timeout=timeout)
         await page.wait_for_timeout(pause)
     return box
+
+
+# ─── Subtitle overlay system ───
+
+SUBTITLE_INJECT = """
+(() => {
+  if (document.getElementById('pw-subtitle')) return;
+  const bar = document.createElement('div');
+  bar.id = 'pw-subtitle';
+  bar.style.cssText = `
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 999998;
+    height: 52px; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.78); backdrop-filter: blur(8px);
+    opacity: 0; transition: opacity 0.3s ease;
+    pointer-events: none;
+  `;
+  const text = document.createElement('span');
+  text.id = 'pw-subtitle-text';
+  text.style.cssText = `
+    color: #fff; font-size: 18px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-weight: 500; letter-spacing: 0.3px; text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  `;
+  bar.appendChild(text);
+  document.body.appendChild(bar);
+})();
+"""
+
+
+async def inject_subtitle(page):
+    """Inject subtitle overlay into the page."""
+    await page.evaluate(SUBTITLE_INJECT)
+
+
+async def show_subtitle(page, text, pause=2000):
+    """Show subtitle text with fade-in, wait for `pause` ms."""
+    await page.evaluate(f"""
+      (() => {{
+        let bar = document.getElementById('pw-subtitle');
+        if (!bar) {{ {SUBTITLE_INJECT}; bar = document.getElementById('pw-subtitle'); }}
+        const span = document.getElementById('pw-subtitle-text');
+        if (span) span.textContent = {repr(text)};
+        if (bar) bar.style.opacity = '1';
+      }})()
+    """)
+    await page.wait_for_timeout(pause)
+
+
+async def hide_subtitle(page, pause=300):
+    """Hide subtitle with fade-out."""
+    await page.evaluate("""
+      (() => {
+        const bar = document.getElementById('pw-subtitle');
+        if (bar) bar.style.opacity = '0';
+      })()
+    """)
+    await page.wait_for_timeout(pause)
