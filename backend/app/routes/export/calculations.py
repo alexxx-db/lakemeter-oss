@@ -11,6 +11,9 @@ def _calculate_hours_per_month(item) -> float:
     Priority: If run-based fields (runs_per_day, avg_runtime_minutes) are set,
     calculate from those. Only fall back to hours_per_month if no run-based data.
     This prevents hours_per_month=730 default from overriding user's run config.
+
+    Always-on workloads (Vector Search, Model Serving, Lakebase, Databricks Apps)
+    default to 730 hours/month when no usage data is provided.
     """
     if item.runs_per_day and item.avg_runtime_minutes:
         runs = float(item.runs_per_day)
@@ -19,7 +22,10 @@ def _calculate_hours_per_month(item) -> float:
         return (runs * runtime / 60) * days
     if item.hours_per_month:
         return float(item.hours_per_month)
-    # No usage data provided — return 0 (consistent with frontend)
+    # Always-on workloads default to 730 hours/month (24/7)
+    wt = getattr(item, 'workload_type', '') or ''
+    if wt in ('VECTOR_SEARCH', 'MODEL_SERVING', 'LAKEBASE', 'DATABRICKS_APPS'):
+        return 730
     return 0
 
 

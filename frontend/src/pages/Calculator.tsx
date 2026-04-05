@@ -594,7 +594,10 @@ export default function Calculator() {
     // Track loading state so UI can show "calculating" instead of partial costs
     if (fetchPromises.length > 0) {
       setIsLoadingVMCosts(true)
-      Promise.all(fetchPromises)
+      // Race against a 10s timeout so the UI never shows "..." permanently
+      const timeout = new Promise(resolve => setTimeout(resolve, 10000))
+      Promise.race([Promise.all(fetchPromises), timeout])
+        .catch(() => {})
         .finally(() => setIsLoadingVMCosts(false))
     }
   }, [formData.cloud, formData.region, lineItems, lineItemsLoaded, fetchVMCostForInstance, pricingBundle])

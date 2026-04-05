@@ -50,22 +50,23 @@ MODEL_SERVING_GPUS = [
 ]
 
 FMAPI_PROPRIETARY_CONFIGS = [
-    ("anthropic", "claude-sonnet-4-5-20250514", "input_token"),
-    ("anthropic", "claude-sonnet-4-5-20250514", "output_token"),
-    ("openai", "gpt-4o", "input_token"),
-    ("openai", "gpt-4o", "output_token"),
-    ("google", "gemini-2.0-flash", "input_token"),
-    ("google", "gemini-2.0-flash", "output_token"),
-    ("anthropic", "claude-sonnet-4-5-20250514", "cache_read"),
-    ("anthropic", "claude-sonnet-4-5-20250514", "cache_write"),
+    # (provider, model, endpoint, context, rate_type)
+    ("anthropic", "claude-sonnet-3-7", "global", "long", "input_token"),
+    ("anthropic", "claude-sonnet-3-7", "global", "long", "output_token"),
+    ("openai", "gpt-4o", "global", "all", "input_token"),
+    ("openai", "gpt-4o", "global", "all", "output_token"),
+    ("google", "gemini-2.0-flash", "global", "all", "input_token"),
+    ("google", "gemini-2.0-flash", "global", "all", "output_token"),
+    ("anthropic", "claude-sonnet-3-7", "global", "long", "cache_read"),
+    ("anthropic", "claude-sonnet-3-7", "global", "long", "cache_write"),
 ]
 
 FMAPI_DATABRICKS_CONFIGS = [
-    ("databricks-dbrx-instruct", "input_token"),
-    ("databricks-dbrx-instruct", "output_token"),
-    ("databricks-meta-llama-3-1-70b-instruct", "input_token"),
-    ("databricks-meta-llama-3-1-70b-instruct", "output_token"),
-    ("databricks-mixtral-8x7b-instruct", "input_token"),
+    ("llama-3-3-70b", "input_token"),
+    ("llama-3-3-70b", "output_token"),
+    ("llama-3-1-8b", "input_token"),
+    ("llama-3-1-8b", "output_token"),
+    ("gemma-3-12b", "input_token"),
 ]
 
 LAKEBASE_CONFIGS = [
@@ -254,6 +255,7 @@ def build_workloads(cloud: str) -> list[dict]:
             "vector_search_mode": mode,
             "vector_capacity_millions": capacity,
             "vector_search_storage_gb": storage,
+            "hours_per_month": 730,
             "notes": f"{capacity}M vectors, {storage}GB storage",
         })
 
@@ -273,15 +275,15 @@ def build_workloads(cloud: str) -> list[dict]:
     # =========================================================================
     # 7. FMAPI PROPRIETARY — Every provider × rate type
     # =========================================================================
-    for provider, model, rate_type in FMAPI_PROPRIETARY_CONFIGS:
+    for provider, model, endpoint, context, rate_type in FMAPI_PROPRIETARY_CONFIGS:
         items.append({
             "workload_name": f"FMAPI {provider.title()} {model} ({rate_type})",
             "workload_type": "FMAPI_PROPRIETARY",
             "display_order": (order := order + 1),
             "fmapi_provider": provider,
             "fmapi_model": model,
-            "fmapi_endpoint_type": "foundation_model",
-            "fmapi_context_length": "all",
+            "fmapi_endpoint_type": endpoint,
+            "fmapi_context_length": context,
             "fmapi_rate_type": rate_type,
             "fmapi_quantity": 50,
             "notes": f"{provider}/{model} — {rate_type}",
@@ -350,10 +352,10 @@ def create_estimate(session: requests.Session, base_url: str,
                     cloud: str, region: str, tier: str) -> str:
     """Create an estimate and return its ID."""
     resp = session.post(f"{base_url}/api/v1/estimates/", json={
-        "estimate_name": f"[TEST] All Workloads — {cloud.upper()} {region} {tier}",
-        "cloud": cloud,
+        "estimate_name": f"[TEST] All Workloads — {cloud.upper()} {region} {tier.upper()}",
+        "cloud": cloud.upper(),
         "region": region,
-        "tier": tier,
+        "tier": tier.upper(),
         "status": "draft",
     })
     if resp.status_code != 201:

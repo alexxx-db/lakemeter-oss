@@ -235,3 +235,44 @@ async def visual_select(page, select_locator, *, label=None, value=None, index=N
         await select_locator.select_option(index=index)
 
     await page.wait_for_timeout(400)
+
+
+# ─── Custom SearchableSelect interaction ───
+
+async def visual_searchable_select(page, trigger_locator, search_text,
+                                    option_text=None, pause=500, load_wait=2000):
+    """Interact with a custom SearchableSelect React component for video recording.
+
+    Custom dropdowns ARE visible in headless Chrome (unlike native <select>).
+    This function provides smooth mouse movements for clean video capture.
+
+    Args:
+        trigger_locator: Playwright locator for the SearchableSelect container/trigger
+        search_text: Text to type into the search field
+        option_text: Text of the option to click (defaults to search_text)
+        pause: ms to wait after selection
+        load_wait: ms to wait for options to load after opening
+    """
+    await move_to(page, trigger_locator, pause=300)
+    await trigger_locator.click()
+    await page.wait_for_timeout(load_wait)
+
+    # Type search text with visible typing
+    await page.keyboard.type(search_text, delay=60)
+    await page.wait_for_timeout(800)
+
+    # Find and click matching option in the dropdown overlay
+    # The SearchableSelect dropdown has classes: absolute z-50 w-full overflow-auto
+    # (Distinguish from tooltips which have w-64 and invisible)
+    target = option_text or search_text
+    dropdown = page.locator('[class*="absolute"][class*="z-50"][class*="overflow-auto"]').last
+    try:
+        await dropdown.wait_for(state="visible", timeout=5000)
+        # Find the option div that contains the target text
+        option = dropdown.locator(f'div >> text=/{target}/i').first
+        await move_to(page, option, pause=300)
+        await option.click()
+    except Exception as e:
+        print(f"  [searchable_select] Could not find option '{target}': {e}")
+
+    await page.wait_for_timeout(pause)
