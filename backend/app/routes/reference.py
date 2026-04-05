@@ -107,16 +107,46 @@ async def get_vm_costs(
     pricing_tier: Optional[str] = None,
     payment_option: Optional[str] = None
 ):
-    """Get VM costs from external API.
-    
-    Uses region_code format (e.g., ap-southeast-1).
-    """
-    client = LakemeterAPIClient(user_token=get_user_token(request))
-    return await call_external_api(
-        request,
-        lambda: client.get_vm_costs(cloud, region, instance_type, pricing_tier, payment_option),
-        "get_vm_costs"
-    )
+    """Get VM costs from local DEFAULT_VM_PRICING data (no external API)."""
+    from app.routes.vm_pricing import DEFAULT_VM_PRICING
+    cloud_lc = cloud.lower()
+    vm_prices = DEFAULT_VM_PRICING.get(cloud_lc, {})
+    if not instance_type or instance_type not in vm_prices:
+        return {"success": False, "data": {"pricing_options": []}}
+
+    tiers = vm_prices[instance_type]
+    pricing_options = []
+    for tier_name, price in tiers.items():
+        if pricing_tier and tier_name != pricing_tier:
+            continue
+        pricing_options.append({
+            "pricing_tier": tier_name,
+            "payment_option": "NA",
+            "cost_per_hour": price,
+        })
+    # Generate reserved pricing from on-demand rate
+    on_demand = tiers.get("on_demand", 0)
+    for res_tier, factor in [("1yr_reserved", 0.72), ("3yr_reserved", 0.50)]:
+        if res_tier not in tiers and (not pricing_tier or pricing_tier == res_tier):
+            for po in ["no_upfront", "partial_upfront", "all_upfront"]:
+                if payment_option and payment_option not in ("NA", po):
+                    continue
+                po_discount = {"no_upfront": 1.0, "partial_upfront": 0.93, "all_upfront": 0.85}
+                pricing_options.append({
+                    "pricing_tier": res_tier,
+                    "payment_option": po,
+                    "cost_per_hour": round(on_demand * factor * po_discount[po], 4),
+                })
+    return {
+        "success": True,
+        "data": {
+            "cloud": cloud.upper(),
+            "region": region,
+            "instance_type": instance_type,
+            "instance_specs": {},
+            "pricing_options": pricing_options,
+        },
+    }
 
 
 # ==================== DBSQL ====================
