@@ -269,8 +269,6 @@ Click **"+ New Estimate"** above to create one, then I can help you add workload
 📖 **Help & Resources**
 - [Documentation](/docs/) - User guides & reference
 - [Official Pricing](https://www.databricks.com/product/pricing) - Databricks pricing page
-- [Share Feedback](https://docs.google.com/forms/d/e/1FAIpQLSde1O7LKq2emPUr1jQ7vNDJMJuC51JKz_HS26drIBHatyGy7Q/viewform) - Tell us what you think
-- [Report a Bug](https://docs.google.com/forms/d/e/1FAIpQLScCB3n4nIkZ1wgZlkzWnCgXGxXC4_qP_8Fgf3k6_C3Y4N5CkQ/viewform) - Help us improve
 
 *Ask me anything using the quick actions below* 👇`
     }
@@ -291,8 +289,6 @@ I can assist you with:
 📖 **Help & Resources**
 - [Documentation](/docs/) - User guides & reference
 - [Official Pricing](https://www.databricks.com/product/pricing) - Databricks pricing page
-- [Share Feedback](https://docs.google.com/forms/d/e/1FAIpQLSde1O7LKq2emPUr1jQ7vNDJMJuC51JKz_HS26drIBHatyGy7Q/viewform) - Tell us what you think
-- [Report a Bug](https://docs.google.com/forms/d/e/1FAIpQLScCB3n4nIkZ1wgZlkzWnCgXGxXC4_qP_8Fgf3k6_C3Y4N5CkQ/viewform) - Help us improve
 
 *Try the quick actions below or ask me anything!*`
     } else {

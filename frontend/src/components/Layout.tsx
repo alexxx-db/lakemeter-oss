@@ -13,8 +13,6 @@ import {
   QuestionMarkCircleIcon,
   DocumentTextIcon,
   CurrencyDollarIcon,
-  ChatBubbleLeftRightIcon,
-  BugAntIcon
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import { useState, useRef, useEffect, useCallback } from 'react'
@@ -438,33 +436,6 @@ export default function Layout() {
                         </div>
                       </a>
 
-                      <a
-                        href="https://docs.google.com/forms/d/e/1FAIpQLSc3bNU-Fm2mpsEWzLZxF1GvMxi4Iqw4bs8JXntWh9bLiLDiFQ/viewform"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setIsHelpOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                      >
-                        <ChatBubbleLeftRightIcon className="w-4 h-4 text-green-500" />
-                        <div>
-                          <p className="font-medium">Share Feedback</p>
-                          <p className="text-xs text-[var(--text-muted)]">Tell us what you think</p>
-                        </div>
-                      </a>
-                      
-                      <a
-                        href="https://docs.google.com/spreadsheets/d/1U5tg73pPJBUEX7SsPAn3ybOhHuY0UNo76jtT9f0u2WA/edit?gid=0#gid=0"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setIsHelpOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                      >
-                        <BugAntIcon className="w-4 h-4 text-amber-500" />
-                        <div>
-                          <p className="font-medium">Report a Bug</p>
-                          <p className="text-xs text-[var(--text-muted)]">Help us improve</p>
-                        </div>
-                      </a>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -520,22 +491,6 @@ export default function Layout() {
                 className="text-lava-600 hover:text-lava-700 transition-colors hover:underline"
               >
                 Pricing
-              </a>
-              <a 
-                href="https://docs.google.com/forms/d/e/1FAIpQLSde1O7LKq2emPUr1jQ7vNDJMJuC51JKz_HS26drIBHatyGy7Q/viewform"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-lava-600 hover:text-lava-700 transition-colors hover:underline"
-              >
-                Feedback
-              </a>
-              <a 
-                href="https://docs.google.com/forms/d/e/1FAIpQLScCB3n4nIkZ1wgZlkzWnCgXGxXC4_qP_8Fgf3k6_C3Y4N5CkQ/viewform"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-lava-600 hover:text-lava-700 transition-colors hover:underline"
-              >
-                Report Bug
               </a>
             </div>
           </div>
