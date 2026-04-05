@@ -221,6 +221,20 @@ def provision_lakebase(ctx: dict, cfg: dict) -> dict:
     try:
         existing = w.database.get_database_instance(name)
         log_warn(f"Instance '{name}' already exists (state={existing.state})")
+
+        # Ensure pg_native_login is enabled (password auth fallback)
+        if not existing.effective_enable_pg_native_login:
+            try:
+                from databricks.sdk.service.database import DatabaseInstance
+                w.database.update_database_instance(
+                    name=name,
+                    database_instance=DatabaseInstance(name=name, enable_pg_native_login=True),
+                    update_mask="enable_pg_native_login",
+                )
+                log_ok("pg_native_login enabled on existing instance")
+            except Exception as e:
+                log_warn(f"Could not enable pg_native_login: {e}")
+
         return {
             "host": existing.read_write_dns,
             "uid": existing.uid,
@@ -238,6 +252,19 @@ def provision_lakebase(ctx: dict, cfg: dict) -> dict:
         stopped=False,
     )
     log_ok(f"Instance created: {instance.name} (uid={instance.uid})")
+
+    # Enable pg_native_login for password-based auth fallback
+    # This ensures the app can connect even without SP OAuth credentials
+    try:
+        from databricks.sdk.service.database import DatabaseInstance
+        w.database.update_database_instance(
+            name=name,
+            database_instance=DatabaseInstance(name=name, enable_pg_native_login=True),
+            update_mask="enable_pg_native_login",
+        )
+        log_ok("pg_native_login enabled (password auth fallback)")
+    except Exception as e:
+        log_warn(f"Could not enable pg_native_login: {e}")
 
     # Wait for AVAILABLE
     log_info("Waiting for instance to become AVAILABLE...")
@@ -330,6 +357,61 @@ def create_database_and_schema(ctx: dict, instance_info: dict, cfg: dict):
 
     cur.close()
     conn.close()
+
+
+def create_password_auth_role(ctx: dict, instance_info: dict, cfg: dict):
+    """Create a password-authenticated role as fallback when SP OAuth isn't configured.
+
+    This prevents the app from failing to connect after deployment when the
+    app's service principal doesn't have Lakebase access or SP credentials
+    aren't stored in the secrets scope.
+    """
+    import secrets as py_secrets
+
+    w = ctx["client"]
+    scope = cfg["secrets_scope"]
+    role_name = "lakemeter_sync_role"
+
+    conn = get_owner_connection(ctx, instance_info, cfg)
+    conn.autocommit = True
+    cur = conn.cursor()
+
+    # Check if role exists
+    cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role_name,))
+    exists = cur.fetchone()
+
+    # Generate a secure password
+    password = py_secrets.token_urlsafe(32)
+
+    if not exists:
+        log_info(f"Creating password-auth role '{role_name}'...")
+        cur.execute(f"CREATE ROLE {role_name} LOGIN PASSWORD %s", (password,))
+        log_ok(f"Role '{role_name}' created")
+    else:
+        # Reset password to ensure it matches what we store in secrets
+        cur.execute(f"ALTER ROLE {role_name} PASSWORD %s", (password,))
+        log_ok(f"Role '{role_name}' password reset")
+
+    # Grant permissions
+    cur.execute(f"GRANT CONNECT ON DATABASE {cfg['db_name']} TO {role_name}")
+    cur.execute(f"GRANT USAGE ON SCHEMA {DEFAULT_SCHEMA} TO {role_name}")
+    cur.execute(f"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {DEFAULT_SCHEMA} TO {role_name}")
+    cur.execute(f"GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {DEFAULT_SCHEMA} TO {role_name}")
+    cur.execute(
+        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {DEFAULT_SCHEMA} "
+        f"GRANT ALL PRIVILEGES ON TABLES TO {role_name}"
+    )
+    log_ok(f"Permissions granted to '{role_name}'")
+
+    cur.close()
+    conn.close()
+
+    # Store credentials in secrets scope (used by password auth fallback in database.py)
+    w.secrets.put_secret(scope=scope, key="lakebase-user", string_value=role_name)
+    w.secrets.put_secret(scope=scope, key="lakebase-password", string_value=password)
+    w.secrets.put_secret(scope=scope, key="lakebase-host", string_value=instance_info["host"])
+    w.secrets.put_secret(scope=scope, key="lakebase-database", string_value=cfg["db_name"])
+    log_ok("Password-auth credentials stored in secrets scope")
 
 
 def run_setup_sql(ctx: dict, instance_info: dict, cfg: dict):
@@ -1522,6 +1604,7 @@ def main():
     # Step 4: Create database & schema & tables
     log_step(4, TOTAL_STEPS, "Creating database, schema, and tables")
     create_database_and_schema(ctx, instance_info, cfg)
+    create_password_auth_role(ctx, instance_info, cfg)
     run_setup_sql(ctx, instance_info, cfg)
 
     # Step 5: Load pricing data
@@ -1547,6 +1630,52 @@ def main():
     # Step 9b: Configure app resources (so valueFrom references resolve)
     log_info("Configuring Databricks App resources...")
     configure_app_resources(ctx, instance_info, cfg)
+
+    # Step 9c: Grant app SP access to Lakebase (so OAuth auth works too)
+    log_info("Granting app service principal Lakebase access...")
+    try:
+        app_info = w.apps.get(cfg["app_name"])
+        app_sp_id = app_info.service_principal_client_id
+        if app_sp_id:
+            import requests
+            host = ctx["host"].rstrip("/")
+            headers = w.config.authenticate()
+            roles_url = f"{host}/api/2.0/database/instances/{instance_info['name']}/roles"
+
+            # Check if role exists
+            resp = requests.get(roles_url, headers=headers)
+            existing_roles = resp.json().get("database_instance_roles", []) if resp.status_code == 200 else []
+            sp_role = next((r for r in existing_roles if r["name"] == app_sp_id), None)
+
+            if not sp_role or sp_role.get("identity_type") != "SERVICE_PRINCIPAL":
+                if sp_role:
+                    requests.delete(f"{roles_url}/{app_sp_id}", headers=headers)
+                resp = requests.post(roles_url, headers=headers, json={
+                    "name": app_sp_id,
+                    "identity_type": "SERVICE_PRINCIPAL",
+                    "membership_role": "DATABRICKS_SUPERUSER",
+                })
+                if resp.status_code == 200:
+                    log_ok(f"App SP Lakebase role created ({app_sp_id[:12]}...)")
+                else:
+                    log_warn(f"Could not create app SP role: {resp.status_code}")
+            else:
+                log_ok("App SP already has Lakebase role")
+
+            # Grant SQL-level permissions
+            conn = get_owner_connection(ctx, instance_info, cfg)
+            conn.autocommit = True
+            cur = conn.cursor()
+            cur.execute(f'GRANT CONNECT ON DATABASE {cfg["db_name"]} TO "{app_sp_id}"')
+            cur.execute(f'GRANT USAGE ON SCHEMA {DEFAULT_SCHEMA} TO "{app_sp_id}"')
+            cur.execute(f'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {DEFAULT_SCHEMA} TO "{app_sp_id}"')
+            cur.execute(f'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {DEFAULT_SCHEMA} TO "{app_sp_id}"')
+            cur.close()
+            conn.close()
+            log_ok("App SP SQL permissions granted")
+    except Exception as e:
+        log_warn(f"Could not configure app SP Lakebase access: {e}")
+        log_info("App will use password-auth fallback (lakemeter_sync_role)")
 
     # Optional: Deploy
     if not args.skip_deploy:

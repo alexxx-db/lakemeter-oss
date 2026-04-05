@@ -83,8 +83,6 @@ class LakebaseTokenManager:
     def _init_workspace_client(self):
         """Initialize Databricks WorkspaceClient using available auth."""
         try:
-            # In Databricks Apps, the SDK auto-detects authentication
-            # It will use the app's service principal automatically
             if self.databricks_config_profile:
                 # Local dev: use CLI profile
                 config = Config(
@@ -93,9 +91,20 @@ class LakebaseTokenManager:
                 )
                 self._workspace_client = WorkspaceClient(config=config)
             else:
-                # Production/Databricks Apps: use default auth (auto-detected)
-                self._workspace_client = WorkspaceClient(host=self.databricks_host)
-            
+                # Production/Databricks Apps: try no-args first (auto-detects app SP)
+                try:
+                    self._workspace_client = WorkspaceClient()
+                    current_user = self._workspace_client.current_user.me()
+                    _log_info(f"Authenticated (auto) as: {current_user.user_name}")
+                    return
+                except Exception as e1:
+                    _log_warning(f"Auto auth failed: {e1}, trying with explicit host...")
+                    # Fallback: explicit host (ensure https://)
+                    host = self.databricks_host
+                    if host and not host.startswith("https://"):
+                        host = f"https://{host}"
+                    self._workspace_client = WorkspaceClient(host=host)
+
             # Test auth by getting current user
             current_user = self._workspace_client.current_user.me()
             _log_info(f"Authenticated as: {current_user.user_name}")

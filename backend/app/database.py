@@ -22,7 +22,7 @@ Base = declarative_base()
 
 
 def _get_database_url() -> str:
-    """Build database URL from env var or token manager."""
+    """Build database URL from env var, token manager, or secrets fallback."""
     import os
 
     # Check for direct DATABASE_URL first (local dev)
@@ -33,23 +33,53 @@ def _get_database_url() -> str:
 
     from app.auth.token_manager import token_manager
 
-    if not token_manager:
-        raise Exception("Token manager not initialized. Check DATABRICKS_HOST and DATABRICKS_SECRETS_SCOPE.")
+    # Try OAuth token manager ONLY if SP credentials were successfully loaded
+    if token_manager and token_manager._sp_client_id and token_manager._sp_client_secret:
+        params = token_manager.get_connection_params()
+        if params.get("password"):
+            encoded_user = quote_plus(params["user"])
+            encoded_password = quote_plus(params["password"])
+            log_info(f"Using OAuth SP token for database connection (user: {params['user']})")
+            return (
+                f"postgresql://{encoded_user}:{encoded_password}"
+                f"@{params['host']}:{params['port']}/{params['dbname']}"
+                f"?sslmode={params['sslmode']}"
+            )
+    log_info("No SP OAuth credentials available, using password fallback...")
 
-    params = token_manager.get_connection_params()
+    # Fallback: use secrets-based password auth (lakebase-password from secrets scope)
+    log_info("Attempting password-based auth via Databricks secrets...")
+    try:
+        from databricks.sdk import WorkspaceClient
+        import base64
+        w = WorkspaceClient()
+        scope = os.getenv("DATABRICKS_SECRETS_SCOPE", "lakemeter-credentials")
 
-    if not params["password"]:
-        raise Exception("No valid OAuth token available. Run 'databricks auth login' to authenticate.")
+        def _get_secret(key):
+            raw = w.secrets.get_secret(scope=scope, key=key).value
+            try:
+                return base64.b64decode(raw).decode('utf-8')
+            except Exception:
+                return raw
 
-    # URL-encode credentials
-    encoded_user = quote_plus(params["user"])
-    encoded_password = quote_plus(params["password"])
+        db_host = _get_secret("lakebase-host")
+        db_user = _get_secret("lakebase-user")
+        db_pass = _get_secret("lakebase-password")
+        db_name = _get_secret("lakebase-database")
+        db_port = os.getenv("DB_PORT", "5432")
 
-    return (
-        f"postgresql://{encoded_user}:{encoded_password}"
-        f"@{params['host']}:{params['port']}/{params['dbname']}"
-        f"?sslmode={params['sslmode']}"
-    )
+        encoded_user = quote_plus(db_user)
+        encoded_password = quote_plus(db_pass)
+        log_info(f"Using password auth for user: {db_user}")
+        return (
+            f"postgresql://{encoded_user}:{encoded_password}"
+            f"@{db_host}:{db_port}/{db_name}"
+            f"?sslmode=require"
+        )
+    except Exception as e:
+        log_error(f"Password fallback failed: {e}")
+
+    raise Exception("No valid database credentials available. Check OAuth config or lakebase-password secret.")
 
 
 def _create_engine_with_token_refresh():
