@@ -18,6 +18,7 @@ from .helpers import (
 )
 from .calculations import _calculate_dbu_per_hour, _is_serverless_workload
 from .excel_item_helpers import calc_item_values, write_storage_subrow
+from app.routes.vm_pricing import DEFAULT_VM_PRICING
 
 
 def build_estimate_excel(estimate, line_items, cloud, region, tier):
@@ -56,6 +57,23 @@ def build_estimate_excel(estimate, line_items, cloud, region, tier):
 def _get_val(obj, key, default=''):
     val = getattr(obj, key, default)
     return val if val is not None else default
+
+
+# Reserved instance discount factors relative to on-demand
+_RESERVED_DISCOUNTS = {
+    '1yr_reserved': 0.72,   # ~28% discount
+    '3yr_reserved': 0.50,   # ~50% discount
+    'spot': 0.30,           # ~70% discount
+}
+
+
+def _get_vm_hourly_rate(instance_prices: dict, pricing_tier: str) -> float:
+    """Get VM hourly rate for a pricing tier. Uses direct lookup, falls back to discount."""
+    if pricing_tier in instance_prices:
+        return instance_prices[pricing_tier]
+    on_demand = instance_prices.get('on_demand', 0)
+    discount = _RESERVED_DISCOUNTS.get(pricing_tier, 1.0)
+    return round(on_demand * discount, 4)
 
 
 def _write_header_section(sheet, fmt, estimate, cloud, region, tier, max_col):
@@ -138,10 +156,20 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier):
         item, is_fmapi_token, is_fmapi_provisioned, dbu_per_hour, cloud, auto_notes)
 
     num_workers = int(item.num_workers or 0)
-    # VM costs are $0 by default — matching frontend behavior.
-    # The frontend only shows VM costs when real cloud VM pricing data is available.
+    # Look up VM costs from DEFAULT_VM_PRICING; serverless workloads have no VM costs
     driver_vm_hr = 0
     worker_vm_hr = 0
+    if not is_serverless:
+        cloud_lc = (cloud or 'aws').lower()
+        vm_prices = DEFAULT_VM_PRICING.get(cloud_lc, {})
+        driver_node = _get_val(item, 'driver_node_type', '')
+        worker_node = _get_val(item, 'worker_node_type', '')
+        driver_tier = _get_val(item, 'driver_pricing_tier', 'on_demand') or 'on_demand'
+        worker_tier = _get_val(item, 'worker_pricing_tier', 'on_demand') or 'on_demand'
+        if driver_node and driver_node in vm_prices:
+            driver_vm_hr = _get_vm_hourly_rate(vm_prices[driver_node], driver_tier)
+        if worker_node and worker_node in vm_prices:
+            worker_vm_hr = _get_vm_hourly_rate(vm_prices[worker_node], worker_tier)
 
     user_notes = _get_val(item, 'notes', '') or ''
     notes_parts = [user_notes] if user_notes else []
