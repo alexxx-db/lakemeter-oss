@@ -421,6 +421,14 @@ def run_setup_sql(ctx: dict, instance_info: dict, cfg: dict):
     """)
     log_ok("Lakebase CU size constraint updated")
 
+    # --- Migrate sync_ref_instance_dbu_rates to include is_active and source ---
+    for col_name, col_type in [("is_active", "BOOLEAN DEFAULT TRUE"), ("source", "TEXT")]:
+        try:
+            cur.execute(f"ALTER TABLE lakemeter.sync_ref_instance_dbu_rates ADD COLUMN IF NOT EXISTS {col_name} {col_type}")
+        except Exception:
+            pass
+    log_ok("sync_ref_instance_dbu_rates schema migration complete")
+
     cur.close()
     conn.close()
 
@@ -786,12 +794,26 @@ def _load_dbu_rates(cur, data: dict, now: str) -> int:
         else:
             continue
         if isinstance(rate, dict):
-            for sku_name, info in rate.items():
+            for sku_name, val in rate.items():
+                # val can be a float (rate) or a dict with metadata
+                if isinstance(val, dict):
+                    price = val.get("price_per_dbu", 0)
+                    product_type = val.get("product_type", "")
+                    sku_region = val.get("sku_region", "")
+                    usage_unit = val.get("usage_unit", "DBU")
+                    currency = val.get("currency_code", "USD")
+                    pricing_type = val.get("pricing_type", "")
+                else:
+                    price = float(val) if val else 0
+                    product_type = ""
+                    sku_region = ""
+                    usage_unit = "DBU"
+                    currency = "USD"
+                    pricing_type = ""
                 rows.append((
-                    sku_name, cloud.upper(), tier, info.get("product_type", ""),
-                    info.get("sku_region", ""), region, info.get("usage_unit", "DBU"),
-                    info.get("price_per_dbu", 0), info.get("currency_code", "USD"),
-                    info.get("pricing_type", ""), now,
+                    sku_name, cloud.upper(), tier, product_type,
+                    sku_region, region, usage_unit,
+                    price, currency, pricing_type, now,
                 ))
     return _batch_insert(cur, "sync_pricing_dbu_rates",
         ["sku_name", "cloud", "tier", "product_type", "sku_region", "region",
@@ -801,18 +823,32 @@ def _load_dbu_rates(cur, data: dict, now: str) -> int:
 
 def _load_instance_dbu_rates(cur, data: dict, now: str) -> int:
     rows = []
-    for key, info in data.items():
-        parts = key.split(":")
-        if len(parts) >= 2:
-            cloud, instance_type = parts[0], parts[1]
+    for key, val in data.items():
+        if isinstance(val, dict) and "dbu_rate" not in val:
+            # Nested format: {cloud: {instance_type: {dbu_rate, vcpus, ...}}}
+            cloud = key
+            for instance_type, info in val.items():
+                if isinstance(info, dict):
+                    rows.append((
+                        cloud.upper(), instance_type,
+                        info.get("vcpus", 0), info.get("memory_gb", 0),
+                        info.get("dbu_rate", 0), info.get("family", info.get("instance_family", "")),
+                        True, "pricing_bundle",
+                    ))
         else:
-            continue
-        rows.append((
-            cloud.upper(), instance_type,
-            info.get("vcpus", 0), info.get("memory_gb", 0),
-            info.get("dbu_rate", 0), info.get("instance_family", ""),
-            True, "pricing_bundle",
-        ))
+            # Flat format: {cloud:instance_type: {dbu_rate, vcpus, ...}}
+            parts = key.split(":")
+            if len(parts) >= 2:
+                cloud, instance_type = parts[0], parts[1]
+            else:
+                continue
+            info = val if isinstance(val, dict) else {}
+            rows.append((
+                cloud.upper(), instance_type,
+                info.get("vcpus", 0), info.get("memory_gb", 0),
+                info.get("dbu_rate", 0), info.get("family", info.get("instance_family", "")),
+                True, "pricing_bundle",
+            ))
     return _batch_insert(cur, "sync_ref_instance_dbu_rates",
         ["cloud", "instance_type", "vcpus", "memory_gb", "dbu_rate", "instance_family",
          "is_active", "source"],
@@ -1193,7 +1229,6 @@ def configure_sp_access(ctx: dict, instance_info: dict, cfg: dict):
     conn.autocommit = True
     cur = conn.cursor()
 
-    cur.execute(f'GRANT USAGE ON DATABASE {cfg["db_name"]} TO "{sp_client_id}"')
     cur.execute(f'GRANT CONNECT ON DATABASE {cfg["db_name"]} TO "{sp_client_id}"')
     log_ok("Database-level permissions granted")
 
