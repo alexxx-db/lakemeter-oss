@@ -1,4 +1,10 @@
-"""Shared cursor injection and mouse movement utilities for Playwright recordings."""
+"""Shared cursor injection and mouse movement utilities for Playwright recordings.
+
+Includes:
+  - Custom cursor overlay (arrow + click ring)
+  - Subtitle bar (bottom of viewport)
+  - Visual <select> dropdown simulation (shows options overlay for headless recording)
+"""
 
 # Custom cursor: large arrow with drop shadow, plus click ring animation
 CURSOR_INJECT = """
@@ -132,3 +138,100 @@ async def hide_subtitle(page, pause=300):
       })()
     """)
     await page.wait_for_timeout(pause)
+
+
+# ─── Visual <select> dropdown simulation ───
+
+async def visual_select(page, select_locator, *, label=None, value=None, index=None,
+                        show_ms=1200, highlight_ms=800):
+    """Select an option with a visible dropdown overlay for video recording.
+
+    Native <select> dropdowns are invisible in headless Chromium. This function:
+      1. Reads all <option> elements from the <select>
+      2. Creates a floating dropdown overlay positioned below the <select>
+      3. Highlights the target option
+      4. Removes the overlay and calls select_option()
+    """
+    # Move cursor to the <select> element
+    await move_to(page, select_locator, pause=300)
+
+    # Build and display the visual overlay
+    await page.evaluate("""
+      (args) => {
+        const {selectSelector, targetValue, targetLabel, targetIndex} = args;
+        const sel = document.querySelector(selectSelector) || document.activeElement;
+        if (!sel || sel.tagName !== 'SELECT') return;
+
+        const rect = sel.getBoundingClientRect();
+        const opts = Array.from(sel.options);
+
+        // Create dropdown overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'pw-select-overlay';
+        overlay.style.cssText = `
+          position: fixed; z-index: 999997;
+          left: ${rect.left}px; top: ${rect.bottom + 2}px;
+          width: ${Math.max(rect.width, 220)}px;
+          max-height: 260px; overflow-y: auto;
+          background: white; border: 1px solid #d1d5db;
+          border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+          padding: 4px 0; opacity: 0;
+          transition: opacity 0.15s ease;
+        `;
+
+        // Determine which option to highlight
+        let highlightIdx = -1;
+        if (targetValue !== null) highlightIdx = opts.findIndex(o => o.value === targetValue);
+        else if (targetLabel !== null) highlightIdx = opts.findIndex(o => o.textContent.trim() === targetLabel);
+        else if (targetIndex !== null) highlightIdx = targetIndex;
+
+        opts.forEach((opt, i) => {
+          if (opt.value === '' && opt.textContent.includes('Select')) return; // skip placeholder
+          const row = document.createElement('div');
+          row.style.cssText = `
+            padding: 6px 12px; font-size: 13px; cursor: default;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            ${i === highlightIdx ? 'background: #3b82f6; color: white; border-radius: 4px; margin: 0 4px; padding: 6px 8px;' : ''}
+          `;
+          row.textContent = opt.textContent;
+          overlay.appendChild(row);
+        });
+
+        document.body.appendChild(overlay);
+        // Trigger fade-in
+        requestAnimationFrame(() => { overlay.style.opacity = '1'; });
+      }
+    """, {
+        "selectSelector": await select_locator.evaluate("el => { const id = el.id; const name = el.name; if (id) return '#'+id; if (name) return 'select[name=\"'+name+'\"]'; return 'select'; }"),
+        "targetValue": value,
+        "targetLabel": label,
+        "targetIndex": index,
+    })
+
+    await page.wait_for_timeout(show_ms)
+
+    # Highlight the target option briefly
+    await page.wait_for_timeout(highlight_ms)
+
+    # Remove overlay with fade-out
+    await page.evaluate("""
+      (() => {
+        const ol = document.getElementById('pw-select-overlay');
+        if (ol) {
+          ol.style.opacity = '0';
+          setTimeout(() => ol.remove(), 200);
+        }
+      })()
+    """)
+    await page.wait_for_timeout(300)
+
+    # Actually select the option
+    if label:
+        await select_locator.select_option(label=label)
+    elif value:
+        await select_locator.select_option(value=value)
+    elif index is not None:
+        await select_locator.select_option(index=index)
+
+    await page.wait_for_timeout(400)

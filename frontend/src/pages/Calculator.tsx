@@ -208,7 +208,7 @@ const formatCurrencyCompact = (amount: number) => {
   if (Math.abs(amount) >= 1_000_000) {
     return `$${(amount / 1_000_000).toFixed(2)}M`
   }
-  if (Math.abs(amount) >= 10_000) {
+  if (Math.abs(amount) >= 1_000) {
     return `$${(amount / 1_000).toFixed(1)}K`
   }
   return formatCurrency(amount)
@@ -3829,11 +3829,11 @@ export default function Calculator() {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="text-center p-2 sm:p-3 rounded-xl bg-gradient-to-br from-blue-500/5 to-blue-500/10 border border-blue-500/20 min-w-0">
                       <p className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider font-medium mb-1">DBU Cost</p>
-                      <p className="text-xs font-bold text-[var(--text-primary)] tabular-nums" title={formatCurrency(totalCosts.totalDBUCost)}>{formatCurrencyCompact(totalCosts.totalDBUCost)}</p>
+                      <p className="text-xs font-bold text-[var(--text-primary)] tabular-nums truncate" title={formatCurrency(totalCosts.totalDBUCost)}>{formatCurrencyCompact(totalCosts.totalDBUCost)}</p>
                     </div>
                     <div className="text-center p-2 sm:p-3 rounded-xl bg-gradient-to-br from-purple-500/5 to-purple-500/10 border border-purple-500/20 min-w-0">
                       <p className="text-[10px] text-purple-600 dark:text-purple-400 uppercase tracking-wider font-medium mb-1">VM Cost</p>
-                      <p className="text-xs font-bold text-[var(--text-primary)] tabular-nums" title={isLoadingVMCosts ? 'Loading...' : formatCurrency(totalCosts.totalVMCost)}>{isLoadingVMCosts ? '...' : formatCurrencyCompact(totalCosts.totalVMCost)}</p>
+                      <p className="text-xs font-bold text-[var(--text-primary)] tabular-nums truncate" title={isLoadingVMCosts ? 'Loading...' : formatCurrency(totalCosts.totalVMCost)}>{isLoadingVMCosts ? '...' : formatCurrencyCompact(totalCosts.totalVMCost)}</p>
                     </div>
                   </div>
                   

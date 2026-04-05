@@ -6,7 +6,7 @@ import os
 from playwright.async_api import async_playwright
 
 sys.path.insert(0, os.path.dirname(__file__))
-from cursor import CURSOR_INJECT, inject_cursor, smooth_move, move_to, click_on
+from cursor import CURSOR_INJECT, inject_cursor, smooth_move, move_to, click_on, visual_select
 
 APP_URL = "http://localhost:8000"
 ESTIMATE_URL = f"{APP_URL}/calculator/2fc50a70-060d-49e2-b845-eb8c055f4aeb"
@@ -51,18 +51,6 @@ async def go_to_estimate(page):
     await page.wait_for_timeout(200)
 
 
-async def visible_select(page, select_locator, label=None, index=None):
-    """Select an option with visible interaction: click to focus, pause, then select."""
-    await move_to(page, select_locator, pause=300)
-    await select_locator.click()
-    await page.wait_for_timeout(400)  # Show focus state
-    if label:
-        await select_locator.select_option(label=label)
-    elif index is not None:
-        await select_locator.select_option(index=index)
-    await page.wait_for_timeout(600)  # Show new value
-
-
 async def finish(page, context, browser, gif_name):
     video_path = await page.video.path()
     await context.close()
@@ -79,7 +67,13 @@ async def record_creating_estimate(p):
         await page.wait_for_selector('select', timeout=15000)
     except:
         pass
-    await page.wait_for_timeout(3000)
+    # Wait for regions to load asynchronously
+    for _ in range(30):
+        opt_count = await page.locator('select').first.evaluate('(el) => el.options.length')
+        if opt_count > 5:
+            break
+        await page.wait_for_timeout(500)
+    await page.wait_for_timeout(1000)
     await inject_cursor(page)
     await page.mouse.move(0, 400)
     await page.wait_for_timeout(300)
@@ -91,21 +85,13 @@ async def record_creating_estimate(p):
     await page.keyboard.type("Q4 Data Platform Estimate", delay=45)
     await page.wait_for_timeout(600)
 
-    # Select region — with visible focus
+    # Select region — with visible dropdown overlay
     region_select = page.locator('select').first
-    await move_to(page, region_select, pause=300)
-    await region_select.click()
-    await page.wait_for_timeout(400)
-    await region_select.select_option(value="us-east-1")
-    await page.wait_for_timeout(600)
+    await visual_select(page, region_select, value="us-east-1")
 
-    # Select tier — with visible focus
+    # Select tier — with visible dropdown overlay
     tier_select = page.locator('select').nth(1)
-    await move_to(page, tier_select, pause=300)
-    await tier_select.click()
-    await page.wait_for_timeout(400)
-    await tier_select.select_option(value="premium")
-    await page.wait_for_timeout(600)
+    await visual_select(page, tier_select, value="premium")
 
     # Move to Create Estimate button and click
     create_btn = page.locator('button:has-text("Create Estimate")').first
@@ -142,7 +128,7 @@ async def record_adding_workload(p):
         except:
             continue
 
-    # Select workload type with visible interaction
+    # Select workload type with visible dropdown overlay
     selects = page.locator('select')
     sel_count = await selects.count()
     if sel_count > 0:
@@ -151,7 +137,7 @@ async def record_adding_workload(p):
                 sel = selects.nth(i)
                 box = await sel.bounding_box(timeout=1000)
                 if box and box["y"] > 100:
-                    await visible_select(page, sel, index=2)
+                    await visual_select(page, sel, value="JOBS")
                     break
             except:
                 continue

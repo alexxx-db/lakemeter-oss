@@ -1,8 +1,8 @@
 """
 Databricks Claude AI Client
 
-Integrates with Databricks-hosted Claude Sonnet 4.5 model for the AI assistant.
-Endpoint: https://fe-vm-lakemeter.cloud.databricks.com/serving-endpoints/databricks-claude-sonnet-4-5/invocations
+Integrates with Databricks-hosted Claude Opus 4.6 model for the AI assistant.
+Endpoint: https://fe-vm-lakemeter.cloud.databricks.com/serving-endpoints/databricks-claude-opus-4-6/invocations
 
 Uses OpenAI-compatible chat completions format as per Databricks documentation:
 https://docs.databricks.com/aws/en/machine-learning/model-serving/query-chat-models
@@ -26,7 +26,7 @@ from app.config import log_info, log_warning, log_error
 
 # Claude endpoint configuration
 DATABRICKS_HOST = os.getenv("DATABRICKS_HOST", "https://fe-vm-lakemeter.cloud.databricks.com")
-MODEL_ENDPOINT = "databricks-claude-sonnet-4-5"
+MODEL_ENDPOINT = "databricks-claude-opus-4-6"
 CLAUDE_ENDPOINT = f"{DATABRICKS_HOST}/serving-endpoints/{MODEL_ENDPOINT}/invocations"
 
 # Rate limiting configuration
@@ -53,7 +53,7 @@ class ClaudeAIClient:
     Client for Databricks-hosted Claude models.
     
     Uses OpenAI-compatible chat completions format.
-    Supports multiple models: databricks-claude-sonnet-4-5, databricks-claude-opus-4-5
+    Supports multiple models: databricks-claude-opus-4-6, databricks-claude-sonnet-4-6
     """
     
     def __init__(self, token: Optional[str] = None, model: Optional[str] = None):
@@ -514,6 +514,6 @@ class ClaudeAIClient:
         return result
 
 
-def get_claude_client(token: str, model: str = "databricks-claude-sonnet-4-5") -> ClaudeAIClient:
+def get_claude_client(token: str, model: str = "databricks-claude-opus-4-6") -> ClaudeAIClient:
     """Get a Claude client instance with the given token."""
     return ClaudeAIClient(token=token, model=model)

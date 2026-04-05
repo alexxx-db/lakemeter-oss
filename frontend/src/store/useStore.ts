@@ -1418,7 +1418,7 @@ export const useStore = create<Store>((set, get) => ({
           result = await api.calculateFMAPIProprietary({
             ...baseParams,
             provider: lineItem.fmapi_provider || 'anthropic',
-            model: lineItem.fmapi_model || 'claude-sonnet-4-5',
+            model: lineItem.fmapi_model || 'claude-opus-4-6',
             endpoint_type: lineItem.fmapi_endpoint_type || 'global',
             context_length: lineItem.fmapi_context_length || 'all',
             rate_type: lineItem.fmapi_rate_type || 'input_token',
