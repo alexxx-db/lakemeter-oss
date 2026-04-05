@@ -741,7 +741,8 @@ def _create_sync_tables(cur):
         CREATE TABLE IF NOT EXISTS lakemeter.sync_ref_instance_dbu_rates (
             cloud TEXT, instance_type TEXT, vcpus DOUBLE PRECISION,
             memory_gb DOUBLE PRECISION, dbu_rate DOUBLE PRECISION,
-            instance_family TEXT, updated_at TIMESTAMP DEFAULT NOW()
+            instance_family TEXT, is_active BOOLEAN DEFAULT TRUE,
+            source TEXT, updated_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS lakemeter.sync_ref_sku_region_map (
             cloud TEXT, sku_region TEXT, region_code TEXT
@@ -810,9 +811,11 @@ def _load_instance_dbu_rates(cur, data: dict, now: str) -> int:
             cloud.upper(), instance_type,
             info.get("vcpus", 0), info.get("memory_gb", 0),
             info.get("dbu_rate", 0), info.get("instance_family", ""),
+            True, "pricing_bundle",
         ))
     return _batch_insert(cur, "sync_ref_instance_dbu_rates",
-        ["cloud", "instance_type", "vcpus", "memory_gb", "dbu_rate", "instance_family"],
+        ["cloud", "instance_type", "vcpus", "memory_gb", "dbu_rate", "instance_family",
+         "is_active", "source"],
         rows)
 
 
