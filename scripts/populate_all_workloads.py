@@ -45,18 +45,20 @@ DBSQL_TYPES = ["SERVERLESS", "PRO", "CLASSIC"]
 DLT_EDITIONS = ["CORE", "PRO", "ADVANCED"]
 
 MODEL_SERVING_GPUS = [
+    # GPU type IDs must match keys in model-serving-rates.json
     "cpu", "gpu_small_t4", "gpu_medium_a10g_1x",
-    "gpu_medium_a10g_4x", "gpu_large_a100",
+    "gpu_medium_a10g_4x", "gpu_xlarge_a100_40gb_8x",
 ]
 
 FMAPI_PROPRIETARY_CONFIGS = [
     # (provider, model, endpoint, context, rate_type)
+    # Model names must match keys in fmapi-proprietary-rates.json
     ("anthropic", "claude-sonnet-3-7", "global", "long", "input_token"),
     ("anthropic", "claude-sonnet-3-7", "global", "long", "output_token"),
-    ("openai", "gpt-4o", "global", "all", "input_token"),
-    ("openai", "gpt-4o", "global", "all", "output_token"),
-    ("google", "gemini-2.0-flash", "global", "all", "input_token"),
-    ("google", "gemini-2.0-flash", "global", "all", "output_token"),
+    ("openai", "gpt-5", "global", "all", "input_token"),
+    ("openai", "gpt-5", "global", "all", "output_token"),
+    ("google", "gemini-2-5-flash", "global", "long", "input_token"),
+    ("google", "gemini-2-5-flash", "global", "long", "output_token"),
     ("anthropic", "claude-sonnet-3-7", "global", "long", "cache_read"),
     ("anthropic", "claude-sonnet-3-7", "global", "long", "cache_write"),
 ]

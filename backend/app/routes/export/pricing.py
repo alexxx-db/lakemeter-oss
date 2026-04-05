@@ -175,9 +175,14 @@ def _get_fmapi_dbu_per_million(item, cloud: str) -> tuple:
         for k, v in FMAPI_PROP_RATES.items():
             if k.lower().strip() == key_lower:
                 return v.get('dbu_rate', 0), True
-        # Try 'all' context as fallback (some models use it)
+        # Try alternate context as fallback (OpenAI uses 'all', Google uses 'long'/'short')
+        alt_contexts = []
         if context != 'all':
-            alt_key = f"{cloud}:{provider}:{model}:{endpoint}:all:{rate_type}"
+            alt_contexts.append('all')
+        if context != 'long':
+            alt_contexts.append('long')
+        for alt_ctx in alt_contexts:
+            alt_key = f"{cloud}:{provider}:{model}:{endpoint}:{alt_ctx}:{rate_type}"
             info = FMAPI_PROP_RATES.get(alt_key, {})
             if 'dbu_rate' in info:
                 return info['dbu_rate'], True
