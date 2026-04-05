@@ -12,6 +12,7 @@ import {
   ArrowPathIcon,
   QuestionMarkCircleIcon,
   DocumentTextIcon,
+  CurrencyDollarIcon,
   ChatBubbleLeftRightIcon,
   BugAntIcon
 } from '@heroicons/react/24/outline'
@@ -422,7 +423,21 @@ export default function Layout() {
                           <p className="text-xs text-[var(--text-muted)]">User guides & reference</p>
                         </div>
                       </a>
-                      
+
+                      <a
+                        href="https://www.databricks.com/product/pricing"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setIsHelpOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      >
+                        <CurrencyDollarIcon className="w-4 h-4 text-purple-500" />
+                        <div>
+                          <p className="font-medium">Official Pricing</p>
+                          <p className="text-xs text-[var(--text-muted)]">Databricks pricing page</p>
+                        </div>
+                      </a>
+
                       <a
                         href="https://docs.google.com/forms/d/e/1FAIpQLSc3bNU-Fm2mpsEWzLZxF1GvMxi4Iqw4bs8JXntWh9bLiLDiFQ/viewform"
                         target="_blank"
@@ -490,13 +505,21 @@ export default function Layout() {
             </p>
             <span className="hidden sm:inline text-[var(--text-muted)]">•</span>
             <div className="flex items-center gap-3 text-xs">
-              <a 
-                href="https://docs.google.com/document/d/1ca8Nn-44ObcLnskQ0XsKwSS3CRe-jbqJNdiK3i-ItoA/edit?tab=t.0"
+              <a
+                href="/docs/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-lava-600 hover:text-lava-700 transition-colors hover:underline"
               >
                 Docs
+              </a>
+              <a
+                href="https://www.databricks.com/product/pricing"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-lava-600 hover:text-lava-700 transition-colors hover:underline"
+              >
+                Pricing
               </a>
               <a 
                 href="https://docs.google.com/forms/d/e/1FAIpQLSde1O7LKq2emPUr1jQ7vNDJMJuC51JKz_HS26drIBHatyGy7Q/viewform"

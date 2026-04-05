@@ -51,6 +51,18 @@ async def go_to_estimate(page):
     await page.wait_for_timeout(200)
 
 
+async def visible_select(page, select_locator, label=None, index=None):
+    """Select an option with visible interaction: click to focus, pause, then select."""
+    await move_to(page, select_locator, pause=300)
+    await select_locator.click()
+    await page.wait_for_timeout(400)  # Show focus state
+    if label:
+        await select_locator.select_option(label=label)
+    elif index is not None:
+        await select_locator.select_option(index=index)
+    await page.wait_for_timeout(600)  # Show new value
+
+
 async def finish(page, context, browser, gif_name):
     video_path = await page.video.path()
     await context.close()
@@ -62,10 +74,9 @@ async def finish(page, context, browser, gif_name):
 async def record_creating_estimate(p):
     print("Recording: creating-estimate...")
     browser, context, page = await new_context(p)
-    # Go to new calculator page
     await page.goto(f"{APP_URL}/calculator", wait_until="load", timeout=60000)
     try:
-        await page.wait_for_selector('text="Select region"', timeout=15000)
+        await page.wait_for_selector('select', timeout=15000)
     except:
         pass
     await page.wait_for_timeout(3000)
@@ -80,16 +91,20 @@ async def record_creating_estimate(p):
     await page.keyboard.type("Q4 Data Platform Estimate", delay=45)
     await page.wait_for_timeout(600)
 
-    # Select region
+    # Select region — with visible focus
     region_select = page.locator('select').first
-    await move_to(page, region_select, pause=400)
-    await region_select.select_option(label="us-east-1 (US_EAST_N_VIRGINIA)")
+    await move_to(page, region_select, pause=300)
+    await region_select.click()
+    await page.wait_for_timeout(400)
+    await region_select.select_option(value="us-east-1")
     await page.wait_for_timeout(600)
 
-    # Select tier
+    # Select tier — with visible focus
     tier_select = page.locator('select').nth(1)
-    await move_to(page, tier_select, pause=400)
-    await tier_select.select_option(label="Premium")
+    await move_to(page, tier_select, pause=300)
+    await tier_select.click()
+    await page.wait_for_timeout(400)
+    await tier_select.select_option(value="premium")
     await page.wait_for_timeout(600)
 
     # Move to Create Estimate button and click
@@ -109,7 +124,7 @@ async def record_adding_workload(p):
     add_btn = page.locator('button:has-text("Add Workload")').first
     await click_on(page, add_btn, pause=1000)
 
-    # Fill workload name — look for new input fields that appeared
+    # Fill workload name
     await page.wait_for_timeout(500)
     all_inputs = page.locator('input[type="text"]')
     count = await all_inputs.count()
@@ -117,7 +132,7 @@ async def record_adding_workload(p):
         try:
             inp = all_inputs.nth(i)
             box = await inp.bounding_box(timeout=1000)
-            if box and box["y"] > 100:  # Below the estimate name
+            if box and box["y"] > 100:
                 await move_to(page, inp, pause=300)
                 await inp.click()
                 await inp.fill("")
@@ -127,7 +142,7 @@ async def record_adding_workload(p):
         except:
             continue
 
-    # Look for workload type select
+    # Select workload type with visible interaction
     selects = page.locator('select')
     sel_count = await selects.count()
     if sel_count > 0:
@@ -136,9 +151,7 @@ async def record_adding_workload(p):
                 sel = selects.nth(i)
                 box = await sel.bounding_box(timeout=1000)
                 if box and box["y"] > 100:
-                    await move_to(page, sel, pause=300)
-                    await sel.select_option(index=2)
-                    await page.wait_for_timeout(500)
+                    await visible_select(page, sel, index=2)
                     break
             except:
                 continue
@@ -167,7 +180,10 @@ async def record_cost_summary(p):
     await move_to(page, page.locator('text=VM COST').first, pause=600)
 
     # Move to workload breakdown
-    await move_to(page, page.locator('text=Click to view').first, pause=400)
+    try:
+        await move_to(page, page.locator('text=Click to view').first, pause=400)
+    except:
+        pass
 
     # Click on a workload in breakdown
     bi_wl = page.locator('button:has-text("BI Analytics")').last
@@ -236,34 +252,29 @@ async def record_ai_assistant(p):
     browser, context, page = await new_context(p)
     await go_to_estimate(page)
 
-    # The AI panel may already be open. Look for quick action buttons or chat input.
-    # Try clicking a quick action first (e.g. "Optimize")
+    # Click the Optimize quick action to show AI capability
     optimize_btn = page.locator('button:has-text("Optimize")').first
     try:
-        await move_to(page, optimize_btn, pause=400, timeout=5000)
+        await click_on(page, optimize_btn, pause=500, timeout=5000)
     except:
         pass
 
-    # Move to the chat textarea/input and type a message
+    # Wait for AI response to appear
+    await page.wait_for_timeout(4000)
+
+    # Now type a custom message
     chat_input = page.locator('textarea').last
     try:
         await move_to(page, chat_input, pause=500, timeout=5000)
         await chat_input.click()
-        await page.keyboard.type("How can I optimize my workload costs?", delay=50)
+        await page.keyboard.type("What is the total monthly cost?", delay=50)
         await page.wait_for_timeout(600)
-
-        # Press Enter to send (send button is disabled until text is typed)
         await page.keyboard.press("Enter")
     except Exception as e:
-        print(f"  [skip] AI chat interaction: {e}")
-        # Fallback: just click the Optimize quick action
-        try:
-            await click_on(page, optimize_btn, pause=500, timeout=3000)
-        except:
-            pass
+        print(f"  [skip] AI chat: {e}")
 
-    # Wait for response to stream
-    await page.wait_for_timeout(6000)
+    # Wait for response
+    await page.wait_for_timeout(5000)
 
     await finish(page, context, browser, "ai-assistant.gif")
 
