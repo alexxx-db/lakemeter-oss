@@ -2,9 +2,8 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
-import { CSS } from '@dnd-kit/utilities'
 import {
   PlusIcon,
   ArrowDownTrayIcon,
@@ -19,8 +18,8 @@ import {
   XMarkIcon,
   Squares2X2Icon,
   BuildingOfficeIcon,
-  Bars3Icon
 } from '@heroicons/react/24/outline'
+import { SortableItem } from '../components/SortableItem'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { useStore } from '../store/useStore'
@@ -43,7 +42,7 @@ const tierBadges: Record<string, { label: string; bg: string; text: string }> = 
   standard: { label: 'Standard', bg: 'rgba(107, 114, 128, 0.15)', text: '#6b7280' }
 }
 
-type SortOption = 'updated' | 'name' | 'workloads' | 'custom'
+type SortOption = 'updated' | 'name' | 'workloads' | 'display_order'
 type CloudFilter = 'all' | 'aws' | 'azure' | 'gcp'
 
 // ============================================================================
@@ -126,97 +125,9 @@ function FilterTabs({ cloudFilter, setCloudFilter, cloudCounts }: FilterTabsProp
   )
 }
 
-interface SortDropdownProps {
-  sortBy: SortOption
-  setSortBy: (sort: SortOption) => void
-}
-
-function SortDropdown({ sortBy, setSortBy }: SortDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  
-  const options: { value: SortOption; label: string }[] = [
-    { value: 'updated', label: 'Recently Modified' },
-    { value: 'name', label: 'Name (A-Z)' },
-    { value: 'workloads', label: 'Workload Count' },
-    { value: 'custom', label: 'Custom (Drag)' }
-  ]
-  
-  const selectedOption = options.find(o => o.value === sortBy)
-  
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition-colors"
-        style={{ 
-          borderColor: 'var(--border-primary)',
-          color: 'var(--text-secondary)',
-          backgroundColor: 'var(--bg-primary)'
-        }}
-      >
-        <span>Sort: {selectedOption?.label}</span>
-        <ChevronDownIcon className={clsx('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
-      </button>
-      
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.15 }}
-              className="absolute right-0 top-full mt-1 z-20 min-w-[180px] rounded-lg border shadow-lg overflow-hidden"
-              style={{ 
-                borderColor: 'var(--border-primary)',
-                backgroundColor: 'var(--bg-primary)'
-              }}
-            >
-              {options.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    setSortBy(option.value)
-                    setIsOpen(false)
-                  }}
-                  className={clsx(
-                    'w-full px-3 py-2 text-sm text-left flex items-center justify-between transition-colors',
-                    sortBy === option.value ? 'bg-blue-500/10' : 'hover:bg-[var(--bg-hover)]'
-                  )}
-                  style={{ color: sortBy === option.value ? '#3b82f6' : 'var(--text-primary)' }}
-                >
-                  {option.label}
-                  {sortBy === option.value && <CheckIcon className="w-4 h-4" />}
-                </button>
-              ))}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
 // ============================================================================
 // Main Component
 // ============================================================================
-
-function SortableEstimateRow({ id, disabled, children }: { id: string; disabled?: boolean; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled })
-  return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 50 : undefined, position: 'relative' as const }} {...attributes}>
-      <div className="flex items-stretch">
-        {!disabled && (
-          <div {...listeners} className="flex items-center px-1 cursor-grab active:cursor-grabbing text-[var(--text-muted)] hover:text-[var(--text-secondary)] touch-none" title="Drag to reorder">
-            <Bars3Icon className="w-3.5 h-3.5" />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">{children}</div>
-      </div>
-    </div>
-  )
-}
 
 export default function Estimates() {
   const navigate = useNavigate()
@@ -227,7 +138,7 @@ export default function Estimates() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [cloudFilter, setCloudFilter] = useState<CloudFilter>('all')
-  const [sortBy, setSortBy] = useState<SortOption>('updated')
+  const [sortBy, setSortBy] = useState<SortOption>('display_order')
   const [accountFilter, setAccountFilter] = useState<string>('all')
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false)
   
@@ -248,8 +159,6 @@ export default function Estimates() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor)
   )
-  const isEstimateDragEnabled = sortBy === 'custom'
-
   // Fetch estimates on mount
   useEffect(() => {
     fetchEstimates()
@@ -337,7 +246,7 @@ export default function Estimates() {
       case 'workloads':
         result.sort((a, b) => (b.line_item_count || 0) - (a.line_item_count || 0))
         break
-      case 'custom':
+      case 'display_order':
         result.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
         break
     }
@@ -353,6 +262,11 @@ export default function Estimates() {
     const oldIndex = filteredEstimates.findIndex(e => e.estimate_id === active.id)
     const newIndex = filteredEstimates.findIndex(e => e.estimate_id === over.id)
     if (oldIndex === -1 || newIndex === -1) return
+
+    // Auto-switch to display_order sort when user drags
+    if (sortBy !== 'display_order') {
+      setSortBy('display_order')
+    }
 
     // Reorder locally
     const reordered = arrayMove(filteredEstimates, oldIndex, newIndex)
@@ -371,7 +285,7 @@ export default function Estimates() {
     } catch {
       toast.error('Failed to save reorder')
     }
-  }, [filteredEstimates])
+  }, [filteredEstimates, sortBy])
 
   // Handlers
   const handleDelete = (e: React.MouseEvent, id: string, name: string) => {
@@ -681,7 +595,7 @@ export default function Estimates() {
         )}
       </div>
       
-      {/* Search and Sort Row */}
+      {/* Search Row */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: 'var(--text-muted)' }} />
@@ -693,8 +607,6 @@ export default function Estimates() {
           className="w-full pl-10 pr-4"
         />
         </div>
-        
-        <SortDropdown sortBy={sortBy} setSortBy={setSortBy} />
       </div>
       
       {/* Estimates Table */}
@@ -787,7 +699,7 @@ export default function Estimates() {
               const isSelected = selectedIds.has(estimate.estimate_id)
               
               return (
-            <SortableEstimateRow key={estimate.estimate_id} id={estimate.estimate_id} disabled={!isEstimateDragEnabled}>
+            <SortableItem key={estimate.estimate_id} id={estimate.estimate_id}>
             <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -944,7 +856,7 @@ export default function Estimates() {
                     )}
               </div>
             </motion.div>
-            </SortableEstimateRow>
+            </SortableItem>
               )
             })}
             </SortableContext>
