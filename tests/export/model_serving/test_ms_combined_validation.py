@@ -55,11 +55,12 @@ class TestModelServingInCombinedExcel:
         sku = ws.cell(row=row, column=COL_SKU).value
         assert sku == 'SERVERLESS_REAL_TIME_INFERENCE'
 
-    def test_dbu_hr_is_20(self, ws):
+    def test_dbu_hr_is_80(self, ws):
+        """A10G 1x at small scale-out: 20.0 rate × 4 concurrency = 80 DBU/hr."""
         row = find_row_by_name(ws, 'Model Serving GPU')
         val = ws.cell(row=row, column=COL_DBU_HR).value
-        assert val == pytest.approx(20.0, abs=0.01), \
-            f"Expected 20.0 DBU/hr for A10G 1x, got {val}"
+        assert val == pytest.approx(80.0, abs=0.01), \
+            f"Expected 80.0 DBU/hr for A10G 1x (small scale-out), got {val}"
 
     def test_dbus_mo_is_formula(self, ws):
         row = find_row_by_name(ws, 'Model Serving GPU')
@@ -83,7 +84,10 @@ class TestModelServingInCombinedExcel:
 
 
 class TestAllGpuRates:
-    """AC-12: All 14 GPU types across 3 clouds produce correct DBU/hr."""
+    """AC-12: All 14 GPU types across 3 clouds produce correct DBU/hr.
+
+    DBU/hr = base rate × concurrency; small scale-out (4) is used here.
+    """
 
     @pytest.mark.parametrize("cloud,gpu_type,expected_rate", _GPU_PARAMS,
                              ids=[f"{c}:{g}" for c, g, _ in _GPU_PARAMS])
@@ -91,11 +95,12 @@ class TestAllGpuRates:
         item = make_line_item(
             workload_type="MODEL_SERVING",
             model_serving_gpu_type=gpu_type,
+            model_serving_scale_out="small",
             hours_per_month=100,
         )
         dbu, warnings = _calculate_dbu_per_hour(item, cloud)
-        assert dbu == pytest.approx(expected_rate, abs=0.01), \
-            f"{cloud}:{gpu_type} expected {expected_rate}, got {dbu}"
+        assert dbu == pytest.approx(expected_rate * 4, abs=0.01), \
+            f"{cloud}:{gpu_type} expected {expected_rate * 4}, got {dbu}"
         assert len(warnings) == 0, \
             f"{cloud}:{gpu_type} had warnings: {warnings}"
 
