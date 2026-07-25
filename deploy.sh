@@ -173,7 +173,23 @@ elif [ -n "$WORKSPACE_HOST" ]; then
     echo -e "App URL: ${BLUE}https://${WORKSPACE_HOST}/apps/${APP_NAME}${NC}"
 else
     echo -e "\n${YELLOW}Step 3: Skipping deployment (DATABRICKS_HOST not set)${NC}"
+    echo ""
+    echo "To deploy:"
+    echo -e "  ${BLUE}# Option A: Workspace deploy (recommended for production)${NC}"
+    echo -e "  ${BLUE}LAKEMETER_APP_NAME=lakemeter ./deploy.sh --workspace-deploy${NC}"
+    echo ""
+    echo -e "  ${BLUE}# Option B: Local deploy${NC}"
+    echo -e "  ${BLUE}DATABRICKS_HOST=your-workspace.cloud.databricks.com ./deploy.sh${NC}"
+    echo -e "\n${GREEN}OK Build complete - ready for deployment${NC}"
 fi
 
-echo -e "\n${GREEN}================================"
-echo -e "Done in $(( $(date +%s) - DEPLOY_START ))s${NC}"
+echo ""
+echo "Bundle contents:"
+du -sh backend/static/ 2>/dev/null || true
+
+# Total timing
+DEPLOY_END=$(date +%s)
+TOTAL_ELAPSED=$(( DEPLOY_END - DEPLOY_START ))
+MINS=$(( TOTAL_ELAPSED / 60 ))
+SECS=$(( TOTAL_ELAPSED % 60 ))
+echo -e "\n${GREEN}Total deployment time: ${MINS}m ${SECS}s${NC}"
