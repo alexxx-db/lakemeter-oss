@@ -170,8 +170,9 @@ class TestModelServingRegression:
         assert dbu >= 0
 
     def test_gpu_a10g_dbu(self):
+        """20.0 base rate × 4 (small scale-out) = 80.0 DBU/hr."""
         dbu, _ = _calculate_dbu_per_hour(make_ms_gpu_a10g(), 'aws')
-        assert dbu == pytest.approx(20.0, abs=0.01)
+        assert dbu == pytest.approx(80.0, abs=0.01)
 
     def test_sku(self):
         assert _get_sku_type(make_ms_cpu(), 'aws') == 'SERVERLESS_REAL_TIME_INFERENCE'
