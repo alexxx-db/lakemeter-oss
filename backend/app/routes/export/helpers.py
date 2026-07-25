@@ -120,15 +120,19 @@ MODEL_SERVING_GPU_NAMES = {
 
 
 def _model_serving_details(item) -> list:
+    from app.routes.export.calculations import MODEL_SERVING_SCALE_OUT_PRESETS
     details = []
     if item.model_serving_gpu_type:
         name = MODEL_SERVING_GPU_NAMES.get(
             item.model_serving_gpu_type, item.model_serving_gpu_type
         )
         details.append(f"GPU: {name}")
-    # Show concurrency (from dedicated column or default 4)
-    concurrency = getattr(item, 'model_serving_concurrency', None) or 4
-    scale_out = getattr(item, 'model_serving_scale_out', None) or 'small'
+    # Show concurrency, resolved the same way as the cost calculation:
+    # presets (small=4, medium=12, large=40); custom uses the explicit value.
+    scale_out = (getattr(item, 'model_serving_scale_out', None) or 'small').lower()
+    concurrency = getattr(item, 'model_serving_concurrency', None)
+    if not concurrency or scale_out != 'custom':
+        concurrency = MODEL_SERVING_SCALE_OUT_PRESETS.get(scale_out, concurrency or 4)
     scale_labels = {'small': 'Small', 'medium': 'Medium', 'large': 'Large', 'custom': 'Custom'}
     label = scale_labels.get(scale_out, scale_out)
     details.append(f"Scale-Out: {label} ({concurrency} concurrency)")

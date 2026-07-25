@@ -129,7 +129,12 @@ def _calc_compute_dbu(item, cloud, wt, warnings):
     if item.serverless_enabled:
         photon_mult = _get_photon_multiplier(cloud, sku_base)
         base_dbu *= photon_mult
-        mode_multiplier = 2 if (item.serverless_mode or '').lower() == 'performance' else 1
+        # All-Purpose serverless only supports performance mode (always 2x),
+        # matching the frontend calculator; Jobs/DLT honor the selected mode.
+        if wt == 'ALL_PURPOSE':
+            mode_multiplier = 2
+        else:
+            mode_multiplier = 2 if (item.serverless_mode or '').lower() == 'performance' else 1
         return base_dbu * mode_multiplier, warnings
 
     if item.photon_enabled:
@@ -179,11 +184,20 @@ def _calc_vector_search_dbu(item, cloud, warnings):
     return units * dbu_rate, warnings
 
 
+# Scale-out presets — must stay in sync with:
+#   - frontend/src/utils/costCalculation.ts (msScaleOutPresets)
+#   - backend/app/routes/calculate/model_serving_calc.py (SCALE_OUT_PRESETS)
+MODEL_SERVING_SCALE_OUT_PRESETS = {'small': 4, 'medium': 12, 'large': 40}
+
+
 def _calc_model_serving_dbu(item, cloud, warnings):
     """Calculate DBU/hr for Model Serving workloads.
 
-    DBU/hr = gpu_dbu_rate × concurrency.
-    Concurrency source priority: dedicated column > workload_config JSON > default 4.
+    DBU/hr = gpu_dbu_rate × concurrency, matching the live /calculate/model-serving
+    endpoint and the frontend calculator. Concurrency is resolved from the
+    scale-out preset (small=4, medium=12, large=40); for custom scale-out the
+    explicit concurrency value (column > workload_config JSON) is used.
+    Defaults to small (4) with a warning when nothing is set.
     """
     gpu_type = (item.model_serving_gpu_type or 'cpu').lower()
     key = f"{cloud}:{gpu_type}"
@@ -192,13 +206,31 @@ def _calc_model_serving_dbu(item, cloud, warnings):
         warnings.append(f"Model Serving rate not found for {key}")
         return 0, warnings
     base_rate = info.get('dbu_rate', 0)
-    # Prefer dedicated column, fall back to workload_config JSON, then default 4
-    concurrency = getattr(item, 'model_serving_concurrency', None)
-    if not concurrency:
-        config = getattr(item, 'workload_config', None) or {}
-        concurrency = int(config.get('model_serving_concurrency', 4))
-    else:
+
+    config = getattr(item, 'workload_config', None) or {}
+    scale_out = (
+        getattr(item, 'model_serving_scale_out', None)
+        or config.get('model_serving_scale_out')
+        or 'small'
+    ).lower()
+
+    if scale_out == 'custom':
+        concurrency = (
+            getattr(item, 'model_serving_concurrency', None)
+            or config.get('model_serving_concurrency')
+        )
+        if not concurrency:
+            warnings.append("Model Serving custom scale-out without concurrency, using minimum 4")
+            concurrency = 4
         concurrency = int(concurrency)
+    elif scale_out in MODEL_SERVING_SCALE_OUT_PRESETS:
+        concurrency = MODEL_SERVING_SCALE_OUT_PRESETS[scale_out]
+        if not getattr(item, 'model_serving_scale_out', None) and not config.get('model_serving_scale_out'):
+            warnings.append(f"Model Serving scale-out not specified, assuming 'small' (concurrency {concurrency})")
+    else:
+        warnings.append(f"Unknown Model Serving scale-out '{scale_out}', assuming 'small' (concurrency 4)")
+        concurrency = MODEL_SERVING_SCALE_OUT_PRESETS['small']
+
     return base_rate * concurrency, warnings
 
 
@@ -214,5 +246,3 @@ def _is_serverless_workload(item) -> bool:
     if wt == 'DBSQL' and (item.dbsql_warehouse_type or '').upper() == 'SERVERLESS':
         return True
     return False
-
-
