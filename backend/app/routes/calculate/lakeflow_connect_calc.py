@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.validators import validate_cloud, validate_region, validate_tier, validate_sku_specific_discounts
 from app.services.lakebase_queries import call_calculate_line_item_costs, get_product_type_for_pricing
-from app.routes.calculate.helpers import build_sku_breakdown_serverless, build_sku_breakdown_classic
+from app.routes.calculate.helpers import build_sku_breakdown_serverless, build_sku_breakdown_classic, build_cost_params
 from app.routes.calculate.discount import (
     apply_discount_to_sku_breakdown, calculate_total_discount_summary, enhance_total_cost_with_discount,
 )
@@ -57,22 +57,18 @@ def calculate_lakeflow_connect_cost(
         if has_run_params and request.days_per_month is None:
             request.days_per_month = 30
 
-        params = {
-            "p1": "DLT", "p2": cloud_upper, "p3": request.region, "p4": tier_upper,
-            "p5": True, "p6": False, "p7": None,
-            "p8": None, "p9": None, "p10": 0,
-            "p11": "on_demand", "p12": "on_demand",
-            "p13": request.runs_per_day or 0,
-            "p14": request.avg_runtime_minutes or 0,
-            "p15": request.days_per_month or 30,
-            "p16": int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
-            "p17": "standard", "p18": (request.dlt_edition or "ADVANCED").upper(),
-            "p19": None, "p20": 1,
-            "p21": "on_demand", "p22": None,
-            "p23": 0, "p24": None, "p25": None, "p26": None,
-            "p27": "global", "p28": "all", "p29": "input_token", "p30": 0, "p31": 0, "p32": 1,
-            "p33": "NA", "p34": "NA", "p35": "NA",
-        }
+        params = build_cost_params(
+            workload_type="DLT",
+            cloud=cloud_upper,
+            region=request.region,
+            tier=tier_upper,
+            serverless_enabled=True,
+            runs_per_day=request.runs_per_day or 0,
+            avg_runtime_minutes=request.avg_runtime_minutes or 0,
+            days_per_month=request.days_per_month or 30,
+            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            dbsql_warehouse_type=(request.dlt_edition or "ADVANCED").upper(),
+        )
         pipeline_row = call_calculate_line_item_costs(db, params)
         if not pipeline_row:
             raise HTTPException(status_code=500, detail="Pipeline calculation returned no result")
@@ -96,23 +92,20 @@ def calculate_lakeflow_connect_cost(
             gateway_instance = request.gateway_instance_type or DEFAULT_GATEWAY_INSTANCES.get(cloud_upper, "i3.xlarge")
             gateway_hours = request.gateway_hours_per_month or 730  # always-on
 
-            gateway_params = {
-                "p1": "DLT", "p2": cloud_upper, "p3": request.region, "p4": tier_upper,
-                "p5": False, "p6": False, "p7": None,
-                "p8": gateway_instance, "p9": gateway_instance, "p10": 0,
-                "p11": request.gateway_pricing_tier or "on_demand",
-                "p12": request.gateway_pricing_tier or "on_demand",
-                "p13": 0, "p14": 0, "p15": 30,
-                "p16": int(gateway_hours),
-                "p17": "standard", "p18": "ADVANCED",
-                "p19": None, "p20": 1,
-                "p21": "on_demand", "p22": None,
-                "p23": 0, "p24": None, "p25": None, "p26": None,
-                "p27": "global", "p28": "all", "p29": "input_token", "p30": 0, "p31": 0, "p32": 1,
-                "p33": request.gateway_payment_option or "NA",
-                "p34": request.gateway_payment_option or "NA",
-                "p35": "NA",
-            }
+            gateway_params = build_cost_params(
+                workload_type="DLT",
+                cloud=cloud_upper,
+                region=request.region,
+                tier=tier_upper,
+                driver_node_type=gateway_instance,
+                worker_node_type=gateway_instance,
+                driver_pricing_tier=request.gateway_pricing_tier or "on_demand",
+                worker_pricing_tier=request.gateway_pricing_tier or "on_demand",
+                hours_per_month=int(gateway_hours),
+                dbsql_warehouse_type="ADVANCED",
+                driver_payment_option=request.gateway_payment_option or "NA",
+                worker_payment_option=request.gateway_payment_option or "NA",
+            )
             gateway_row = call_calculate_line_item_costs(db, gateway_params)
 
             if gateway_row:
