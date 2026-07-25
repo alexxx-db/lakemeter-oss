@@ -21,6 +21,9 @@ def make_line_item(**kwargs):
         "vector_capacity_millions": None,
         "vector_search_storage_gb": None,
         "model_serving_gpu_type": None,
+        "model_serving_scale_out": None,
+        "model_serving_concurrency": None,
+        "workload_config": None,
         "fmapi_provider": None,
         "fmapi_model": None,
         "fmapi_endpoint_type": None,
@@ -97,11 +100,12 @@ def make_dbsql_serverless_medium():
 
 
 def make_model_serving_gpu():
-    """Model Serving Medium GPU (A10G x1) — 200 hrs/month."""
+    """Model Serving Medium GPU (A10G x1, small scale-out) — 200 hrs/month."""
     return make_line_item(
         workload_type="MODEL_SERVING",
         workload_name="Model Serving GPU",
         model_serving_gpu_type="gpu_medium_a10g_1x",
+        model_serving_scale_out="small",
         hours_per_month=200,
         display_order=4,
     )
