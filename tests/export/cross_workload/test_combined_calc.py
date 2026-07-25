@@ -95,8 +95,8 @@ class TestModelServingCalc:
     def test_dbu_per_hour(self):
         item = make_model_serving_gpu()
         dbu, warnings = _calculate_dbu_per_hour(item, 'aws')
-        # gpu_medium_a10g_1x on AWS = 20.0 DBU/hr
-        assert dbu == pytest.approx(20.0, abs=0.01)
+        # gpu_medium_a10g_1x on AWS: 20.0 rate × 4 (small scale-out) = 80.0 DBU/hr
+        assert dbu == pytest.approx(80.0, abs=0.01)
         assert len(warnings) == 0, f"Unexpected warnings: {warnings}"
 
     def test_sku(self):
@@ -173,5 +173,3 @@ class TestLakebaseCalc:
 
     def test_is_serverless(self):
         assert _is_serverless_workload(make_lakebase()) is True
-
-
