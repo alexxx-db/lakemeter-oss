@@ -28,6 +28,16 @@ def _get_database_url() -> str:
     # Check for direct DATABASE_URL first (local dev)
     direct_url = os.getenv("DATABASE_URL")
     if direct_url:
+        # SQLite is not supported: the cost math lives in Lakebase SQL functions
+        # and the engine is configured with PostgreSQL-specific pooling args.
+        # Fail fast with a clear message instead of a cryptic pool error.
+        if direct_url.strip().lower().startswith("sqlite"):
+            raise Exception(
+                "SQLite is not supported. Lakemeter requires Lakebase/PostgreSQL "
+                "(the cost-calculation SQL functions run in the database). "
+                "Point DATABASE_URL at a PostgreSQL instance, e.g. "
+                "postgresql://user:pass@host:5432/dbname"
+            )
         log_info("Using DATABASE_URL environment variable for database connection")
         return direct_url
 
