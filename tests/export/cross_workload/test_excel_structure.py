@@ -154,10 +154,10 @@ class TestDbuPerHour:
         assert val == pytest.approx(8.0, abs=0.01)
 
     def test_model_serving_dbu_hr(self, ws):
-        """Model Serving GPU (A10G x1) should show 20.0 DBU/hr."""
+        """Model Serving GPU (A10G x1, small scale-out): 20.0 × 4 = 80.0 DBU/hr."""
         row = find_row_by_name(ws, 'Model Serving GPU')
         val = ws.cell(row=row, column=COL_DBU_HR).value
-        assert val == pytest.approx(20.0, abs=0.01)
+        assert val == pytest.approx(80.0, abs=0.01)  # 20.0 × 4 (small)
 
     def test_fmapi_dbu_hr_na(self, ws):
         """FMAPI token items show N/A for DBU/Hr."""
