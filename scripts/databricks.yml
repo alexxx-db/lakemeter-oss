@@ -1,6 +1,15 @@
 bundle:
   name: lakemeter-installer
 
+variables:
+  pricing_sync_pause_status:
+    description: >-
+      Schedule pause status for the pricing sync job (PAUSED or UNPAUSED).
+      Deployed PAUSED by default; enable with
+      --var="pricing_sync_pause_status=UNPAUSED" or unpause in the
+      Workflows UI.
+    default: PAUSED
+
 sync:
   include:
     - "notebooks/**"
@@ -136,6 +145,44 @@ resources:
               app_name: "{{job.parameters.app_name}}"
               instance_name: "{{job.parameters.instance_name}}"
               db_name: "{{job.parameters.db_name}}"
+          environment_key: serverless_env
+
+      environments:
+        - environment_key: serverless_env
+          spec:
+            environment_version: "5"
+
+    # ── Recurring pricing refresh ───────────────────────────────────────
+    # Reloads the shipped pricing snapshot into Lakebase monthly, so the
+    # sync_* tables pick up pricing updates shipped with new releases
+    # without re-running the full installer. Deployed PAUSED by default —
+    # enable with:
+    #   databricks bundle deploy --var="pricing_sync_pause_status=UNPAUSED"
+    # or unpause the schedule in the Workflows UI. Safe to run any time:
+    # the notebook refreshes tables via TRUNCATE + INSERT.
+    lakemeter_pricing_sync:
+      name: "Lakemeter Pricing Sync"
+      parameters:
+        - name: instance_name
+          default: "lakemeter-customer"
+        - name: db_name
+          default: "lakemeter_pricing"
+        - name: secrets_scope
+          default: "lakemeter-secrets"
+
+      schedule:
+        quartz_cron_expression: "0 0 6 1 * ?"  # 06:00 UTC on the 1st
+        timezone_id: "UTC"
+        pause_status: ${var.pricing_sync_pause_status}
+
+      tasks:
+        - task_key: reload_pricing_data
+          notebook_task:
+            notebook_path: ./notebooks/03_load_pricing_data.py
+            base_parameters:
+              instance_name: "{{job.parameters.instance_name}}"
+              db_name: "{{job.parameters.db_name}}"
+              secrets_scope: "{{job.parameters.secrets_scope}}"
           environment_key: serverless_env
 
       environments:
