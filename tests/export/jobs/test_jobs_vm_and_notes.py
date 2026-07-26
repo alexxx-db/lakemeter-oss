@@ -1,4 +1,5 @@
-"""Sprint 1 Iteration 2: VM Cost, Notes, and NaN/Zero Regression Tests
+"""
+Sprint 1 Iteration 2: VM Cost, Notes, and NaN/Zero Regression Tests
 
 Tests:
 1. VM cost calculation for classic workloads (hardcoded $0.20/$0.10 in export.py)
