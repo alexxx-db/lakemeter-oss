@@ -78,20 +78,9 @@ def _is_gated_path(nodeid: str) -> bool:
 # ---------------------------------------------------------------------------
 
 # Each entry: test nodeid prefix -> reason (track and remove when fixed).
-KNOWN_DRIFT_XFAIL = {
-    # Lakebase autoscale pricing: code applies the discounted autoscale formula
-    # (cu x nodes x dbu_per_cu_hour x 0.75 floor), tests still assert the
-    # pre-autoscale formula (cu x nodes). Tracked as a pricing-drift follow-up;
-    # needs a product decision on which formula is authoritative.
-    "tests/export/cross_workload/test_combined_calc.py::TestLakebaseCalc::test_dbu_per_hour":
-        "Lakebase autoscale pricing drift (formula changed, test stale)",
-    "tests/export/cross_workload/test_excel_structure.py::TestDbuPerHour::test_lakebase_dbu_hr":
-        "Lakebase autoscale pricing drift (formula changed, test stale)",
-    "tests/export/jobs/test_jobs_vm_and_notes.py::TestLakebaseDBUFormula::test_lakebase_backend_formula":
-        "Lakebase autoscale pricing drift (formula changed, test stale)",
-    "tests/export/jobs/test_jobs_vm_and_notes.py::TestLakebaseDBUFormula::test_lakebase_single_node":
-        "Lakebase autoscale pricing drift (formula changed, test stale)",
-}
+# (Currently empty — the Lakebase autoscale and FMAPI Google drifts have both
+# been resolved. Keep the mechanism for future quarantines.)
+KNOWN_DRIFT_XFAIL = {}
 
 
 def pytest_collection_modifyitems(config, items):
