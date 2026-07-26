@@ -91,9 +91,6 @@ KNOWN_DRIFT_XFAIL = {
         "Lakebase autoscale pricing drift (formula changed, test stale)",
     "tests/export/jobs/test_jobs_vm_and_notes.py::TestLakebaseDBUFormula::test_lakebase_single_node":
         "Lakebase autoscale pricing drift (formula changed, test stale)",
-    # FMAPI Google context-length handling drift.
-    "tests/export/fmapi_proprietary/test_fmapi_prop_edge_cases.py::TestGoogleContextLength::test_google_all_context_not_found":
-        "FMAPI Google context-length drift (tracked separately)",
 }
 
 
