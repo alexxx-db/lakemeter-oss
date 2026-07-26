@@ -60,7 +60,6 @@ def calculate_dbsql_classic_pro_cost(
             dbsql_warehouse_type=request.warehouse_type.upper(),
             dbsql_warehouse_size=request.warehouse_size,
             dbsql_vm_pricing_tier=request.driver_pricing_tier,
-            vector_search_mode=request.warehouse_size,
             driver_payment_option=request.driver_payment_option or "NA",
             worker_payment_option=request.worker_payment_option or "NA",
         )
@@ -164,7 +163,6 @@ def calculate_dbsql_serverless_cost(
             hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
             dbsql_warehouse_type="SERVERLESS",
             dbsql_warehouse_size=request.warehouse_size,
-            vector_search_mode=request.warehouse_size,
         )
         row = call_calculate_line_item_costs(db, params)
         if not row:
