@@ -11,7 +11,7 @@ from app.services.validators import (
     validate_sku_specific_discounts,
 )
 from app.services.lakebase_queries import call_calculate_line_item_costs, get_product_type_for_pricing
-from app.routes.calculate.helpers import build_sku_breakdown_classic, build_sku_breakdown_serverless
+from app.routes.calculate.helpers import build_sku_breakdown_classic, build_sku_breakdown_serverless, build_cost_params
 from app.routes.calculate.discount import (
     apply_discount_to_sku_breakdown, calculate_total_discount_summary, enhance_total_cost_with_discount,
 )
@@ -48,23 +48,22 @@ def calculate_dbsql_classic_pro_cost(
         raise HTTPException(status_code=400, detail=error["error"])
 
     try:
-        params = {
-            "p1": "DBSQL", "p2": request.cloud.upper(), "p3": request.region, "p4": request.tier.upper(),
-            "p5": False, "p6": False, "p7": None,
-            "p8": None, "p9": None, "p10": 0,
-            "p11": request.driver_pricing_tier, "p12": request.worker_pricing_tier,
-            "p13": 0, "p14": 0,
-            "p15": request.days_per_month or 30,
-            "p16": int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
-            "p17": "standard",
-            "p18": request.warehouse_type.upper(),
-            "p19": request.warehouse_size, "p20": 1,
-            "p21": request.driver_pricing_tier, "p22": request.warehouse_size,
-            "p23": 0, "p24": None, "p25": None, "p26": None,
-            "p27": "global", "p28": "all", "p29": "input_token", "p30": 0, "p31": 0, "p32": 1,
-            "p33": request.driver_payment_option or "NA",
-            "p34": request.worker_payment_option or "NA", "p35": "NA",
-        }
+        params = build_cost_params(
+            workload_type="DBSQL",
+            cloud=request.cloud,
+            region=request.region,
+            tier=request.tier,
+            driver_pricing_tier=request.driver_pricing_tier,
+            worker_pricing_tier=request.worker_pricing_tier,
+            days_per_month=request.days_per_month or 30,
+            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            dbsql_warehouse_type=request.warehouse_type.upper(),
+            dbsql_warehouse_size=request.warehouse_size,
+            dbsql_vm_pricing_tier=request.driver_pricing_tier,
+            vector_search_mode=request.warehouse_size,
+            driver_payment_option=request.driver_payment_option or "NA",
+            worker_payment_option=request.worker_payment_option or "NA",
+        )
         row = call_calculate_line_item_costs(db, params)
         if not row:
             raise HTTPException(status_code=500, detail="No calculation result returned")
@@ -155,18 +154,18 @@ def calculate_dbsql_serverless_cost(
         raise HTTPException(status_code=400, detail=error["error"])
 
     try:
-        params = {
-            "p1": "DBSQL", "p2": request.cloud.upper(), "p3": request.region, "p4": request.tier.upper(),
-            "p5": True, "p6": False, "p7": None, "p8": None, "p9": None, "p10": 0,
-            "p11": "on_demand", "p12": "on_demand",
-            "p13": 0, "p14": 0, "p15": request.days_per_month or 30,
-            "p16": int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
-            "p17": "standard", "p18": "SERVERLESS", "p19": request.warehouse_size, "p20": 1,
-            "p21": "on_demand", "p22": request.warehouse_size,
-            "p23": 0, "p24": None, "p25": None, "p26": None,
-            "p27": "global", "p28": "all", "p29": "input_token", "p30": 0, "p31": 0, "p32": 1,
-            "p33": "NA", "p34": "NA", "p35": "NA",
-        }
+        params = build_cost_params(
+            workload_type="DBSQL",
+            cloud=request.cloud,
+            region=request.region,
+            tier=request.tier,
+            serverless_enabled=True,
+            days_per_month=request.days_per_month or 30,
+            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            dbsql_warehouse_type="SERVERLESS",
+            dbsql_warehouse_size=request.warehouse_size,
+            vector_search_mode=request.warehouse_size,
+        )
         row = call_calculate_line_item_costs(db, params)
         if not row:
             raise HTTPException(status_code=500, detail="No calculation result returned")
