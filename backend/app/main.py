@@ -40,6 +40,11 @@ app = FastAPI(
 # Log startup info
 log_info(f"Starting Lakemeter API (environment: {settings.environment})")
 
+# Opt-in anonymous telemetry (no-op unless TELEMETRY_ENABLED=true and
+# TELEMETRY_ENDPOINT are set — see app/telemetry.py for guarantees).
+from app import telemetry
+telemetry.track_event("app_started", {"environment": settings.environment})
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
