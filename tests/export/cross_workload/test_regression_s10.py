@@ -30,7 +30,7 @@ class TestBugS10001ModelServingGpu:
         item = make_model_serving_gpu()
         dbu, warnings = _calculate_dbu_per_hour(item, 'aws')
         assert dbu > 0, f"Model Serving GPU returned 0 DBU/hr: {warnings}"
-        assert dbu == pytest.approx(20.0, abs=0.01)
+        assert dbu == pytest.approx(80.0, abs=0.01)  # 20.0 × 4 (small)
 
     def test_no_pricing_warnings(self):
         """Model Serving GPU resolves without fallback warnings."""

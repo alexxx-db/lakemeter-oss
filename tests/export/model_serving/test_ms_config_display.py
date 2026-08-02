@@ -44,32 +44,59 @@ class TestGPUDisplayNames:
 
 
 class TestModelServingDetails:
-    """AC-24: Config details show "GPU: {label}" format."""
+    """AC-24: Config details show "GPU: {label}" and scale-out/concurrency."""
 
     def test_cpu_details(self):
         item = make_line_item(model_serving_gpu_type='cpu')
         details = _model_serving_details(item)
-        assert details == ["GPU: CPU"]
+        assert details == ["GPU: CPU", "Scale-Out: Small (4 concurrency)"]
 
     def test_t4_details(self):
         item = make_line_item(model_serving_gpu_type='gpu_small_t4')
         details = _model_serving_details(item)
-        assert details == ["GPU: Small (T4)"]
+        assert details == ["GPU: Small (T4)", "Scale-Out: Small (4 concurrency)"]
 
     def test_a100_details(self):
         item = make_line_item(model_serving_gpu_type='gpu_xlarge_a100_80gb_8x')
         details = _model_serving_details(item)
-        assert details == ["GPU: XLarge (A100 80GB 8x)"]
+        assert details == ["GPU: XLarge (A100 80GB 8x)", "Scale-Out: Small (4 concurrency)"]
+
+    def test_medium_preset_shows_12_concurrency(self):
+        item = make_line_item(model_serving_gpu_type='cpu', model_serving_scale_out='medium')
+        details = _model_serving_details(item)
+        assert details == ["GPU: CPU", "Scale-Out: Medium (12 concurrency)"]
+
+    def test_large_preset_shows_40_concurrency(self):
+        item = make_line_item(model_serving_gpu_type='cpu', model_serving_scale_out='large')
+        details = _model_serving_details(item)
+        assert details == ["GPU: CPU", "Scale-Out: Large (40 concurrency)"]
+
+    def test_custom_shows_explicit_concurrency(self):
+        item = make_line_item(
+            model_serving_gpu_type='cpu', model_serving_scale_out='custom',
+            model_serving_concurrency=16,
+        )
+        details = _model_serving_details(item)
+        assert details == ["GPU: CPU", "Scale-Out: Custom (16 concurrency)"]
+
+    def test_preset_ignores_stale_concurrency_column(self):
+        """Preset scale-out drives concurrency, matching the frontend calculator."""
+        item = make_line_item(
+            model_serving_gpu_type='cpu', model_serving_scale_out='medium',
+            model_serving_concurrency=99,
+        )
+        details = _model_serving_details(item)
+        assert details == ["GPU: CPU", "Scale-Out: Medium (12 concurrency)"]
 
     def test_none_gpu_no_details(self):
         item = make_line_item(model_serving_gpu_type=None)
         details = _model_serving_details(item)
-        assert details == []
+        assert details == ["Scale-Out: Small (4 concurrency)"]
 
     def test_unknown_gpu_uses_raw_name(self):
         item = make_line_item(model_serving_gpu_type='some_new_gpu')
         details = _model_serving_details(item)
-        assert details == ["GPU: some_new_gpu"]
+        assert details == ["GPU: some_new_gpu", "Scale-Out: Small (4 concurrency)"]
 
 
 class TestWorkloadDisplayName:
@@ -88,6 +115,7 @@ class TestWorkloadConfigDetails:
         assert 'GPU: Medium (A10G 1x)' in config
 
     def test_config_no_gpu(self):
+        """Without a GPU type only the scale-out line is shown."""
         item = make_line_item(model_serving_gpu_type=None)
         config = _get_workload_config_details(item)
-        assert config == '-'
+        assert config == "Scale-Out: Small (4 concurrency)"
