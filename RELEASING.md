@@ -22,7 +22,39 @@ python scripts/update_version.py 0.1.0
 
 The changelog should still be reviewed and edited by hand for human-readable release notes.
 
-## Standard Release Flow
+## Version Sync Guard
+
+`tests/test_version_sync.py` pins every source above to `VERSION` and
+requires a dated `## vX.Y.Z` changelog entry matching it. It runs in CI
+and again in the release workflow, so mismatched metadata can never
+reach a release. Between releases, `VERSION` on `main` stays at the last
+released version; bump it only as part of release prep.
+
+```bash
+python -m pytest tests/test_version_sync.py -q
+```
+
+## Automated Release Flow (tag-driven)
+
+Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which:
+
+1. Runs the version-sync guard.
+2. Verifies the tag matches `VERSION`.
+3. Extracts the tag's section from `docs-site/docs/changelog.md` and
+   publishes a GitHub Release with those notes.
+
+Release prep therefore reduces to:
+
+```bash
+python scripts/update_version.py <version>
+# edit docs-site/docs/changelog.md — add the dated <version> section
+python -m pytest tests/test_version_sync.py -q
+git add VERSION frontend docs-site && git commit -m "Release v<version>"
+git tag -a v<version> -m "Lakemeter OSS v<version>"
+git push origin main v<version>
+```
+
+## Manual Release Flow (fallback)
 
 1. Update version metadata:
 
@@ -69,4 +101,3 @@ The changelog should still be reviewed and edited by hand for human-readable rel
 - Patch (`v0.1.1`): bug fixes, pricing data updates, documentation fixes.
 - Minor (`v0.2.0`): new workload support, new user-facing features, installer improvements.
 - Major (`v1.0.0`): stable API/installer contract or breaking changes.
-
