@@ -24,6 +24,7 @@ This page lists everything the Lakemeter installer creates in your Databricks wo
 | App resources | 5 environment variable bindings | App config |
 | Lakebase role | App Service Principal | Database role |
 | PostgreSQL role | `lakemeter_sync_role` | Password-auth role |
+| Scheduled job | `Lakemeter Pricing Sync` | Monthly pricing refresh (deployed paused) |
 
 ---
 
@@ -100,10 +101,13 @@ databricks api delete /api/2.0/database/instances/lakemeter-customer --profile <
 # 3. Delete the secrets scope
 databricks secrets delete-scope lakemeter-secrets --profile <profile>
 
-# 4. Remove bundle files (optional)
+# 4. Delete the pricing sync job (find the job ID in the Workflows UI)
+databricks jobs delete <job-id> --profile <profile>
+
+# 5. Remove bundle files (optional)
 databricks workspace delete -r /Workspace/Users/{user}/.bundle/lakemeter-installer --profile <profile>
 
-# 5. Remove app source (optional)
+# 6. Remove app source (optional)
 databricks workspace delete -r /Workspace/Users/{user}/apps/lakemeter --profile <profile>
 ```
 

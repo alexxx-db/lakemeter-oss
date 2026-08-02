@@ -221,3 +221,31 @@ This means you can safely re-run the installer to:
 - Update pricing data after a new release
 - Fix a broken deployment
 - Add newly created stored functions
+
+## Scheduled Pricing Sync
+
+The installer bundle also deploys a **Lakemeter Pricing Sync** job — a
+monthly refresh (06:00 UTC on the 1st) that reloads the pricing CSV
+snapshot shipped with your installed version into the Lakebase `sync_*`
+tables, using the same idempotent `TRUNCATE + INSERT` load as the
+installer itself.
+
+The schedule is deployed **paused** by default. Enable it either at
+deploy time:
+
+```bash
+databricks bundle deploy --var="pricing_sync_pause_status=UNPAUSED"
+```
+
+or afterwards in the **Workflows** UI (unpause the job schedule).
+
+How this fits the release cadence:
+
+1. A new Lakemeter release ships refreshed pricing data (patch releases
+   include pricing updates — see [Releasing](https://github.com/alexxx-db/lakemeter-oss/blob/main/RELEASING.md)).
+2. You deploy the new version (re-run the installer or the day-2 bundle).
+3. The next scheduled run — or a manual **Run now** — refreshes the
+   Lakebase tables to match, with no app downtime.
+
+If you prefer to control refresh timing yourself, leave the schedule
+paused and re-run the installer after each upgrade instead.
