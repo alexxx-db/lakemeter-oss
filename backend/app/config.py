@@ -1,8 +1,9 @@
 """Application configuration settings."""
 import os
 import logging
+import secrets
 from urllib.parse import quote_plus
-from pydantic import ConfigDict
+from pydantic import ConfigDict, model_validator
 from pydantic_settings import BaseSettings
 from typing import List, Optional
 
@@ -36,7 +37,11 @@ class Settings(BaseSettings):
     database_url: Optional[str] = None
     
     # JWT Authentication
-    jwt_secret_key: str = "your-secret-key-change-in-production"
+    # No default secret: in production the value MUST be provided via the
+    # JWT_SECRET_KEY environment variable (sourced from a Databricks secret
+    # scope, e.g. `valueFrom: lakemeter-jwt-secret` in app.yaml). A local-dev
+    # fallback is generated per-process so nothing predictable is shipped.
+    jwt_secret_key: Optional[str] = None
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
@@ -66,6 +71,28 @@ class Settings(BaseSettings):
         return self.environment.lower() == "local"
     
     model_config = ConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
+
+    @model_validator(mode="after")
+    def _resolve_jwt_secret(self) -> "Settings":
+        """Require an explicit JWT secret in production; generate an ephemeral
+        per-process secret for local development so no predictable value ships."""
+        if self.jwt_secret_key:
+            if self.is_production and self.jwt_secret_key == "your-secret-key-change-in-production":
+                raise ValueError(
+                    "JWT_SECRET_KEY is set to the old insecure placeholder. "
+                    "Generate a real secret and store it in a Databricks secret scope."
+                )
+            return self
+        if self.is_production:
+            raise ValueError(
+                "JWT_SECRET_KEY must be set when ENVIRONMENT=production. "
+                "Store it in a Databricks secret scope and inject it via app.yaml, e.g.:\n"
+                "  - name: JWT_SECRET_KEY\n"
+                "    valueFrom: lakemeter-jwt-secret"
+            )
+        # Local/development: ephemeral per-process secret (tokens invalidate on restart).
+        self.jwt_secret_key = secrets.token_urlsafe(32)
+        return self
 
 
 settings = Settings()
