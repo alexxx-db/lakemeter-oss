@@ -67,7 +67,7 @@ def calculate_lakeflow_connect_cost(
             avg_runtime_minutes=request.avg_runtime_minutes or 0,
             days_per_month=request.days_per_month or 30,
             hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
-            dbsql_warehouse_type=(request.dlt_edition or "ADVANCED").upper(),
+            dlt_edition=(request.dlt_edition or "ADVANCED").upper(),
         )
         pipeline_row = call_calculate_line_item_costs(db, params)
         if not pipeline_row:
@@ -102,7 +102,7 @@ def calculate_lakeflow_connect_cost(
                 driver_pricing_tier=request.gateway_pricing_tier or "on_demand",
                 worker_pricing_tier=request.gateway_pricing_tier or "on_demand",
                 hours_per_month=int(gateway_hours),
-                dbsql_warehouse_type="ADVANCED",
+                dlt_edition="ADVANCED",
                 driver_payment_option=request.gateway_payment_option or "NA",
                 worker_payment_option=request.gateway_payment_option or "NA",
             )
