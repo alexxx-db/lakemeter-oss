@@ -271,26 +271,31 @@ class TestNoNaNOrZeroCosts:
 # ============================================================
 
 class TestLakebaseDBUFormula:
-    """Lakebase DBU/hr = CU × HA nodes.
-    BUG-S1-6 fixed: backend previously used cu×nodes×2, now aligned with frontend.
+    """Lakebase DBU/hr per the published Always-On pricing model (May 2026).
+
+    With scale-to-zero disabled (the default for these fixtures), the baseline
+    (min CU) bills at a 25% lower rate after 24h continuous use; HA instances
+    get the discount automatically. Formula:
+        DBU/hr = min_cu × dbu_per_cu_hour × (1 - 25%) × ha_nodes
+    AWS Premium dbu_per_cu_hour = 0.230, so 4 CU × 2 nodes = 1.38 DBU/hr.
     """
 
     def test_lakebase_backend_formula(self):
-        """Backend: DBU/hr = CU × nodes (fixed — was cu×nodes×2)."""
+        """Backend: DBU/hr = cu × nodes × 0.230 × 0.75 (Always-On baseline)."""
         item = make_line_item(
             workload_type="LAKEBASE",
             lakebase_cu=4, lakebase_ha_nodes=2, lakebase_storage_gb=100,
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        # Correct formula: 4 × 2 = 8
-        assert dbu_hr == pytest.approx(8.0), \
-            f"Backend Lakebase DBU/hr should be cu×nodes = 8, got {dbu_hr}"
+        # 4 × 0.230 × 0.75 × 2 = 1.38
+        assert dbu_hr == pytest.approx(1.38), \
+            f"Backend Lakebase DBU/hr should be cu×nodes×rate×0.75 = 1.38, got {dbu_hr}"
 
     def test_lakebase_single_node(self):
-        """0.5 CU × 1 node = 0.5 DBU/hr."""
+        """0.5 CU × 1 node × 0.230 × 0.75 = 0.08625 DBU/hr."""
         item = make_line_item(
             workload_type="LAKEBASE",
             lakebase_cu=0.5, lakebase_ha_nodes=1,
         )
         dbu_hr, _ = _calculate_dbu_per_hour(item, "aws")
-        assert dbu_hr == pytest.approx(0.5)
+        assert dbu_hr == pytest.approx(0.08625)

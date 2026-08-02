@@ -159,13 +159,17 @@ class TestVectorSearchCalc:
 
 
 class TestLakebaseCalc:
-    """AC-2: Lakebase 4 CU, 2 HA nodes calculation."""
+    """AC-2: Lakebase 4 CU, 2 HA nodes — published Always-On baseline pricing.
+
+    min_cu × dbu_per_cu_hour × 0.75 (25% Always-On baseline discount)
+    × nodes = 4 × 0.230 × 0.75 × 2 = 1.38 DBU/hr.
+    """
 
     def test_dbu_per_hour(self):
         item = make_lakebase()
         dbu, warnings = _calculate_dbu_per_hour(item, 'aws')
-        # 4 CU * 2 nodes = 8 DBU/hr
-        assert dbu == pytest.approx(8.0, abs=0.01)
+        # 4 CU × 2 nodes × 0.230 × 0.75 = 1.38 DBU/hr
+        assert dbu == pytest.approx(1.38, abs=0.01)
 
     def test_sku(self):
         item = make_lakebase()
