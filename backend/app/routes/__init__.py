@@ -7,6 +7,7 @@ from app.routes.export import router as export_router
 from app.routes.vm_pricing import router as vm_pricing_router
 from app.routes.calculate import router as calculate_router
 from app.routes.reference import router as reference_router
+from app.routes.health import router as health_router
 
 __all__ = [
     "estimates_router",
@@ -17,6 +18,5 @@ __all__ = [
     "vm_pricing_router",
     "calculate_router",
     "reference_router",
+    "health_router",
 ]
-
-

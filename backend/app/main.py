@@ -17,7 +17,8 @@ from app.routes import (
     export_router,
     vm_pricing_router,
     calculate_router,
-    reference_router
+    reference_router,
+    health_router
 )
 from app.routes.chat import router as chat_router
 
@@ -58,6 +59,9 @@ app.include_router(vm_pricing_router, prefix="/api/v1")
 app.include_router(calculate_router, prefix="/api/v1")
 app.include_router(reference_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
+# Readiness and diagnostics carry their own full paths (/health/ready,
+# /api/v1/diagnostics) — no prefix.
+app.include_router(health_router)
 
 
 @app.get("/api")

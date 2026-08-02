@@ -1,5 +1,6 @@
 """Application configuration settings."""
 import os
+import json
 import logging
 import secrets
 from urllib.parse import quote_plus
@@ -16,6 +17,10 @@ class Settings(BaseSettings):
     
     # Log level: DEBUG, INFO, WARNING, ERROR
     log_level: str = "INFO"
+
+    # Log format: "text" (default, human-readable) or "json" (structured,
+    # one JSON object per line — recommended for production log aggregation)
+    log_format: str = "text"
     
     # Lakebase Database Configuration
     db_host: str = ""
@@ -102,24 +107,50 @@ settings = Settings()
 # Logging Setup
 # =============================================================================
 
+class JsonFormatter(logging.Formatter):
+    """Structured JSON log formatter — one JSON object per line.
+
+    Fields: timestamp (ISO 8601 UTC), level, logger, message, plus
+    exception/stack info when present. No third-party dependencies.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        from datetime import datetime, timezone
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        if record.stack_info:
+            payload["stack"] = self.formatStack(record.stack_info)
+        return json.dumps(payload, default=str)
+
+
 def setup_logging():
     """Configure logging based on environment."""
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    
+
     if settings.is_production:
-        # Production: minimal logging, only warnings and errors
-        logging.basicConfig(
-            level=logging.WARNING,
-            format=log_format
-        )
+        log_level = logging.WARNING
     else:
         # Local/Development: verbose logging
         log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
-        logging.basicConfig(
-            level=log_level,
-            format=log_format
-        )
-    
+
+    if settings.log_format.lower() == "json":
+        handler = logging.StreamHandler()
+        handler.setFormatter(JsonFormatter())
+        root = logging.getLogger()
+        if not root.handlers:
+            root.handlers.append(handler)
+        else:
+            root.handlers[0].setFormatter(JsonFormatter())
+        root.setLevel(log_level)
+    else:
+        logging.basicConfig(level=log_level, format=log_format)
+
     # Suppress noisy third-party loggers in production
     if settings.is_production:
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
