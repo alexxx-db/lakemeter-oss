@@ -115,6 +115,7 @@ def make_ms_cpu():
 def make_ms_gpu_a10g():
     return make_item(workload_type="MODEL_SERVING", workload_name="MS A10G",
                      model_serving_gpu_type="gpu_medium_a10g_1x",
+                     model_serving_scale_out="small",
                      hours_per_month=200)
 
 

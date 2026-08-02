@@ -73,9 +73,15 @@ def fe_vector_search_storage_cost(*, storage_gb, units_used):
     return billable_gb * price_per_gb
 
 
-def fe_model_serving_dbu_per_hour(*, gpu_dbu_rate):
-    """Frontend Model Serving DBU/hr (direct rate lookup)."""
-    return gpu_dbu_rate
+def fe_model_serving_dbu_per_hour(*, gpu_dbu_rate, scale_out='small', concurrency=None):
+    """Frontend Model Serving DBU/hr (matches costCalculation.ts).
+
+    DBU/hr = gpu_dbu_rate × concurrency. Presets: small=4, medium=12, large=40;
+    custom uses the explicit concurrency (default 4).
+    """
+    presets = {'small': 4, 'medium': 12, 'large': 40}
+    resolved = (concurrency or 4) if scale_out == 'custom' else presets.get(scale_out, 4)
+    return gpu_dbu_rate * resolved
 
 
 def fe_fmapi_token_cost(*, quantity_millions, dbu_per_million, dbu_price):

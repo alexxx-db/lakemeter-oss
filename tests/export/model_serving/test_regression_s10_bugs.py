@@ -41,10 +41,11 @@ class TestBugS10001InvalidGpuType:
         assert len(warnings) > 0, "Expected warning for invalid gpu_medium"
         assert any('gpu_medium' in w for w in warnings)
 
-    def test_valid_gpu_medium_a10g_1x_returns_20(self):
-        item = make_model_serving_gpu()  # uses gpu_medium_a10g_1x
+    def test_valid_gpu_medium_a10g_1x_returns_80(self):
+        """gpu_medium_a10g_1x at small scale-out: 20.0 rate × 4 concurrency."""
+        item = make_model_serving_gpu()  # uses gpu_medium_a10g_1x, small scale-out
         dbu, warnings = _calculate_dbu_per_hour(item, 'aws')
-        assert dbu == pytest.approx(20.0, abs=0.01)
+        assert dbu == pytest.approx(80.0, abs=0.01)
         assert len(warnings) == 0, f"Unexpected warnings: {warnings}"
 
 
