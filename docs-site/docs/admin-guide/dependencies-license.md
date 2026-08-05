@@ -17,8 +17,6 @@ title: Dependencies & License
 | pydantic-settings | Settings management |
 | python-multipart | Form data parsing |
 | xlsxwriter | Excel export |
-| python-jose | JWT token handling |
-| passlib | Password hashing |
 | python-dotenv | Environment variable loading |
 | cachetools | In-memory caching |
 | databricks-sdk | Databricks API client |

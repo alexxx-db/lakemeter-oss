@@ -47,7 +47,7 @@ Use the [workload sizing catalog](/user-guide/workloads) to choose a guide. For 
 ## Quick start
 
 1. Open Lakemeter and click **New Estimate**
-2. Choose your cloud (AWS/Azure/GCP), region, and pricing tier
+2. Choose your cloud (AWS/Azure/GCP), region, and pricing tier — estimates support all three clouds; install the app in an AWS or Azure workspace
 3. Add workloads and configure their parameters
 4. Review the cost breakdown
 5. Export to Excel

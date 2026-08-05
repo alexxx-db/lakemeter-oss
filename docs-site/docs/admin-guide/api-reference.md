@@ -257,6 +257,7 @@ All calculation endpoints accept workload parameters and return cost breakdowns.
 | `POST /api/v1/calculate/databricks-apps` | Databricks Apps |
 | `POST /api/v1/calculate/ai-parse` | AI Parse (Document AI) |
 | `POST /api/v1/calculate/shutterstock-imageai` | Shutterstock ImageAI |
+| `POST /api/v1/calculate/lakeflow-connect` | Lakeflow Connect |
 
 ### Example: Jobs Classic
 
@@ -434,32 +435,28 @@ Accepts or rejects a workload proposed by the AI assistant.
 
 ---
 
+## Pricing Freshness
+
+```
+GET /api/v1/pricing/freshness
+```
+
+Returns when Lakebase pricing tables were last loaded (`loaded_at`, `source`, `total_rows`).
+Use this to surface a “prices as of” stamp in the UI. Bundled CSV snapshots are planning guidance — verify against official Databricks list prices.
+
+---
+
 ## Users
 
 **Router prefix:** `/api/v1/users`
+
+Users are provisioned automatically from Databricks Apps SSO (`X-Forwarded-Email`).
+All user routes require authentication. There is no public list or create endpoint.
 
 ### Get Current User
 
 ```
 GET /api/v1/users/me
-```
-
-### List Users
-
-```
-GET /api/v1/users?skip=0&limit=100
-```
-
-### Create User
-
-```
-POST /api/v1/users/
-```
-
-### Get User by ID
-
-```
-GET /api/v1/users/{user_id}
 ```
 
 ### Get User by Email
@@ -468,11 +465,23 @@ GET /api/v1/users/{user_id}
 GET /api/v1/users/email/{email}
 ```
 
+Authenticated lookup used for sharing flows.
+
+### Get User by ID
+
+```
+GET /api/v1/users/{user_id}
+```
+
+Callers may only read themselves unless they have the `admin` role.
+
 ### Update User
 
 ```
 PUT /api/v1/users/{user_id}
 ```
+
+Non-admins may update only their own `full_name`. Role / `is_active` changes require `admin`.
 
 ---
 
@@ -486,7 +495,7 @@ PUT /api/v1/users/{user_id}
 GET /api/v1/workload-types
 ```
 
-Returns all 14 workload types with their UI configuration flags.
+Returns all curated workload types (including Lakeflow Connect) with their UI configuration flags.
 
 ### Get Workload Type
 
@@ -620,37 +629,16 @@ GET /api/v1/vm-pricing/payment-options
 
 These endpoints are available for diagnosing configuration issues:
 
-### Debug Headers
+### Debug endpoints (non-production only)
+
+Debug routes under `/api/v1/debug/*` are registered **only when `ENVIRONMENT` is not `production`**. Production installs use `/api/v1/system/health`, `/api/v1/system/version`, and `databricks apps logs` instead.
 
 ```
 GET /api/v1/debug/headers
-```
-
-Returns all HTTP headers received by the app (useful for verifying SSO headers from Databricks Apps proxy).
-
-### Debug External API
-
-```
 GET /api/v1/debug/external-api
-```
-
-Tests external API authentication. Returns token availability status and attempts a test calculation.
-
-### Debug Database
-
-```
 GET /api/v1/debug/database
-```
-
-Returns database connection status, environment variable values (passwords redacted), token manager status, and connectivity test result.
-
-### Refresh Database Connection
-
-```
 POST /api/v1/debug/database/refresh
 ```
-
-Forces a database engine refresh with a new OAuth token.
 
 ---
 

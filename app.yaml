@@ -40,11 +40,5 @@ env:
   - name: "CLAUDE_MODEL_ENDPOINT"
     valueFrom: "lakemeter-claude-endpoint"
 
-  # JWT signing secret. Required when ENVIRONMENT=production — the app refuses
-  # to start without it. Create the secret before deploying:
-  #   databricks secrets create-scope lakemeter-credentials
-  #   databricks secrets put-secret lakemeter-credentials lakemeter-jwt-secret \
-  #     --string-value "$(openssl rand -base64 32)"
-  # then expose it to the app as a secret-backed app resource and uncomment:
-  # - name: "JWT_SECRET_KEY"
-  #   valueFrom: "lakemeter-jwt-secret"
+  # Auth: Databricks Apps SSO injects X-Forwarded-Email / X-Forwarded-User.
+  # No application-issued JWT secret is required.

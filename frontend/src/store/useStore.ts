@@ -47,7 +47,7 @@ const _vmCostInflight: Record<string, Promise<any>> = {}
 // =============================================================================
 // LOCAL STORAGE CACHE UTILITIES
 // =============================================================================
-const CACHE_VERSION = 'v7'  // Bumped - added DATABRICKS_APPS, AI_PARSE, SHUTTERSTOCK_IMAGEAI; removed LAKEFLOW_CONNECT
+const CACHE_VERSION = 'v8'  // Bumped - restored LAKEFLOW_CONNECT as first-class workload
 const CACHE_KEY = `lakemeter_reference_data_${CACHE_VERSION}`
 const CACHE_TTL = 4 * 60 * 60 * 1000 // 4 hours in milliseconds (reduced from 24h)
 
@@ -365,6 +365,7 @@ export const useStore = create<Store>((set, get) => ({
     { workload_type: 'DATABRICKS_APPS', display_name: 'Databricks Apps', description: 'Managed app hosting', sku_product_type_standard: 'ALL_PURPOSE_SERVERLESS_COMPUTE', show_usage_hours: true },
     { workload_type: 'AI_PARSE', display_name: 'AI Parse (Document AI)', description: 'Document parsing and extraction', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE' },
     { workload_type: 'SHUTTERSTOCK_IMAGEAI', display_name: 'Shutterstock ImageAI', description: 'AI image generation', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE' },
+    { workload_type: 'LAKEFLOW_CONNECT', display_name: 'Lakeflow Connect', description: 'Managed ingestion with optional gateway', sku_product_type_serverless: 'DELTA_LIVE_TABLES_SERVERLESS', show_usage_runs: true, show_usage_hours: true },
   ] as WorkloadType[],
   // Use static data as defaults - instant display, no waiting for API
   cloudProviders: STATIC_CLOUD_PROVIDERS,
@@ -1515,6 +1516,16 @@ export const useStore = create<Store>((set, get) => ({
           result = await api.calculateShutterstockImageAI({
             ...baseParams,
             images_per_month: lineItem.shutterstock_images || 100,
+          })
+          break
+
+        case 'LAKEFLOW_CONNECT':
+          result = await api.calculateLakeflowConnect({
+            ...baseParams,
+            dlt_edition: lineItem.dlt_edition || 'ADVANCED',
+            gateway_enabled: Boolean(lineItem.lakeflow_connect_gateway_enabled),
+            gateway_instance_type: lineItem.lakeflow_connect_gateway_instance || undefined,
+            ...usageParams,
           })
           break
       }

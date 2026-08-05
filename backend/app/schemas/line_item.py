@@ -7,23 +7,59 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 
 def map_ai_parse_api_fields(data: dict, provided_fields: set[str]) -> dict:
-    """Map the public AI Parse fields onto existing database columns."""
+    """Map the public AI Parse fields onto storage columns while keeping UI columns."""
     if "ai_parse_mode" in provided_fields:
         mode = data.get("ai_parse_mode")
+        storage_mode = mode
         if isinstance(mode, str):
-            mode = mode.lower()
-            if mode in {"dbu", "pages"}:
-                mode = f"{mode}_based"
-        data["ai_parse_calculation_method"] = mode
-    data.pop("ai_parse_mode", None)
+            mode_l = mode.lower()
+            data["ai_parse_mode"] = mode_l.removesuffix("_based")
+            if mode_l in {"dbu", "pages"}:
+                storage_mode = f"{mode_l}_based"
+            elif mode_l in {"dbu_based", "pages_based"}:
+                storage_mode = mode_l
+        data["ai_parse_calculation_method"] = storage_mode
 
     if "ai_parse_pages_thousands" in provided_fields:
         pages_thousands = data.get("ai_parse_pages_thousands")
         data["ai_parse_num_pages"] = (
             pages_thousands * 1000 if pages_thousands is not None else None
         )
-    data.pop("ai_parse_pages_thousands", None)
 
+    return data
+
+
+def map_shutterstock_fields(data: dict, provided_fields: set[str]) -> dict:
+    """Keep shutterstock_images (UI) and shutterstock_imageai_num_images (legacy) aligned."""
+    if "shutterstock_images" in provided_fields:
+        images = data.get("shutterstock_images")
+        if "shutterstock_imageai_num_images" not in provided_fields:
+            data["shutterstock_imageai_num_images"] = images
+    elif "shutterstock_imageai_num_images" in provided_fields:
+        images = data.get("shutterstock_imageai_num_images")
+        if "shutterstock_images" not in provided_fields:
+            data["shutterstock_images"] = images
+    return data
+
+
+def map_lakeflow_connect_fields(data: dict, provided_fields: set[str]) -> dict:
+    """Keep simplified Connect UI fields and legacy gateway instance column aligned."""
+    if "lakeflow_connect_gateway_instance" in provided_fields:
+        instance = data.get("lakeflow_connect_gateway_instance")
+        if "lakeflow_connect_gateway_instance_type" not in provided_fields:
+            data["lakeflow_connect_gateway_instance_type"] = instance
+    elif "lakeflow_connect_gateway_instance_type" in provided_fields:
+        instance = data.get("lakeflow_connect_gateway_instance_type")
+        if "lakeflow_connect_gateway_instance" not in provided_fields:
+            data["lakeflow_connect_gateway_instance"] = instance
+    return data
+
+
+def map_line_item_api_fields(data: dict, provided_fields: set[str]) -> dict:
+    """Apply all public API ↔ storage column mappings for line items."""
+    data = map_ai_parse_api_fields(data, provided_fields)
+    data = map_shutterstock_fields(data, provided_fields)
+    data = map_lakeflow_connect_fields(data, provided_fields)
     return data
 
 
@@ -88,6 +124,7 @@ class LineItemBase(BaseModel):
 
     # Shutterstock ImageAI Configuration
     shutterstock_imageai_num_images: Optional[int] = None
+    shutterstock_images: Optional[int] = None
 
     # Databricks Support Configuration
     databricks_support_tier: Optional[str] = None
@@ -106,12 +143,17 @@ class LineItemBase(BaseModel):
     lakeflow_connect_gateway_instance_type: Optional[str] = None
     lakeflow_connect_gateway_num_workers: Optional[int] = None
     lakeflow_connect_gateway_hours_per_month: Optional[float] = None
+    lakeflow_connect_pipeline_mode: Optional[str] = None
+    lakeflow_connect_gateway_enabled: Optional[bool] = None
+    lakeflow_connect_gateway_instance: Optional[str] = None
 
     # Lakebase Configuration
     lakebase_cu: Optional[float] = None
     lakebase_storage_gb: Optional[int] = None
     lakebase_ha_nodes: Optional[int] = None
     lakebase_backup_retention_days: Optional[int] = None
+    lakebase_pitr_gb: Optional[int] = None
+    lakebase_snapshot_gb: Optional[int] = None
 
     # Usage Configuration
     runs_per_day: Optional[int] = None
@@ -200,6 +242,7 @@ class LineItemUpdate(BaseModel):
 
     # Shutterstock ImageAI Configuration
     shutterstock_imageai_num_images: Optional[int] = None
+    shutterstock_images: Optional[int] = None
 
     # Databricks Support Configuration
     databricks_support_tier: Optional[str] = None
@@ -218,12 +261,17 @@ class LineItemUpdate(BaseModel):
     lakeflow_connect_gateway_instance_type: Optional[str] = None
     lakeflow_connect_gateway_num_workers: Optional[int] = None
     lakeflow_connect_gateway_hours_per_month: Optional[float] = None
+    lakeflow_connect_pipeline_mode: Optional[str] = None
+    lakeflow_connect_gateway_enabled: Optional[bool] = None
+    lakeflow_connect_gateway_instance: Optional[str] = None
 
     # Lakebase Configuration
     lakebase_cu: Optional[float] = None
     lakebase_storage_gb: Optional[int] = None
     lakebase_ha_nodes: Optional[int] = None
     lakebase_backup_retention_days: Optional[int] = None
+    lakebase_pitr_gb: Optional[int] = None
+    lakebase_snapshot_gb: Optional[int] = None
 
     # Usage Configuration
     runs_per_day: Optional[int] = None
@@ -255,8 +303,8 @@ class LineItemResponse(LineItemBase):
 
     @model_validator(mode="before")
     @classmethod
-    def populate_ai_parse_api_fields(cls, value):
-        """Expose the frontend AI Parse fields from the legacy storage columns."""
+    def populate_api_alias_fields(cls, value):
+        """Expose frontend alias fields from legacy storage columns when needed."""
         if isinstance(value, dict):
             data = dict(value)
         else:
@@ -264,6 +312,10 @@ class LineItemResponse(LineItemBase):
                 field_name: getattr(value, field_name, None)
                 for field_name in cls.model_fields
             }
+            # Include legacy columns that may not be in model_fields aliases
+            for legacy in ("shutterstock_imageai_num_images", "ai_parse_calculation_method", "ai_parse_num_pages"):
+                if legacy not in data:
+                    data[legacy] = getattr(value, legacy, None)
 
         if data.get("ai_parse_mode") is None:
             storage_mode = data.get("ai_parse_calculation_method")
@@ -274,6 +326,11 @@ class LineItemResponse(LineItemBase):
             num_pages = data.get("ai_parse_num_pages")
             if num_pages is not None:
                 data["ai_parse_pages_thousands"] = float(num_pages) / 1000
+
+        if data.get("shutterstock_images") is None:
+            legacy_images = data.get("shutterstock_imageai_num_images")
+            if legacy_images is not None:
+                data["shutterstock_images"] = legacy_images
 
         return data
 

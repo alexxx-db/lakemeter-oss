@@ -4,94 +4,54 @@ sidebar_position: 13
 
 # Installation Validation Tests
 
-The installation test suite (`tests/test_installation/`) validates the Lakemeter installer, pricing data files, and app configuration without requiring network access. All 91 tests run locally in under 1 second.
+The installation test suite (`tests/test_installation/`) validates the Lakemeter installer packaging, pricing data, and app configuration without requiring network access.
+
+The supported installer path is **`scripts/install.sh` + `scripts/databricks.yml`** (Databricks Asset Bundles on serverless). Legacy `scripts/install_lakemeter.py` may still exist for reference but is not the primary install path.
 
 ## Test Files
 
-### `test_installer_script.py` (21 tests)
+### `test_installer_script.py`
 
-Static analysis of `scripts/install_lakemeter.py` — verifies the installer's structure without executing it.
+Static analysis of the active installer packaging (`install.sh`, DAB notebooks, shared helpers).
 
-| Test Area | Tests | What It Checks |
-|-----------|-------|----------------|
-| Script structure | 3 | File exists, parseable Python, all 10 step functions defined |
-| Step functions | 2 | Each function has a docstring, all helpers exist (12 functions) |
-| CLI arguments | 3 | `--profile`, `--skip-provision`, `--skip-deploy` flags present |
-| Critical patterns | 4 | `identity_type=SERVICE_PRINCIPAL`, SSL connections, TRUNCATE before insert |
-| Roles API | 2 | Correct URL pattern, `DATABRICKS_SUPERUSER` membership |
-| Constants | 3 | `lakemeter_pricing` DB name, `DEFAULT_SCHEMA`, `TOTAL_STEPS = 9` |
-| Error handling | 4 | `sys.exit` patterns, helper function signatures |
+| Test area | What it checks |
+|-----------|----------------|
+| Script presence | `install.sh` and required notebooks exist |
+| DAB graph | Installer tasks, dependencies, and serverless environments |
+| Grants | Least-privilege helper is synced and used |
+| Critical patterns | Lakebase OAuth SP identity, SSL connections, CSV pricing load |
 
-### `test_pricing_data.py` (49 tests)
+### `test_pricing_data.py`
 
-Validates all 9 pricing JSON files in `backend/static/pricing/`:
+Validates pricing artifacts used by the installer. Active installs load **CSV** files staged into the DAB `pricing_data/` sync path (from `backend/static/pricing` / conversion scripts). JSON files under `backend/static/pricing/` remain useful for local parity tests and frontend bundles.
 
-| Pricing File | Tests | Validations |
-|-------------|-------|-------------|
-| `manifest.json` | 3 | Lists all 9 files, total entries > 4000, all files present |
-| `dbu_rates.json` | 5 | Valid JSON, entries present, `cloud:region:tier` key format, valid clouds |
-| `instance_dbu_rates.json` | 5 | Top-level cloud keys, entries have `dbu_rate > 0` and `vcpus` |
-| `dbu_multipliers.json` | 5 | `cloud:type:feature` format, `multiplier > 0` |
-| `dbsql_rates.json` | 5 | `cloud:type:size` format, `dbu_per_hour > 0` |
-| `dbsql_warehouse_config.json` | 5 | Entries present, correct key format |
-| `model_serving_rates.json` | 5 | Entries present, key format valid |
-| `vector_search_rates.json` | 5 | Entries present, key format valid |
-| `fmapi_databricks_rates.json` | 5 | `cloud:model:rate_type` format |
-| `fmapi_proprietary_rates.json` | 6 | `cloud:model:rate_type` format, provider names valid |
+### `test_app_config.py`
 
-### `test_app_config.py` (21 tests)
+Validates root `app.yaml` Databricks App configuration:
 
-Validates the `app.yaml` Databricks App configuration:
+| Test area | What it checks |
+|-----------|----------------|
+| YAML validity | File parses as valid YAML |
+| Command | Starts uvicorn for the FastAPI app |
+| `valueFrom` references | Lakebase project/branch/endpoint and DB bindings |
+| Hardcoded values | `ENVIRONMENT=production`, `DB_PORT`, `DB_SSLMODE` |
 
-| Test Area | Tests | What It Checks |
-|-----------|-------|----------------|
-| YAML validity | 1 | File parses as valid YAML |
-| Command | 2 | Runs uvicorn on `0.0.0.0:8000` via bash |
-| `valueFrom` references | 6 | All 5 resource references match expected names (parametrized) |
-| Hardcoded values | 3 | `ENVIRONMENT=production`, `DB_PORT=5432`, `DB_SSLMODE=require` |
-| Template variables | 2 | `DATABRICKS_HOST` uses `{{databricks_host}}` template |
-| SP credentials | 2 | `SP_CLIENT_ID_KEY` and `SP_SECRET_KEY` present |
-| Resource names | 5 | Each `valueFrom` maps to the correct resource name |
+Related contract tests outside this folder:
+
+- `tests/test_dab_config.py` — targets, timeouts, concurrency, paused pricing refresh
+- `tests/test_lakebase_grants.py` — least-privilege SQL grants
+- `tests/test_pricing_freshness.py` — freshness metadata + API
 
 ## Running the Tests
 
 ```bash
-cd "/path/to/lakemeter_app"
-source .venv/bin/activate
+cd "/path/to/lakemeter-oss"
 
-# Run all installation tests
-python -m pytest tests/test_installation/ -v
-
-# Run a specific file
-python -m pytest tests/test_installation/test_pricing_data.py -v
-python -m pytest tests/test_installation/test_app_config.py -v
+python -m pytest tests/test_installation/ tests/test_dab_config.py \
+  tests/test_lakebase_grants.py tests/test_pricing_freshness.py -q
 ```
 
-## Key Validations
+## Hosting vs estimated clouds
 
-### Installer Uses Correct SP Identity Type
-
-The most critical validation: the installer must create SP roles with `identity_type=SERVICE_PRINCIPAL`, not `PG_ONLY`. Two dedicated tests verify this:
-
-- `test_sp_role_uses_service_principal_identity` — checks the string `identity_type=SERVICE_PRINCIPAL` or `"identity_type": "SERVICE_PRINCIPAL"` appears in the installer source
-- `test_sp_role_not_pg_only_default` — checks that `PG_ONLY` is not used as the default identity type
-
-The installer handles SP role creation automatically with the correct `identity_type=SERVICE_PRINCIPAL`.
-
-### Pricing Data Integrity
-
-Every pricing file is validated for:
-
-1. **Existence** — File exists in `backend/static/pricing/`
-2. **Valid JSON** — Parses without errors
-3. **Non-empty** — Has at least one entry
-4. **Key format** — Keys follow the expected `cloud:dimension:dimension` pattern
-5. **Value ranges** — Numeric values (rates, multipliers) are positive
-
-### App Configuration Correctness
-
-The `app.yaml` tests verify:
-
-- The 5 `valueFrom` references point to the correct Databricks App resource names
-- Hardcoded values match production defaults (port 5432, SSL required)
-- The `DATABRICKS_HOST` uses the `{{databricks_host}}` template (not a hardcoded URL)
+- **Estimated clouds** in the product UI: AWS, Azure, and GCP pricing models.
+- **Hosting**: Databricks Apps + Lakebase Autoscaling today target AWS and Azure workspaces. Install Lakemeter in an AWS/Azure workspace even when sizing a GCP estimate.

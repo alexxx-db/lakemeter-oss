@@ -32,6 +32,14 @@ DEFAULT_GATEWAY_INSTANCES = {
     "GCP": "n1-standard-4",
 }
 
+# Pipeline sizing proxies for DLT Serverless (DBU estimate uses instance rates × workers)
+DEFAULT_PIPELINE_INSTANCES = {
+    "AWS": "m5.xlarge",
+    "AZURE": "Standard_DS3_v2",
+    "GCP": "n1-standard-4",
+}
+DEFAULT_PIPELINE_WORKERS = 2
+
 
 @router.post("/calculate/lakeflow-connect", tags=["Cost Calculation"])
 def calculate_lakeflow_connect_cost(
@@ -57,10 +65,11 @@ def calculate_lakeflow_connect_cost(
         if has_run_params and request.days_per_month is None:
             request.days_per_month = 30
 
+        pipeline_instance = DEFAULT_PIPELINE_INSTANCES.get(cloud_upper, "m5.xlarge")
         params = {
             "p1": "DLT", "p2": cloud_upper, "p3": request.region, "p4": tier_upper,
             "p5": True, "p6": False, "p7": None,
-            "p8": None, "p9": None, "p10": 0,
+            "p8": pipeline_instance, "p9": pipeline_instance, "p10": DEFAULT_PIPELINE_WORKERS,
             "p11": "on_demand", "p12": "on_demand",
             "p13": request.runs_per_day or 0,
             "p14": request.avg_runtime_minutes or 0,

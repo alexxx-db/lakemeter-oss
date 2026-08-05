@@ -171,6 +171,12 @@ const WORKLOAD_TYPE_CONFIG: Record<string, {
     color: 'text-indigo-500', 
     bgColor: 'bg-indigo-500/10',
     label: 'Lakebase'
+  },
+  'LAKEFLOW_CONNECT': {
+    icon: ArrowsRightLeftIcon,
+    color: 'text-teal-500',
+    bgColor: 'bg-teal-500/10',
+    label: 'Connect'
   }
 }
 
@@ -847,6 +853,10 @@ export default function Calculator() {
         productType = 'SERVERLESS_REAL_TIME_INFERENCE'
         break
 
+      case 'LAKEFLOW_CONNECT':
+        productType = 'DELTA_LIVE_TABLES_SERVERLESS'
+        break
+
       default:
         productType = 'JOBS_COMPUTE'
     }
@@ -1332,6 +1342,35 @@ export default function Calculator() {
         break
       }
 
+      case 'LAKEFLOW_CONNECT': {
+        // Pipeline: DLT Serverless sizing proxy (m5.xlarge × 2 workers × photon × standard)
+        // Matches backend DEFAULT_PIPELINE_* defaults in lakeflow_connect_calc.py
+        let connectDriverRate = 0.75
+        if (isPricingBundleLoaded) {
+          const bundleRate = getBundleInstanceDBURate(pricingBundle, cloud, 'm5.xlarge')
+          if (bundleRate > 0) connectDriverRate = bundleRate
+        }
+        if (connectDriverRate === 0.75) {
+          const fromMap = getInstanceDbuRate(cloud, 'm5.xlarge')
+          if (fromMap > 0) connectDriverRate = fromMap
+        }
+        const connectPhoton = 2.0
+        dbuPerHour = (connectDriverRate + connectDriverRate * 2) * connectPhoton
+        monthlyDBUs = dbuPerHour * hoursPerMonth
+        if (effectiveItem.lakeflow_connect_gateway_enabled) {
+          const gwType = effectiveItem.lakeflow_connect_gateway_instance || 'i3.xlarge'
+          let gwDbu = getInstanceDbuRate(cloud, gwType) || 0.75
+          if (isPricingBundleLoaded) {
+            const gwBundle = getBundleInstanceDBURate(pricingBundle, cloud, gwType)
+            if (gwBundle > 0) gwDbu = gwBundle
+          }
+          const gwHours = 730
+          monthlyDBUs += gwDbu * connectPhoton * gwHours
+          vmCost += getVMPrice(cloud, region, gwType, 'on_demand', 'NA') * gwHours
+        }
+        break
+      }
+
       default:
         monthlyDBUs = 0
     }
@@ -1807,6 +1846,19 @@ export default function Calculator() {
       case 'SHUTTERSTOCK_IMAGEAI':
         if (item.shutterstock_images) {
           details.push({ label: 'Images', value: `${item.shutterstock_images.toLocaleString()}/mo` })
+        }
+        break
+
+      case 'LAKEFLOW_CONNECT':
+        details.push({ label: 'Pipeline', value: 'DLT Serverless' })
+        if (item.dlt_edition) {
+          details.push({ label: 'Edition', value: item.dlt_edition })
+        }
+        if (item.lakeflow_connect_gateway_enabled) {
+          details.push({
+            label: 'Gateway',
+            value: item.lakeflow_connect_gateway_instance || 'default',
+          })
         }
         break
     }

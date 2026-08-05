@@ -301,8 +301,27 @@ table_stmts = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""",
 
+    f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.ai_conversations (
+        conversation_id UUID PRIMARY KEY,
+        owner_user_id UUID NOT NULL REFERENCES {SCHEMA}.users(user_id),
+        mode VARCHAR(20) DEFAULT 'estimate',
+        state JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    f"""CREATE TABLE IF NOT EXISTS {SCHEMA}.pricing_metadata (
+        id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+        loaded_at TIMESTAMPTZ NOT NULL,
+        source TEXT NOT NULL,
+        total_rows INTEGER NOT NULL DEFAULT 0,
+        table_counts JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+        notes TEXT
+    )""",
+
     f"CREATE INDEX IF NOT EXISTS idx_line_items_estimate ON {SCHEMA}.line_items(estimate_id)",
     f"CREATE INDEX IF NOT EXISTS idx_line_items_workload_type ON {SCHEMA}.line_items(workload_type)",
+    f"CREATE INDEX IF NOT EXISTS idx_ai_conversations_owner ON {SCHEMA}.ai_conversations(owner_user_id)",
 ]
 
 for stmt in table_stmts:
@@ -532,7 +551,8 @@ except Exception as e:
 
 # COMMAND ----------
 
-# Create password-auth role (fallback when SP OAuth isn't configured)
+# Password-auth role — emergency fallback when App SP OAuth is unavailable.
+# Uses the same least-privilege grants as the App SP (not ALL PRIVILEGES).
 role_name = "lakemeter_sync_role"
 
 cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role_name,))
@@ -541,19 +561,31 @@ exists = cur.fetchone()
 password = py_secrets.token_urlsafe(32)
 
 if not exists:
-    print(f"Creating password-auth role '{role_name}'...")
+    print(f"Creating password-auth fallback role '{role_name}'...")
     cur.execute(f"CREATE ROLE {role_name} LOGIN PASSWORD %s", (password,))
     print(f"Role '{role_name}' created")
 else:
     cur.execute(f"ALTER ROLE {role_name} PASSWORD %s", (password,))
     print(f"Role '{role_name}' password reset")
 
-cur.execute(f"GRANT CONNECT ON DATABASE {db_name} TO {role_name}")
-cur.execute(f"GRANT USAGE ON SCHEMA {SCHEMA} TO {role_name}")
-cur.execute(f"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {SCHEMA} TO {role_name}")
-cur.execute(f"GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {SCHEMA} TO {role_name}")
-cur.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT ALL PRIVILEGES ON TABLES TO {role_name}")
-print(f"Permissions granted to '{role_name}'")
+import os
+import sys
+
+_bundle_root = os.path.dirname(os.path.dirname(os.path.abspath("__file__")))
+# Notebook path resolution for DAB-synced workspace files
+try:
+    _nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+    if not _nb.startswith("/Workspace"):
+        _nb = "/Workspace" + _nb
+    _bundle_root = os.path.dirname(os.path.dirname(_nb))
+except Exception:
+    pass
+if _bundle_root not in sys.path:
+    sys.path.insert(0, _bundle_root)
+from lakebase_grants import apply_app_role_grants
+
+n = apply_app_role_grants(cur, role_name, db_name)
+print(f"Least-privilege permissions granted to '{role_name}' ({n} statements)")
 
 cur.close()
 conn.close()

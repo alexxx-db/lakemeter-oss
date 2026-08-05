@@ -31,8 +31,9 @@ def inject_proposal(http_client, conversation_id):
 
     This skips the LLM entirely — we're testing the confirm pipeline, not the AI.
     """
-    from app.routes.chat import _conversation_agents
+    from app.routes.chat import _conversation_agents, _conversation_owners
     from app.services.ai_agent import EstimateAgent
+    from tests.e2e.helpers.api_client import AUTH_EMAIL
 
     def _inject(workload_type: str, workload_name: str, cloud: str = "aws",
                 region: str = "us-east-1", tier: str = "PREMIUM", **kwargs):
@@ -47,8 +48,10 @@ def inject_proposal(http_client, conversation_id):
             }
             agent.conversation_history = []
             _conversation_agents[conversation_id] = agent
+            _conversation_owners[conversation_id] = AUTH_EMAIL
 
         agent = _conversation_agents[conversation_id]
+        _conversation_owners.setdefault(conversation_id, AUTH_EMAIL)
 
         # Build proposal directly (same as _propose_workload but without defaults)
         proposal_id = str(uuid.uuid4())
@@ -66,9 +69,11 @@ def inject_proposal(http_client, conversation_id):
 
     yield _inject
 
-    # Cleanup: remove the agent
+    # Cleanup: remove the agent and ownership binding
     from app.routes.chat import _conversation_agents as agents
+    from app.routes.chat import _conversation_owners as owners
     agents.pop(conversation_id, None)
+    owners.pop(conversation_id, None)
 
 
 @pytest.fixture

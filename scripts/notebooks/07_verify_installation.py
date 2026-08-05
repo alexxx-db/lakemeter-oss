@@ -37,20 +37,91 @@ if not app_url:
 app_url = app_url.rstrip("/")
 print(f"App URL: {app_url}")
 
+# Authenticate smoke tests the same way the upgrader does: workspace token,
+# with OAuth token-exchange fallback when the Apps proxy returns 401.
+# Also send X-Forwarded-Email from the job identity so SSO-protected routes work.
+
+
+def _exchange_app_audience_token(workspace_headers, timeout_seconds=30):
+    authorization = workspace_headers.get("Authorization", "")
+    prefix = "Bearer "
+    if not authorization.startswith(prefix):
+        raise RuntimeError("Workspace auth did not provide a Bearer token")
+
+    app_client_id = str(getattr(app_info, "oauth2_app_client_id", "") or "")
+    if not app_client_id:
+        raise RuntimeError(f"App '{app_name}' has no OAuth client ID")
+
+    host = w.config.host.rstrip("/")
+    response = requests.post(
+        f"{host}/oidc/v1/token",
+        data={
+            "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+            "subject_token": authorization[len(prefix):],
+            "subject_token_type": (
+                "urn:databricks:params:oauth:token-type:personal-access-token"
+            ),
+            "requested_token_type": (
+                "urn:ietf:params:oauth:token-type:access_token"
+            ),
+            "scope": "all-apis",
+            "audience": app_client_id,
+        },
+        timeout=timeout_seconds,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"App token exchange failed: HTTP {response.status_code} {response.text[:200]}"
+        )
+    access_token = str(response.json().get("access_token", "") or "")
+    if not access_token:
+        raise RuntimeError("App token exchange returned no access token")
+    return {"Authorization": f"Bearer {access_token}"}
+
+
+try:
+    me = w.current_user.me()
+    verify_email = (
+        getattr(me, "user_name", None)
+        or getattr(me, "emails", [None])[0]
+        or "lakemeter-verify@databricks.com"
+    )
+except Exception:
+    verify_email = "lakemeter-verify@databricks.com"
+
+auth_headers = dict(w.config.authenticate())
+auth_headers["X-Forwarded-Email"] = str(verify_email)
+print(f"Verify identity: {verify_email}")
+
+# Warm auth — exchange once if the Apps proxy requires an app-audience token
+try:
+    probe = requests.get(
+        f"{app_url}/api/v1/system/health",
+        headers=auth_headers,
+        timeout=30,
+    )
+    if probe.status_code == 401:
+        auth_headers.update(_exchange_app_audience_token(auth_headers))
+        auth_headers["X-Forwarded-Email"] = str(verify_email)
+        print("  Using exchanged app-audience token")
+except Exception as e:
+    print(f"  Auth probe warning: {e}")
+
 # Results tracker
 results = []
 section_times = {}
 
-def run_test(name, method, url, expected_status=200, json_body=None, check_fn=None, timeout=30):
+def run_test(name, method, url, expected_status=200, json_body=None, check_fn=None, timeout=30, authed=False):
     """Run a single test and record the result."""
     t0 = time.time()
+    headers = auth_headers if authed else None
     try:
         if method == "GET":
-            resp = requests.get(url, timeout=timeout)
+            resp = requests.get(url, headers=headers, timeout=timeout)
         elif method == "POST":
-            resp = requests.post(url, json=json_body, timeout=timeout)
+            resp = requests.post(url, json=json_body, headers=headers, timeout=timeout)
         elif method == "DELETE":
-            resp = requests.delete(url, timeout=timeout)
+            resp = requests.delete(url, headers=headers, timeout=timeout)
         else:
             raise ValueError(f"Unknown method: {method}")
         elapsed = time.time() - t0
@@ -98,6 +169,17 @@ run_test("health_check", "GET", f"{app_url}/health",
 run_test("api_root", "GET", f"{app_url}/api",
          check_fn=lambda d: ("Lakemeter" in d.get("name", ""), f"name={d.get('name')}"))
 
+run_test(
+    "pricing_freshness",
+    "GET",
+    f"{app_url}/api/v1/pricing/freshness",
+    authed=True,
+    check_fn=lambda d: (
+        d.get("success") is True and d.get("data", {}).get("available") is True,
+        f"freshness={d.get('data')}",
+    ),
+)
+
 section_times["health"] = time.time() - t0
 print(f"  Done ({section_times['health']:.1f}s)")
 
@@ -109,9 +191,17 @@ print(f"  Done ({section_times['health']:.1f}s)")
 t0 = time.time()
 print("Test 2: Database connectivity...")
 
-run_test("database_debug", "GET", f"{app_url}/api/v1/debug/database",
-         check_fn=lambda d: (d.get("database_query_status") == "SUCCESS" or d.get("db_connectable", False),
-                            f"DB status: {d.get('database_query_status', d.get('db_connectable', 'unknown'))}"))
+# Production does not expose /api/v1/debug/* — use the authenticated system health probe.
+run_test(
+    "system_health_db",
+    "GET",
+    f"{app_url}/api/v1/system/health",
+    authed=True,
+    check_fn=lambda d: (
+        d.get("status") == "healthy" and d.get("database") == "connected",
+        f"status={d.get('status')} database={d.get('database')}",
+    ),
+)
 
 section_times["database"] = time.time() - t0
 print(f"  Done ({section_times['database']:.1f}s)")
@@ -400,28 +490,26 @@ print(f"  Done ({section_times['calculations']:.1f}s)")
 t0 = time.time()
 print("Test 5: AI Assistant...")
 
-# Test non-streaming chat endpoint with a simple query
+# Chat endpoints require SSO identity (X-Forwarded-Email + app auth).
 run_test("ai_chat_response", "POST", f"{app_url}/api/v1/chat", json_body={
     "message": "What workload types does Lakemeter support?",
     "mode": "estimate",
     "stream": False,
-}, timeout=60, check_fn=lambda d: (
+}, timeout=60, authed=True, check_fn=lambda d: (
     d.get("content") is not None and len(d.get("content", "")) > 10,
     f"content length: {len(d.get('content', ''))}"
 ))
 
-# Test chat with workload proposal — ask for a specific non-default config
 chat_data = run_test("ai_propose_workload", "POST", f"{app_url}/api/v1/chat", json_body={
     "message": "Add a Jobs Classic workload on AWS us-east-1 Premium with i3.2xlarge driver, i3.4xlarge workers, 5 workers, photon enabled, 8 runs per day, 30 minutes each",
     "mode": "estimate",
     "stream": False,
     "estimate_context": {"cloud": "AWS", "region": "us-east-1", "tier": "PREMIUM"},
-}, timeout=90, check_fn=lambda d: (
+}, timeout=90, authed=True, check_fn=lambda d: (
     d.get("content") is not None and len(d.get("content", "")) > 10,
     f"content length: {len(d.get('content', ''))}"
 ))
 
-# If we got a conversation_id and proposed_workload, test confirm-workload
 if chat_data and chat_data.get("conversation_id") and chat_data.get("proposed_workload"):
     conv_id = chat_data["conversation_id"]
     proposal = chat_data["proposed_workload"]
@@ -431,14 +519,14 @@ if chat_data and chat_data.get("conversation_id") and chat_data.get("proposed_wo
         run_test("ai_confirm_workload", "POST",
                  f"{app_url}/api/v1/chat/{conv_id}/confirm-workload",
                  json_body={"proposal_id": proposal_id, "confirmed": True},
+                 authed=True,
                  check_fn=lambda d: (d.get("success", True), "confirm failed"))
 
-    # Get conversation state
     run_test("ai_conv_state", "GET", f"{app_url}/api/v1/chat/{conv_id}/state",
-             check_fn=lambda d: (True, ""))
+             authed=True, check_fn=lambda d: (True, ""))
 
-    # Cleanup conversation
-    run_test("ai_conv_cleanup", "DELETE", f"{app_url}/api/v1/chat/{conv_id}", expected_status=200)
+    run_test("ai_conv_cleanup", "DELETE", f"{app_url}/api/v1/chat/{conv_id}",
+             expected_status=200, authed=True)
 
 section_times["ai_assistant"] = time.time() - t0
 print(f"  Done ({section_times['ai_assistant']:.1f}s)")
@@ -451,34 +539,61 @@ print(f"  Done ({section_times['ai_assistant']:.1f}s)")
 t0 = time.time()
 print("Test 6: Estimate CRUD + Excel export...")
 
-# Create estimate
-est_data = run_test("create_estimate", "POST", f"{app_url}/api/v1/estimates/", json_body={
-    "name": "Installer Verification Test",
-    "cloud": "AWS", "region": "us-east-1", "tier": "PREMIUM",
-}, check_fn=lambda d: (d.get("success") and d.get("data", {}).get("id") is not None,
-                       "no estimate id"))
+# Estimate/line-item CRUD requires SSO identity. Response is EstimateResponse
+# (estimate_id / estimate_name), not a wrapped {success, data} envelope.
+est_data = run_test(
+    "create_estimate",
+    "POST",
+    f"{app_url}/api/v1/estimates/",
+    json_body={
+        "estimate_name": "Installer Verification Test",
+        "cloud": "AWS",
+        "region": "us-east-1",
+        "tier": "PREMIUM",
+    },
+    expected_status=201,
+    authed=True,
+    check_fn=lambda d: (
+        d.get("estimate_id") is not None,
+        f"no estimate_id in {list(d.keys())[:8]}",
+    ),
+)
 
-if est_data and est_data.get("success"):
-    est_id = est_data["data"]["id"]
+if est_data and est_data.get("estimate_id"):
+    est_id = est_data["estimate_id"]
 
-    # Add a line item
-    run_test("add_line_item", "POST", f"{app_url}/api/v1/line-items/", json_body={
-        "estimate_id": est_id,
-        "workload_type": "jobs_classic",
-        "name": "Test Workload",
-        "configuration": {
-            "cloud": "AWS", "region": "us-east-1", "tier": "PREMIUM",
-            "driver_node_type": "i3.xlarge", "worker_node_type": "i3.xlarge",
-            "num_workers": 2, "photon_enabled": False,
+    run_test(
+        "add_line_item",
+        "POST",
+        f"{app_url}/api/v1/line-items/",
+        json_body={
+            "estimate_id": est_id,
+            "workload_type": "JOBS",
+            "workload_name": "Test Workload",
+            "cloud": "AWS",
+            "driver_node_type": "i3.xlarge",
+            "worker_node_type": "i3.xlarge",
+            "num_workers": 2,
+            "photon_enabled": False,
             "hours_per_month": 100,
-            "driver_pricing_tier": "on_demand", "worker_pricing_tier": "on_demand",
+            "driver_pricing_tier": "on_demand",
+            "worker_pricing_tier": "on_demand",
         },
-    }, check_fn=lambda d: (d.get("success"), "add line item failed"))
+        expected_status=201,
+        authed=True,
+        check_fn=lambda d: (
+            d.get("line_item_id") is not None,
+            f"no line_item_id in {list(d.keys())[:8]}",
+        ),
+    )
 
-    # Export Excel
     try:
         t_export = time.time()
-        resp = requests.get(f"{app_url}/api/v1/export/estimate/{est_id}/excel", timeout=30)
+        resp = requests.get(
+            f"{app_url}/api/v1/export/estimate/{est_id}/excel",
+            headers=auth_headers,
+            timeout=30,
+        )
         export_elapsed = time.time() - t_export
         if resp.status_code == 200 and len(resp.content) > 1000:
             results.append({"test": "excel_export", "status": "PASS", "elapsed": f"{export_elapsed:.1f}s",
@@ -489,9 +604,12 @@ if est_data and est_data.get("success"):
     except Exception as e:
         results.append({"test": "excel_export", "status": "FAIL", "elapsed": "0s", "detail": str(e)[:200]})
 
-    # Delete estimate (cleanup)
     try:
-        requests.delete(f"{app_url}/api/v1/estimates/{est_id}", timeout=10)
+        requests.delete(
+            f"{app_url}/api/v1/estimates/{est_id}",
+            headers=auth_headers,
+            timeout=10,
+        )
     except Exception:
         pass
 

@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models import LineItem, Estimate, User
 from app.models.sharing import Sharing
 from app.schemas import LineItemCreate, LineItemUpdate, LineItemResponse
-from app.schemas.line_item import map_ai_parse_api_fields
+from app.schemas.line_item import map_line_item_api_fields
 from app.auth import get_current_user
 
 # ---- Case normalization for enum-like string fields ----
@@ -129,7 +129,7 @@ def create_line_item(
         LineItem.estimate_id == line_item.estimate_id
     ).count()
     
-    item_data = map_ai_parse_api_fields(
+    item_data = map_line_item_api_fields(
         _normalize_case(line_item.model_dump()),
         line_item.model_fields_set,
     )
@@ -180,7 +180,7 @@ def update_line_item(
     
     _check_estimate_access(item.estimate_id, current_user, db, require_edit=True)
     
-    update_data = map_ai_parse_api_fields(
+    update_data = map_line_item_api_fields(
         _normalize_case(line_item_update.model_dump(exclude_unset=True)),
         line_item_update.model_fields_set,
     )

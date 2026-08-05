@@ -88,8 +88,9 @@ def test_ai_parse_create_fields_map_to_existing_storage_columns():
         line_item.model_fields_set,
     )
 
-    assert "ai_parse_mode" not in storage_data
-    assert "ai_parse_pages_thousands" not in storage_data
+    # UI columns are persisted alongside legacy storage columns
+    assert storage_data["ai_parse_mode"] == "pages"
+    assert storage_data["ai_parse_pages_thousands"] == 200
     assert storage_data["ai_parse_calculation_method"] == "pages_based"
     assert storage_data["ai_parse_num_pages"] == 200_000
 

@@ -1,6 +1,7 @@
 """Regression tests for security hardening:
-- JWT secret must be explicit in production (no shipped/predictable default)
+- Auth is Apps SSO (no application JWT secret required)
 - Debug endpoints must not be registered in production
+- User and chat routes require authentication
 """
 import importlib
 import sys
@@ -20,36 +21,19 @@ def _fresh_config(monkeypatch, **env):
     return importlib.reload(app.config)
 
 
-class TestJwtSecretPolicy:
-    def test_production_requires_jwt_secret(self, monkeypatch):
-        with pytest.raises(Exception, match="JWT_SECRET_KEY"):
-            _fresh_config(monkeypatch, ENVIRONMENT="production")
+class TestAppsSsoAuthPolicy:
+    def test_production_starts_without_jwt_secret(self, monkeypatch):
+        config = _fresh_config(monkeypatch, ENVIRONMENT="production")
+        assert config.settings.is_production
+        assert not hasattr(config.settings, "jwt_secret_key")
 
-    def test_production_rejects_placeholder_secret(self, monkeypatch):
-        with pytest.raises(Exception, match="placeholder"):
-            _fresh_config(
-                monkeypatch,
-                ENVIRONMENT="production",
-                JWT_SECRET_KEY="your-secret-key-change-in-production",
-            )
-
-    def test_production_accepts_explicit_secret(self, monkeypatch):
-        config = _fresh_config(
-            monkeypatch, ENVIRONMENT="production", JWT_SECRET_KEY="real-secret-value"
-        )
-        assert config.settings.jwt_secret_key == "real-secret-value"
-
-    def test_local_generates_ephemeral_secret(self, monkeypatch):
-        config = _fresh_config(monkeypatch, ENVIRONMENT="local")
-        assert config.settings.jwt_secret_key  # non-empty
-        assert config.settings.jwt_secret_key != "your-secret-key-change-in-production"
-
-    def test_no_insecure_default_in_source(self):
-        """The old hardcoded default must never come back."""
+    def test_no_jwt_fields_in_settings_source(self):
+        """JWT settings must not return — auth is Apps SSO headers only."""
         from pathlib import Path
 
         src = Path("backend/app/config.py").read_text()
-        assert 'jwt_secret_key: str = "your-secret-key-change-in-production"' not in src
+        assert "jwt_secret_key" not in src
+        assert "JWT_SECRET_KEY" not in src
 
 
 def _route_paths(monkeypatch, **env):
@@ -69,7 +53,6 @@ class TestDebugEndpointsGated:
         paths = _route_paths(
             monkeypatch,
             ENVIRONMENT="production",
-            JWT_SECRET_KEY="real-secret-value",
             DATABASE_URL="postgresql://u:p@localhost:5432/db",
         )
         assert not any("/debug" in p for p in paths), [
@@ -89,7 +72,7 @@ class TestDebugEndpointsGated:
     def test_cors_same_origin_in_production_config(self, monkeypatch):
         """Empty CORS_ORIGINS must yield no cross-origin allowances."""
         config = _fresh_config(
-            monkeypatch, ENVIRONMENT="production",
-            JWT_SECRET_KEY="real-secret-value", CORS_ORIGINS="",
+            monkeypatch, ENVIRONMENT="production", CORS_ORIGINS="",
         )
         assert config.settings.cors_origins_list == []
+

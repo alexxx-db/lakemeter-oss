@@ -85,6 +85,7 @@ const PREMIUM_ONLY_WORKLOAD_TYPES = new Set([
   'DATABRICKS_APPS',
   'AI_PARSE',
   'SHUTTERSTOCK_IMAGEAI',
+  'LAKEFLOW_CONNECT',
 ])
 
 import {
@@ -1022,6 +1023,20 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         data.shutterstock_images = null
       }
 
+      // Lakeflow Connect config
+      if (form.workload_type === 'LAKEFLOW_CONNECT') {
+        data.dlt_edition = form.dlt_edition || 'ADVANCED'
+        data.lakeflow_connect_pipeline_mode = form.lakeflow_connect_pipeline_mode || 'serverless'
+        data.lakeflow_connect_gateway_enabled = form.lakeflow_connect_gateway_enabled || false
+        data.lakeflow_connect_gateway_instance = form.lakeflow_connect_gateway_enabled
+          ? (form.lakeflow_connect_gateway_instance || null)
+          : null
+      } else {
+        data.lakeflow_connect_pipeline_mode = null
+        data.lakeflow_connect_gateway_enabled = null
+        data.lakeflow_connect_gateway_instance = null
+      }
+
       // Lakebase config
       if (selectedWorkloadType?.show_lakebase_config) {
         const isFixedLakebase = form.lakebase_compute_mode === 'fixed'
@@ -1076,8 +1091,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       // Hours per month vs Run-based usage
       // For compute workloads, check if using direct hours
       const isComputeWorkload = selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config
+      const isLakeflowConnect = form.workload_type === 'LAKEFLOW_CONNECT'
       
-      if (isComputeWorkload) {
+      if (isComputeWorkload || isLakeflowConnect) {
         if (useDirectHours) {
           // Using direct hours - set hours_per_month and null out run-based fields
           data.hours_per_month = form.hours_per_month || 730
@@ -1087,7 +1103,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         } else {
           // Using run-based - set run-based fields and null out hours_per_month
           data.hours_per_month = null
-          data.runs_per_day = selectedWorkloadType?.show_usage_runs ? form.runs_per_day : null
+          data.runs_per_day = selectedWorkloadType?.show_usage_runs || isLakeflowConnect ? form.runs_per_day : null
           data.avg_runtime_minutes = form.avg_runtime_minutes
           data.days_per_month = form.days_per_month
         }
@@ -2363,8 +2379,56 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           </div>
         )}
 
-        {/* Usage Input Method Toggle - for compute workloads only */}
-        {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
+        {/* Lakeflow Connect Config */}
+        {form.workload_type === 'LAKEFLOW_CONNECT' && (
+          <>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Pipeline Edition</label>
+              <select
+                value={form.dlt_edition || 'ADVANCED'}
+                onChange={(e) => setForm(f => ({ ...f, dlt_edition: e.target.value }))}
+                className="w-full text-sm"
+              >
+                <option value="CORE">Core</option>
+                <option value="PRO">Pro</option>
+                <option value="ADVANCED">Advanced</option>
+              </select>
+              <span className="text-[10px] text-[var(--text-tertiary)]">Pipeline billed as DLT Serverless</span>
+            </div>
+            <div className="col-span-full flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="lakeflow-connect-gateway"
+                checked={!!form.lakeflow_connect_gateway_enabled}
+                onChange={(e) => setForm(f => ({ ...f, lakeflow_connect_gateway_enabled: e.target.checked }))}
+                className="rounded border-[var(--border-primary)]"
+              />
+              <label htmlFor="lakeflow-connect-gateway" className="text-xs text-[var(--text-secondary)]">
+                Include database connector gateway (DLT Classic Advanced + VM)
+              </label>
+            </div>
+            {form.lakeflow_connect_gateway_enabled && (
+              <div>
+                <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Gateway Instance</label>
+                <select
+                  value={form.lakeflow_connect_gateway_instance || ''}
+                  onChange={(e) => setForm(f => ({ ...f, lakeflow_connect_gateway_instance: e.target.value }))}
+                  className="w-full text-sm"
+                >
+                  <option value="">Default for cloud</option>
+                  {instanceTypes.map(it => (
+                    <option key={it.id} value={it.id}>
+                      {it.name || it.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Usage Input Method Toggle - for compute workloads and Lakeflow Connect */}
+        {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config || form.workload_type === 'LAKEFLOW_CONNECT') && (
           <div className="col-span-full">
             <div className="flex items-center gap-4 mb-3">
               <span className="text-xs font-medium text-[var(--text-secondary)]">Usage Input Method:</span>
@@ -2415,8 +2479,8 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               </div>
             )}
             
-            {/* Avg Runtime - for Jobs, All Purpose, DLT, and SQL Warehouse */}
-            {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
+            {/* Avg Runtime - for Jobs, All Purpose, DLT, SQL Warehouse, and Lakeflow Connect */}
+            {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config || form.workload_type === 'LAKEFLOW_CONNECT') && (
               <div>
                 <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Avg Runtime (min)</label>
                 <input
@@ -2447,7 +2511,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         )}
         
         {/* Direct hours input */}
-        {useDirectHours && (selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
+        {useDirectHours && (selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config || form.workload_type === 'LAKEFLOW_CONNECT') && (
           <div className="col-span-full md:col-span-1">
             <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Hours/Month</label>
             <input

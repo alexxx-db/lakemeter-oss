@@ -35,7 +35,24 @@ jobs:
         run: |
           python -m pytest \
             tests/test_integration_validation/test_suite_completeness.py \
-            tests/docs_media/test_docs_build.py
+            tests/docs_media/test_docs_build.py \
+            tests/test_security_config.py \
+            tests/test_authz_users_chat.py \
+            tests/test_lakebase_grants.py \
+            tests/test_pricing_freshness.py \
+            tests/test_conversation_store.py \
+            tests/test_dab_config.py \
+            tests/test_database_retry.py \
+            tests/test_line_item_field_mapping.py \
+            tests/test_p3_docs_and_uc.py \
+            tests/schema \
+            tests/parity \
+            tests/export/jobs/test_jobs_calculations.py \
+            tests/export/dbsql/test_dbsql_calculations.py \
+            tests/export/dlt/test_dlt_calculations.py
+        env:
+          DATABASE_URL: postgresql://u:p@localhost:5432/db
+          ENVIRONMENT: local
 
   frontend-build:
     name: Frontend build

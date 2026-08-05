@@ -22,8 +22,6 @@ See `requirements.txt`, `backend/requirements.txt`, `frontend/package.json`, and
 | pydantic-settings | Settings management for Pydantic | MIT | [GitHub: pydantic/pydantic-settings](https://github.com/pydantic/pydantic-settings) |
 | python-multipart | Streaming multipart parser | Apache-2.0 | [GitHub: Kludex/python-multipart](https://github.com/Kludex/python-multipart) |
 | xlsxwriter | Excel XLSX file creation | BSD-2-Clause | [GitHub: jmcnamara/XlsxWriter](https://github.com/jmcnamara/XlsxWriter) |
-| python-jose | JOSE implementation (JWT) | MIT | [GitHub: mpdavis/python-jose](https://github.com/mpdavis/python-jose) |
-| passlib | Password hashing framework | BSD-3-Clause | [GitHub: glic3rern/passlib](https://github.com/glic3rern/passlib) |
 | python-dotenv | Read `.env` files | BSD-3-Clause | [GitHub: theskumar/python-dotenv](https://github.com/theskumar/python-dotenv) |
 | cachetools | Extensible memoizing collections | MIT | [GitHub: tkem/cachetools](https://github.com/tkem/cachetools) |
 | databricks-sdk | Databricks SDK for Python | Apache-2.0 | [GitHub: databricks/databricks-sdk-py](https://github.com/databricks/databricks-sdk-py) |

@@ -30,7 +30,11 @@ The options shown in Lakemeter determine what can be selected for an estimate. S
 
 ### Which workload type should I choose?
 
-Use the [Workload Sizing Guides](./workloads). The catalog maps each sizing need to its canonical Lakemeter guide, including Databricks Apps, AI Parse, and Shutterstock ImageAI.
+Use the [Workload Sizing Guides](./workloads). The catalog maps each sizing need to its canonical Lakemeter guide, including Lakeflow Connect, Databricks Apps, AI Parse, and Shutterstock ImageAI.
+
+### Can I size Databricks Support?
+
+Not as a first-class workload form. Apply support or success-plan economics as a commercial adjustment (Excel **Discount %**, estimate notes, or negotiated commit terms). See the [workload catalog](./workloads#commercial-items-not-first-class-workloads).
 
 ### What's the difference between Classic and Serverless?
 
