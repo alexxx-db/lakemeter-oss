@@ -65,15 +65,13 @@ Databricks workspace.
 
 ### 3.1 In-flight tracking items (time-sensitive)
 
-- **Issue #19 — Lakebase password-auth default change.**
-  New Lakebase Autoscaling projects created after 2026-05-21 have PostgreSQL
-  password authentication *disabled by default*. The installer falls back to a
-  password-auth role (`lakemeter_sync_role`) when service-principal OAuth isn't
-  configured; on new projects that fallback will fail unless password auth is
-  explicitly enabled on the project.
-  *Action:* verify the fallback path on a freshly created project; either enable
-  password auth during provisioning (`01_provision_lakebase.py`) or make the SP
-  OAuth path mandatory. Update `docs-site/docs/admin-guide/installer.md` accordingly.
+- **Issue #19 — Lakebase password-auth default change.** ~~Mitigated in-tree.~~
+  New Lakebase Autoscaling projects disable Postgres password login by default.
+  `scripts/lakebase_autoscaling.py` now sets `enable_pg_native_login=True` on
+  create **and** patches reused projects that still have it disabled, so the
+  `lakemeter_sync_role` fallback can authenticate. Documented in the installer
+  guide. Remaining optional work: make SP OAuth mandatory and drop the password
+  role entirely once all installs prove OAuth-stable.
 - **Issue #20 — Gemini 2.5 pricing data retirement (deadline 2026-10-16).**
   The Gemini 2.5 model family retires 2026-10-16. The bundled
   `fmapi-proprietary-rates` data contains these models.

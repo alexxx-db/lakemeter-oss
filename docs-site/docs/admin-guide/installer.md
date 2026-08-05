@@ -207,6 +207,15 @@ After a successful installation, your workspace will have:
 
 App and fallback DB roles receive least-privilege grants: `SELECT` on pricing/reference tables, `INSERT/UPDATE/DELETE` only on application tables, plus `EXECUTE` on calculation functions.
 
+### Lakebase password authentication (Issue #19)
+
+New Lakebase Autoscaling projects disable Postgres password login by default. Lakemeter still creates a password-auth fallback role (`lakemeter_sync_role`) for cases where Service Principal OAuth is unavailable. The installer therefore:
+
+1. Sets `enable_pg_native_login=True` when **creating** a project
+2. **Updates** reused projects that still have password login disabled
+
+Prefer App SP OAuth at runtime; the password role is a fallback only. See [Architecture](./architecture) and [Pricing Data](./pricing-data).
+
 ### Job failure alerts
 
 Installer, upgrade, and pricing-refresh jobs ship with `notification_settings` that suppress noise for skipped/canceled runs. To email on failure, edit the job in the Databricks Jobs UI (or add `email_notifications.on_failure` in `scripts/databricks.yml` and redeploy the bundle).

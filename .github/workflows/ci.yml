@@ -45,6 +45,10 @@ jobs:
             tests/test_database_retry.py \
             tests/test_line_item_field_mapping.py \
             tests/test_p3_docs_and_uc.py \
+            tests/test_version_sync.py \
+            tests/test_pricing_data_clouds.py \
+            tests/test_release_hygiene.py \
+            tests/test_installation/test_lakebase_autoscaling.py \
             tests/schema \
             tests/parity \
             tests/export/jobs/test_jobs_calculations.py \
@@ -53,6 +57,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://u:p@localhost:5432/db
           ENVIRONMENT: local
+          PYTHONPATH: backend:scripts
 
   frontend-build:
     name: Frontend build

@@ -30,6 +30,9 @@ Security, trust, and platform hardening on top of v0.1.1:
 - Lakebase cold-start: bounded jittered retries + atomic engine dispose before 503
 - Persist Shutterstock / Lakebase PITR-snapshot / AI Parse UI fields correctly
 - Installer job `notification_settings` + docs for optional failure email alerts
+- Legacy `install_lakemeter.py` aligned to least-privilege grants helper
+- Enable Postgres native login on Lakebase create **and** reuse (Issue #19)
+- Root `ARCHITECTURE.md` / `CHANGELOG.md` reconciled with current DAB + SSO auth
 
 ---
 

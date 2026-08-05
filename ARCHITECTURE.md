@@ -100,16 +100,16 @@ backend/app/
 | `estimates` | `/estimates` | CRUD for estimates; sharing |
 | `line_items` | `/line-items` | CRUD for line items within an estimate |
 | `workload_types` | `/workload-types` | The catalog of 16 workload types and which form fields each shows |
-| `users` | `/users` | Current-user profile, admin user list |
+| `users` | `/users` | Current-user profile (self), admin updates, email lookup for sharing |
 | `export` | `/export` | Excel generation |
 | `vm_pricing` | `/vm-pricing` | VM price lookup endpoints for the UI |
 | `calculate` | `/calculate/*` | One endpoint per workload type |
 | `reference` | `/reference/*` | Dropdown data: clouds/regions, instance types, DBSQL sizes, FMAPI models… |
 | `chat` | `/chat` | AI assistant streaming chat |
 
-**Authentication.** `auth/databricks_auth.py` reads the user identity headers injected by the Databricks Apps proxy (email, name) and upserts a row in the `users` table. `get_current_user` is a FastAPI dependency used by protected routes. There is also a JWT fallback for local development, configured via `JWT_SECRET_KEY` — in production the Databricks Apps platform is the identity provider.
+**Authentication.** `auth/databricks_auth.py` reads the user identity headers injected by the Databricks Apps proxy (`X-Forwarded-Email`, `X-Forwarded-User`) and upserts a row in the `users` table. `get_current_user` is a FastAPI dependency used by protected routes. There is **no** application-issued JWT; Apps SSO is the only identity path in production and local Apps-like testing.
 
-**Database connection.** `database.py` builds a SQLAlchemy engine pointing at Lakebase. Lakebase uses short-lived OAuth tokens as passwords when connecting with a service principal; the engine config refreshes the token before it expires so long-lived connections keep working. `DB_SSLMODE=require` is set in `app.yaml` — always keep TLS on.
+**Database connection.** `database.py` builds a SQLAlchemy engine pointing at Lakebase. Preferred auth is the app Service Principal with short-lived OAuth database credentials (token refresh + cold-start retries). A secrets-backed password role (`lakemeter_sync_role`) remains as fallback. New/reused Lakebase Autoscaling projects enable Postgres native login (`enable_pg_native_login=True`) so that fallback can authenticate. `DB_SSLMODE=require` is set in `app.yaml` — always keep TLS on.
 
 **Configuration.** Everything is an environment variable mapped in `config.py` (`Settings`). In the deployed app these come from `app.yaml`; locally, from a `.env` file. Notable ones: `DB_HOST`, `DB_USER`, `DB_NAME`, `DB_PORT`, `LAKEBASE_INSTANCE_NAME`, `CLAUDE_MODEL_ENDPOINT`, `ENVIRONMENT`.
 
@@ -184,7 +184,7 @@ Pricing is the product's foundation, so it has three redundant representations, 
 2. **Lakebase `sync_*` layer**: a Lakebase sync (CDC) mirrors those UC tables into the app's database with a `sync_` prefix, and the installer can load the same data from the bundled CSVs. These tables are what the SQL functions and the app read at runtime.
 3. **Bundled snapshot** (`backend/static/pricing/`): versioned in git, shipped with each release, loaded idempotently by `scripts/notebooks/03_load_pricing_data.py` (`CREATE TABLE IF NOT EXISTS` + `TRUNCATE` + bulk insert; the notebook hard-fails if expected CSVs are missing). This makes a fresh install work even before the fetch notebooks have ever run, and anchors pricing to the release version.
 
-A scheduled job (`lakemeter_pricing_sync` in `scripts/databricks.yml`, monthly, paused by default) re-runs the loader so pricing can be refreshed on a schedule. Manual refresh = re-run the loader notebook or the installer.
+A scheduled job (`lakemeter_pricing_refresh` in `scripts/databricks.yml`, weekly Sunday 06:00 UTC, **paused by default**) reloads pricing via `09_refresh_pricing.py`. Default source is bundled CSVs; set job parameter `pricing_source=unity_catalog` to publish from UC tables (`10_refresh_pricing_from_uc.py`). See `docs-site/docs/admin-guide/pricing-data.md`.
 
 ---
 
@@ -193,7 +193,7 @@ A scheduled job (`lakemeter_pricing_sync` in `scripts/databricks.yml`, monthly, 
 Everything is deployed by **Databricks Asset Bundles** (`scripts/databricks.yml`), driven by `scripts/install.sh`:
 
 1. `01_provision_lakebase.py` — create the Lakebase instance (autoscaling).
-2. `02_create_database.py` — database `lakemeter_pricing`, schema `lakemeter`, app tables, triggers, the `lakemeter_sync_role` login role, and secrets (`lakebase-user`, `lakebase-password`, `lakebase-host`, `lakebase-database`) in a secrets scope.
+2. `02_create_database.py` — database `lakemeter_pricing`, schema `lakemeter`, app tables, triggers, the `lakemeter_sync_role` login role with **least-privilege** grants (`scripts/lakebase_grants.py`), and secrets (`lakebase-user`, `lakebase-password`, `lakebase-host`, `lakebase-database`) in a secrets scope.
 3. `02b_create_functions.py` — the SQL calculators from §6.
 4. `03_load_pricing_data.py` — seed pricing from the bundled snapshot.
 5. `04_create_sku_mapping.py` — SKU→region mapping.

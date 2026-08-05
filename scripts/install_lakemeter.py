@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-Lakemeter Zero-Click Installer
+Lakemeter Zero-Click Installer (legacy)
+
+Prefer the supported path: ``scripts/install.sh`` + ``scripts/databricks.yml``
+(Databricks Asset Bundles on serverless). This Python installer remains for
+reference and recovery installs.
 
 Provisions a complete Lakemeter environment on Databricks:
   1. Validates prerequisites (CLI, Python packages, CSV pricing data)
@@ -34,6 +38,13 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 APP_DIR = SCRIPT_DIR.parent
 BACKEND_DIR = APP_DIR / "backend"
 PRICING_DIR = BACKEND_DIR / "static" / "pricing"
+
+# Prefer scripts/install.sh + Databricks Asset Bundles (scripts/databricks.yml).
+# This legacy Python installer remains for reference / recovery installs.
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from lakebase_grants import apply_app_role_grants  # noqa: E402
 
 DEFAULT_DB_NAME = "lakemeter_pricing"
 DEFAULT_SCHEMA = "lakemeter"
@@ -324,16 +335,9 @@ def create_password_auth_role(ctx: dict, instance_info: dict, cfg: dict):
         cur.execute(f"ALTER ROLE {role_name} PASSWORD %s", (password,))
         log_ok(f"Role '{role_name}' password reset")
 
-    # Grant permissions
-    cur.execute(f"GRANT CONNECT ON DATABASE {cfg['db_name']} TO {role_name}")
-    cur.execute(f"GRANT USAGE ON SCHEMA {DEFAULT_SCHEMA} TO {role_name}")
-    cur.execute(f"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {DEFAULT_SCHEMA} TO {role_name}")
-    cur.execute(f"GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {DEFAULT_SCHEMA} TO {role_name}")
-    cur.execute(
-        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {DEFAULT_SCHEMA} "
-        f"GRANT ALL PRIVILEGES ON TABLES TO {role_name}"
-    )
-    log_ok(f"Permissions granted to '{role_name}'")
+    # Least-privilege grants (shared with DAB installer notebooks)
+    n = apply_app_role_grants(cur, role_name, cfg["db_name"])
+    log_ok(f"Least-privilege permissions granted to '{role_name}' ({n} statements)")
 
     cur.close()
     conn.close()
@@ -1203,28 +1207,8 @@ def configure_sp_access(ctx: dict, instance_info: dict, cfg: dict):
     conn.autocommit = True
     cur = conn.cursor()
 
-    cur.execute(f'GRANT CONNECT ON DATABASE {cfg["db_name"]} TO "{sp_client_id}"')
-    log_ok("Database-level permissions granted")
-
-    cur.execute(f'GRANT USAGE ON SCHEMA {DEFAULT_SCHEMA} TO "{sp_client_id}"')
-    cur.execute(
-        f'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {DEFAULT_SCHEMA} TO "{sp_client_id}"'
-    )
-    cur.execute(
-        f'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {DEFAULT_SCHEMA} TO "{sp_client_id}"'
-    )
-    cur.execute(
-        f'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA {DEFAULT_SCHEMA} TO "{sp_client_id}"'
-    )
-    cur.execute(
-        f'ALTER DEFAULT PRIVILEGES IN SCHEMA {DEFAULT_SCHEMA} '
-        f'GRANT ALL PRIVILEGES ON TABLES TO "{sp_client_id}"'
-    )
-    cur.execute(
-        f'ALTER DEFAULT PRIVILEGES IN SCHEMA {DEFAULT_SCHEMA} '
-        f'GRANT EXECUTE ON FUNCTIONS TO "{sp_client_id}"'
-    )
-    log_ok("Schema-level permissions granted (tables, sequences, functions)")
+    n = apply_app_role_grants(cur, sp_client_id, cfg["db_name"])
+    log_ok(f"Least-privilege permissions granted to SP ({n} statements)")
 
     # Step D: Verify SP can connect
     log_info("Verifying SP connectivity...")
@@ -1494,26 +1478,14 @@ def grant_app_sp_lakebase_access(ctx: dict, instance_info: dict, cfg: dict):
         else:
             log_ok("App SP already has Lakebase role")
 
-        # Grant SQL-level permissions
+        # Grant SQL-level permissions (least privilege)
         conn = get_owner_connection(ctx, instance_info, cfg)
         conn.autocommit = True
         cur = conn.cursor()
-        cur.execute(f'GRANT CONNECT ON DATABASE {cfg["db_name"]} TO "{app_sp_id}"')
-        cur.execute(f'GRANT USAGE ON SCHEMA {DEFAULT_SCHEMA} TO "{app_sp_id}"')
-        cur.execute(f'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {DEFAULT_SCHEMA} TO "{app_sp_id}"')
-        cur.execute(f'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {DEFAULT_SCHEMA} TO "{app_sp_id}"')
-        cur.execute(f'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA {DEFAULT_SCHEMA} TO "{app_sp_id}"')
-        cur.execute(
-            f'ALTER DEFAULT PRIVILEGES IN SCHEMA {DEFAULT_SCHEMA} '
-            f'GRANT ALL PRIVILEGES ON TABLES TO "{app_sp_id}"'
-        )
-        cur.execute(
-            f'ALTER DEFAULT PRIVILEGES IN SCHEMA {DEFAULT_SCHEMA} '
-            f'GRANT EXECUTE ON FUNCTIONS TO "{app_sp_id}"'
-        )
+        n = apply_app_role_grants(cur, app_sp_id, cfg["db_name"])
         cur.close()
         conn.close()
-        log_ok("App SP SQL permissions granted")
+        log_ok(f"App SP SQL permissions granted ({n} statements)")
     except Exception as e:
         log_warn(f"Could not configure app SP Lakebase access: {e}")
         log_info("App will use password-auth fallback (lakemeter_sync_role)")

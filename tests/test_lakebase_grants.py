@@ -39,6 +39,7 @@ def test_installer_notebooks_use_shared_grants_helper():
         "notebooks/05b_grant_app_access.py",
         "notebooks/02_create_database.py",
         "notebooks/05_configure_app.py",
+        "install_lakemeter.py",
     ):
         path = os.path.join(SCRIPTS_DIR, relative)
         text = open(path).read()
