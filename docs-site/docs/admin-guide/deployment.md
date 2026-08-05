@@ -10,6 +10,10 @@ Lakemeter is a **Databricks App** — a managed web application with built-in SS
 
 You need a **Databricks CLI** configured with a [workspace profile](https://docs.databricks.com/aws/en/dev-tools/cli/profiles.html). All other permissions (Lakebase, secret scopes, Apps, serverless compute) are granted to workspace users by default.
 
+:::info Hosting cloud vs estimated cloud
+Install Lakemeter in an **AWS or Azure** Databricks workspace (Apps + Lakebase Autoscaling hosting). Once installed, you can still create estimates for **AWS, Azure, and GCP** pricing. GCP is an estimated cloud in the product, not a required hosting cloud for the app itself.
+:::
+
 :::tip No local CLI? Use the notebook terminal
 If you can't install the Databricks CLI locally, you can run the installer directly from your workspace. Create any notebook on a serverless cluster, click the **terminal button** (bottom-right corner), and use the pre-installed CLI — no profile needed since it's already authenticated.
 

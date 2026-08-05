@@ -453,7 +453,7 @@ const SKU_TO_WORKLOAD_MAP: Record<string, string> = {
 const ALL_WORKLOAD_TYPES = [
   'JOBS', 'ALL_PURPOSE', 'DLT', 'DBSQL',
   'VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE',
-  'DATABRICKS_APPS', 'AI_PARSE', 'SHUTTERSTOCK_IMAGEAI'
+  'DATABRICKS_APPS', 'AI_PARSE', 'SHUTTERSTOCK_IMAGEAI', 'LAKEFLOW_CONNECT'
 ]
 
 /**
@@ -548,6 +548,15 @@ export function getAvailableWorkloadTypesForRegion(
   if (availableWorkloads.has('MODEL_SERVING') || productTypes['SERVERLESS_REAL_TIME_INFERENCE']) {
     availableWorkloads.add('AI_PARSE')
     availableWorkloads.add('SHUTTERSTOCK_IMAGEAI')
+  }
+
+  // Lakeflow Connect: pipeline uses DLT Serverless SKUs
+  if (
+    availableWorkloads.has('DLT') ||
+    productTypes['DELTA_LIVE_TABLES_SERVERLESS'] ||
+    productTypes['DLT_ADVANCED_COMPUTE']
+  ) {
+    availableWorkloads.add('LAKEFLOW_CONNECT')
   }
 
   return Array.from(availableWorkloads).sort()

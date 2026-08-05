@@ -18,6 +18,7 @@ For current Databricks product capabilities and availability, refer to the [offi
 | Scheduled or triggered processing | [Lakeflow Jobs](./jobs-compute) | Compute shape, workers, runs, runtime |
 | Interactive notebook compute | [All-Purpose Compute](./all-purpose-compute) | Compute shape, workers, active hours |
 | Declarative data pipelines | [Lakeflow Spark Declarative Pipelines](./dlt-pipelines) | Compute mode, edition, workers, usage |
+| Managed ingestion (Connect) | [Lakeflow Connect](./lakeflow-connect) | Pipeline edition, optional gateway, usage |
 | SQL warehouses | [Databricks SQL](./dbsql-warehouses) | Warehouse type, size, clusters, hours |
 
 ## AI, ML, and data services
@@ -32,6 +33,12 @@ For current Databricks product capabilities and availability, refer to the [offi
 | Databricks-hosted applications | [Databricks Apps](./databricks-apps) | App size, app count, active hours |
 | Document parsing | [AI Parse](./ai-parse) | Estimation mode, document complexity, page volume |
 | Image generation | [Shutterstock ImageAI](./shutterstock-imageai) | Monthly image volume |
+
+## Commercial items (not first-class workloads)
+
+| What you need | How Lakemeter handles it |
+|---|---|
+| Databricks Support / Success plans | Not a selectable workload form. Model support as a commercial adjustment (Excel **Discount %**, estimate notes, or negotiated commit terms). Line-item fields `databricks_support_tier` / `databricks_support_annual_commit` exist for future use but have no dedicated calculator. |
 
 ## Shared sizing principles
 

@@ -252,7 +252,19 @@ try:
     else:
         print("App SP already has Lakebase role")
 
-    # Grant SQL-level permissions
+    # Grant least-privilege SQL permissions
+    import os
+    import sys
+
+    nb_context = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+    nb_path = nb_context.notebookPath().get()
+    if not nb_path.startswith("/Workspace"):
+        nb_path = "/Workspace" + nb_path
+    bundle_root = os.path.dirname(os.path.dirname(nb_path))
+    if bundle_root not in sys.path:
+        sys.path.insert(0, bundle_root)
+    from lakebase_grants import apply_app_role_grants
+
     endpoint = w.postgres.get_endpoint(name=endpoint_name)
     instance_host = endpoint.status.hosts.host
     cred = w.postgres.generate_database_credential(endpoint=endpoint_name)
@@ -264,18 +276,10 @@ try:
     )
     conn.autocommit = True
     cur = conn.cursor()
-    cur.execute(f'GRANT CONNECT ON DATABASE {db_name} TO "{app_sp_id}"')
-    cur.execute(f'GRANT USAGE ON SCHEMA lakemeter TO "{app_sp_id}"')
-    cur.execute(f'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA lakemeter TO "{app_sp_id}"')
-    cur.execute(f'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA lakemeter TO "{app_sp_id}"')
-    cur.execute(f'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA lakemeter TO "{app_sp_id}"')
-    cur.execute(
-        f'ALTER DEFAULT PRIVILEGES IN SCHEMA lakemeter '
-        f'GRANT ALL PRIVILEGES ON TABLES TO "{app_sp_id}"'
-    )
+    n = apply_app_role_grants(cur, app_sp_id, db_name)
     cur.close()
     conn.close()
-    print("App SP SQL permissions granted")
+    print(f"App SP least-privilege SQL permissions granted ({n} statements)")
 
 except Exception as e:
     print(f"Warning: Could not configure app SP Lakebase access: {e}")

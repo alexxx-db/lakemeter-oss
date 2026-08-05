@@ -27,7 +27,7 @@ All required permissions (Lakebase, secret scopes, Apps, serverless compute) are
 The installer handles everything else automatically:
 - Lakebase Autoscaling project provisioning (reuses an existing project with the same ID)
 - Database creation, schema setup, and stored functions
-- Pricing data loading from pre-flattened CSV files included in the repository
+- Pricing data loading from pre-flattened CSV files included in the repository (optional [UC publication path](./pricing-data) after install)
 - App Service Principal creation and Lakebase access grants
 - App deployment and smoke test verification
 
@@ -171,7 +171,7 @@ funcs      data   grant_app_access
 | **create_functions** | Deploys 19 stored functions for cost calculations |
 | **load_pricing_data** | Bulk-loads pricing reference data from CSV files |
 | **create_sku_mapping** | Populates SKU discount mapping table |
-| **grant_app_access** | Grants the app's Service Principal access to Lakebase |
+| **grant_app_access** | Grants the app's Service Principal least-privilege Lakebase access |
 | **deploy_app** | Uploads app source and deploys (this is the longest step — mostly Databricks Apps infrastructure time) |
 | **verify_installation** | Runs ~80 smoke tests covering all APIs, reference data, cost calculations, AI assistant, and Excel export |
 
@@ -203,6 +203,22 @@ After a successful installation, your workspace will have:
 | **Secret scope** | `lakemeter-secrets` with 7 secrets |
 | **Databricks App** | `lakemeter` with 7 resources |
 | **App URL** | `https://lakemeter-<workspace-id>.<cloud>.databricksapps.com` |
+| **Pricing refresh job** | `Lakemeter Pricing Refresh` (weekly schedule, **paused** by default) |
+
+App and fallback DB roles receive least-privilege grants: `SELECT` on pricing/reference tables, `INSERT/UPDATE/DELETE` only on application tables, plus `EXECUTE` on calculation functions.
+
+### Job failure alerts
+
+Installer, upgrade, and pricing-refresh jobs ship with `notification_settings` that suppress noise for skipped/canceled runs. To email on failure, edit the job in the Databricks Jobs UI (or add `email_notifications.on_failure` in `scripts/databricks.yml` and redeploy the bundle).
+
+### Pricing freshness
+
+Each pricing load records `lakemeter.pricing_metadata` (`loaded_at`, row counts, source). The app exposes this at `GET /api/v1/pricing/freshness` and shows a “prices as of” stamp on the Pricing page. To enable the weekly refresh job after install:
+
+```bash
+databricks bundle run lakemeter_pricing_refresh --profile <cli-profile>
+# and unpause the job schedule in the workspace Jobs UI when ready
+```
 
 For a detailed breakdown of all resources created, see the [Deployment Inventory](./deployment-inventory).
 

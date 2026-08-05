@@ -72,7 +72,11 @@ def _get_workload_config_details(item) -> str:
     elif wt == 'AI_PARSE':
         details.extend(_ai_parse_details(item))
     elif wt == 'SHUTTERSTOCK_IMAGEAI':
-        images = getattr(item, 'shutterstock_images', None) or 0
+        images = (
+            getattr(item, 'shutterstock_images', None)
+            or getattr(item, 'shutterstock_imageai_num_images', None)
+            or 0
+        )
         details.append(f"Images/mo: {images:,}")
     elif wt == 'LAKEFLOW_CONNECT':
         details.extend(_lakeflow_connect_details(item))

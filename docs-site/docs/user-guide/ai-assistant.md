@@ -13,6 +13,8 @@ Lakemeter includes a built-in AI assistant powered by Claude that can answer pri
 
 The assistant appears as a chat panel on the right side of the screen. It has access to Lakemeter's full pricing database and can create workloads directly in your estimate — no manual form-filling required.
 
+Conversation state is **owned by your SSO user** and persisted in Lakebase (`ai_conversations`), so sessions survive app restarts. Proposals still require explicit confirm/reject before anything is written to an estimate.
+
 Behind the scenes, the assistant uses five specialized tools:
 
 | Tool | What it does |

@@ -5,6 +5,8 @@
 
 Fetches and syncs Databricks pricing data to Unity Catalog tables.
 
+> **Installer note:** OSS installs load bundled CSVs into Lakebase by default. To publish these UC tables into a deployed Lakemeter Lakebase, use `scripts/notebooks/10_refresh_pricing_from_uc.py` (`pricing_source=unity_catalog` on the pricing refresh job). See the [Pricing Data admin guide](../../docs-site/docs/admin-guide/pricing-data.md).
+
 ---
 
 ## Notebook Execution Order

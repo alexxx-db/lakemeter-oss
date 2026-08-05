@@ -553,6 +553,20 @@ export const fetchDBURates = async (params: {
   return data?.data?.dbu_rates || data?.dbu_rates || (Array.isArray(data) ? data : [])
 }
 
+export interface PricingFreshness {
+  available: boolean
+  loaded_at: string | null
+  source: string | null
+  total_rows: number
+  table_counts?: Record<string, number>
+  notes?: string | null
+}
+
+export const fetchPricingFreshness = async (): Promise<PricingFreshness> => {
+  const { data } = await api.get('/pricing/freshness')
+  return unwrap<PricingFreshness>(data)
+}
+
 // ============================================================================
 // Model Serving (NEW API)
 // ============================================================================

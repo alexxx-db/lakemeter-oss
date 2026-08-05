@@ -74,7 +74,11 @@ def calc_item_values(item, is_fmapi_token, is_fmapi_provisioned,
             return 0, 0, 0, total_dbus, ''
         # Shutterstock ImageAI: quantity-based (images × 0.857 DBU)
         if wt == 'SHUTTERSTOCK_IMAGEAI':
-            images = int(getattr(item, 'shutterstock_images', 0) or 0)
+            images = int(
+                getattr(item, 'shutterstock_images', None)
+                or getattr(item, 'shutterstock_imageai_num_images', None)
+                or 0
+            )
             total_dbus = images * 0.857
             return 0, 0, 0, total_dbus, ''
         hours = _calculate_hours_per_month(item)

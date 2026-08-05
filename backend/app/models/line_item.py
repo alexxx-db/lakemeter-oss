@@ -66,12 +66,15 @@ class LineItem(Base):
 
     # AI Parse Configuration
     ai_parse_calculation_method = Column(String(20))  # dbu, pages
+    ai_parse_mode = Column(String(20))  # pages / dbu (UI field; also mirrored to calculation_method)
     ai_parse_complexity = Column(String(20))  # low_text, low_images, medium, high
     ai_parse_dbu_quantity = Column(Numeric(12, 2))
     ai_parse_num_pages = Column(Numeric(12, 2))  # pages
+    ai_parse_pages_thousands = Column(Numeric(12, 2))
 
     # Shutterstock ImageAI Configuration
-    shutterstock_imageai_num_images = Column(Integer)  # number of images per month
+    shutterstock_imageai_num_images = Column(Integer)  # legacy column name
+    shutterstock_images = Column(Integer)  # UI / API field
 
     # Databricks Support Configuration
     databricks_support_tier = Column(String(50))
@@ -90,12 +93,18 @@ class LineItem(Base):
     lakeflow_connect_gateway_instance_type = Column(String(100))
     lakeflow_connect_gateway_num_workers = Column(Integer)
     lakeflow_connect_gateway_hours_per_month = Column(Numeric(12, 2))
+    # Simplified UI fields (pipeline mode + optional gateway)
+    lakeflow_connect_pipeline_mode = Column(String(20))
+    lakeflow_connect_gateway_enabled = Column(Boolean)
+    lakeflow_connect_gateway_instance = Column(String(100))
 
     # Lakebase Configuration
     lakebase_cu = Column(Numeric(5, 1))
     lakebase_storage_gb = Column(Integer)
     lakebase_ha_nodes = Column(Integer)
     lakebase_backup_retention_days = Column(Integer)
+    lakebase_pitr_gb = Column(Integer)
+    lakebase_snapshot_gb = Column(Integer)
 
     # Usage Configuration
     runs_per_day = Column(Integer)

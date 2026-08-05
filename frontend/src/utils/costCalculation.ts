@@ -601,6 +601,23 @@ export function calculateWorkloadCost(
       break
     }
 
+    case 'LAKEFLOW_CONNECT': {
+      // Pipeline sizing proxy aligned with backend lakeflow_connect_calc defaults
+      const connectDriver = getInstanceDBURate
+        ? (getInstanceDBURate('m5.xlarge') || 0.75)
+        : 0.75
+      const connectPhoton = 2.0
+      dbuPerHour = (connectDriver + connectDriver * 2) * connectPhoton
+      monthlyDBUs = dbuPerHour * hoursPerMonth
+      if (item.lakeflow_connect_gateway_enabled) {
+        const gwType = item.lakeflow_connect_gateway_instance || 'i3.xlarge'
+        const gwDbu = getInstanceDBURate ? (getInstanceDBURate(gwType) || 0.75) : 0.75
+        monthlyDBUs += gwDbu * connectPhoton * 730
+        vmCost += getVMPrice(cloud, region, gwType, 'on_demand', 'NA') * 730
+      }
+      break
+    }
+
     default:
       monthlyDBUs = 0
   }

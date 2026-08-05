@@ -12,6 +12,27 @@ Lakemeter follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## Unreleased
+
+Security, trust, and platform hardening on top of v0.1.1:
+
+- Locked down user APIs and bound AI chat conversations to SSO ownership
+- Removed unused production JWT gate (Apps SSO identity headers only)
+- Least-privilege Lakebase grants for App SP and password fallback role
+- Pricing freshness metadata + paused weekly refresh job + UI “prices as of”
+- Durable AI conversation persistence in Lakebase (`ai_conversations`)
+- Installer DAB targets (`dev`/`staging`/`prod`) with job/task timeouts
+- Expanded CI with schema, parity, and calculation suites
+- Restored **Lakeflow Connect** as a first-class workload (catalog, form, calculator, sizing guide)
+- Documented Databricks Support as commercial-only (not a workload form)
+- Optional Unity Catalog pricing publication path (`pricing_source=unity_catalog`)
+- Admin architecture note: when not to migrate the estimator to AppKit
+- Lakebase cold-start: bounded jittered retries + atomic engine dispose before 503
+- Persist Shutterstock / Lakebase PITR-snapshot / AI Parse UI fields correctly
+- Installer job `notification_settings` + docs for optional failure email alerts
+
+---
+
 ## v0.1.1
 
 *2026-08-01*
