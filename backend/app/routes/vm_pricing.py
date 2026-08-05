@@ -12,8 +12,10 @@ from app.schemas.vm_pricing import (
     VMPaymentOptionResponse
 )
 from app.config import log_warning
+from app.auth.databricks_auth import require_authenticated
 
-router = APIRouter(prefix="/vm-pricing", tags=["vm-pricing"])
+router = APIRouter(prefix="/vm-pricing", tags=["vm-pricing"],
+                   dependencies=[Depends(require_authenticated)])
 
 
 # Default VM pricing for fallback
@@ -255,4 +257,3 @@ def _get_default_pricing(cloud: str, region: Optional[str], instance_type: Optio
             })
     
     return results
-

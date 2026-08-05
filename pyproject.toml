@@ -4,6 +4,7 @@ pythonpath = ["backend"]
 addopts = "--ignore=tests/ai_assistant"
 markers = [
     "ai: AI assistant tests requiring live FMAPI (deselected by default)",
+    "databricks: tests requiring live Databricks/Lakebase access (set LAKEMETER_RUN_DATABRICKS_TESTS=1 to run)",
 ]
 
 [tool.coverage.run]

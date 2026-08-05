@@ -10,7 +10,7 @@ from app.services.validators import (
     validate_cloud, validate_region, validate_tier, validate_sku_specific_discounts,
 )
 from app.services.lakebase_queries import call_calculate_line_item_costs, get_product_type_for_pricing
-from app.routes.calculate.helpers import build_sku_breakdown_serverless
+from app.routes.calculate.helpers import build_sku_breakdown_serverless, build_cost_params
 from app.routes.calculate.discount import (
     apply_discount_to_sku_breakdown, calculate_total_discount_summary, enhance_total_cost_with_discount,
 )
@@ -41,21 +41,17 @@ def calculate_vector_search_cost(
         raise HTTPException(status_code=400, detail=error["error"])
 
     try:
-        params = {
-            "p1": "VECTOR_SEARCH", "p2": request.cloud.upper(), "p3": request.region, "p4": request.tier.upper(),
-            "p5": True, "p6": False, "p7": None,
-            "p8": None, "p9": None, "p10": 0,
-            "p11": "on_demand", "p12": "on_demand",
-            "p13": 0, "p14": 0,
-            "p15": request.days_per_month or 30,
-            "p16": int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
-            "p17": "standard", "p18": None, "p19": None, "p20": 1,
-            "p21": "on_demand", "p22": request.mode,
-            "p23": request.num_vectors_millions,
-            "p24": None, "p25": None, "p26": None,
-            "p27": "global", "p28": "all", "p29": "input_token", "p30": 0, "p31": 0, "p32": 1,
-            "p33": "NA", "p34": "NA", "p35": "NA",
-        }
+        params = build_cost_params(
+            workload_type="VECTOR_SEARCH",
+            cloud=request.cloud,
+            region=request.region,
+            tier=request.tier,
+            serverless_enabled=True,
+            days_per_month=request.days_per_month or 30,
+            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            vector_search_mode=request.mode,
+            vector_search_capacity_millions=request.num_vectors_millions,
+        )
         row = call_calculate_line_item_costs(db, params)
         if not row:
             raise HTTPException(status_code=500, detail="No calculation result returned")

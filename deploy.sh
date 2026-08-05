@@ -2,6 +2,11 @@
 # Lakemeter Deployment Script
 # Builds frontend, syncs to workspace, and deploys to Databricks Apps
 #
+# Note: for day-2 updates, the root Asset Bundle (databricks.yml) is the
+# preferred path — `databricks bundle deploy && databricks bundle run lakemeter`.
+# This script remains the way to BUILD the frontend, and for environments
+# without Asset Bundle support.
+#
 # Usage:
 #   ./deploy.sh                          # Build only (no deploy)
 #   DATABRICKS_HOST=... ./deploy.sh      # Build + local deploy from backend/

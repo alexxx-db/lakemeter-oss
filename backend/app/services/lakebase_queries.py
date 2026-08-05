@@ -97,32 +97,91 @@ def get_product_type_for_pricing(
     return row.product_type if row and row.product_type else None
 
 
+# Canonical parameter specification for lakemeter.calculate_line_item_costs().
+# (semantic_key, sql_param_name, pg_type) — single source of truth replacing the
+# fragile positional p1-p35 dicts that were duplicated across every calculator.
+# Keep in sync with etl/lakebase_setup/functions/09_Main_Orchestrator.py.
+LINE_ITEM_COST_PARAM_SPECS = [
+    ("workload_type", "p_workload_type", "VARCHAR"),
+    ("cloud", "p_cloud", "VARCHAR"),
+    ("region", "p_region", "VARCHAR"),
+    ("tier", "p_tier", "VARCHAR"),
+    ("serverless_enabled", "p_serverless_enabled", "BOOLEAN"),
+    ("photon_enabled", "p_photon_enabled", "BOOLEAN"),
+    ("dlt_edition", "p_dlt_edition", "VARCHAR"),
+    ("driver_node_type", "p_driver_node_type", "VARCHAR"),
+    ("worker_node_type", "p_worker_node_type", "VARCHAR"),
+    ("num_workers", "p_num_workers", "INT"),
+    ("driver_pricing_tier", "p_driver_pricing_tier", "VARCHAR"),
+    ("worker_pricing_tier", "p_worker_pricing_tier", "VARCHAR"),
+    ("runs_per_day", "p_runs_per_day", "INT"),
+    ("avg_runtime_minutes", "p_avg_runtime_minutes", "INT"),
+    ("days_per_month", "p_days_per_month", "INT"),
+    ("hours_per_month", "p_hours_per_month", "INT"),
+    ("serverless_mode", "p_serverless_mode", "VARCHAR"),
+    ("dbsql_warehouse_type", "p_dbsql_warehouse_type", "VARCHAR"),
+    ("dbsql_warehouse_size", "p_dbsql_warehouse_size", "VARCHAR"),
+    ("dbsql_num_clusters", "p_dbsql_num_clusters", "INT"),
+    ("dbsql_vm_pricing_tier", "p_dbsql_vm_pricing_tier", "VARCHAR"),
+    ("vector_search_mode", "p_vector_search_mode", "VARCHAR"),
+    ("vector_search_capacity_millions", "p_vector_search_capacity_millions", "DECIMAL"),
+    ("model_serving_gpu_type", "p_model_serving_gpu_type", "VARCHAR"),
+    ("fmapi_model", "p_fmapi_model", "VARCHAR"),
+    ("fmapi_provider", "p_fmapi_provider", "VARCHAR"),
+    ("fmapi_endpoint_type", "p_fmapi_endpoint_type", "VARCHAR"),
+    ("fmapi_context_length", "p_fmapi_context_length", "VARCHAR"),
+    ("fmapi_rate_type", "p_fmapi_rate_type", "VARCHAR"),
+    ("fmapi_quantity", "p_fmapi_quantity", "BIGINT"),
+    ("lakebase_cu", "p_lakebase_cu", "INT"),
+    ("lakebase_ha_nodes", "p_lakebase_ha_nodes", "INT"),
+    ("driver_payment_option", "p_driver_payment_option", "VARCHAR"),
+    ("worker_payment_option", "p_worker_payment_option", "VARCHAR"),
+    ("dbsql_vm_payment_option", "p_dbsql_vm_payment_option", "VARCHAR"),
+]
+
+_SEMANTIC_KEYS = frozenset(key for key, _, _ in LINE_ITEM_COST_PARAM_SPECS)
+
+_REQUIRED_PARAMS = ("workload_type", "cloud", "region", "tier")
+
+_LINE_ITEM_COST_SQL = text(
+    "SELECT "
+    "dbu_per_hour, hours_per_month, dbu_per_month, dbu_price, "
+    "dbu_cost_per_month, driver_vm_cost_per_hour, worker_vm_cost_per_hour, "
+    "total_vm_cost_per_hour, driver_vm_cost_per_month, "
+    "total_worker_vm_cost_per_month, vm_cost_per_month, cost_per_month "
+    "FROM lakemeter.calculate_line_item_costs("
+    + ", ".join(
+        f"{sql_name} => CAST(:{semantic} AS {pg_type})"
+        for semantic, sql_name, pg_type in LINE_ITEM_COST_PARAM_SPECS
+    )
+    + ")"
+)
+
+
 def call_calculate_line_item_costs(db: Session, params: Dict[str, Any]):
     """
     Call the lakemeter.calculate_line_item_costs() PostgreSQL function.
-    Accepts params dict with keys p1-p35 matching the 35 positional parameters.
+
+    Accepts a params dict keyed by SEMANTIC names (see LINE_ITEM_COST_PARAM_SPECS)
+    and invokes the SQL function using PostgreSQL named-argument notation, so
+    parameter order can never silently shift pricing. Unknown keys and missing
+    required params are rejected before hitting the database.
+
     Returns a SQLAlchemy row object, or None on failure.
     """
-    query = text("""
-        SELECT
-            dbu_per_hour, hours_per_month, dbu_per_month, dbu_price,
-            dbu_cost_per_month, driver_vm_cost_per_hour, worker_vm_cost_per_hour,
-            total_vm_cost_per_hour, driver_vm_cost_per_month,
-            total_worker_vm_cost_per_month, vm_cost_per_month, cost_per_month
-        FROM lakemeter.calculate_line_item_costs(
-            CAST(:p1 AS VARCHAR), CAST(:p2 AS VARCHAR), CAST(:p3 AS VARCHAR), CAST(:p4 AS VARCHAR),
-            CAST(:p5 AS BOOLEAN), CAST(:p6 AS BOOLEAN), CAST(:p7 AS VARCHAR), CAST(:p8 AS VARCHAR),
-            CAST(:p9 AS VARCHAR), CAST(:p10 AS INT), CAST(:p11 AS VARCHAR), CAST(:p12 AS VARCHAR),
-            CAST(:p13 AS INT), CAST(:p14 AS INT), CAST(:p15 AS INT), CAST(:p16 AS INT),
-            CAST(:p17 AS VARCHAR), CAST(:p18 AS VARCHAR), CAST(:p19 AS VARCHAR), CAST(:p20 AS INT),
-            CAST(:p21 AS VARCHAR), CAST(:p22 AS VARCHAR), CAST(:p23 AS DECIMAL), CAST(:p24 AS VARCHAR),
-            CAST(:p25 AS VARCHAR), CAST(:p26 AS VARCHAR), CAST(:p27 AS VARCHAR), CAST(:p28 AS VARCHAR),
-            CAST(:p29 AS VARCHAR), CAST(:p30 AS BIGINT), CAST(:p31 AS INT), CAST(:p32 AS INT),
-            CAST(:p33 AS VARCHAR), CAST(:p34 AS VARCHAR), CAST(:p35 AS VARCHAR)
+    unknown = set(params) - _SEMANTIC_KEYS
+    if unknown:
+        raise ValueError(
+            f"Unknown line-item cost params: {sorted(unknown)}. "
+            f"Valid keys are defined in LINE_ITEM_COST_PARAM_SPECS."
         )
-    """)
+    missing = [key for key in _REQUIRED_PARAMS if not params.get(key)]
+    if missing:
+        raise ValueError(f"Missing required line-item cost params: {missing}")
+
+    bind = {semantic: params.get(semantic) for semantic, _, _ in LINE_ITEM_COST_PARAM_SPECS}
     try:
-        result = db.execute(query, params)
+        result = db.execute(_LINE_ITEM_COST_SQL, bind)
         return result.fetchone()
     except Exception as e:
         logger.error(f"calculate_line_item_costs failed: {e}")

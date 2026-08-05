@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.validators import validate_sku_specific_discounts
 from app.services.lakebase_queries import call_calculate_line_item_costs, get_product_type_for_pricing
-from app.routes.calculate.helpers import build_sku_breakdown_classic, build_sku_breakdown_serverless
+from app.routes.calculate.helpers import build_sku_breakdown_classic, build_sku_breakdown_serverless, build_cost_params
 from app.routes.calculate.discount import (
     apply_discount_to_sku_breakdown, calculate_total_discount_summary, enhance_total_cost_with_discount,
 )
@@ -29,21 +29,25 @@ def calculate_dlt_classic_cost(
     _validate_classic_inputs(request, db)
 
     try:
-        params = {
-            "p1": "DLT", "p2": request.cloud.upper(), "p3": request.region, "p4": request.tier.upper(),
-            "p5": False, "p6": request.photon_enabled, "p7": request.dlt_edition.upper(),
-            "p8": request.driver_node_type, "p9": request.worker_node_type, "p10": request.num_workers,
-            "p11": request.driver_pricing_tier, "p12": request.worker_pricing_tier,
-            "p13": request.runs_per_day if has_run_params else 0,
-            "p14": request.avg_runtime_minutes if has_run_params else 0,
-            "p15": request.days_per_month if has_run_params else 30,
-            "p16": int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
-            "p17": "standard", "p18": None, "p19": None, "p20": 1, "p21": "on_demand", "p22": None,
-            "p23": 0, "p24": None, "p25": None, "p26": None,
-            "p27": "global", "p28": "all", "p29": "input_token", "p30": 0, "p31": 0, "p32": 1,
-            "p33": request.driver_payment_option or "NA",
-            "p34": request.worker_payment_option or "NA", "p35": "NA",
-        }
+        params = build_cost_params(
+            workload_type="DLT",
+            cloud=request.cloud,
+            region=request.region,
+            tier=request.tier,
+            photon_enabled=request.photon_enabled,
+            dlt_edition=request.dlt_edition.upper(),
+            driver_node_type=request.driver_node_type,
+            worker_node_type=request.worker_node_type,
+            num_workers=request.num_workers,
+            driver_pricing_tier=request.driver_pricing_tier,
+            worker_pricing_tier=request.worker_pricing_tier,
+            runs_per_day=request.runs_per_day if has_run_params else 0,
+            avg_runtime_minutes=request.avg_runtime_minutes if has_run_params else 0,
+            days_per_month=request.days_per_month if has_run_params else 30,
+            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            driver_payment_option=request.driver_payment_option or "NA",
+            worker_payment_option=request.worker_payment_option or "NA",
+        )
         row = call_calculate_line_item_costs(db, params)
         if not row:
             raise HTTPException(status_code=500, detail="No calculation result returned")
@@ -129,21 +133,22 @@ def calculate_dlt_serverless_cost(
     _validate_serverless_inputs(request, db)
 
     try:
-        params = {
-            "p1": "DLT", "p2": request.cloud.upper(), "p3": request.region, "p4": request.tier.upper(),
-            "p5": True, "p6": True, "p7": None,
-            "p8": request.driver_node_type, "p9": request.worker_node_type,
-            "p10": request.num_workers or 0,
-            "p11": "on_demand", "p12": "on_demand",
-            "p13": request.runs_per_day if has_run_params else 0,
-            "p14": request.avg_runtime_minutes if has_run_params else 0,
-            "p15": request.days_per_month if has_run_params else 30,
-            "p16": int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
-            "p17": request.serverless_mode, "p18": None, "p19": None, "p20": 1,
-            "p21": "on_demand", "p22": None, "p23": 0, "p24": None, "p25": None, "p26": None,
-            "p27": "global", "p28": "all", "p29": "input_token", "p30": 0, "p31": 0, "p32": 1,
-            "p33": "NA", "p34": "NA", "p35": "NA",
-        }
+        params = build_cost_params(
+            workload_type="DLT",
+            cloud=request.cloud,
+            region=request.region,
+            tier=request.tier,
+            serverless_enabled=True,
+            photon_enabled=True,
+            driver_node_type=request.driver_node_type,
+            worker_node_type=request.worker_node_type,
+            num_workers=request.num_workers or 0,
+            runs_per_day=request.runs_per_day if has_run_params else 0,
+            avg_runtime_minutes=request.avg_runtime_minutes if has_run_params else 0,
+            days_per_month=request.days_per_month if has_run_params else 30,
+            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            serverless_mode=request.serverless_mode,
+        )
         row = call_calculate_line_item_costs(db, params)
         if not row:
             raise HTTPException(status_code=500, detail="No calculation result returned")

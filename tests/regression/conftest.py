@@ -19,6 +19,8 @@ def make_item(**kwargs):
         "fmapi_rate_type": None, "fmapi_quantity": None,
         "lakebase_cu": None, "lakebase_ha_nodes": None,
         "lakebase_storage_gb": None, "lakebase_backup_retention_days": None,
+        "lakebase_pitr_gb": None, "lakebase_snapshot_gb": None,
+        "dbsql_vm_pricing_tier": None,
         "workload_config": None,
         "runs_per_day": None, "avg_runtime_minutes": None,
         "days_per_month": None, "hours_per_month": None,

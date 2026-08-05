@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import RefWorkloadType
 from app.schemas import WorkloadTypeResponse
+from app.auth.databricks_auth import require_authenticated
 
-router = APIRouter(prefix="/workload-types", tags=["workload-types"])
+router = APIRouter(prefix="/workload-types", tags=["workload-types"],
+                   dependencies=[Depends(require_authenticated)])
 
 # Default workload types based on the CSV reference
 DEFAULT_WORKLOAD_TYPES = [

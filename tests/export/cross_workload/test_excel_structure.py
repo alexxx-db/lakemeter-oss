@@ -149,9 +149,10 @@ class TestDbuPerHour:
         assert val == pytest.approx(24.0, abs=0.01)
 
     def test_lakebase_dbu_hr(self, ws):
+        # Always-On baseline: 4 CU × 2 nodes × 0.230 × 0.75 = 1.38
         row = find_row_by_name(ws, 'Lakebase 4CU 2HA')
         val = ws.cell(row=row, column=COL_DBU_HR).value
-        assert val == pytest.approx(8.0, abs=0.01)
+        assert val == pytest.approx(1.38, abs=0.01)
 
     def test_model_serving_dbu_hr(self, ws):
         """Model Serving GPU (A10G x1, small scale-out): 20.0 × 4 = 80.0 DBU/hr."""

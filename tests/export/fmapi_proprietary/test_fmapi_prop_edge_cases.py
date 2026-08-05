@@ -20,7 +20,16 @@ from tests.export.fmapi_proprietary.conftest import make_line_item
 
 
 class TestGoogleContextLength:
-    """BUG-S7-4 regression: Google uses 'long' default, not 'all'."""
+    """Google context-length semantics, per current Gemini specs (July 2026).
+
+    - Gemini 2.5 Flash is flat-priced ($0.30 / $2.50 per 1M tokens) with NO
+      context-length tiers, so 'short' and 'long' rates are identical and
+      resolving 'all' via fallback is semantically safe.
+    - Gemini 2.5 Pro IS tiered at 200K input tokens:
+      $1.25 / $10 (<=200K) vs $2.50 / $15 (>200K). With no explicit tier,
+      'all' falls back to 'long' — the >200K rate, a deliberately
+      conservative default for estimates.
+    """
 
     def test_google_default_context_finds_rate(self):
         """Google with default context_length should find rates."""
@@ -31,13 +40,36 @@ class TestGoogleContextLength:
         assert found, "Google with context_length='long' should find rate"
         assert rate > 0
 
-    def test_google_all_context_not_found(self):
-        """Google with context_length='all' should NOT find rate."""
-        item = make_line_item(
+    def test_google_all_context_falls_back_to_long(self):
+        """Flash is flat-priced: 'all' resolves to the same rate as 'long'."""
+        item_all = make_line_item(
             fmapi_provider="google", fmapi_model="gemini-2-5-flash",
             fmapi_context_length="all", fmapi_rate_type="input_token")
-        rate, found = _get_fmapi_dbu_per_million(item, "aws")
-        assert not found, "Google with 'all' context should not find rate"
+        item_long = make_line_item(
+            fmapi_provider="google", fmapi_model="gemini-2-5-flash",
+            fmapi_context_length="long", fmapi_rate_type="input_token")
+        rate_all, found_all = _get_fmapi_dbu_per_million(item_all, "aws")
+        rate_long, _ = _get_fmapi_dbu_per_million(item_long, "aws")
+        assert found_all, "Google Flash with 'all' context should resolve via fallback"
+        assert rate_all == rate_long, "Flash has no context tiers; 'all' must equal 'long'"
+
+    def test_google_pro_all_context_uses_conservative_long_rate(self):
+        """Pro is tiered at 200K: 'all' defaults to the >200K ('long') rate."""
+        item_all = make_line_item(
+            fmapi_provider="google", fmapi_model="gemini-2-5-pro",
+            fmapi_context_length="all", fmapi_rate_type="input_token")
+        item_long = make_line_item(
+            fmapi_provider="google", fmapi_model="gemini-2-5-pro",
+            fmapi_context_length="long", fmapi_rate_type="input_token")
+        item_short = make_line_item(
+            fmapi_provider="google", fmapi_model="gemini-2-5-pro",
+            fmapi_context_length="short", fmapi_rate_type="input_token")
+        rate_all, found_all = _get_fmapi_dbu_per_million(item_all, "aws")
+        rate_long, _ = _get_fmapi_dbu_per_million(item_long, "aws")
+        rate_short, _ = _get_fmapi_dbu_per_million(item_short, "aws")
+        assert found_all, "Google Pro with 'all' context should resolve via fallback"
+        assert rate_all == rate_long, "'all' defaults to the conservative >200K rate"
+        assert rate_long > rate_short, "Pro >200K rate must exceed the <=200K rate"
 
     def test_google_sku_with_long_context(self):
         item = make_line_item(

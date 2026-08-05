@@ -59,10 +59,13 @@ def _get_val(obj, key, default=''):
     return val if val is not None else default
 
 
-# Reserved instance discount factors relative to on-demand
+# Reserved instance discount factors relative to on-demand (static fallback only;
+# authoritative reserved prices come from lakemeter.sync_pricing_vm_costs).
 _RESERVED_DISCOUNTS = {
-    '1yr_reserved': 0.72,   # ~28% discount
-    '3yr_reserved': 0.50,   # ~50% discount
+    'reserved_1y': 0.72,    # ~28% discount
+    'reserved_3y': 0.50,    # ~50% discount
+    '1yr_reserved': 0.72,   # legacy alias
+    '3yr_reserved': 0.50,   # legacy alias
     'spot': 0.30,           # ~70% discount
 }
 
@@ -80,14 +83,15 @@ def _lookup_dbsql_vm_costs(item, cloud, region, vm_prices, db, auto_notes):
     """Look up VM costs for DBSQL Classic/Pro warehouses.
 
     Uses static dbsql-warehouse-config.json to find driver/worker instance types,
-    then looks up VM costs from DEFAULT_VM_PRICING. Falls back to DB if needed.
-    Returns (driver_vm_hr, worker_vm_hr, worker_count).
+    then resolves each VM price via _resolve_vm_price (DB first, static defaults
+    as noted fallback). Returns (driver_vm_hr, worker_vm_hr, worker_count).
     """
     from .pricing import DBSQL_WAREHOUSE_CONFIG
 
     wh_type = (item.dbsql_warehouse_type or 'CLASSIC').upper()
     wh_size = item.dbsql_warehouse_size or 'Small'
     driver_tier = _get_val(item, 'dbsql_vm_pricing_tier', 'on_demand') or 'on_demand'
+    payment_option = _get_val(item, 'dbsql_vm_payment_option', None)
     cloud_lc = (cloud or 'aws').lower()
 
     # Look up warehouse config from static JSON (key format: "aws:classic:Small")
@@ -105,19 +109,10 @@ def _lookup_dbsql_vm_costs(item, cloud, region, vm_prices, db, auto_notes):
     worker_inst = config.get('worker_instance_type', '') if isinstance(config, dict) else getattr(config, 'worker_instance_type', '')
     worker_count = (config.get('worker_count', 0) if isinstance(config, dict) else getattr(config, 'worker_count', 0)) or 0
 
-    driver_vm_hr = 0
-    worker_vm_hr = 0
-    if driver_inst and driver_inst in vm_prices:
-        driver_vm_hr = _get_vm_hourly_rate(vm_prices[driver_inst], driver_tier)
-    if worker_inst and worker_inst in vm_prices:
-        worker_vm_hr = _get_vm_hourly_rate(vm_prices[worker_inst], driver_tier)
-
-    # If not in static VM pricing, try the database
-    if (driver_vm_hr == 0 or worker_vm_hr == 0) and db:
-        _lookup_vm_costs_from_db(
-            cloud, region, driver_inst, worker_inst, driver_tier,
-            driver_vm_hr, worker_vm_hr, db, auto_notes
-        )
+    driver_vm_hr = _resolve_vm_price(cloud, region, driver_inst, driver_tier,
+                                     payment_option, db, auto_notes, "DBSQL driver")
+    worker_vm_hr = _resolve_vm_price(cloud, region, worker_inst, driver_tier,
+                                     payment_option, db, auto_notes, "DBSQL worker")
 
     return driver_vm_hr, worker_vm_hr, worker_count
 
@@ -144,31 +139,67 @@ def _lookup_dbsql_config_from_db(cloud, wh_type, wh_size, db, auto_notes):
     return None
 
 
-def _lookup_vm_costs_from_db(cloud, region, driver_inst, worker_inst, tier,
-                              driver_vm_hr, worker_vm_hr, db, auto_notes):
-    """Fallback: query VM costs from DB when not in static pricing."""
+def _query_vm_cost_from_db(cloud, region, instance, pricing_tier, payment_option,
+                           db, auto_notes, label):
+    """Query lakemeter.sync_pricing_vm_costs for one instance. Returns price or None."""
+    if not (db and instance):
+        return None
     try:
         from sqlalchemy import text as sa_text
-        if driver_vm_hr == 0 and driver_inst:
-            row = db.execute(sa_text("""
-                SELECT cost_per_hour FROM lakemeter.sync_pricing_vm_costs
-                WHERE UPPER(cloud) = UPPER(:cloud) AND region = :region
-                    AND instance_type = :inst AND pricing_tier = :tier
-                LIMIT 1
-            """), {"cloud": cloud, "region": region, "inst": driver_inst, "tier": tier}).fetchone()
-            if row:
-                driver_vm_hr = float(row.cost_per_hour or 0)
-        if worker_vm_hr == 0 and worker_inst:
-            row = db.execute(sa_text("""
-                SELECT cost_per_hour FROM lakemeter.sync_pricing_vm_costs
-                WHERE UPPER(cloud) = UPPER(:cloud) AND region = :region
-                    AND instance_type = :inst AND pricing_tier = :tier
-                LIMIT 1
-            """), {"cloud": cloud, "region": region, "inst": worker_inst, "tier": tier}).fetchone()
-            if row:
-                worker_vm_hr = float(row.cost_per_hour or 0)
+        row = db.execute(sa_text("""
+            SELECT cost_per_hour
+            FROM lakemeter.sync_pricing_vm_costs
+            WHERE UPPER(cloud) = UPPER(:cloud)
+              AND region = :region
+              AND instance_type = :instance_type
+              AND pricing_tier = :pricing_tier
+              AND COALESCE(payment_option, 'NA') = :payment_option
+            LIMIT 1
+        """), {
+            "cloud": cloud, "region": region, "instance_type": instance,
+            "pricing_tier": pricing_tier, "payment_option": payment_option,
+        }).fetchone()
+        if row and row.cost_per_hour is not None:
+            return float(row.cost_per_hour)
     except Exception as e:
-        auto_notes.append(f"VM cost DB lookup: {e}")
+        auto_notes.append(f"{label} VM cost DB lookup failed: {e}")
+    return None
+
+
+def _resolve_vm_price(cloud, region, instance, pricing_tier, payment_option,
+                      db, auto_notes, label):
+    """Resolve a VM $/hour price for one instance.
+
+    Order: (1) lakemeter.sync_pricing_vm_costs — authoritative, region/tier/
+    payment-option aware; (2) DEFAULT_VM_PRICING static reference map — a
+    documented fallback noted in the export; (3) 0 with a not-found note.
+    """
+    pricing_tier = (pricing_tier or 'on_demand').lower()
+    payment_option = (payment_option or 'NA')
+    # Reserved tiers require a payment option; default to the standard one.
+    if pricing_tier in ('reserved_1y', 'reserved_3y') and payment_option == 'NA':
+        payment_option = 'no_upfront'
+
+    if instance:
+        price = _query_vm_cost_from_db(cloud, region, instance, pricing_tier,
+                                       payment_option, db, auto_notes, label)
+        if price is not None:
+            return price
+
+        vm_prices = DEFAULT_VM_PRICING.get((cloud or 'aws').lower(), {})
+        if instance in vm_prices and pricing_tier in ('on_demand', 'spot'):
+            price = _get_vm_hourly_rate(vm_prices[instance], pricing_tier)
+            if price:
+                auto_notes.append(
+                    f"{label} VM price for {instance} not found in Lakebase sync data; "
+                    f"using default reference price"
+                )
+                return price
+
+        auto_notes.append(
+            f"{label} VM price not found for {instance} ({pricing_tier})"
+        )
+    return 0.0
 
 
 def _write_header_section(sheet, fmt, estimate, cloud, region, tier, max_col):
@@ -277,10 +308,12 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier, db=None)
             worker_node = _get_val(item, 'worker_node_type', '')
             driver_tier = _get_val(item, 'driver_pricing_tier', 'on_demand') or 'on_demand'
             worker_tier = _get_val(item, 'worker_pricing_tier', 'on_demand') or 'on_demand'
-            if driver_node and driver_node in vm_prices:
-                driver_vm_hr = _get_vm_hourly_rate(vm_prices[driver_node], driver_tier)
-            if worker_node and worker_node in vm_prices:
-                worker_vm_hr = _get_vm_hourly_rate(vm_prices[worker_node], worker_tier)
+            driver_payment = _get_val(item, 'driver_payment_option', None)
+            worker_payment = _get_val(item, 'worker_payment_option', None)
+            driver_vm_hr = _resolve_vm_price(cloud, region, driver_node, driver_tier,
+                                             driver_payment, db, auto_notes, "Driver")
+            worker_vm_hr = _resolve_vm_price(cloud, region, worker_node, worker_tier,
+                                             worker_payment, db, auto_notes, "Worker")
 
     user_notes = _get_val(item, 'notes', '') or ''
     notes_parts = [user_notes] if user_notes else []
@@ -338,5 +371,3 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier, db=None)
         row = write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
                                    'Vector Search (Storage)', 'vector_search_storage_gb')
     return row
-
-

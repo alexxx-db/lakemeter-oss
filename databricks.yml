@@ -1,0 +1,101 @@
+# =============================================================================
+# Lakemeter — Databricks Asset Bundle (day-2 deployment)
+#
+# This bundle deploys the Lakemeter app itself (source sync + app resources).
+# For first-time installation (Lakebase provisioning, schema, functions,
+# pricing data, secrets), use the installer bundle instead:
+#   scripts/install.sh   (see scripts/databricks.yml)
+#
+# Usage:
+#   ./deploy.sh                                 # build the frontend first
+#   databricks bundle validate                  # check config (dev target)
+#   databricks bundle deploy                    # sync source + update app
+#   databricks bundle run lakemeter             # deploy the app
+#
+# Requires Databricks CLI >= 0.261 (apps in bundles). CI pins v1.9.0.
+# =============================================================================
+
+bundle:
+  name: lakemeter
+
+variables:
+  app_name:
+    description: Name of the Databricks App to deploy
+    default: lakemeter
+  secrets_scope:
+    description: Workspace secret scope holding Lakebase connection config
+    default: lakemeter-secrets
+  claude_endpoint:
+    description: Model serving endpoint used by the AI Assistant
+    default: databricks-claude-opus-4-6
+
+# Only runtime files are synced — mirrors deploy.sh's parallel-sync set.
+# The frontend is pre-built into backend/static/ (run ./deploy.sh to rebuild);
+# pricing CSVs stay out (pricing data lives in Lakebase, not in files).
+sync:
+  include:
+    - "backend/app/**"
+    - "backend/static/assets/**"
+    - "backend/static/pricing/**"
+    - "backend/static/index.html"
+    - "backend/static/databricks-icon.svg"
+    - "app.yaml"
+    - "requirements.txt"
+  exclude:
+    - "**/__pycache__/**"
+    - "**/*.pyc"
+    - "backend/static/pricing/*.csv"
+    - "backend/static/pricing/manifest.json"
+
+resources:
+  apps:
+    lakemeter:
+      name: ${var.app_name}
+      description: "Lakemeter — Databricks cost estimation tool"
+      source_code_path: ${workspace.file_path}
+
+      # App resources backing the valueFrom references in app.yaml.
+      # Resource names are app-scoped and MUST match app.yaml exactly —
+      # do not rename without updating app.yaml in the same change.
+      resources:
+        - name: lakemeter-lakebase-instance
+          description: Lakebase instance name
+          secret:
+            scope: ${var.secrets_scope}
+            key: lakebase-instance-name
+            permission: READ
+        - name: lakemeter-db-host
+          description: Database host
+          secret:
+            scope: ${var.secrets_scope}
+            key: lakebase-host
+            permission: READ
+        - name: lakemeter-db-user
+          description: Database user
+          secret:
+            scope: ${var.secrets_scope}
+            key: lakebase-user
+            permission: READ
+        - name: lakemeter-db-name
+          description: Database name
+          secret:
+            scope: ${var.secrets_scope}
+            key: lakebase-database
+            permission: READ
+        - name: lakemeter-claude-endpoint
+          description: Claude model endpoint for AI Assistant
+          serving_endpoint:
+            name: ${var.claude_endpoint}
+            permission: CAN_QUERY
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      app_name: lakemeter-dev
+
+  prod:
+    mode: production
+    variables:
+      app_name: lakemeter
