@@ -2,6 +2,13 @@ bundle:
   name: lakemeter-installer
 
 variables:
+  reporting_package_pause_status:
+    description: >-
+      Schedule pause status for the weekly reporting package job (PAUSED
+      or UNPAUSED). Deployed PAUSED by default; enable with
+      --var="reporting_package_pause_status=UNPAUSED" or unpause in the
+      Workflows UI.
+    default: PAUSED
   chargeback_export_pause_status:
     description: >-
       Schedule pause status for the monthly chargeback export job (PAUSED
@@ -332,6 +339,47 @@ resources:
               export_catalog: "{{job.parameters.export_catalog}}"
               export_schema: "{{job.parameters.export_schema}}"
               export_volume: "{{job.parameters.export_volume}}"
+          environment_key: serverless_env
+
+      environments:
+        - environment_key: serverless_env
+          spec:
+            environment_version: "5"
+
+    # ── Weekly reporting package ──────────────────────────────────────
+    # Copies the Lakebase reporting rollups into Unity Catalog rpt_*
+    # tables and deploys the AI/BI dashboard definition and Genie space.
+    # Deployed PAUSED by default; enable with:
+    #   databricks bundle deploy --var="reporting_package_pause_status=UNPAUSED"
+    lakemeter_reporting_package:
+      name: "Lakemeter Reporting Package"
+      parameters:
+        - name: instance_name
+          default: "lakemeter-customer"
+        - name: db_name
+          default: "lakemeter_pricing"
+        - name: secrets_scope
+          default: "lakemeter-secrets"
+        - name: reporting_catalog
+          default: "lakemeter_catalog"
+        - name: reporting_schema
+          default: "lakemeter"
+
+      schedule:
+        quartz_cron_expression: "0 0 7 ? * MON"  # 07:00 UTC on Mondays
+        timezone_id: "UTC"
+        pause_status: ${var.reporting_package_pause_status}
+
+      tasks:
+        - task_key: package_reporting
+          notebook_task:
+            notebook_path: ./notebooks/14_package_reporting.py
+            base_parameters:
+              instance_name: "{{job.parameters.instance_name}}"
+              db_name: "{{job.parameters.db_name}}"
+              secrets_scope: "{{job.parameters.secrets_scope}}"
+              reporting_catalog: "{{job.parameters.reporting_catalog}}"
+              reporting_schema: "{{job.parameters.reporting_schema}}"
           environment_key: serverless_env
 
       environments:
