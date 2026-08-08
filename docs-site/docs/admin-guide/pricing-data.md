@@ -6,6 +6,8 @@ sidebar_position: 4
 
 Lakemeter estimates use **snapshot pricing** loaded into Lakebase, not a live FinOps feed. This page describes the default CSV path and the optional Unity Catalog (UC) publication path.
 
+For **account actuals** (`system.billing.usage` → UC gold → App **Actuals** page), see the [Live FinOps](./finops) admin guide (ADR-012, `etl/finops/`). Set `FINOPS_WAREHOUSE_ID` on the app and grant the app SP `SELECT` on gold. That path does not replace this Lakebase pricing snapshot.
+
 ## Default: bundled CSV snapshot
 
 New installs and the paused `lakemeter_pricing_refresh` job load flattened CSVs from `scripts/pricing_data/` via `03_load_pricing_data.py` (TRUNCATE + INSERT into `lakemeter.sync_*` tables). Freshness is recorded in `lakemeter.pricing_metadata` with `source=bundled_csv`.

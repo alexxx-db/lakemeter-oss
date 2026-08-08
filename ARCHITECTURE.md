@@ -186,6 +186,8 @@ Pricing is the product's foundation, so it has three redundant representations, 
 
 A scheduled job (`lakemeter_pricing_refresh` in `scripts/databricks.yml`, weekly Sunday 06:00 UTC, **paused by default**) reloads pricing via `09_refresh_pricing.py`. Default source is bundled CSVs; set job parameter `pricing_source=unity_catalog` to publish from UC tables (`10_refresh_pricing_from_uc.py`). See `docs-site/docs/admin-guide/pricing-data.md`.
 
+**Live FinOps (actuals)** is a separate plane ([ADR-012](DECISIONS.md)): `etl/finops/` builds UC gold (`cost_daily`, …) from `system.billing.usage` × time-windowed `list_prices`. The App serves Actuals (`/actuals`, `/api/v1/finops/*`) via SQL warehouse Statement Execution (App SP `SELECT` on gold only). It does not load usage into Lakebase and is not required for the estimator.
+
 ---
 
 ## 8. Deployment topology

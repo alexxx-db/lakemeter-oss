@@ -45,6 +45,7 @@ import {
 } from '../api/client'
 import { saveAs } from 'file-saver'
 import WorkloadForm from '../components/WorkloadForm'
+import FinOpsTagsButton from '../components/FinOpsTagsButton'
 import type { LineItem } from '../types'
 import {
   getInstanceDBURate as getBundleInstanceDBURate,
@@ -2020,6 +2021,17 @@ export default function Calculator() {
             <ArrowDownTrayIcon className="w-4 h-4" />
             <span className="hidden sm:inline">Excel</span>
           </button>
+
+          {id && (
+            <FinOpsTagsButton
+              estimateId={id}
+              lineItems={lineItems.map((li) => ({
+                line_item_id: li.line_item_id,
+                workload_name: li.workload_name,
+                workload_type: li.workload_type,
+              }))}
+            />
+          )}
           
           {id && (
             <button

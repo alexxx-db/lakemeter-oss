@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     
     # Auth is Databricks Apps SSO via X-Forwarded-* identity headers.
     # No application-issued JWTs are used.
+
+    # Live FinOps (ADR-012) — UC gold via SQL warehouse; optional until configured
+    finops_warehouse_id: str = ""
+    finops_catalog: str = "main"
+    finops_schema: str = "lakemeter_finops"
+    # When warehouse id is empty, attempt to discover a warehouse (dev-friendly).
+    # Production should set FINOPS_WAREHOUSE_ID explicitly.
+    finops_auto_warehouse: bool = False
     
     # CORS
     cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:5175"

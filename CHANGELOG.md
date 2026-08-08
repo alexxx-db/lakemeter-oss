@@ -39,6 +39,10 @@ Security, trust, and platform hardening on top of v0.1.1 (also summarized in
 - Documented Databricks Support as commercial-only
 - Admin guides: pricing data path, AppKit evaluation note
 - Persist Shutterstock / Lakebase PITR-snapshot / AI Parse UI fields correctly
+- Live FinOps P0–P2 (ADR-012): `etl/finops` gold job (`cost_daily`,
+  `cost_by_estimate_daily`), App Actuals + variance (`/actuals`,
+  `/api/v1/finops/*`) via SQL warehouse; tagging contract in `TAGGING.md`;
+  calculator **FinOps tags** copy helper + admin guide `finops.md`
 
 ### Ops / CI
 - Installer DAB targets (`dev`/`staging`/`prod`), timeouts, notification_settings

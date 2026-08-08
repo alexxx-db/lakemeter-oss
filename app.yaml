@@ -40,5 +40,16 @@ env:
   - name: "CLAUDE_MODEL_ENDPOINT"
     valueFrom: "lakemeter-claude-endpoint"
 
+  # Live FinOps (ADR-012) — optional until gold job + warehouse grants are ready.
+  # Set FINOPS_WAREHOUSE_ID to a warehouse the app SP can use (SELECT on gold).
+  - name: "FINOPS_WAREHOUSE_ID"
+    value: ""
+  - name: "FINOPS_CATALOG"
+    value: "main"
+  - name: "FINOPS_SCHEMA"
+    value: "lakemeter_finops"
+  - name: "FINOPS_AUTO_WAREHOUSE"
+    value: "false"
+
   # Auth: Databricks Apps SSO injects X-Forwarded-Email / X-Forwarded-User.
   # No application-issued JWT secret is required.

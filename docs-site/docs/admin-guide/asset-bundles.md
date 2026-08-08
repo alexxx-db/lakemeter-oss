@@ -4,12 +4,13 @@ sidebar_position: 6
 
 # Deploying with Asset Bundles
 
-Lakemeter uses **two** Databricks Asset Bundles, one per lifecycle stage:
+Lakemeter uses Databricks Asset Bundles for lifecycle stages:
 
 | Bundle | Location | Purpose |
 |---|---|---|
 | Installer | `scripts/databricks.yml` | One-time provisioning: Lakebase instance, database, schema + functions, pricing data, secrets, app creation (runs as a serverless job). |
 | App deployment | `databricks.yml` (repo root) | Day-2 updates: sync app source, configure app resources, deploy the app. |
+| Live FinOps (P0) | `etl/finops/databricks.yml` | Optional gold job from `system.billing` → UC (`lakemeter_finops_gold`, paused by default). See [ADR-012](https://github.com/databrickslabs/lakemeter-oss/blob/main/DECISIONS.md). |
 
 This page covers the **root bundle** — the fast path for shipping code updates after the initial install. The installer bundle is covered by the [Installer Guide](./installer).
 

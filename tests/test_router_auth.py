@@ -21,6 +21,8 @@ def client(monkeypatch_module):
     for mod in [m for m in sys.modules if m.startswith("app")]:
         del sys.modules[mod]
     monkeypatch_module.setenv("DATABASE_URL", "postgresql://u:p@localhost:5432/db")
+    monkeypatch_module.setenv("FINOPS_WAREHOUSE_ID", "")
+    monkeypatch_module.setenv("FINOPS_AUTO_WAREHOUSE", "false")
     monkeypatch_module.delenv("LOCAL_DEV_EMAIL", raising=False)
     import app.main
     return TestClient(app.main.app)
@@ -43,6 +45,8 @@ PROTECTED_GET_ROUTES = [
     "/api/v1/vm-pricing/regions",
     "/api/v1/vm-pricing/instance-types",
     "/api/v1/workload-types/",
+    "/api/v1/finops/metadata",
+    "/api/v1/finops/summary?days=7",
 ]
 
 PROTECTED_POST_ROUTES = [

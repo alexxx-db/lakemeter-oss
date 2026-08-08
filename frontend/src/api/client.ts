@@ -568,6 +568,146 @@ export const fetchPricingFreshness = async (): Promise<PricingFreshness> => {
 }
 
 // ============================================================================
+// Live FinOps (Actuals) — UC gold via warehouse (ADR-012)
+// ============================================================================
+
+export interface FinOpsMetadata {
+  available: boolean
+  configured: boolean
+  built_at?: string | null
+  catalog?: string
+  schema?: string
+  lookback_days?: number
+  cost_daily_rows?: number
+  cost_by_product_daily_rows?: number
+  cost_by_estimate_daily_rows?: number
+  unpriced_positive_usage_rows?: number
+  total_list_cost_usd?: number
+  attributed_list_cost_usd?: number
+  attributed_pct?: number
+  cost_basis?: string
+  build_version?: string | null
+  message?: string | null
+}
+
+export interface FinOpsDailyPoint {
+  usage_date: string
+  list_cost_usd: number
+  usage_quantity: number
+}
+
+export interface FinOpsProductRow {
+  billing_origin_product: string
+  list_cost_usd: number
+  usage_quantity: number
+  usage_record_count: number
+}
+
+export interface FinOpsSummary {
+  available: boolean
+  configured: boolean
+  days: number
+  workspace_id?: string | null
+  cost_basis: string
+  total_list_cost_usd: number
+  daily: FinOpsDailyPoint[]
+  by_product: FinOpsProductRow[]
+  message?: string | null
+}
+
+export interface FinOpsSkuRow {
+  sku_name: string
+  billing_origin_product: string
+  cloud: string
+  usage_unit: string
+  usage_quantity: number
+  list_cost_usd: number
+  usage_record_count: number
+}
+
+export interface FinOpsTopSkus {
+  available: boolean
+  configured: boolean
+  days: number
+  cost_basis: string
+  skus: FinOpsSkuRow[]
+  message?: string | null
+}
+
+export const fetchFinopsMetadata = async (): Promise<FinOpsMetadata> => {
+  const { data } = await api.get('/finops/metadata')
+  return unwrap<FinOpsMetadata>(data)
+}
+
+export const fetchFinopsSummary = async (params: {
+  days?: number
+  workspace_id?: string
+}): Promise<FinOpsSummary> => {
+  const { data } = await api.get('/finops/summary', { params })
+  return unwrap<FinOpsSummary>(data)
+}
+
+export const fetchFinopsTopSkus = async (params: {
+  days?: number
+  limit?: number
+  workspace_id?: string
+}): Promise<FinOpsTopSkus> => {
+  const { data } = await api.get('/finops/top-skus', { params })
+  return unwrap<FinOpsTopSkus>(data)
+}
+
+export interface FinOpsVariance {
+  available: boolean
+  configured: boolean
+  estimate_id: string
+  estimate_name: string
+  days: number
+  cost_basis: string
+  plan_monthly_usd: number
+  plan_period_usd: number
+  actual_list_cost_usd: number
+  variance_usd: number
+  variance_pct: number | null
+  by_product: Array<{
+    product_key: string
+    billing_origin_product?: string
+    lakemeter_workload_type?: string | null
+    list_cost_usd: number
+    usage_quantity: number
+  }>
+  daily: Array<{ usage_date: string; list_cost_usd: number }>
+  line_item_count?: number
+  line_items_with_plan?: number
+  message?: string | null
+  notes?: string
+}
+
+export const fetchFinopsVariance = async (
+  estimateId: string,
+  params?: { days?: number }
+): Promise<FinOpsVariance> => {
+  const { data } = await api.get(`/finops/variance/${estimateId}`, { params })
+  return unwrap<FinOpsVariance>(data)
+}
+
+export interface FinOpsTagPack {
+  estimate: Record<string, string>
+  line_items: Array<{
+    line_item_id: string
+    workload_name?: string
+    workload_type?: string | null
+    tags: Record<string, string>
+  }>
+  tag_keys: Record<string, string>
+  notes?: string
+}
+
+export const fetchFinopsTags = async (estimateId: string): Promise<FinOpsTagPack> => {
+  const { data } = await api.get(`/finops/tags/${estimateId}`)
+  return unwrap<FinOpsTagPack>(data)
+}
+
+// ============================================================================
 // Model Serving (NEW API)
 // ============================================================================
 export const fetchModelServingGPUTypes = async (cloud: string): Promise<ModelServingGPUType[]> => {
