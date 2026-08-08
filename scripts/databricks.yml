@@ -243,6 +243,19 @@ resources:
               secrets_scope: "{{job.parameters.secrets_scope}}"
           environment_key: serverless_env
 
+        # Classify attributed spend into product lines and ingest Genie /
+        # dashboard query activity from system.query.history.
+        - task_key: enrich_product_coverage
+          depends_on:
+            - task_key: build_attribution
+          notebook_task:
+            notebook_path: ./notebooks/10_enrich_product_coverage.py
+            base_parameters:
+              instance_name: "{{job.parameters.instance_name}}"
+              db_name: "{{job.parameters.db_name}}"
+              secrets_scope: "{{job.parameters.secrets_scope}}"
+          environment_key: serverless_env
+
       environments:
         - environment_key: serverless_env
           spec:
