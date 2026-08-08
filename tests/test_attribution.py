@@ -5,10 +5,14 @@ statically, so they run anywhere without a Databricks workspace or a
 Lakebase instance.
 """
 
+import pytest
 import re
 from pathlib import Path
 
 import yaml
+
+pytestmark = pytest.mark.structural
+
 
 REPO = Path(__file__).resolve().parent.parent
 NOTEBOOK = REPO / "scripts" / "notebooks" / "09_build_attribution.py"
