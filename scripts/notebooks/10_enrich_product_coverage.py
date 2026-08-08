@@ -289,12 +289,12 @@ def load_query_activity(client_pattern, target_table, pipeline_name):
     if rows:
         psycopg2.extras.execute_values(
             cur,
-            f\"\"\"
+            f"""
             INSERT INTO lakemeter.{target_table} (
                 usage_date, executed_by, warehouse_id,
                 query_count, total_duration_ms, total_rows_produced
             ) VALUES %s
-            \"\"\",
+            """,
             rows,
             page_size=1000,
         )
