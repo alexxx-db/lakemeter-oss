@@ -1,0 +1,83 @@
+{
+  "version": 2,
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "${catalog}.${schema}.rpt_spend_daily"
+      },
+      {
+        "identifier": "${catalog}.${schema}.rpt_spend_daily_by_product"
+      },
+      {
+        "identifier": "${catalog}.${schema}.rpt_genie_queries_daily"
+      },
+      {
+        "identifier": "${catalog}.${schema}.rpt_dashboard_queries_daily"
+      },
+      {
+        "identifier": "${catalog}.${schema}.rpt_budget_alerts"
+      }
+    ]
+  },
+  "instructions": {
+    "text_instructions": [
+      {
+        "content": [
+          "These tables are Lakemeter reporting rollups refreshed daily from system.billing.usage.",
+          "list_cost is usage_quantity multiplied by the public list price, in the row's currency_code.",
+          "Every row is attributed to attributed_user with a confidence grade: HIGH means the billing record named the executing identity (run_as); MEDIUM means resource owner or creator; LOW means an owner custom tag; NONE means UNATTRIBUTED.",
+          "cost_center comes from the FinOps-maintained mapping table, then the cost_center tag, then UNMAPPED.",
+          "product_line is one of: sql_warehouse, model_serving, dlt_pipeline, jobs, interactive_cluster, foundation_model_api, other.",
+          "Genie and dashboard tables are query activity, not cost: their compute is billed to the SQL warehouse and appears under product_line sql_warehouse. Join on warehouse_id and usage_date to apportion warehouse spend.",
+          "Genie One and Agents usage is free through 2027-01-31; billing corrections that negate it are already included in the spend tables."
+        ]
+      }
+    ],
+    "example_questions": [
+      {
+        "question": [
+          "What was our total list cost last week by product line?"
+        ]
+      },
+      {
+        "question": [
+          "Which users spent the most this month, and how confident is the attribution?"
+        ]
+      },
+      {
+        "question": [
+          "Show spend by cost center for the last 30 days"
+        ]
+      },
+      {
+        "question": [
+          "How many Genie queries did each user run last week?"
+        ]
+      },
+      {
+        "question": [
+          "Which cost centers are over 80 percent of their monthly budget?"
+        ]
+      }
+    ]
+  },
+  "config": {
+    "sample_questions": [
+      {
+        "question": [
+          "What was our total list cost last week by product line?"
+        ]
+      },
+      {
+        "question": [
+          "Show spend by cost center for the last 30 days"
+        ]
+      },
+      {
+        "question": [
+          "Which cost centers are over budget this month?"
+        ]
+      }
+    ]
+  }
+}
