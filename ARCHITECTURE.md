@@ -6,9 +6,9 @@ This document explains how Lakemeter is put together: what the major components 
 
 ## 1. What Lakemeter is, in one paragraph
 
-Lakemeter is a cost-estimation application for Databricks. A user describes the workloads they plan to run (for example: "a nightly ETL job on 8 workers of i3.xlarge for 2 hours"), and Lakemeter computes an estimated monthly cost in USD by combining two ingredients: (1) the Databricks unit price of the relevant SKU (DBUs — Databricks Units — or token rates), and (2) the underlying cloud VM price, when the workload runs on customer-managed ("classic") compute. The result is stored as an **estimate** containing **line items** (one per workload), and can be exported to a formatted Excel workbook.
+Lakemeter is a cost-estimation application for Databricks. A user describes the workloads they plan to run (for example: "a nightly ETL job on 8 workers of i3.xlarge for 2 hours"), and Lakemeter computes an estimated monthly cost in USD by combining two ingredients: (1) the Databricks unit price of the relevant SKU (DBUs, Databricks Units, or token rates), and (2) the underlying cloud VM price, when the workload runs on customer-managed ("classic") compute. The result is stored as an **estimate** containing **line items** (one per workload), and can be exported to a formatted Excel workbook.
 
-The application runs as a **Databricks App** — a managed hosting environment inside a Databricks workspace — which gives it single sign-on (SSO) for free: anyone who can open the app is already authenticated by Databricks, and the backend learns their identity from headers the platform injects.
+The application runs as a **Databricks App**, a managed hosting environment inside a Databricks workspace. This gives it single sign-on (SSO) for free: anyone who can open the app is already authenticated by Databricks, and the backend learns their identity from headers the platform injects.
 
 ---
 
@@ -49,12 +49,12 @@ Four runtime components:
 
 Plus two data pipelines that run *outside* the app, inside the workspace:
 
-- **Pricing fetch pipeline** (`etl/pricing_sync/`) — notebooks that pull official Databricks list prices (from system tables) and cloud VM prices (from AWS/Azure/GCP price lists) into **Unity Catalog** tables under `lakemeter_catalog.lakemeter`.
-- **Sync + setup pipeline** (`etl/lakebase_setup/`, and the installer variant in `scripts/notebooks/`) — creates the Lakebase database, tables, SQL functions, and copies the Unity Catalog pricing rows into Lakebase `sync_*` tables.
+- **Pricing fetch pipeline** (`etl/pricing_sync/`): notebooks that pull official Databricks list prices (from system tables) and cloud VM prices (from AWS/Azure/GCP price lists) into **Unity Catalog** tables under `lakemeter_catalog.lakemeter`.
+- **Sync + setup pipeline** (`etl/lakebase_setup/`, and the installer variant in `scripts/notebooks/`): creates the Lakebase database, tables, SQL functions, and copies the Unity Catalog pricing rows into Lakebase `sync_*` tables.
 
 And one static artifact that ships with the app:
 
-- **Bundled pricing snapshot** (`backend/static/pricing/`) — CSV/JSON files with the same pricing data, so the installer can seed a fresh database without running the fetch notebooks.
+- **Bundled pricing snapshot** (`backend/static/pricing/`): CSV/JSON files with the same pricing data, so the installer can seed a fresh database without running the fetch notebooks.
 
 ---
 
@@ -72,7 +72,7 @@ This is the single most important flow to understand. Follow it end to end and m
 
 5. **The response** is returned to the browser, and the caller (usually a line-item edit form) stores the full breakdown JSON back onto the line item's `cost_calculation_response` column when the user saves.
 
-6. **Export** (`backend/app/routes/export/`) later reads all line items of an estimate and renders an Excel workbook with `openpyxl`/`xlsxwriter` using the stored breakdowns — it does not recalculate.
+6. **Export** (`backend/app/routes/export/`) later reads all line items of an estimate and renders an Excel workbook with `openpyxl`/`xlsxwriter` using the stored breakdowns; it does not recalculate.
 
 Why this design matters operationally: **all pricing data lives inside the customer's own workspace**, in their Lakebase database. The app makes zero external network calls at runtime for pricing. That is a deliberate security and reliability decision (see DECISIONS.md).
 
@@ -107,9 +107,9 @@ backend/app/
 | `reference` | `/reference/*` | Dropdown data: clouds/regions, instance types, DBSQL sizes, FMAPI models… |
 | `chat` | `/chat` | AI assistant streaming chat |
 
-**Authentication.** `auth/databricks_auth.py` reads the user identity headers injected by the Databricks Apps proxy (email, name) and upserts a row in the `users` table. `get_current_user` is a FastAPI dependency used by protected routes. There is also a JWT fallback for local development, configured via `JWT_SECRET_KEY` — in production the Databricks Apps platform is the identity provider.
+**Authentication.** `auth/databricks_auth.py` reads the user identity headers injected by the Databricks Apps proxy (email, name) and upserts a row in the `users` table. `get_current_user` is a FastAPI dependency used by protected routes. There is also a JWT fallback for local development, configured via `JWT_SECRET_KEY`; in production the Databricks Apps platform is the identity provider.
 
-**Database connection.** `database.py` builds a SQLAlchemy engine pointing at Lakebase. Lakebase uses short-lived OAuth tokens as passwords when connecting with a service principal; the engine config refreshes the token before it expires so long-lived connections keep working. `DB_SSLMODE=require` is set in `app.yaml` — always keep TLS on.
+**Database connection.** `database.py` builds a SQLAlchemy engine pointing at Lakebase. Lakebase uses short-lived OAuth tokens as passwords when connecting with a service principal; the engine config refreshes the token before it expires so long-lived connections keep working. `DB_SSLMODE=require` is set in `app.yaml`; always keep TLS on.
 
 **Configuration.** Everything is an environment variable mapped in `config.py` (`Settings`). In the deployed app these come from `app.yaml`; locally, from a `.env` file. Notable ones: `DB_HOST`, `DB_USER`, `DB_NAME`, `DB_PORT`, `LAKEBASE_INSTANCE_NAME`, `CLAUDE_MODEL_ENDPOINT`, `ENVIRONMENT`.
 
@@ -140,7 +140,7 @@ Two things worth knowing:
 
 ## 6. The database is also a calculation engine
 
-Unusually for a web app, a large part of the cost math lives **inside PostgreSQL as SQL functions**. They are created from `scripts/functions/` (numbered `01`–`09`; there is no `07`) by the installer notebook `scripts/notebooks/02b_create_functions.py`:
+Unusually for a web app, a large part of the cost math lives **inside PostgreSQL as SQL functions**. They are created from `scripts/functions/` (numbered `01`-`09`; there is no `07`) by the installer notebook `scripts/notebooks/02b_create_functions.py`:
 
 | File | Functions (schema `lakemeter`) | Role |
 |---|---|---|
@@ -153,7 +153,7 @@ Unusually for a web app, a large part of the cost math lives **inside PostgreSQL
 | `08_VM_Cost_Calculators.py` | `calculate_classic_vm_costs`, `calculate_dbsql_vm_costs` | Cloud VM cost for customer-managed compute |
 | `09_Main_Orchestrator.py` | `calculate_line_item_costs` | One entry point that dispatches to the right calculator given a line item's workload type |
 
-Why SQL functions at all? Two reasons. First, the same calculation can then be used from notebooks, SQL editor, and the app — the cost model is defined once, in the database where the pricing data already lives. Second, it makes the cost model auditable: an engineer can `SELECT lakemeter.calculate_line_item_costs(...)` by hand to reproduce any number the app produced. The detailed table-by-table design is in SCHEMA.md.
+Why SQL functions at all? Two reasons. First, the same calculation can then be used from notebooks, SQL editor, and the app: the cost model is defined once, in the database where the pricing data already lives. Second, it makes the cost model auditable: an engineer can `SELECT lakemeter.calculate_line_item_costs(...)` by hand to reproduce any number the app produced. The detailed table-by-table design is in SCHEMA.md.
 
 The `calculate` routes call these functions where available and fall back to equivalent Python math for workload types without a SQL calculator (e.g. Lakebase CU pricing, AI Parse, Shutterstock, Databricks Apps, Lakeflow Connect).
 
@@ -192,14 +192,14 @@ A scheduled job (`lakemeter_pricing_sync` in `scripts/databricks.yml`, monthly, 
 
 Everything is deployed by **Databricks Asset Bundles** (`scripts/databricks.yml`), driven by `scripts/install.sh`:
 
-1. `01_provision_lakebase.py` — create the Lakebase instance (autoscaling).
-2. `02_create_database.py` — database `lakemeter_pricing`, schema `lakemeter`, app tables, triggers, the `lakemeter_sync_role` login role, and secrets (`lakebase-user`, `lakebase-password`, `lakebase-host`, `lakebase-database`) in a secrets scope.
-3. `02b_create_functions.py` — the SQL calculators from §6.
-4. `03_load_pricing_data.py` — seed pricing from the bundled snapshot.
-5. `04_create_sku_mapping.py` — SKU→region mapping.
-6. `05a/05b` — create the Databricks App and grant it access.
-7. `06_deploy_app.py` — build the frontend (`tsc && vite build`), package the app, deploy.
-8. `07_verify_installation.py` — smoke checks.
+1. `01_provision_lakebase.py`, create the Lakebase instance (autoscaling).
+2. `02_create_database.py`, database `lakemeter_pricing`, schema `lakemeter`, app tables, triggers, the `lakemeter_sync_role` login role, and secrets (`lakebase-user`, `lakebase-password`, `lakebase-host`, `lakebase-database`) in a secrets scope.
+3. `02b_create_functions.py`, the SQL calculators from §6.
+4. `03_load_pricing_data.py`, seed pricing from the bundled snapshot.
+5. `04_create_sku_mapping.py`, SKU→region mapping.
+6. `05a/05b`, create the Databricks App and grant it access.
+7. `06_deploy_app.py`, build the frontend (`tsc && vite build`), package the app, deploy.
+8. `07_verify_installation.py`, smoke checks.
 
 At runtime the platform injects `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET` into the app; the app's own service principal authenticates to Lakebase and to the model-serving endpoint. The app itself binds to `0.0.0.0:${DATABRICKS_APP_PORT}` via uvicorn (see `app.yaml`).
 
@@ -222,4 +222,4 @@ At runtime the platform injects `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, `DATA
 
 ## 10. Testing layout
 
-`tests/` mirrors the backend: unit tests per route/service, plus `tests/export/golden/` (a pinned canonical estimate whose every number is independently derived — change the cost model and these tests tell you exactly what moved), `tests/test_pricing_data_clouds.py` (36 checks that the bundled pricing snapshot covers all three clouds), `tests/test_version_sync.py` (version strings consistent across the repo), `tests/test_health_diagnostics.py`, and `tests/test_telemetry.py`. E2E and credential-gated suites (`tests/e2e/`, `tests/ai_assistant/`) require a live workspace and are excluded from CI by default.
+`tests/` mirrors the backend: unit tests per route/service, plus `tests/export/golden/` (a pinned canonical estimate whose every number is independently derived: change the cost model and these tests tell you exactly what moved), `tests/test_pricing_data_clouds.py` (36 checks that the bundled pricing snapshot covers all three clouds), `tests/test_version_sync.py` (version strings consistent across the repo), `tests/test_health_diagnostics.py`, and `tests/test_telemetry.py`. E2E and credential-gated suites (`tests/e2e/`, `tests/ai_assistant/`) require a live workspace and are excluded from CI by default.
