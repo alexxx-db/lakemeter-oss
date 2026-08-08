@@ -230,6 +230,19 @@ resources:
               secrets_scope: "{{job.parameters.secrets_scope}}"
           environment_key: serverless_env
 
+        # Rebuild the attribution rollup right after each ingestion, so
+        # attribution_daily is never behind actuals_usage_daily.
+        - task_key: build_attribution
+          depends_on:
+            - task_key: sync_actuals_usage
+          notebook_task:
+            notebook_path: ./notebooks/09_build_attribution.py
+            base_parameters:
+              instance_name: "{{job.parameters.instance_name}}"
+              db_name: "{{job.parameters.db_name}}"
+              secrets_scope: "{{job.parameters.secrets_scope}}"
+          environment_key: serverless_env
+
       environments:
         - environment_key: serverless_env
           spec:

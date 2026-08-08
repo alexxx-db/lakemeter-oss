@@ -99,7 +99,6 @@ Preparing bundle...
 Deploying bundle to workspace...
 Uploading bundle files to /Workspace/Users/admin@company.com/.bundle/lakemeter-installer/default/files...
 Deploying resources...
-Updating deployment state...
 Deployment complete!
 Bundle deployed
 ```
@@ -289,3 +288,25 @@ databricks bundle deploy --var="actuals_sync_pause_status=UNPAUSED"
 or unpause the schedule in the **Workflows** UI, or run it once manually
 with **Run now**. The first run backfills the last 30 days; you can widen
 that with the `initial_backfill_days` notebook parameter.
+
+### Attribution Build
+
+The same job runs a second task, **build_attribution**, immediately after
+each ingestion. It rebuilds `lakemeter.attribution_daily`: a daily rollup
+of actual usage where every record is attributed to a single owner using
+the first available identity signal, in order `run_as` (HIGH confidence),
+`owned_by` / `created_by` (MEDIUM), `custom_tags['owner']` (LOW), and a
+fallback `UNATTRIBUTED` bucket (NONE). The attribution source and
+confidence grade are stored on every row, so reports can filter or shade
+by data quality.
+
+Cost centers resolve through `lakemeter.ref_user_cost_center_map`
+(insert rows mapping user emails to cost centers), falling back to the
+`custom_tags['cost_center']` tag, then `UNMAPPED`. Each run prints the top
+attributed users without a mapping so the FinOps team can keep the map
+current, and warns if more than 20% of list cost lands in `UNATTRIBUTED`.
+
+The rollup is incremental with a trailing 14-day rebuild window
+(`reprocess_days` notebook parameter), so billing corrections and
+restatements flow through automatically. It shares the pause state of the
+parent job; no separate enablement is needed.
