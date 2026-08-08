@@ -311,3 +311,29 @@ The rollup is incremental with a trailing 14-day rebuild window
 (`reprocess_days` notebook parameter), so billing corrections and
 restatements flow through automatically. It shares the pause state of the
 parent job; no separate enablement is needed.
+
+### Product Coverage: SQL Warehouses, Model Serving, Genie, Dashboards
+
+A third task, **enrich_product_coverage**, runs after the attribution
+build and extends actuals beyond the Unity Catalog entities:
+
+- `lakemeter.product_usage_daily` re-classifies all attributed spend into
+  a `product_line`: `sql_warehouse`, `model_serving` (including the
+  `SERVERLESS_REAL_TIME_INFERENCE` SKU family), `dlt_pipeline`, `jobs`,
+  `interactive_cluster`, `foundation_model_api`, and `other`. A warning
+  prints if more than 20% of list cost stays unclassified.
+- `lakemeter.genie_query_daily` ingests per-day Genie query activity by
+  user and warehouse from `system.query.history` (matched on
+  `client_application` containing "Genie"). Genie compute is billed to the
+  underlying SQL warehouse, so this table is what lets you apportion
+  warehouse spend to the Genie users driving it. Genie One / Agents usage
+  is free through 2027-01-31; the negating correction records in billing
+  are preserved by the actuals pipeline, so warehouse sums stay correct.
+- `lakemeter.dashboard_query_daily` does the same for AI/BI dashboard
+  refreshes (`client_application` containing "Dashboard"), whose cost is
+  likewise the serving warehouse's compute.
+
+The enrichment task reads `system.query.history`, so the job identity also
+needs `SELECT` on that system table. It is incremental with its own
+watermarks and the same trailing rebuild window; no separate enablement
+is needed beyond the parent job.
