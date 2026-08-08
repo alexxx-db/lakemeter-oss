@@ -337,3 +337,42 @@ The enrichment task reads `system.query.history`, so the job identity also
 needs `SELECT` on that system table. It is incremental with its own
 watermarks and the same trailing rebuild window; no separate enablement
 is needed beyond the parent job.
+
+### Hardening: Migrations, Budgets, Chargeback
+
+The daily job now starts with an **apply_migrations** task: a canonical
+schema ledger for the pipeline tables. Migration files ship under
+`scripts/notebooks/migrations/` and are applied in filename order, each
+recorded in `lakemeter.schema_migrations` with a SHA-256 checksum.
+Re-runs skip applied migrations; editing an already-applied file fails
+the run loudly (checksum drift) instead of silently diverging schema.
+Add new schema changes as new numbered files, never by editing applied
+ones.
+
+A **check_budgets** task closes the daily chain. Define budgets in
+`lakemeter.ref_budgets` scoped by `cost_center`, `product_line`, or
+`overall`, each with a monthly amount and WARN (default 80%) / CRITICAL
+(default 100%) thresholds. Month-to-date spend from
+`product_usage_daily` is compared every run; breaches are recorded in
+`lakemeter.budget_alerts` (rebuilt idempotently each month) and printed
+in the task log, and you can point a SQL alert or dashboard at the
+table.
+
+Finally, a separate **Lakemeter Chargeback Export** job (monthly, 05:00
+UTC on the 1st, deployed paused) writes
+`chargeback_YYYY-MM.csv` for the previous month to a UC volume
+(`main.default.lakemeter_chargeback` by default, configurable via job
+parameters): one row per cost center, attributed user, and asset type,
+with list cost, usage quantity, and the high-confidence / unattributed
+cost split so Finance can see data quality alongside the numbers.
+Enable with:
+
+```bash
+databricks bundle deploy --var="chargeback_export_pause_status=UNPAUSED"
+```
+
+Runtime Python dependencies for the app are now pinned to exact versions
+in `requirements.txt` and `backend/requirements.txt`, so redeploys are
+reproducible; the pipeline structural tests carry the `structural`
+pytest marker (`pytest -m structural`) so they can run without a
+workspace.
