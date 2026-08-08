@@ -8,11 +8,11 @@ Create, manage, and export detailed pricing estimates for 16 Databricks workload
 
 ## Features
 
-- **16 workload types** — Jobs, All-Purpose, DBSQL, DLT, Model Serving, FMAPI, Vector Search, Lakebase, Databricks Apps, AI Parse, Shutterstock ImageAI
-- **AI assistant** — Describe your workload in natural language, review the suggestion, and accept with one click
-- **Excel export** — Full cost breakdowns with SKU details, discount calculations, and VM pricing
-- **Multi-cloud** — AWS, Azure, and GCP with region-specific pricing
-- **One-command install** — Provisions Lakebase, loads pricing data, and deploys the app automatically
+- **16 workload types**: Jobs, All-Purpose, DBSQL, DLT, Model Serving, FMAPI, Vector Search, Lakebase, Databricks Apps, AI Parse, Shutterstock ImageAI
+- **AI assistant**: Describe your workload in natural language, review the suggestion, and accept with one click
+- **Excel export**: Full cost breakdowns with SKU details, discount calculations, and VM pricing
+- **Multi-cloud**: AWS, Azure, and GCP with region-specific pricing
+- **One-command install**: Provisions Lakebase, loads pricing data, and deploys the app automatically
 
 ## Quick Start
 
@@ -29,9 +29,9 @@ The installer provisions everything in ~15 minutes. You only need a [Databricks 
 
 Full documentation is available at **[databrickslabs.github.io/lakemeter-oss](https://databrickslabs.github.io/lakemeter-oss/)**.
 
-- [User Guide](https://databrickslabs.github.io/lakemeter-oss/user-guide/overview) — How to create estimates, configure workloads, use the AI assistant, and export
-- [Admin Guide](https://databrickslabs.github.io/lakemeter-oss/admin-guide/deployment) — Installation, deployment inventory, and API reference
-- [Changelog](https://databrickslabs.github.io/lakemeter-oss/changelog) — Release history
+- [User Guide](https://databrickslabs.github.io/lakemeter-oss/user-guide/overview), How to create estimates, configure workloads, use the AI assistant, and export
+- [Admin Guide](https://databrickslabs.github.io/lakemeter-oss/admin-guide/deployment), Installation, deployment inventory, and API reference
+- [Changelog](https://databrickslabs.github.io/lakemeter-oss/changelog), Release history
 
 ## Tech Stack
 

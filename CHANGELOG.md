@@ -4,9 +4,9 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/):
 
-- **Major** (X.0.0) — breaking changes, mandatory database migrations
-- **Minor** (0.X.0) — new features, new workload types
-- **Patch** (0.0.X) — bug fixes, pricing data updates
+- **Major** (X.0.0), breaking changes, mandatory database migrations
+- **Minor** (0.X.0), new features, new workload types
+- **Patch** (0.0.X), bug fixes, pricing data updates
 
 This root changelog is the canonical source; `docs-site/docs/changelog.md` mirrors it
 for the published documentation site. The version-sync test suite enforces that the
@@ -56,7 +56,7 @@ The following changes are implemented on pull-request branches and queued for me
 
 ---
 
-## [0.1.0] — 2026-07-24
+## [0.1.0] - 2026-07-24
 
 Initial public open-source release.
 
@@ -69,7 +69,7 @@ Initial public open-source release.
 - One-command installer (`scripts/install.sh`) using Databricks Asset Bundles.
 - Lakebase-backed estimate storage (schema `lakemeter`, database `lakemeter_pricing`).
 - SQL cost-calculation functions deployed into Lakebase
-  (`scripts/functions/01–09`, orchestrated by `calculate_line_item_costs`).
+  (`scripts/functions/01-09`, orchestrated by `calculate_line_item_costs`).
 - Bundled pricing snapshot (`backend/static/pricing/`) covering AWS, Azure, and GCP.
 - Unity Catalog pricing-fetch notebooks (`etl/pricing_sync/`) targeting
   `lakemeter_catalog.lakemeter.*`.

@@ -2,11 +2,11 @@
 
 This file is the working plan for what happens next. It has three parts:
 
-1. **Merge queue** — work already implemented, waiting to land.
-2. **Operator checklist** — things only a repo admin / workspace admin can do.
-3. **Roadmap** — planned work, in priority order, with enough context to pick any item up cold.
+1. **Merge queue**: work already implemented, waiting to land.
+2. **Operator checklist**: things only a repo admin / workspace admin can do.
+3. **Roadmap**: planned work, in priority order, with enough context to pick any item up cold.
 
-When you complete an item, delete it here (and mention it in the changelog). Keep this file short enough to read in one sitting — prune aggressively.
+When you complete an item, delete it here (and mention it in the changelog). Keep this file short enough to read in one sitting, prune aggressively.
 
 ---
 
@@ -41,10 +41,10 @@ Databricks workspace.
 
 - [ ] **Apply the four workflow files.** The token used for automation lacks the
   `workflow` OAuth scope, so the revised YAMLs are posted as comments:
-  - `ci.yml` — comment on PR #4 (includes the pricing-coverage matrix job in a follow-up comment)
-  - `bundle.yml` — comment on PR #6
-  - `release.yml` — comment on PR #14
-  - `security.yml` — comment on PR #17
+  - `ci.yml`: comment on PR #4 (includes the pricing-coverage matrix job in a follow-up comment)
+  - `bundle.yml`: comment on PR #6
+  - `release.yml`: comment on PR #14
+  - `security.yml`: comment on PR #17
 
   Either copy each file from its comment into `.github/workflows/`, or re-authorize
   the automation token with the `workflow` scope and ask for them to be pushed.
@@ -65,7 +65,7 @@ Databricks workspace.
 
 ### 3.1 In-flight tracking items (time-sensitive)
 
-- **Issue #19 — Lakebase password-auth default change.**
+- **Issue #19: Lakebase password-auth default change.**
   New Lakebase Autoscaling projects created after 2026-05-21 have PostgreSQL
   password authentication *disabled by default*. The installer falls back to a
   password-auth role (`lakemeter_sync_role`) when service-principal OAuth isn't
@@ -74,7 +74,7 @@ Databricks workspace.
   *Action:* verify the fallback path on a freshly created project; either enable
   password auth during provisioning (`01_provision_lakebase.py`) or make the SP
   OAuth path mandatory. Update `docs-site/docs/admin-guide/installer.md` accordingly.
-- **Issue #20 — Gemini 2.5 pricing data retirement (deadline 2026-10-16).**
+- **Issue #20: Gemini 2.5 pricing data retirement (deadline 2026-10-16).**
   The Gemini 2.5 model family retires 2026-10-16. The bundled
   `fmapi-proprietary-rates` data contains these models.
   *Action:* refresh FMAPI proprietary rates after the retirement (re-run
@@ -83,15 +83,15 @@ Databricks workspace.
 
 ### 3.2 Next releases
 
-**v0.2.0 — Productionalization release (target: after merge queue clears)**
+**v0.2.0: Productionalization release (target: after merge queue clears)**
 Contents: everything in the changelog's Unreleased section. Exit criteria:
 all PRs merged, workflows applied, CI green on `main`, version bumped via
 `scripts/update_version.py`, tag-driven release executed.
 
-**v0.3.0 — Marketplace submission (Public Preview)**
+**v0.3.0: Marketplace submission (Public Preview)**
 Prereq: v0.2.0 shipped. Work items:
 - [ ] Complete the partner readiness checklist in `marketplace/README.md`
-  (dependency pinning is the main ⚠️ — move `requirements.txt` from `>=` ranges to
+  (dependency pinning is the main ⚠️: move `requirements.txt` from `>=` ranges to
   pinned versions with hashes for the release build).
 - [ ] SEG-restricted workspace install test (marketplace requirement).
 - [ ] Two-person review / branch protection evidence (operator checklist above).
