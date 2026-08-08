@@ -27,10 +27,14 @@ This page lists everything the Lakemeter installer creates in your Databricks wo
 | Scheduled job | `Lakemeter Pricing Sync` | Monthly pricing refresh (deployed paused) |
 | Scheduled job | `Lakemeter Actuals Sync` | Daily schema migrations, usage ingestion, attribution rollup, product coverage, and budget checks (deployed paused) |
 | Scheduled job | `Lakemeter Chargeback Export` | Monthly chargeback CSV to a UC volume (deployed paused) |
+| Scheduled job | `Lakemeter Reporting Package` | Weekly UC reporting tables, AI/BI dashboard definition, and Genie space (deployed paused) |
 | Actuals tables | `actuals_usage_daily`, `actuals_ingestion_state` | PostgreSQL tables |
 | Attribution tables | `attribution_daily`, `ref_user_cost_center_map` | PostgreSQL tables |
 | Product coverage tables | `product_usage_daily`, `genie_query_daily`, `dashboard_query_daily` | PostgreSQL tables |
 | Hardening tables | `schema_migrations`, `ref_budgets`, `budget_alerts` | PostgreSQL tables |
+| Reporting tables | `rpt_spend_daily`, `rpt_spend_daily_by_product`, `rpt_genie_queries_daily`, `rpt_dashboard_queries_daily`, `rpt_budget_alerts` | Unity Catalog Delta tables |
+| Genie space | `Lakemeter Cost Attribution` | Genie space over the reporting tables |
+| Dashboard definition | `lakemeter_costs.lvdash.json` | AI/BI dashboard (workspace file, importable) |
 
 ---
 
