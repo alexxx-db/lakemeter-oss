@@ -3,9 +3,9 @@
 This document specifies every persistent data structure Lakemeter uses, at both
 layers of the system:
 
-- **Unity Catalog (UC)** — the workspace's source of record for raw pricing
+- **Unity Catalog (UC)**: the workspace's source of record for raw pricing
   (`lakemeter_catalog.lakemeter.*`), produced by the fetch notebooks.
-- **Lakebase (PostgreSQL)** — the app's runtime database (`lakemeter_pricing`,
+- **Lakebase (PostgreSQL)**: the app's runtime database (`lakemeter_pricing`,
   schema `lakemeter`), holding application tables, the synced pricing copy, and the
   SQL cost-calculation functions.
 
@@ -19,12 +19,12 @@ function, update this file in the same pull request.
 
 | Prefix / pattern | Layer | Meaning | Examples |
 |---|---|---|---|
-| *(none)* | Lakebase | Application tables — user-generated data | `estimates`, `line_items`, `users` |
+| *(none)* | Lakebase | Application tables, user-generated data | `estimates`, `line_items`, `users` |
 | `sync_` | Lakebase | Tables synced (CDC) from Unity Catalog, or loaded from the bundled snapshot; **authoritative for the app at runtime** | `sync_pricing_dbu_rates` |
 | `sync_ref_` | Lakebase | Synced *reference* data (lookup dimensions) | `sync_ref_instance_dbu_rates` |
 | `sync_product_` | Lakebase | Synced *product rate* data (serverless/LLM products) | `sync_product_fmapi_databricks` |
 | `ref_` | Lakebase | Static reference data seeded by the installer (not synced) | `ref_workload_types`, `ref_cloud_tiers` |
-| `lakemeter.<fn>` | Lakebase | SQL functions, grouped by file number `01–09` | `lakemeter.get_dbu_price` |
+| `lakemeter.<fn>` | Lakebase | SQL functions, grouped by file number `01-09` | `lakemeter.get_dbu_price` |
 | `lakemeter_catalog.lakemeter.*` | UC | Raw pricing tables, source of record | `dbu_prices`, `vm_costs` |
 
 Rules that follow from this:
@@ -69,7 +69,7 @@ CREATE SCHEMA IF NOT EXISTS lakemeter_catalog.lakemeter;
 
 ### 2.2 Core pricing tables
 
-**`dbu_prices`** — Databricks list price per SKU. Grain: one row per
+**`dbu_prices`**: Databricks list price per SKU. Grain: one row per
 `cloud, region, tier, product_type, sku_name`. Primary key is that five-column
 composite. Sourced from `system.billing.list_prices`. Key columns:
 
@@ -82,17 +82,17 @@ composite. Sourced from `system.billing.list_prices`. Key columns:
 | `sku_name` | string | As-reported SKU name from the price list |
 | `price` | decimal | USD per DBU (or per unit for non-DBU SKUs) |
 
-**`vm_costs`** — Cloud VM hourly prices. Grain: one row per
+**`vm_costs`**: Cloud VM hourly prices. Grain: one row per
 `cloud, region, instance_type, pricing_tier, payment_option`.
 `pricing_tier` is `on_demand` / `reserved` / `spot`; `payment_option` is `NA` for
 on-demand and the reservation term otherwise. Roughly 111k rows across the three
 clouds in the current snapshot.
 
-**`instance_rates`** — DBU-per-hour consumed by each instance type. Grain:
+**`instance_rates`**: DBU-per-hour consumed by each instance type. Grain:
 `cloud, instance_type`. Sourced from the maintained `Instance Type Pricing.xlsx`
 (the cloud price lists don't publish DBU consumption; this file does).
 
-**`sku_region_mapping`** — Maps SKU-region names as they appear in price lists to
+**`sku_region_mapping`**: Maps SKU-region names as they appear in price lists to
 canonical region codes (`cloud, sku_region` → `region`).
 
 ### 2.3 Product and reference tables
@@ -115,7 +115,7 @@ canonical region codes (`cloud, sku_region` → `region`).
 - **Refresh cadence:** DBU prices and VM costs monthly (after vendor price updates);
   instance rates quarterly; FMAPI rates on model-release events (see Issue #20 for
   the 2026-10-16 Gemini retirement).
-- **Quality gates:** run `99_Debug_Data_Quality.ipynb` after every refresh — it
+- **Quality gates:** run `99_Debug_Data_Quality.ipynb` after every refresh; it
   checks duplicate keys, missing regions, and DBU-price/VM-cost coverage mismatches.
   The SQL checks are documented in `etl/pricing_sync/README.md`.
 - **Volumes:** the pipeline currently uses tables only. If raw vendor price-list
@@ -136,7 +136,7 @@ canonical region codes (`cloud, sku_region` → `region`).
 
 ### 3.1 Application tables
 
-**`users`** — one row per person who has opened the app.
+**`users`**: one row per person who has opened the app.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -148,7 +148,7 @@ canonical region codes (`cloud, sku_region` → `region`).
 | `last_login_at` | TIMESTAMP | updated on each authenticated request |
 | `created_at` / `updated_at` | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | audit |
 
-**`estimates`** — the top-level document a user edits.
+**`estimates`**: the top-level document a user edits.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -162,11 +162,11 @@ canonical region codes (`cloud, sku_region` → `region`).
 | `template_id` | UUID FK → templates | origin template, if any |
 | `original_prompt` | TEXT | the AI-assistant prompt that started the estimate, if any |
 | `display_order` | INT DEFAULT 0 | UI ordering |
-| `is_deleted` | BOOLEAN DEFAULT false | soft delete — rows are never hard-deleted by the app |
+| `is_deleted` | BOOLEAN DEFAULT false | soft delete; rows are never hard-deleted by the app |
 | `discount_config` | JSONB | per-estimate discount rules |
 | `created_at` / `updated_at` / `updated_by` | audit | `updated_by` FK → users |
 
-**`line_items`** — one row per workload inside an estimate; the heart of the system.
+**`line_items`**: one row per workload inside an estimate; the heart of the system.
 ~80 columns by design (ADR: one wide table; `workload_config` JSON is the overflow).
 Key groups:
 
@@ -192,26 +192,26 @@ Key groups:
 
 Indexes: `idx_line_items_estimate (estimate_id)`, `idx_line_items_workload_type (workload_type)`.
 
-**`conversation_messages`** — AI assistant history per estimate:
+**`conversation_messages`**: AI assistant history per estimate:
 `message_id` UUID PK, `estimate_id` FK, `message_role`, `message_content`,
 `message_sequence`, `message_type`, `tokens_used`, `model_used`, `created_at`.
 
-**`decision_records`** — assistant reasoning audit trail:
+**`decision_records`**: assistant reasoning audit trail:
 `record_id` UUID PK, `line_item_id` FK, `record_type`, `user_input`,
 `agent_response`, `assumptions` JSON, `calculations` JSON, `reasoning`, `created_at`.
 
-**`sharing`** — estimate sharing:
+**`sharing`**: estimate sharing:
 `share_id` UUID PK, `estimate_id` FK, `share_type`, `shared_with_user_id` FK → users,
 `share_link` VARCHAR(255) UNIQUE, `permission`, `expires_at`, `access_count`,
 `last_accessed_at`, `created_at`.
 
-**`templates`** — estimate templates: `template_id` UUID PK, `template_name`,
+**`templates`**: estimate templates: `template_id` UUID PK, `template_name`,
 `workload_type`, `file_path`, `file_format`, `mandatory_fields`/`optional_fields` JSON,
 `description`, `version`, `is_active`, audit columns.
 
 ### 3.2 Seeded reference tables
 
-**`ref_workload_types`** — the workload catalog *and* the UI form contract. PK
+**`ref_workload_types`**: the workload catalog *and* the UI form contract. PK
 `workload_type`. Columns include `display_name`, `description`, fifteen
 `show_*` BOOLEAN flags (`show_compute_config`, `show_serverless_toggle`,
 `show_serverless_performance_mode`, `show_photon_toggle`, `show_dlt_config`,
@@ -222,9 +222,9 @@ types (`sku_product_type_standard`, `sku_product_type_photon`,
 `sku_product_type_serverless`), and `display_order`. Nine rows are seeded at install
 (JOBS, ALL_PURPOSE, DLT, DBSQL, VECTOR_SEARCH, MODEL_SERVING, FMAPI_DATABRICKS,
 FMAPI_PROPRIETARY, LAKEBASE); the remaining workload types are added by later
-migrations/seeds. Inserts use `ON CONFLICT DO NOTHING` — re-running is safe.
+migrations/seeds. Inserts use `ON CONFLICT DO NOTHING`; re-running is safe.
 
-**`ref_cloud_tiers`** — PK `(cloud, tier)`; eight seeded rows (AWS/GCP:
+**`ref_cloud_tiers`**: PK `(cloud, tier)`; eight seeded rows (AWS/GCP:
 STANDARD, PREMIUM, ENTERPRISE; Azure: STANDARD, PREMIUM).
 
 ### 3.3 Synced pricing tables (`sync_*`)
@@ -267,7 +267,7 @@ keep pricing join keys consistent with this casing.
 
 ### 3.5 SQL functions (calculation engine)
 
-Deployed by `02b_create_functions.py` from `scripts/functions/01–09`. All live in
+Deployed by `02b_create_functions.py` from `scripts/functions/01-09`. All live in
 schema `lakemeter`; all are `CREATE OR REPLACE`, so redeploying updates them in place.
 
 | Function | Defined in | Purpose |
@@ -287,7 +287,7 @@ schema `lakemeter`; all are `CREATE OR REPLACE`, so redeploying updates them in 
 | `calculate_dbsql_vm_costs` | 08 | VM cost behind classic DBSQL warehouses |
 | `calculate_line_item_costs` | 09 | **Orchestrator**: given a line item, dispatches to the right calculators and returns the full breakdown JSON that gets stored in `line_items.cost_calculation_response` |
 
-File numbers `01–09` are significant and gaps are intentional (there is no `07`).
+File numbers `01-09` are significant and gaps are intentional (there is no `07`).
 Add new calculators in the matching numbered file, register them in the orchestrator,
 and add a test notebook under `etl/lakebase_setup/tests/`.
 
@@ -298,7 +298,7 @@ and add a test notebook under `etl/lakebase_setup/tests/`.
 1. **Additive-only by default.** New columns via `ADD COLUMN IF NOT EXISTS` in
    `02_create_database.py`'s `migration_columns` list; new tables via
    `CREATE TABLE IF NOT EXISTS`; function changes via `CREATE OR REPLACE`.
-2. **Every installer step is idempotent** — re-running the installer is the upgrade
+2. **Every installer step is idempotent**: re-running the installer is the upgrade
    path. Seeds use `ON CONFLICT DO NOTHING`.
 3. **Destructive changes** (drops, renames, type narrowing) are exceptional and ship
    as numbered release scripts under `etl/lakebase_setup/release_N/` with a README
@@ -315,9 +315,9 @@ and add a test notebook under `etl/lakebase_setup/tests/`.
 |---|---|---|
 | Pricing-refresh identity (SP/group) | OWNER / `MODIFY` + `SELECT` | DDL + DML (loads `sync_*`) |
 | App service principal | none | DML on app tables; `SELECT` + `EXECUTE` on pricing tables/functions (OAuth token auth) |
-| `lakemeter_sync_role` (fallback) | none | full DML, password auth (see Issue #19 — new projects disable password auth by default) |
+| `lakemeter_sync_role` (fallback) | none | full DML, password auth (see Issue #19: new projects disable password auth by default) |
 | Analysts (SQL editor/notebooks) | `SELECT` | `SELECT` + `EXECUTE` as granted |
-| End users | none | none directly — they go through the app, which enforces ownership/sharing |
+| End users | none | none directly; they go through the app, which enforces ownership/sharing |
 
 Credentials live in a Databricks secrets scope (`lakebase-user`,
 `lakebase-password`, `lakebase-host`, `lakebase-database`) created by the installer;
