@@ -2,6 +2,13 @@ bundle:
   name: lakemeter-installer
 
 variables:
+  chargeback_export_pause_status:
+    description: >-
+      Schedule pause status for the monthly chargeback export job (PAUSED
+      or UNPAUSED). Deployed PAUSED by default; enable with
+      --var="chargeback_export_pause_status=UNPAUSED" or unpause in the
+      Workflows UI.
+    default: PAUSED
   actuals_sync_pause_status:
     description: >-
       Schedule pause status for the actuals usage sync job (PAUSED or
@@ -221,7 +228,20 @@ resources:
         pause_status: ${var.actuals_sync_pause_status}
 
       tasks:
+        # Schema migrations run first: every downstream task can assume
+        # the pipeline tables exist.
+        - task_key: apply_migrations
+          notebook_task:
+            notebook_path: ./notebooks/11_apply_migrations.py
+            base_parameters:
+              instance_name: "{{job.parameters.instance_name}}"
+              db_name: "{{job.parameters.db_name}}"
+              secrets_scope: "{{job.parameters.secrets_scope}}"
+          environment_key: serverless_env
+
         - task_key: sync_actuals_usage
+          depends_on:
+            - task_key: apply_migrations
           notebook_task:
             notebook_path: ./notebooks/08_sync_actuals.py
             base_parameters:
@@ -254,6 +274,64 @@ resources:
               instance_name: "{{job.parameters.instance_name}}"
               db_name: "{{job.parameters.db_name}}"
               secrets_scope: "{{job.parameters.secrets_scope}}"
+          environment_key: serverless_env
+
+        # Compare month-to-date spend against ref_budgets and record
+        # breaches in budget_alerts.
+        - task_key: check_budgets
+          depends_on:
+            - task_key: enrich_product_coverage
+          notebook_task:
+            notebook_path: ./notebooks/12_check_budgets.py
+            base_parameters:
+              instance_name: "{{job.parameters.instance_name}}"
+              db_name: "{{job.parameters.db_name}}"
+              secrets_scope: "{{job.parameters.secrets_scope}}"
+          environment_key: serverless_env
+
+      environments:
+        - environment_key: serverless_env
+          spec:
+            environment_version: "5"
+
+    # ── Monthly chargeback export ─────────────────────────────────────
+    # Writes a per-cost-center, per-user chargeback CSV for the previous
+    # month into a UC volume, for import into Finance systems. Deployed
+    # PAUSED by default; enable with:
+    #   databricks bundle deploy --var="chargeback_export_pause_status=UNPAUSED"
+    lakemeter_chargeback_export:
+      name: "Lakemeter Chargeback Export"
+      parameters:
+        - name: instance_name
+          default: "lakemeter-customer"
+        - name: db_name
+          default: "lakemeter_pricing"
+        - name: secrets_scope
+          default: "lakemeter-secrets"
+        - name: export_catalog
+          default: "main"
+        - name: export_schema
+          default: "default"
+        - name: export_volume
+          default: "lakemeter_chargeback"
+
+      schedule:
+        quartz_cron_expression: "0 0 5 1 * ?"  # 05:00 UTC on the 1st
+        timezone_id: "UTC"
+        pause_status: ${var.chargeback_export_pause_status}
+
+      tasks:
+        - task_key: export_chargeback
+          notebook_task:
+            notebook_path: ./notebooks/13_export_chargeback.py
+            base_parameters:
+              instance_name: "{{job.parameters.instance_name}}"
+              db_name: "{{job.parameters.db_name}}"
+              secrets_scope: "{{job.parameters.secrets_scope}}"
+              export_month: "previous"
+              export_catalog: "{{job.parameters.export_catalog}}"
+              export_schema: "{{job.parameters.export_schema}}"
+              export_volume: "{{job.parameters.export_volume}}"
           environment_key: serverless_env
 
       environments:
