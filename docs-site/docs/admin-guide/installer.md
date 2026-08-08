@@ -376,3 +376,38 @@ in `requirements.txt` and `backend/requirements.txt`, so redeploys are
 reproducible; the pipeline structural tests carry the `structural`
 pytest marker (`pytest -m structural`) so they can run without a
 workspace.
+
+### Reporting Package: AI/BI Dashboard and Genie Space
+
+A separate **Lakemeter Reporting Package** job (weekly, 07:00 UTC on
+Mondays, deployed paused) turns the pipeline tables into a consumable
+reporting layer:
+
+1. The Lakebase rollups are copied into Unity Catalog Delta tables
+   (`lakemeter_catalog.lakemeter.rpt_spend_daily`,
+   `rpt_spend_daily_by_product`, `rpt_genie_queries_daily`,
+   `rpt_dashboard_queries_daily`, `rpt_budget_alerts`), because AI/BI
+   dashboards and Genie spaces query Unity Catalog rather than Lakebase.
+   Rollups are daily-grain and small, so each run does a full overwrite
+   and UC stays in lockstep with Lakebase.
+2. The bundled dashboard definition (`lakemeter_costs.lvdash.json`) is
+   rendered with your catalog/schema and written to
+   `/Workspace/Shared/lakemeter/`. It ships two pages: a Spend Overview
+   (daily trend by product line, spend by cost center, top users, budget
+   alerts) and a Genie and Dashboards page (query activity per user).
+   Import it from the Dashboards UI with "Create dashboard from file".
+3. A Genie space titled **Lakemeter Cost Attribution** is created (or
+   updated) over the five reporting tables, with instructions explaining
+   list cost, the attribution confidence grades, cost-center resolution,
+   and the Genie free window, plus sample questions. If the Genie API is
+   unavailable in your workspace, the rendered definition is left in the
+   same folder for manual import instead of failing the job.
+
+Enable with:
+
+```bash
+databricks bundle deploy --var="reporting_package_pause_status=UNPAUSED"
+```
+
+The job identity needs `USE CATALOG`, `USE SCHEMA`, and `CREATE TABLE` on
+the target catalog/schema, plus workspace access to the parent folder.
