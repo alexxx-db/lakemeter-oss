@@ -15,11 +15,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.validators import validate_cloud, validate_region, validate_tier, validate_sku_specific_discounts
 from app.services.lakebase_queries import call_calculate_line_item_costs, get_product_type_for_pricing
-from app.routes.calculate.helpers import build_sku_breakdown_serverless, build_sku_breakdown_classic
+from app.routes.calculate.helpers import build_sku_breakdown_serverless, build_sku_breakdown_classic, build_cost_params
 from app.routes.calculate.discount import (
     apply_discount_to_sku_breakdown, calculate_total_discount_summary, enhance_total_cost_with_discount,
 )
-from app.routes.calculate.jobs import _validate_usage_params
+from app.routes.calculate.jobs import normalize_usage_params
 from app.routes.calculate.schemas import LakeflowConnectCalculationRequest
 
 logger = logging.getLogger(__name__)
@@ -32,20 +32,14 @@ DEFAULT_GATEWAY_INSTANCES = {
     "GCP": "n1-standard-4",
 }
 
-# Pipeline sizing proxies for DLT Serverless (DBU estimate uses instance rates × workers)
-DEFAULT_PIPELINE_INSTANCES = {
-    "AWS": "m5.xlarge",
-    "AZURE": "Standard_DS3_v2",
-    "GCP": "n1-standard-4",
-}
-DEFAULT_PIPELINE_WORKERS = 2
-
 
 @router.post("/calculate/lakeflow-connect", tags=["Cost Calculation"])
 def calculate_lakeflow_connect_cost(
     request: LakeflowConnectCalculationRequest,
     db: Session = Depends(get_db),
 ):
+    usage = normalize_usage_params(request, mode="runs_or_monthly")
+
     error = validate_cloud(request.cloud)
     if error:
         raise HTTPException(status_code=400, detail=error["error"])
@@ -61,27 +55,19 @@ def calculate_lakeflow_connect_cost(
         tier_upper = request.tier.upper()
 
         # ── Pipeline (DLT Serverless) ─────────────────────────────────
-        has_run_params, has_hours = _validate_usage_params(request, require_runs=False)
-        if has_run_params and request.days_per_month is None:
-            request.days_per_month = 30
-
-        pipeline_instance = DEFAULT_PIPELINE_INSTANCES.get(cloud_upper, "m5.xlarge")
-        params = {
-            "p1": "DLT", "p2": cloud_upper, "p3": request.region, "p4": tier_upper,
-            "p5": True, "p6": False, "p7": None,
-            "p8": pipeline_instance, "p9": pipeline_instance, "p10": DEFAULT_PIPELINE_WORKERS,
-            "p11": "on_demand", "p12": "on_demand",
-            "p13": request.runs_per_day or 0,
-            "p14": request.avg_runtime_minutes or 0,
-            "p15": request.days_per_month or 30,
-            "p16": int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
-            "p17": "standard", "p18": (request.dlt_edition or "ADVANCED").upper(),
-            "p19": None, "p20": 1,
-            "p21": "on_demand", "p22": None,
-            "p23": 0, "p24": None, "p25": None, "p26": None,
-            "p27": "global", "p28": "all", "p29": "input_token", "p30": 0, "p31": 0, "p32": 1,
-            "p33": "NA", "p34": "NA", "p35": "NA",
-        }
+        params = build_cost_params(
+            workload_type="DLT",
+            cloud=request.cloud,
+            region=request.region,
+            tier=request.tier,
+            serverless_enabled=True,
+            dlt_edition=request.dlt_edition or "ADVANCED",
+            runs_per_day=usage.runs_per_day,
+            avg_runtime_minutes=usage.avg_runtime_minutes,
+            days_per_month=usage.days_per_month,
+            hours_per_month=usage.hours_per_month,
+            serverless_mode="standard",
+        )
         pipeline_row = call_calculate_line_item_costs(db, params)
         if not pipeline_row:
             raise HTTPException(status_code=500, detail="Pipeline calculation returned no result")
@@ -105,23 +91,23 @@ def calculate_lakeflow_connect_cost(
             gateway_instance = request.gateway_instance_type or DEFAULT_GATEWAY_INSTANCES.get(cloud_upper, "i3.xlarge")
             gateway_hours = request.gateway_hours_per_month or 730  # always-on
 
-            gateway_params = {
-                "p1": "DLT", "p2": cloud_upper, "p3": request.region, "p4": tier_upper,
-                "p5": False, "p6": False, "p7": None,
-                "p8": gateway_instance, "p9": gateway_instance, "p10": 0,
-                "p11": request.gateway_pricing_tier or "on_demand",
-                "p12": request.gateway_pricing_tier or "on_demand",
-                "p13": 0, "p14": 0, "p15": 30,
-                "p16": int(gateway_hours),
-                "p17": "standard", "p18": "ADVANCED",
-                "p19": None, "p20": 1,
-                "p21": "on_demand", "p22": None,
-                "p23": 0, "p24": None, "p25": None, "p26": None,
-                "p27": "global", "p28": "all", "p29": "input_token", "p30": 0, "p31": 0, "p32": 1,
-                "p33": request.gateway_payment_option or "NA",
-                "p34": request.gateway_payment_option or "NA",
-                "p35": "NA",
-            }
+            gateway_params = build_cost_params(
+                workload_type="DLT",
+                cloud=request.cloud,
+                region=request.region,
+                tier=request.tier,
+                serverless_enabled=False,
+                dlt_edition="ADVANCED",
+                driver_node_type=gateway_instance,
+                worker_node_type=gateway_instance,
+                num_workers=0,
+                driver_pricing_tier=request.gateway_pricing_tier or "on_demand",
+                worker_pricing_tier=request.gateway_pricing_tier or "on_demand",
+                days_per_month=30,
+                hours_per_month=gateway_hours,
+                driver_payment_option=request.gateway_payment_option or "NA",
+                worker_payment_option=request.gateway_payment_option or "NA",
+            )
             gateway_row = call_calculate_line_item_costs(db, gateway_params)
 
             if gateway_row:

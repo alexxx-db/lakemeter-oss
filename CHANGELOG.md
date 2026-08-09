@@ -51,6 +51,10 @@ Security, trust, and platform hardening on top of v0.1.1 (also summarized in
 
 ---
 
+## [0.1.2] — 2026-08-08
+
+Patch release reconciling calculation-accuracy fixes with security, trust, Lakebase, pricing-freshness, Lakeflow Connect, and release-hardening changes described above.
+
 ## [0.1.1] — 2026-08-01
 
 Patch release introducing safer upgrades and correcting AI Parse estimate persistence.
@@ -78,6 +82,7 @@ Initial public open-source release.
 - SSO authentication via Databricks Apps.
 - Interactive API docs at `/api/docs` and `/api/redoc`.
 
-[Unreleased]: https://github.com/databrickslabs/lakemeter-oss/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/databrickslabs/lakemeter-oss/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/databrickslabs/lakemeter-oss/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/databrickslabs/lakemeter-oss/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/databrickslabs/lakemeter-oss/releases/tag/v0.1.0

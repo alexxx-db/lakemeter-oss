@@ -44,6 +44,22 @@ import {
 // duplicate concurrent requests when loading estimates with many workloads.
 const _vmCostInflight: Record<string, Promise<any>> = {}
 
+function normalizeVMPaymentOption(
+  cloud: string,
+  pricingTier: string,
+  paymentOption?: string | null,
+): string {
+  if (pricingTier === 'on_demand' || pricingTier === 'spot') return 'NA'
+  if (
+    cloud.toLowerCase() === 'aws' &&
+    pricingTier.startsWith('reserved') &&
+    (!paymentOption || paymentOption === 'NA')
+  ) {
+    return 'no_upfront'
+  }
+  return paymentOption || 'NA'
+}
+
 // =============================================================================
 // LOCAL STORAGE CACHE UTILITIES
 // =============================================================================
@@ -1043,10 +1059,11 @@ export const useStore = create<Store>((set, get) => ({
       return 0
     }
 
-    // Normalize payment option: on_demand and spot don't have payment options (always NA)
-    const normalizedPaymentOption = (pricingTier === 'on_demand' || pricingTier === 'spot')
-      ? 'NA'
-      : (paymentOption || 'NA')
+    const normalizedPaymentOption = normalizeVMPaymentOption(
+      cloud,
+      pricingTier,
+      paymentOption,
+    )
 
     // Check if already in cache (before making API call)
     const exactKey = `${cloud.toLowerCase()}:${region}:${instanceType}:${pricingTier}:${normalizedPaymentOption}`
@@ -1122,10 +1139,11 @@ export const useStore = create<Store>((set, get) => ({
       return 0
     }
     
-    // Normalize payment option: on_demand and spot don't have payment options (always NA)
-    const normalizedPaymentOption = (pricingTier === 'on_demand' || pricingTier === 'spot') 
-      ? 'NA' 
-      : (paymentOption || 'NA')
+    const normalizedPaymentOption = normalizeVMPaymentOption(
+      cloud,
+      pricingTier,
+      paymentOption,
+    )
     
     const { vmPricingMap } = get()
     const cloudLower = cloud.toLowerCase()

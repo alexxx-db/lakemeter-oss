@@ -12,7 +12,9 @@ Lakemeter follows [Semantic Versioning](https://semver.org/):
 
 ---
 
-## Unreleased
+## v0.1.2
+
+*2026-08-08*
 
 Security, trust, and platform hardening on top of v0.1.1:
 

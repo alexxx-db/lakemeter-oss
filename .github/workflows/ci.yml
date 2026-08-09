@@ -35,6 +35,7 @@ jobs:
         run: |
           python -m pytest \
             tests/test_integration_validation/test_suite_completeness.py \
+<<<<<<< HEAD
             tests/docs_media/test_docs_build.py \
             tests/test_security_config.py \
             tests/test_authz_users_chat.py \
@@ -58,6 +59,9 @@ jobs:
           DATABASE_URL: postgresql://u:p@localhost:5432/db
           ENVIRONMENT: local
           PYTHONPATH: backend:scripts
+=======
+            tests/docs_media/test_docs_build.py
+>>>>>>> ab0dfcbfdc1627ea77d052d44b97be7860e34a48
 
   frontend-build:
     name: Frontend build

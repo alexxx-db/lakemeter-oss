@@ -17,11 +17,14 @@ const config: Config = {
   organizationName: 'databrickslabs',
   projectName: 'lakemeter-oss',
 
+  organizationName: 'databrickslabs',
+  projectName: 'lakemeter-oss',
+
   onBrokenLinks: 'warn',
 
   markdown: {
     hooks: {
-      onBrokenMarkdownLinks: 'warn',
+      onBrokenMarkdownLinks: 'throw',
     },
   },
 

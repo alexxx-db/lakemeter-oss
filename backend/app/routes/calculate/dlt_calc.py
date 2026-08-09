@@ -10,7 +10,7 @@ from app.routes.calculate.helpers import build_sku_breakdown_classic, build_sku_
 from app.routes.calculate.discount import (
     apply_discount_to_sku_breakdown, calculate_total_discount_summary, enhance_total_cost_with_discount,
 )
-from app.routes.calculate.jobs import _validate_usage_params, _validate_classic_inputs, _validate_serverless_inputs
+from app.routes.calculate.jobs import normalize_usage_params, _validate_classic_inputs, _validate_serverless_inputs
 from app.routes.calculate.schemas import DLTClassicCalculationRequest, DLTServerlessCalculationRequest
 
 logger = logging.getLogger(__name__)
@@ -22,9 +22,7 @@ def calculate_dlt_classic_cost(
     request: DLTClassicCalculationRequest,
     db: Session = Depends(get_db),
 ):
-    has_run_params, has_hours = _validate_usage_params(request)
-    if has_run_params and request.days_per_month is None:
-        request.days_per_month = 30
+    usage = normalize_usage_params(request, mode="runs_or_monthly")
 
     _validate_classic_inputs(request, db)
 
@@ -41,10 +39,10 @@ def calculate_dlt_classic_cost(
             num_workers=request.num_workers,
             driver_pricing_tier=request.driver_pricing_tier,
             worker_pricing_tier=request.worker_pricing_tier,
-            runs_per_day=request.runs_per_day if has_run_params else 0,
-            avg_runtime_minutes=request.avg_runtime_minutes if has_run_params else 0,
-            days_per_month=request.days_per_month if has_run_params else 30,
-            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            runs_per_day=usage.runs_per_day,
+            avg_runtime_minutes=usage.avg_runtime_minutes,
+            days_per_month=usage.days_per_month,
+            hours_per_month=usage.hours_per_month,
             driver_payment_option=request.driver_payment_option or "NA",
             worker_payment_option=request.worker_payment_option or "NA",
         )
@@ -126,9 +124,7 @@ def calculate_dlt_serverless_cost(
     request: DLTServerlessCalculationRequest,
     db: Session = Depends(get_db),
 ):
-    has_run_params, has_hours = _validate_usage_params(request)
-    if has_run_params and request.days_per_month is None:
-        request.days_per_month = 30
+    usage = normalize_usage_params(request, mode="runs_or_monthly")
 
     _validate_serverless_inputs(request, db)
 
@@ -143,10 +139,10 @@ def calculate_dlt_serverless_cost(
             driver_node_type=request.driver_node_type,
             worker_node_type=request.worker_node_type,
             num_workers=request.num_workers or 0,
-            runs_per_day=request.runs_per_day if has_run_params else 0,
-            avg_runtime_minutes=request.avg_runtime_minutes if has_run_params else 0,
-            days_per_month=request.days_per_month if has_run_params else 30,
-            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            runs_per_day=usage.runs_per_day,
+            avg_runtime_minutes=usage.avg_runtime_minutes,
+            days_per_month=usage.days_per_month,
+            hours_per_month=usage.hours_per_month,
             serverless_mode=request.serverless_mode,
         )
         row = call_calculate_line_item_costs(db, params)

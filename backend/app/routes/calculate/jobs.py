@@ -1,5 +1,8 @@
 """Jobs compute calculation endpoints (Classic + Serverless)."""
+from dataclasses import dataclass
 import logging
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -21,30 +24,80 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _validate_usage_params(request, require_runs=True):
-    """Validate usage params. Returns (has_run_params, has_hours)."""
-    if require_runs:
-        has_run_params = all([
-            getattr(request, 'runs_per_day', None) is not None,
-            getattr(request, 'avg_runtime_minutes', None) is not None,
-        ])
-    else:
-        has_run_params = all([
-            getattr(request, 'hours_per_day', None) is not None,
-        ])
-    has_hours = request.hours_per_month is not None
+@dataclass(frozen=True)
+class NormalizedUsage:
+    runs_per_day: int = 0
+    avg_runtime_minutes: int = 0
+    days_per_month: int = 30
+    hours_per_month: float | None = None
 
-    if not has_run_params and not has_hours:
+
+def normalize_usage_params(
+    request,
+    *,
+    mode: Literal["runs_or_monthly", "daily_or_monthly"],
+) -> NormalizedUsage:
+    """Validate usage inputs and return a normalized, immutable representation."""
+    days_per_month = getattr(request, "days_per_month", None) or 30
+    hours_per_month = getattr(request, "hours_per_month", None)
+
+    if mode == "daily_or_monthly":
+        hours_per_day = getattr(request, "hours_per_day", None)
+        if hours_per_day is not None and hours_per_month is not None:
+            raise HTTPException(status_code=400, detail={
+                "code": "CONFLICTING_USAGE_PARAMETERS",
+                "message": "Cannot provide both hours_per_day and hours_per_month.",
+            })
+        if hours_per_day is None and hours_per_month is None:
+            raise HTTPException(status_code=400, detail={
+                "code": "MISSING_USAGE_PARAMETERS",
+                "message": "Must provide either hours_per_day or hours_per_month.",
+            })
+        normalized_hours = (
+            float(hours_per_day) * days_per_month
+            if hours_per_day is not None
+            else float(hours_per_month)
+        )
+        return NormalizedUsage(
+            days_per_month=days_per_month,
+            hours_per_month=normalized_hours,
+        )
+
+    if mode != "runs_or_monthly":
+        raise ValueError(f"Unsupported usage normalization mode: {mode}")
+
+    runs_per_day = getattr(request, "runs_per_day", None)
+    avg_runtime_minutes = getattr(request, "avg_runtime_minutes", None)
+    has_any_run_param = (
+        runs_per_day is not None or avg_runtime_minutes is not None
+    )
+    has_run_params = (
+        runs_per_day is not None and avg_runtime_minutes is not None
+    )
+
+    if has_any_run_param and not has_run_params:
+        raise HTTPException(status_code=400, detail={
+            "code": "INCOMPLETE_USAGE_PARAMETERS",
+            "message": "runs_per_day and avg_runtime_minutes must be provided together.",
+        })
+    if not has_run_params and hours_per_month is None:
         raise HTTPException(status_code=400, detail={
             "code": "MISSING_USAGE_PARAMETERS",
-            "message": "Must provide either run-based parameters OR hours_per_month",
+            "message": "Must provide either run-based parameters or hours_per_month.",
         })
-    if has_run_params and has_hours:
+    if has_run_params and hours_per_month is not None:
         raise HTTPException(status_code=400, detail={
             "code": "CONFLICTING_USAGE_PARAMETERS",
             "message": "Cannot provide both run-based parameters and hours_per_month.",
         })
-    return has_run_params, has_hours
+    return NormalizedUsage(
+        runs_per_day=runs_per_day or 0,
+        avg_runtime_minutes=avg_runtime_minutes or 0,
+        days_per_month=days_per_month,
+        hours_per_month=(
+            float(hours_per_month) if hours_per_month is not None else None
+        ),
+    )
 
 
 def _validate_classic_inputs(request, db):
@@ -104,9 +157,7 @@ def calculate_jobs_classic_cost(
     request: JobsClassicCalculationRequest,
     db: Session = Depends(get_db),
 ):
-    has_run_params, has_hours = _validate_usage_params(request)
-    if has_run_params and request.days_per_month is None:
-        request.days_per_month = 30
+    usage = normalize_usage_params(request, mode="runs_or_monthly")
 
     _validate_classic_inputs(request, db)
 
@@ -122,10 +173,10 @@ def calculate_jobs_classic_cost(
             num_workers=request.num_workers,
             driver_pricing_tier=request.driver_pricing_tier,
             worker_pricing_tier=request.worker_pricing_tier,
-            runs_per_day=request.runs_per_day if has_run_params else 0,
-            avg_runtime_minutes=request.avg_runtime_minutes if has_run_params else 0,
-            days_per_month=request.days_per_month if has_run_params else 30,
-            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            runs_per_day=usage.runs_per_day,
+            avg_runtime_minutes=usage.avg_runtime_minutes,
+            days_per_month=usage.days_per_month,
+            hours_per_month=usage.hours_per_month,
             driver_payment_option=request.driver_payment_option or "NA",
             worker_payment_option=request.worker_payment_option or "NA",
         )
@@ -174,7 +225,7 @@ def calculate_jobs_classic_cost(
                 },
                 "usage": {
                     "runs_per_day": request.runs_per_day, "avg_runtime_minutes": request.avg_runtime_minutes,
-                    "days_per_month": request.days_per_month, "hours_per_month": float(row.hours_per_month or 0),
+                    "days_per_month": usage.days_per_month, "hours_per_month": float(row.hours_per_month or 0),
                 },
                 "dbu_calculation": {
                     "dbu_per_hour": float(row.dbu_per_hour or 0), "dbu_per_month": float(row.dbu_per_month or 0),
@@ -218,9 +269,7 @@ def calculate_jobs_serverless_cost(
     request: JobsServerlessCalculationRequest,
     db: Session = Depends(get_db),
 ):
-    has_run_params, has_hours = _validate_usage_params(request)
-    if has_run_params and request.days_per_month is None:
-        request.days_per_month = 30
+    usage = normalize_usage_params(request, mode="runs_or_monthly")
 
     _validate_serverless_inputs(request, db)
 
@@ -235,10 +284,10 @@ def calculate_jobs_serverless_cost(
             driver_node_type=request.driver_node_type,
             worker_node_type=request.worker_node_type,
             num_workers=request.num_workers or 0,
-            runs_per_day=request.runs_per_day if has_run_params else 0,
-            avg_runtime_minutes=request.avg_runtime_minutes if has_run_params else 0,
-            days_per_month=request.days_per_month if has_run_params else 30,
-            hours_per_month=int(request.hours_per_month) if has_hours and request.hours_per_month is not None else None,
+            runs_per_day=usage.runs_per_day,
+            avg_runtime_minutes=usage.avg_runtime_minutes,
+            days_per_month=usage.days_per_month,
+            hours_per_month=usage.hours_per_month,
             serverless_mode=request.serverless_mode,
         )
         row = call_calculate_line_item_costs(db, params)
@@ -273,7 +322,7 @@ def calculate_jobs_serverless_cost(
                 },
                 "usage": {
                     "runs_per_day": request.runs_per_day, "avg_runtime_minutes": request.avg_runtime_minutes,
-                    "days_per_month": request.days_per_month, "hours_per_month": float(row.hours_per_month or 0),
+                    "days_per_month": usage.days_per_month, "hours_per_month": float(row.hours_per_month or 0),
                 },
                 "dbu_calculation": {
                     "dbu_per_hour": float(row.dbu_per_hour or 0), "dbu_per_month": float(row.dbu_per_month or 0),

@@ -10,13 +10,15 @@ import uuid
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.databricks_auth import get_current_user
-from app.models import User
 from app.external_api import get_model_serving_token
+from app.models import Estimate, LineItem, User
+from app.schemas import EstimateCreate, LineItemCreate
+from app.schemas.line_item import map_line_item_api_fields
 from app.services.ai_agent import create_agent, EstimateAgent
 from app.services import conversation_store
 from app.config import log_error
@@ -309,51 +311,49 @@ async def apply_estimate(
         raise HTTPException(status_code=400, detail="No estimate to apply")
 
     try:
-        est_name = (
-            agent.current_estimate.get("name")
-            or agent.current_estimate.get("estimate_name", "AI Generated Estimate")
-        )
-
-        estimate = Estimate(
+        # Keep AI-created records aligned with the standard estimate and line-item
+        # routes, including validation, case normalization, and AI Parse aliases.
+        from app.routes.estimates import _normalize_estimate_case
+        from app.routes.line_items import _normalize_case
+        
+        # Get estimate name (support both 'name' and 'estimate_name')
+        est_name = agent.current_estimate.get("name") or agent.current_estimate.get("estimate_name", "AI Generated Estimate")
+        
+        estimate_input = EstimateCreate(
             estimate_name=est_name,
-            cloud=agent.current_estimate.get("cloud", "aws"),
+            cloud=agent.current_estimate.get("cloud", "AWS"),
             region=agent.current_estimate.get("region", "us-east-1"),
-            tier="PREMIUM",
-            description=agent.current_estimate.get(
-                "description", "Created by AI Assistant"
-            ),
+            tier=agent.current_estimate.get("tier", "PREMIUM"),
+            status=agent.current_estimate.get("status", "draft"),
+            original_prompt=agent.current_estimate.get("original_prompt"),
+        )
+        estimate = Estimate(
+            **_normalize_estimate_case(estimate_input.model_dump()),
             owner_user_id=current_user.user_id,
         )
         db.add(estimate)
-        db.flush()
-
+        db.flush()  # Get the estimate_id
+        
+        # Apply every workload currently proposed in this conversation.
+        # LineItemCreate preserves every supported workload-specific field and
+        # ignores internal AI proposal metadata.
         created_workloads = []
         workloads_to_create = agent.proposed_workloads if agent.proposed_workloads else []
-        for workload in workloads_to_create:
-            line_item = LineItem(
-                estimate_id=estimate.estimate_id,
-                workload_name=workload["workload_name"],
-                workload_type=workload["workload_type"],
-                serverless_enabled=workload.get("serverless_enabled", False),
-                photon_enabled=workload.get("photon_enabled", False),
-                driver_node_type=workload.get("driver_node_type"),
-                worker_node_type=workload.get("worker_node_type"),
-                num_workers=workload.get("num_workers"),
-                hours_per_month=workload.get("hours_per_month", 730),
-                runs_per_day=workload.get("runs_per_day"),
-                avg_runtime_minutes=workload.get("avg_runtime_minutes"),
-                days_per_month=workload.get("days_per_month", 22),
-                driver_pricing_tier=workload.get("driver_pricing_tier", "on_demand"),
-                worker_pricing_tier=workload.get("worker_pricing_tier", "spot"),
-                dlt_edition=workload.get("dlt_edition"),
-                dbsql_warehouse_type=workload.get("dbsql_warehouse_type"),
-                dbsql_warehouse_size=workload.get("dbsql_warehouse_size"),
-                dbsql_num_clusters=workload.get("dbsql_num_clusters"),
-                lakebase_cu=workload.get("lakebase_cu"),
-                lakebase_ha_nodes=workload.get("lakebase_ha_nodes"),
-                notes="Created by AI Assistant",
+        for display_order, workload in enumerate(workloads_to_create):
+            item_display_order = workload.get("display_order")
+            line_item_input = LineItemCreate.model_validate({
+                **workload,
+                "estimate_id": estimate.estimate_id,
+                "display_order": (
+                    display_order if item_display_order is None else item_display_order
+                ),
+                "notes": workload.get("notes") or "Created by AI Assistant",
+            })
+            line_item_data = map_line_item_api_fields(
+                _normalize_case(line_item_input.model_dump()),
+                line_item_input.model_fields_set,
             )
-            db.add(line_item)
+            db.add(LineItem(**line_item_data))
             created_workloads.append(workload["workload_name"])
 
         db.commit()
@@ -370,14 +370,23 @@ async def apply_estimate(
                 f"with {len(created_workloads)} workloads"
             ),
         }
+    
+    except ValidationError as e:
+        db.rollback()
+        log_error(f"Invalid AI estimate data: {e}")
+        raise HTTPException(
+            status_code=422,
+            detail="AI estimate contains invalid data"
+        )
     except HTTPException:
+        db.rollback()
         raise
     except Exception as e:
         db.rollback()
         log_error(f"Apply estimate error: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to create estimate: {str(e)}",
+            detail=f"Failed to apply estimate: {str(e)}"
         )
 
 
