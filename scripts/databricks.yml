@@ -121,7 +121,6 @@ resources:
             base_parameters:
               project_id: "{{job.parameters.project_id}}"
               db_name: "{{job.parameters.db_name}}"
-              secrets_scope: "{{job.parameters.secrets_scope}}"
           environment_key: serverless_env
 
         - task_key: create_app
@@ -146,6 +145,7 @@ resources:
             base_parameters:
               project_id: "{{job.parameters.project_id}}"
               db_name: "{{job.parameters.db_name}}"
+              app_name: "{{job.parameters.app_name}}"
               secrets_scope: "{{job.parameters.secrets_scope}}"
               claude_endpoint: "{{job.parameters.claude_endpoint}}"
           environment_key: serverless_env
