@@ -26,6 +26,8 @@ This page lists everything the Lakemeter installer creates in your Databricks wo
 | App resources | 7 environment variable bindings | App config |
 | Lakebase role | App Service Principal | Database role |
 | PostgreSQL role | `lakemeter_sync_role` | Password-auth role |
+| Scheduled job | `Lakemeter Actuals Sync` | Daily usage ingestion from `system.billing.usage` (deployed paused) |
+| Actuals tables | `actuals_usage_daily`, `actuals_ingestion_state` | PostgreSQL tables |
 
 ---
 
