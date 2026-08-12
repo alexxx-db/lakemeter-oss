@@ -6,10 +6,14 @@ its contract instead: table DDL, watermark-based incremental behavior,
 idempotent DELETE + INSERT reprocess window, correction-record handling,
 bundle job wiring, and documentation.
 """
+import pytest
 import re
 from pathlib import Path
 
 import yaml
+
+pytestmark = pytest.mark.structural
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK = REPO_ROOT / "scripts" / "notebooks" / "08_sync_actuals.py"
@@ -120,7 +124,8 @@ def test_bundle_job_is_daily_and_serverless():
     job = bundle_dict()["resources"]["jobs"]["lakemeter_actuals_sync"]
     cron = job["schedule"]["quartz_cron_expression"]
     assert cron.split()[3] == "*", f"expected daily cron, got {cron}"
-    task = job["tasks"][0]
+    tasks = {t["task_key"]: t for t in job["tasks"]}
+    task = tasks["sync_actuals_usage"]
     assert task["notebook_task"]["notebook_path"] == "./notebooks/08_sync_actuals.py"
     assert task["environment_key"] == "serverless_env"
 

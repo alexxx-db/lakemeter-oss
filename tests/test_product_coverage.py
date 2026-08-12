@@ -4,10 +4,14 @@ Static tests: they validate the notebook, bundle wiring, and docs without
 a Databricks workspace or Lakebase instance.
 """
 
+import pytest
 import re
 from pathlib import Path
 
 import yaml
+
+pytestmark = pytest.mark.structural
+
 
 REPO = Path(__file__).resolve().parent.parent
 NOTEBOOK = REPO / "scripts" / "notebooks" / "10_enrich_product_coverage.py"

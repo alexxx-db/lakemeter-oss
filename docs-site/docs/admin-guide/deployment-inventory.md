@@ -25,10 +25,12 @@ This page lists everything the Lakemeter installer creates in your Databricks wo
 | Lakebase role | App Service Principal | Database role |
 | PostgreSQL role | `lakemeter_sync_role` | Password-auth role |
 | Scheduled job | `Lakemeter Pricing Sync` | Monthly pricing refresh (deployed paused) |
-| Scheduled job | `Lakemeter Actuals Sync` | Daily usage ingestion from `system.billing.usage`, attribution rollup, and product coverage enrichment (deployed paused) |
+| Scheduled job | `Lakemeter Actuals Sync` | Daily schema migrations, usage ingestion, attribution rollup, product coverage, and budget checks (deployed paused) |
+| Scheduled job | `Lakemeter Chargeback Export` | Monthly chargeback CSV to a UC volume (deployed paused) |
 | Actuals tables | `actuals_usage_daily`, `actuals_ingestion_state` | PostgreSQL tables |
 | Attribution tables | `attribution_daily`, `ref_user_cost_center_map` | PostgreSQL tables |
 | Product coverage tables | `product_usage_daily`, `genie_query_daily`, `dashboard_query_daily` | PostgreSQL tables |
+| Hardening tables | `schema_migrations`, `ref_budgets`, `budget_alerts` | PostgreSQL tables |
 
 ---
 
