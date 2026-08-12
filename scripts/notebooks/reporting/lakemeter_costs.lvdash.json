@@ -1,0 +1,378 @@
+{
+  "datasets": [
+    {
+      "name": "spend_daily",
+      "displayName": "Daily attributed spend",
+      "query": "SELECT usage_date, cost_center, attributed_user, attribution_confidence, product_line, asset_type, list_cost, usage_quantity FROM ${catalog}.${schema}.rpt_spend_daily"
+    },
+    {
+      "name": "spend_by_product",
+      "displayName": "Daily spend by product line",
+      "query": "SELECT usage_date, product_line, list_cost, usage_quantity FROM ${catalog}.${schema}.rpt_spend_daily_by_product"
+    },
+    {
+      "name": "genie_activity",
+      "displayName": "Genie query activity",
+      "query": "SELECT usage_date, executed_by, warehouse_id, query_count, total_duration_ms FROM ${catalog}.${schema}.rpt_genie_queries_daily"
+    },
+    {
+      "name": "dashboard_activity",
+      "displayName": "Dashboard query activity",
+      "query": "SELECT usage_date, executed_by, warehouse_id, query_count, total_duration_ms FROM ${catalog}.${schema}.rpt_dashboard_queries_daily"
+    },
+    {
+      "name": "budget_alerts",
+      "displayName": "Budget alerts",
+      "query": "SELECT alert_month, scope_type, scope_key, mtd_cost, monthly_budget, severity FROM ${catalog}.${schema}.rpt_budget_alerts"
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview",
+      "displayName": "Spend Overview",
+      "layout": [
+        {
+          "widget": {
+            "name": "daily_spend_trend",
+            "datasetQueries": [
+              {
+                "datasetName": "spend_by_product",
+                "name": "q1",
+                "displayName": "daily_spend_trend",
+                "fields": [
+                  {
+                    "name": "usage_date",
+                    "expression": "`usage_date`",
+                    "displayName": "Date"
+                  },
+                  {
+                    "name": "list_cost",
+                    "expression": "SUM(`list_cost`)",
+                    "displayName": "List cost"
+                  },
+                  {
+                    "name": "product_line",
+                    "expression": "`product_line`",
+                    "displayName": "Product"
+                  }
+                ]
+              }
+            ],
+            "spec": {
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "usage_date",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "list_cost",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "product_line",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Daily list cost by product line"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "spend_by_cost_center",
+            "datasetQueries": [
+              {
+                "datasetName": "spend_daily",
+                "name": "q1",
+                "displayName": "spend_by_cost_center",
+                "fields": [
+                  {
+                    "name": "cost_center",
+                    "expression": "`cost_center`",
+                    "displayName": "Cost center"
+                  },
+                  {
+                    "name": "list_cost",
+                    "expression": "SUM(`list_cost`)",
+                    "displayName": "List cost"
+                  }
+                ]
+              }
+            ],
+            "spec": {
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "list_cost",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "cost_center",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Spend by cost center"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 0,
+            "width": 4,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "top_users",
+            "datasetQueries": [
+              {
+                "datasetName": "spend_daily",
+                "name": "q1",
+                "displayName": "top_users",
+                "fields": [
+                  {
+                    "name": "attributed_user",
+                    "expression": "`attributed_user`",
+                    "displayName": "User"
+                  },
+                  {
+                    "name": "list_cost",
+                    "expression": "SUM(`list_cost`)",
+                    "displayName": "List cost"
+                  }
+                ]
+              }
+            ],
+            "spec": {
+              "widgetType": "table",
+              "encodings": {},
+              "frame": {
+                "showTitle": true,
+                "title": "Spend by attributed user"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "budget_alerts_table",
+            "datasetQueries": [
+              {
+                "datasetName": "budget_alerts",
+                "name": "q1",
+                "displayName": "budget_alerts_table",
+                "fields": [
+                  {
+                    "name": "alert_month",
+                    "expression": "`alert_month`",
+                    "displayName": "Month"
+                  },
+                  {
+                    "name": "scope_key",
+                    "expression": "`scope_key`",
+                    "displayName": "Scope"
+                  },
+                  {
+                    "name": "severity",
+                    "expression": "`severity`",
+                    "displayName": "Severity"
+                  },
+                  {
+                    "name": "mtd_cost",
+                    "expression": "`mtd_cost`",
+                    "displayName": "MTD cost"
+                  },
+                  {
+                    "name": "monthly_budget",
+                    "expression": "`monthly_budget`",
+                    "displayName": "Budget"
+                  }
+                ]
+              }
+            ],
+            "spec": {
+              "widgetType": "table",
+              "encodings": {},
+              "frame": {
+                "showTitle": true,
+                "title": "Budget alerts"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "genie_dashboards",
+      "displayName": "Genie and Dashboards",
+      "layout": [
+        {
+          "widget": {
+            "name": "genie_queries",
+            "datasetQueries": [
+              {
+                "datasetName": "genie_activity",
+                "name": "q1",
+                "displayName": "genie_queries",
+                "fields": [
+                  {
+                    "name": "usage_date",
+                    "expression": "`usage_date`",
+                    "displayName": "Date"
+                  },
+                  {
+                    "name": "query_count",
+                    "expression": "SUM(`query_count`)",
+                    "displayName": "Genie queries"
+                  },
+                  {
+                    "name": "executed_by",
+                    "expression": "`executed_by`",
+                    "displayName": "User"
+                  }
+                ]
+              }
+            ],
+            "spec": {
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "usage_date",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "query_count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "executed_by",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Genie queries per day by user"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "dashboard_queries",
+            "datasetQueries": [
+              {
+                "datasetName": "dashboard_activity",
+                "name": "q1",
+                "displayName": "dashboard_queries",
+                "fields": [
+                  {
+                    "name": "usage_date",
+                    "expression": "`usage_date`",
+                    "displayName": "Date"
+                  },
+                  {
+                    "name": "query_count",
+                    "expression": "SUM(`query_count`)",
+                    "displayName": "Dashboard queries"
+                  },
+                  {
+                    "name": "executed_by",
+                    "expression": "`executed_by`",
+                    "displayName": "User"
+                  }
+                ]
+              }
+            ],
+            "spec": {
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "usage_date",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "query_count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "executed_by",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Dashboard refresh queries per day by user"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 0,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "palette": {
+        "singular": "#1f77b4"
+      }
+    }
+  }
+}
