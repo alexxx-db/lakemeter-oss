@@ -249,3 +249,43 @@ How this fits the release cadence:
 
 If you prefer to control refresh timing yourself, leave the schedule
 paused and re-run the installer after each upgrade instead.
+
+## Actuals Usage Sync
+
+The bundle also deploys a **Lakemeter Actuals Sync** job: a daily ingest
+(04:00 UTC) that reads `system.billing.usage` (joined to
+`system.billing.list_prices` for list prices) and appends daily-grain
+consumption records into the Lakebase table
+`lakemeter.actuals_usage_daily`. This is the raw material for actual-cost
+reporting and per-user attribution; the estimate side of the app does not
+depend on it.
+
+Key properties:
+
+- **Incremental**: a watermark table (`lakemeter.actuals_ingestion_state`)
+  tracks progress; each run reprocesses a trailing 7-day window via
+  DELETE + INSERT, so late-arriving billing records are picked up
+  automatically and re-running the job never duplicates rows.
+- **Correction-safe**: billing correction records (negative quantities,
+  for example Genie One/Agents usage negated while free through
+  2027-01-31) are loaded as-is so sums stay correct.
+- **Attribution-ready**: each row carries `run_as`, `owned_by`,
+  `created_by`, asset identifiers (warehouse, serving endpoint, cluster,
+  job, pipeline), and `custom_tags`.
+- **Data-quality checked**: rows with no matching list price are kept
+  (with NULL price) and counted at the end of each run; a warning prints
+  if unpriced rows exceed 20%.
+
+Permissions: the identity running the job needs read access to
+`system.billing.usage` and `system.billing.list_prices` (account admin, or
+a principal granted `USE CATALOG` and `SELECT` on the `system` catalog).
+
+The schedule is deployed **paused** by default. Enable it at deploy time:
+
+```bash
+databricks bundle deploy --var="actuals_sync_pause_status=UNPAUSED"
+```
+
+or unpause the schedule in the **Workflows** UI, or run it once manually
+with **Run now**. The first run backfills the last 30 days; you can widen
+that with the `initial_backfill_days` notebook parameter.

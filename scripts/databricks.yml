@@ -2,6 +2,13 @@ bundle:
   name: lakemeter-installer
 
 variables:
+  actuals_sync_pause_status:
+    description: >-
+      Schedule pause status for the actuals usage sync job (PAUSED or
+      UNPAUSED). Deployed PAUSED by default; enable with
+      --var="actuals_sync_pause_status=UNPAUSED" or unpause in the
+      Workflows UI.
+    default: PAUSED
   pricing_sync_pause_status:
     description: >-
       Schedule pause status for the pricing sync job (PAUSED or UNPAUSED).
@@ -179,6 +186,44 @@ resources:
         - task_key: reload_pricing_data
           notebook_task:
             notebook_path: ./notebooks/03_load_pricing_data.py
+            base_parameters:
+              instance_name: "{{job.parameters.instance_name}}"
+              db_name: "{{job.parameters.db_name}}"
+              secrets_scope: "{{job.parameters.secrets_scope}}"
+          environment_key: serverless_env
+
+      environments:
+        - environment_key: serverless_env
+          spec:
+            environment_version: "5"
+
+    # ── Daily actuals (usage) sync ──────────────────────────────────────
+    # Ingests system.billing.usage (joined to list prices) into Lakebase
+    # actuals_usage_daily. Incremental via a watermark, idempotent via a
+    # DELETE + INSERT reprocess window. Deployed PAUSED by default; enable
+    # with:
+    #   databricks bundle deploy --var="actuals_sync_pause_status=UNPAUSED"
+    # Requires read access to system.billing.usage and
+    # system.billing.list_prices for the deploying identity.
+    lakemeter_actuals_sync:
+      name: "Lakemeter Actuals Sync"
+      parameters:
+        - name: instance_name
+          default: "lakemeter-customer"
+        - name: db_name
+          default: "lakemeter_pricing"
+        - name: secrets_scope
+          default: "lakemeter-secrets"
+
+      schedule:
+        quartz_cron_expression: "0 0 4 * * ?"  # 04:00 UTC daily
+        timezone_id: "UTC"
+        pause_status: ${var.actuals_sync_pause_status}
+
+      tasks:
+        - task_key: sync_actuals_usage
+          notebook_task:
+            notebook_path: ./notebooks/08_sync_actuals.py
             base_parameters:
               instance_name: "{{job.parameters.instance_name}}"
               db_name: "{{job.parameters.db_name}}"
