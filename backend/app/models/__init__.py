@@ -6,6 +6,7 @@ from app.models.template import Template
 from app.models.workload_type import RefWorkloadType
 from app.models.sharing import Sharing
 from app.models.conversation import ConversationMessage
+from app.models.ai_conversation import AIConversation
 from app.models.decision_record import DecisionRecord
 from app.models.vm_pricing import VMPricing
 from app.models.sku_region_map import SKURegionMap
@@ -28,6 +29,7 @@ __all__ = [
     "RefWorkloadType",
     "Sharing",
     "ConversationMessage",
+    "AIConversation",
     "DecisionRecord",
     "VMPricing",
     "SKURegionMap",

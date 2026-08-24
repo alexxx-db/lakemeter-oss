@@ -68,14 +68,23 @@ def test_direct_project_creation_configures_autoscaling_and_scale_to_zero():
 
 def test_existing_direct_project_is_reused():
     project_name, _, endpoint_name = project_resource_names("lakemeter")
+    updates = []
 
     class Postgres:
         def get_project(self, name):
             assert name == project_name
-            return SimpleNamespace(name=name, uid="existing")
+            return SimpleNamespace(
+                name=name,
+                uid="existing",
+                spec=SimpleNamespace(enable_pg_native_login=False),
+            )
 
         def create_project(self, **_kwargs):
             raise AssertionError("existing project must not be recreated")
+
+        def update_project(self, **kwargs):
+            updates.append(kwargs)
+            return Operation(SimpleNamespace(name=project_name, uid="existing"))
 
         def get_endpoint(self, name):
             return endpoint(name)
@@ -88,6 +97,33 @@ def test_existing_direct_project_is_reused():
     assert resources.project_uid == "existing"
     assert resources.endpoint_name == endpoint_name
     assert not created
+    assert len(updates) == 1
+    assert updates[0]["project"].spec.enable_pg_native_login is True
+
+
+def test_existing_project_skips_update_when_native_login_enabled():
+    project_name, _, endpoint_name = project_resource_names("lakemeter")
+
+    class Postgres:
+        def get_project(self, name):
+            return SimpleNamespace(
+                name=name,
+                uid="existing",
+                spec=SimpleNamespace(enable_pg_native_login=True),
+            )
+
+        def update_project(self, **_kwargs):
+            raise AssertionError("must not update when already enabled")
+
+        def get_endpoint(self, name):
+            return endpoint(name)
+
+    resources, created = ensure_autoscaling_project(
+        SimpleNamespace(postgres=Postgres()),
+        "lakemeter",
+    )
+    assert not created
+    assert resources.endpoint_name == endpoint_name
 
 
 def test_project_ids_are_normalized_for_resource_paths():

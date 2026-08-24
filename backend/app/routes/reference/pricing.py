@@ -17,6 +17,50 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/pricing/freshness", tags=["Pricing - Freshness"])
+def get_pricing_freshness(db: Session = Depends(get_db)):
+    """Return when bundled pricing was last loaded into Lakebase."""
+    try:
+        row = db.execute(
+            text(
+                """
+                SELECT loaded_at, source, total_rows, table_counts, notes
+                FROM lakemeter.pricing_metadata
+                WHERE id = 1
+                """
+            )
+        ).mappings().first()
+        if not row:
+            return {
+                "success": True,
+                "data": {
+                    "available": False,
+                    "loaded_at": None,
+                    "source": None,
+                    "total_rows": 0,
+                    "notes": "Pricing freshness metadata has not been recorded yet.",
+                },
+            }
+        loaded_at = row["loaded_at"]
+        return {
+            "success": True,
+            "data": {
+                "available": True,
+                "loaded_at": loaded_at.isoformat() if loaded_at is not None else None,
+                "source": row["source"],
+                "total_rows": row["total_rows"],
+                "table_counts": row["table_counts"] or {},
+                "notes": row["notes"],
+            },
+        }
+    except Exception as e:
+        logger.error(f"Error fetching pricing freshness: {e}")
+        return {
+            "success": False,
+            "error": {"message": str(e), "code": "DATABASE_ERROR"},
+        }
+
+
 @router.get("/pricing/product-types", tags=["Pricing - DBU Rates"])
 def list_product_types(
     cloud: str = Query(..., description="Cloud provider (required): AWS, AZURE, GCP"),

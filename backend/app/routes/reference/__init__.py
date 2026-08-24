@@ -1,5 +1,7 @@
 """Reference data endpoints — direct Lakebase queries with caching."""
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from app.auth.databricks_auth import require_authenticated
 
 from app.routes.reference.clouds_regions import router as clouds_regions_router
 from app.routes.reference.instances import router as instances_router
@@ -13,7 +15,7 @@ from app.routes.reference.pricing import router as pricing_router
 from app.routes.reference.model_serving import router as model_serving_router
 from app.routes.reference.fmapi import router as fmapi_router
 
-router = APIRouter(tags=["Reference Data"])
+router = APIRouter(tags=["Reference Data"], dependencies=[Depends(require_authenticated)])
 
 router.include_router(clouds_regions_router)
 router.include_router(instances_router)

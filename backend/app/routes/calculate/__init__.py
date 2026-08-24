@@ -1,5 +1,7 @@
 """Calculate endpoints package — aggregates all workload calculation sub-routers."""
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from app.auth.databricks_auth import require_authenticated
 
 from app.routes.calculate.jobs import router as jobs_router
 from app.routes.calculate.all_purpose import router as all_purpose_router
@@ -16,7 +18,7 @@ from app.routes.calculate.ai_classify_calc import router as ai_classify_router
 from app.routes.calculate.shutterstock_calc import router as shutterstock_router
 from app.routes.calculate.lakeflow_connect_calc import router as lakeflow_connect_router
 
-router = APIRouter(tags=["Cost Calculation"])
+router = APIRouter(tags=["Cost Calculation"], dependencies=[Depends(require_authenticated)])
 router.include_router(jobs_router)
 router.include_router(all_purpose_router)
 router.include_router(dbsql_router)

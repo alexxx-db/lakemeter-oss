@@ -4,12 +4,15 @@ Database connection and session management.
 Supports automatic OAuth token refresh for Lakebase using Service Principal M2M flow.
 Reference: https://docs.databricks.com/aws/en/oltp/instances/authentication
 """
+import random
 import threading
 import time
 from urllib.parse import quote_plus
 
 from fastapi import HTTPException
-from sqlalchemy import create_engine, text, event
+from typing import Optional
+
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError
@@ -19,6 +22,56 @@ from app.config import log_info, log_warning, log_error
 
 # Base class for models (defined early so models can import it)
 Base = declarative_base()
+
+# Cold-start / scale-to-zero: bounded retries before surfacing 503
+_CONNECT_MAX_ATTEMPTS = 4
+_CONNECT_BASE_DELAY_SEC = 0.4
+_CONNECT_MAX_DELAY_SEC = 4.0
+
+
+def _is_auth_error(error: BaseException) -> bool:
+    error_str = str(error).lower()
+    return any(
+        token in error_str
+        for token in (
+            "invalid authorization",
+            "authentication failed",
+            "password authentication failed",
+            "password",
+        )
+    )
+
+
+def _is_transient_db_error(error: BaseException) -> bool:
+    """True for cold-start / network blips that often succeed on retry."""
+    if _is_auth_error(error):
+        return False
+    error_str = str(error).lower()
+    transient_markers = (
+        "connection refused",
+        "connection reset",
+        "could not connect",
+        "server closed the connection",
+        "timeout",
+        "timed out",
+        "temporarily unavailable",
+        "starting up",
+        "not yet ready",
+        "the database system is starting",
+        "connection to server",
+        "ssl syscall error",
+        "broken pipe",
+        "name or service not known",
+        "network is unreachable",
+    )
+    return any(marker in error_str for marker in transient_markers)
+
+
+def _sleep_with_jitter(attempt: int) -> None:
+    """Exponential backoff with jitter: base * 2^attempt ± 25%."""
+    delay = min(_CONNECT_MAX_DELAY_SEC, _CONNECT_BASE_DELAY_SEC * (2 ** attempt))
+    jitter = delay * random.uniform(-0.25, 0.25)
+    time.sleep(max(0.05, delay + jitter))
 
 
 def _get_database_url() -> str:
@@ -98,37 +151,48 @@ def _get_database_url() -> str:
 
 
 def _create_engine_with_token_refresh():
-    """Create SQLAlchemy engine with automatic token refresh."""
+    """Create SQLAlchemy engine with automatic token refresh and cold-start retries."""
     try:
         database_url = _get_database_url()
     except Exception as e:
         log_error(f"Database initialization failed: {e}")
         raise
-    
-    try:
-        engine = create_engine(
-            database_url,
-            pool_pre_ping=True,
-            pool_size=15,
-            max_overflow=25,
-            pool_timeout=15,
-            # Recycle connections every 15 minutes (before token expires at 1 hour)
-            pool_recycle=900,
-            connect_args={"sslmode": "require", "connect_timeout": 10}
-        )
-        
-        # Test connection
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        
-        log_info("Database engine created for Lakebase")
-        
-        session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-        return engine, session_local
-        
-    except Exception as e:
-        log_error(f"Could not create database engine: {e}")
-        raise
+
+    last_error: Optional[Exception] = None
+    for attempt in range(_CONNECT_MAX_ATTEMPTS):
+        try:
+            engine = create_engine(
+                database_url,
+                pool_pre_ping=True,
+                pool_size=15,
+                max_overflow=25,
+                pool_timeout=15,
+                # Recycle connections every 15 minutes (before token expires at 1 hour)
+                pool_recycle=900,
+                connect_args={"sslmode": "require", "connect_timeout": 10}
+            )
+
+            # Test connection
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+
+            log_info("Database engine created for Lakebase")
+
+            session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            return engine, session_local
+        except Exception as e:
+            last_error = e
+            if attempt < _CONNECT_MAX_ATTEMPTS - 1 and _is_transient_db_error(e):
+                log_warning(
+                    f"Database connect attempt {attempt + 1}/{_CONNECT_MAX_ATTEMPTS} "
+                    f"failed (transient): {e}"
+                )
+                _sleep_with_jitter(attempt)
+                continue
+            log_error(f"Could not create database engine: {e}")
+            raise
+
+    raise last_error or Exception("Could not create database engine")
 
 
 # Initialize engine and session factory (fault-tolerant)
@@ -147,33 +211,41 @@ _refresh_lock = threading.Lock()
 
 
 def refresh_engine():
-    """Refresh the database engine with a new token. Thread-safe."""
+    """Refresh the database engine with a new token. Thread-safe; disposes the old engine."""
     global engine, SessionLocal, _last_engine_refresh
-    
+
     from app.auth.token_manager import token_manager
-    
+
     with _refresh_lock:
         log_info("Refreshing database engine with new token...")
-        
+
         if token_manager:
             # Force token refresh
             token_manager._token = None
             token_manager._expires_at = None
-        
+
+        old_engine = engine
         try:
-            engine, SessionLocal = _create_engine_with_token_refresh()
+            new_engine, new_session = _create_engine_with_token_refresh()
+            engine, SessionLocal = new_engine, new_session
             _last_engine_refresh = time.time()
             log_info("Database engine refreshed successfully")
             return True
         except Exception as e:
             log_error(f"Failed to refresh database engine: {e}")
             return False
+        finally:
+            if old_engine is not None and old_engine is not engine:
+                try:
+                    old_engine.dispose()
+                except Exception as dispose_err:
+                    log_warning(f"Failed to dispose previous engine: {dispose_err}")
 
 
 def _check_and_refresh_engine():
     """Check if engine needs refresh due to token age."""
     global engine, SessionLocal, _last_engine_refresh
-    
+
     # If engine is None, try to create it
     if engine is None:
         log_info("Engine is None, attempting to create...")
@@ -182,54 +254,88 @@ def _check_and_refresh_engine():
         except Exception as e:
             log_error(f"Failed to create engine: {e}")
             return False
-    
+
     # Check if it's time to refresh (proactive refresh before token expires)
     time_since_refresh = time.time() - _last_engine_refresh
     if time_since_refresh > _ENGINE_REFRESH_INTERVAL:
         log_info(f"Engine is {time_since_refresh/60:.1f} minutes old, proactively refreshing...")
         refresh_engine()
-    
+
     return engine is not None
+
+
+def _ping_session(db) -> None:
+    """Execute a lightweight probe with retries for transient/cold-start errors."""
+    last_error: Optional[Exception] = None
+    for attempt in range(_CONNECT_MAX_ATTEMPTS):
+        try:
+            db.execute(text("SELECT 1"))
+            return
+        except OperationalError as e:
+            last_error = e
+            if _is_auth_error(e):
+                raise
+            if attempt < _CONNECT_MAX_ATTEMPTS - 1 and _is_transient_db_error(e):
+                log_warning(
+                    f"Database ping attempt {attempt + 1}/{_CONNECT_MAX_ATTEMPTS} "
+                    f"failed (transient): {e}"
+                )
+                _sleep_with_jitter(attempt)
+                continue
+            raise
+    if last_error:
+        raise last_error
 
 
 def get_db():
     """
     Dependency to get database session.
-    
-    Automatically handles token refresh on connection errors.
+
+    Automatically handles token refresh on auth errors and bounded retries on cold-start.
     """
     # Proactive refresh check
     _check_and_refresh_engine()
-    
+
     if SessionLocal is None:
         raise HTTPException(status_code=503, detail="Database not connected")
-    
+
     db = SessionLocal()
     try:
-        # Test the connection before yielding
         try:
-            db.execute(text("SELECT 1"))
+            _ping_session(db)
         except OperationalError as e:
-            error_str = str(e).lower()
-            # Check if it's an auth/token error
-            if "invalid authorization" in error_str or "authentication failed" in error_str or "password" in error_str:
+            if _is_auth_error(e):
                 log_warning("Database connection failed due to auth error, refreshing token...")
                 db.close()
-                
-                # Refresh engine with new token
-                if refresh_engine():
-                    # Retry with new session
+
+                if refresh_engine() and SessionLocal is not None:
                     db = SessionLocal()
-                    db.execute(text("SELECT 1"))  # Test again
+                    _ping_session(db)
                 else:
-                    raise HTTPException(status_code=503, detail="Database connection failed after token refresh")
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Database connection failed after token refresh",
+                    )
+            elif _is_transient_db_error(e):
+                log_warning("Database still unavailable after retries; refreshing engine...")
+                db.close()
+                if refresh_engine() and SessionLocal is not None:
+                    db = SessionLocal()
+                    _ping_session(db)
+                else:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Database unavailable (cold start or connectivity)",
+                    )
             else:
                 raise
-        
+
         yield db
+    except HTTPException:
+        raise
     except OperationalError as e:
         error_str = str(e).lower()
-        if "invalid authorization" in error_str or "authentication failed" in error_str:
+        if _is_auth_error(e):
             log_warning("Database operation failed due to auth error, refreshing for next request...")
             refresh_engine()
         raise HTTPException(status_code=503, detail=f"Database error: {str(e)}")

@@ -156,11 +156,24 @@ else:
 
 # COMMAND ----------
 
-# 4. Grant SQL-level permissions
+# 4. Grant least-privilege SQL permissions (SELECT all; DML on app tables only)
 t0 = time.time()
-print("Step 4: Granting SQL permissions to app SP...")
+print("Step 4: Granting least-privilege SQL permissions to app SP...")
 
 try:
+    import os
+    import sys
+
+    # Bundle root is the parent of notebooks/ (synced via DAB)
+    nb_context = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+    nb_path = nb_context.notebookPath().get()
+    if not nb_path.startswith("/Workspace"):
+        nb_path = "/Workspace" + nb_path
+    bundle_root = os.path.dirname(os.path.dirname(nb_path))
+    if bundle_root not in sys.path:
+        sys.path.insert(0, bundle_root)
+    from lakebase_grants import apply_app_role_grants
+
     cred = w.postgres.generate_database_credential(endpoint=endpoint_name)
     owner_user = w.current_user.me().user_name
 
@@ -170,22 +183,10 @@ try:
     )
     conn.autocommit = True
     cur = conn.cursor()
-    cur.execute(f'GRANT CONNECT ON DATABASE {db_name} TO "{app_sp_id}"')
-    cur.execute(f'GRANT USAGE ON SCHEMA lakemeter TO "{app_sp_id}"')
-    cur.execute(f'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA lakemeter TO "{app_sp_id}"')
-    cur.execute(f'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA lakemeter TO "{app_sp_id}"')
-    cur.execute(f'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA lakemeter TO "{app_sp_id}"')
-    cur.execute(
-        f'ALTER DEFAULT PRIVILEGES IN SCHEMA lakemeter '
-        f'GRANT ALL PRIVILEGES ON TABLES TO "{app_sp_id}"'
-    )
-    cur.execute(
-        f'ALTER DEFAULT PRIVILEGES IN SCHEMA lakemeter '
-        f'GRANT EXECUTE ON FUNCTIONS TO "{app_sp_id}"'
-    )
+    n = apply_app_role_grants(cur, app_sp_id, db_name)
     cur.close()
     conn.close()
-    print(f"  SQL permissions granted ({time.time() - t0:.1f}s)")
+    print(f"  Least-privilege SQL grants applied ({n} statements, {time.time() - t0:.1f}s)")
 except Exception as e:
     print(f"  Warning: Could not grant SQL permissions: {e}")
     print("  App will use password-auth fallback (lakemeter_sync_role)")

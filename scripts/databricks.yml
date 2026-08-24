@@ -8,16 +8,32 @@ sync:
     - "app_source/**"
     - "functions/**"
     - "lakebase_autoscaling.py"
+    - "lakebase_grants.py"
     - "upgrader/**"
     - "upgrade_payload/**"
   exclude:
     - "**/__pycache__/**"
     - "**/*.pyc"
 
+# Optional: pin a least-privilege deployment identity at the target level, e.g.
+#   run_as:
+#     service_principal_name: lakemeter-deploy-sp
+# Configure the SP in the Databricks account before enabling.
+#
+# Optional failure alerts (add under any job after deploy, or uncomment):
+#   email_notifications:
+#     on_failure:
+#       - platform-ops@example.com
+
 resources:
   jobs:
     lakemeter_installer:
       name: "Lakemeter Installer"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: true
       parameters:
         - name: project_id
           default: "lakemeter-customer"
@@ -44,8 +60,8 @@ resources:
       #                       07_verify (~30s)
       #
       tasks:
-        # ── Branch 1: Database provisioning ──────────────────────────────
         - task_key: provision_lakebase
+          timeout_seconds: 1800
           notebook_task:
             notebook_path: ./notebooks/01_provision_lakebase.py
             base_parameters:
@@ -55,6 +71,7 @@ resources:
         - task_key: create_database
           depends_on:
             - task_key: provision_lakebase
+          timeout_seconds: 1800
           notebook_task:
             notebook_path: ./notebooks/02_create_database.py
             base_parameters:
@@ -66,6 +83,7 @@ resources:
         - task_key: create_functions
           depends_on:
             - task_key: create_database
+          timeout_seconds: 1800
           notebook_task:
             notebook_path: ./notebooks/02b_create_functions.py
             base_parameters:
@@ -76,6 +94,7 @@ resources:
         - task_key: load_pricing_data
           depends_on:
             - task_key: create_database
+          timeout_seconds: 3600
           notebook_task:
             notebook_path: ./notebooks/03_load_pricing_data.py
             base_parameters:
@@ -87,6 +106,7 @@ resources:
         - task_key: create_sku_mapping
           depends_on:
             - task_key: load_pricing_data
+          timeout_seconds: 1800
           notebook_task:
             notebook_path: ./notebooks/04_create_sku_mapping.py
             base_parameters:
@@ -94,8 +114,8 @@ resources:
               db_name: "{{job.parameters.db_name}}"
           environment_key: serverless_env
 
-        # ── Branch 2: App creation (parallel with DB provisioning) ──────
         - task_key: create_app
+          timeout_seconds: 1800
           notebook_task:
             notebook_path: ./notebooks/05a_create_app.py
             base_parameters:
@@ -106,11 +126,11 @@ resources:
               claude_endpoint: "{{job.parameters.claude_endpoint}}"
           environment_key: serverless_env
 
-        # ── Merge point: grant SP access (needs app + database) ─────────
         - task_key: grant_app_access
           depends_on:
             - task_key: create_app
             - task_key: create_database
+          timeout_seconds: 1800
           notebook_task:
             notebook_path: ./notebooks/05b_grant_app_access.py
             base_parameters:
@@ -121,20 +141,20 @@ resources:
               claude_endpoint: "{{job.parameters.claude_endpoint}}"
           environment_key: serverless_env
 
-        # ── Deploy (needs app configured + SP granted) ──────────────────
         - task_key: deploy_app
           depends_on:
             - task_key: grant_app_access
+          timeout_seconds: 3600
           notebook_task:
             notebook_path: ./notebooks/06_deploy_app.py
             base_parameters:
               app_name: "{{job.parameters.app_name}}"
           environment_key: serverless_env
 
-        # ── Verify (smoke tests against deployed app) ─────────────────
         - task_key: verify_installation
           depends_on:
             - task_key: deploy_app
+          timeout_seconds: 1800
           notebook_task:
             notebook_path: ./notebooks/07_verify_installation.py
             base_parameters:
@@ -154,6 +174,10 @@ resources:
     lakemeter_upgrade:
       name: "Lakemeter Upgrade"
       max_concurrent_runs: 1
+      timeout_seconds: 7200
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: true
       parameters:
         - name: command
           default: "plan"
@@ -161,6 +185,7 @@ resources:
           default: "lakemeter"
       tasks:
         - task_key: upgrade_lakemeter
+          timeout_seconds: 7200
           notebook_task:
             notebook_path: ./notebooks/08_upgrade_lakemeter.py
             base_parameters:
@@ -175,3 +200,65 @@ resources:
               - "databricks-sdk>=0.123.0"
               - "psycopg2-binary>=2.9.9"
               - "requests>=2.31.0"
+
+    # Weekly pricing snapshot refresh (bundled CSVs → Lakebase).
+    # Pause or retarget after pointing source at live UC list prices.
+    lakemeter_pricing_refresh:
+      name: "Lakemeter Pricing Refresh"
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: true
+      schedule:
+        quartz_cron_expression: "0 0 6 ? * SUN"
+        timezone_id: "UTC"
+        # Deployed paused — unpause after confirming CSV/UC source cadence.
+        pause_status: "PAUSED"
+      parameters:
+        - name: project_id
+          default: "lakemeter-customer"
+        - name: db_name
+          default: "lakemeter_pricing"
+        - name: secrets_scope
+          default: "lakemeter-secrets"
+        # bundled_csv (default) or unity_catalog — see notebooks/10_refresh_pricing_from_uc.py
+        - name: pricing_source
+          default: "bundled_csv"
+        - name: uc_catalog
+          default: "lakemeter_catalog"
+        - name: uc_schema
+          default: "lakemeter"
+      tasks:
+        - task_key: refresh_pricing
+          timeout_seconds: 3600
+          notebook_task:
+            notebook_path: ./notebooks/09_refresh_pricing.py
+            base_parameters:
+              project_id: "{{job.parameters.project_id}}"
+              db_name: "{{job.parameters.db_name}}"
+              secrets_scope: "{{job.parameters.secrets_scope}}"
+              pricing_source: "{{job.parameters.pricing_source}}"
+              uc_catalog: "{{job.parameters.uc_catalog}}"
+              uc_schema: "{{job.parameters.uc_schema}}"
+          environment_key: pricing_refresh_env
+      environments:
+        - environment_key: pricing_refresh_env
+          spec:
+            environment_version: "5"
+            dependencies:
+              - "databricks-sdk>=0.123.0"
+              - "psycopg2-binary>=2.9.9"
+              - "pandas>=2.0.0"
+
+targets:
+  # Default used by scripts/install.sh
+  dev:
+    mode: development
+    default: true
+
+  staging:
+    mode: development
+
+  prod:
+    mode: production

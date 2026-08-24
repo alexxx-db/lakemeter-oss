@@ -12,6 +12,34 @@ Lakemeter follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## v0.2.0
+
+*2026-08-24*
+
+Minor release adding AI Extract / AI Classify calculators and production
+hardening. No Lakebase schema migration is required for existing installs;
+optional pricing-metadata and conversation tables are created on next app start.
+
+### New capabilities
+
+- AI Extract and AI Classify cost calculators and estimate persistence
+- Pricing freshness metadata + paused weekly refresh job + UI “prices as of”
+- Durable AI conversation persistence (`ai_conversations`)
+
+### Security / trust
+
+- Locked down user APIs (no open list/create); chat conversations bound to SSO ownership
+- Apps SSO identity headers only (no application JWT gate)
+- Least-privilege Lakebase grants via `scripts/lakebase_grants.py`
+- Lakebase cold-start retries + Postgres native login on create and reuse
+
+### Upgrade notes
+
+- Application-only for most workspaces; re-run grants notebooks if upgrading
+  an older App SP that still has `ALL PRIVILEGES`
+
+---
+
 ## v0.1.2
 
 *2026-08-08*
