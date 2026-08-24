@@ -123,3 +123,27 @@ Architecture Decision Records (ADRs) for Lakemeter. Each entry follows the same 
 **Decision.** `tests/export/golden/` contains a canonical 9-workload estimate whose expected values are derived independently of the implementation. Any change to calculators, pricing data shape, or export math that alters the canonical estimate fails these tests loudly.
 
 **Consequences.** (+) Refactors are safe; intentional model changes require deliberately updating the golden pack, which forces a review conversation. (−) Golden values must be re-derived when the cost model legitimately changes.
+
+---
+
+## ADR-012: Live FinOps is a separate actuals plane (not Lakebase OLTP)
+
+**Context.** Lakemeter today answers “what might this cost?” using snapshot list prices in Lakebase (ADR-002, ADR-003). Customers also need “what did we spend?” from Databricks billable usage. Stuffing account-scale `system.billing.usage` into Lakebase would fight OLTP sizing, cold-start, and the zero-egress estimator posture. Replacing the estimator with a Genie dashboard would discard transparent sizing + Excel export.
+
+**Decision.** Live FinOps is a **second product plane** next to the estimator:
+
+1. **Source of truth for actuals** is Databricks system tables: `system.billing.usage` joined to `system.billing.list_prices` on `sku_name` with a **price time-window** (`usage_end_time` ∈ `[price_start_time, price_end_time)`). Always retain `billing_origin_product` alongside `sku_name`.
+2. **Gold layer** lives in Unity Catalog (`{catalog}.lakemeter_finops.*`), built by a scheduled Lakeflow Job under `etl/finops/` (P0 scaffold). Default dollars are **list cost**; commercial/negotiated overlays are explicit and labeled — never presented as the invoice.
+3. **Serving** is a SQL warehouse (App SP read-only SELECT on gold). Optional later: Genie/Lakeview for exploration; rolled-up KPI sync into Lakebase only if App latency requires it.
+4. **Estimator path unchanged.** ADR-003 still holds for estimate calculations — the App does not call billing system tables at request time for sizing. Variance (estimate ↔ actual) is a later phase and requires a tagging contract (`lakemeter_estimate_id`, …) or an explicit resource map; unattributed spend stays visible.
+
+**Consequences.** (+) Clear separation of planning OLTP vs account-scale analytics. (+) Auditable join semantics matching Databricks FinOps guidance. (+) Installer/estimator remains usable without system-table enablement. (−) Two data planes and an extra warehouse permission to operate. (−) List cost ≠ customer invoice until a rate card is applied. (−) Variance quality depends on tag hygiene.
+
+**Alternatives considered.**
+
+- *Pipe raw usage into Lakebase:* rejected — wrong store for high-volume billing facts; breaks ADR-002 scale assumptions.
+- *Live per-request system-table queries from the App:* rejected — warehouse cold-start, privilege sprawl, and couples every Actuals page load to account billing access.
+- *Replace Lakemeter with Lakeview/Genie only:* rejected — loses the sizing/export product; Genie remains optional exploration, not the estimator.
+- *Invoice-accurate dollars from list_prices alone:* rejected — `list_prices` is not the contract; commercial overlay must be explicit.
+
+**Delivery phases (product).** P0 gold job (`etl/finops`); P1 Actuals UI (`/actuals`); P2 estimate↔actual variance via `lakemeter_estimate_id` tags (`cost_by_estimate_daily` + `/finops/variance/{id}`); P3 chargeback/budgets. See design canvas `lakemeter-live-finops-design` and `etl/finops/TAGGING.md`.

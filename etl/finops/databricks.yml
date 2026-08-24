@@ -1,0 +1,62 @@
+# Lakemeter Live FinOps — P0 gold job (ADR-012)
+# Deploy from this directory: databricks bundle deploy --target dev
+bundle:
+  name: lakemeter-finops
+
+variables:
+  catalog:
+    description: Unity Catalog for FinOps gold tables
+    default: main
+  schema:
+    description: Schema for FinOps gold tables
+    default: lakemeter_finops
+  lookback_days:
+    description: Days of usage to materialize (1..730)
+    default: "90"
+
+resources:
+  jobs:
+    lakemeter_finops_gold:
+      name: lakemeter_finops_gold
+      description: >
+        FinOps gold from system.billing.usage × list_prices (list $), including
+        cost_by_estimate_daily for tagged usage (ADR-012 P0/P2).
+        Ships paused — enable after confirming system.billing access.
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: lookback_days
+          default: ${var.lookback_days}
+      tasks:
+        - task_key: build_finops_gold
+          timeout_seconds: 7200
+          notebook_task:
+            notebook_path: ./notebooks/01_build_finops_gold.py
+            base_parameters:
+              catalog: "{{job.parameters.catalog}}"
+              schema: "{{job.parameters.schema}}"
+              lookback_days: "{{job.parameters.lookback_days}}"
+          environment_key: finops_gold_env
+      environments:
+        - environment_key: finops_gold_env
+          spec:
+            environment_version: "5"
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+  staging:
+    mode: development
+
+  prod:
+    mode: production
