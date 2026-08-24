@@ -170,6 +170,7 @@ def _database_diagnostics():
 @router.get("/api/v1/diagnostics")
 def diagnostics():
     """Support diagnostics bundle. Safe to share: secrets are masked."""
+    finops_wh = (getattr(settings, "finops_warehouse_id", None) or "").strip()
     return {
         "app": {
             "name": "Lakemeter",
@@ -184,4 +185,12 @@ def diagnostics():
         },
         "config": _redacted_config(),
         "database": _database_diagnostics(),
+        "finops": {
+            "configured": bool(finops_wh) or bool(
+                getattr(settings, "finops_auto_warehouse", False)
+            ),
+            "warehouse_id_set": bool(finops_wh),
+            "catalog": getattr(settings, "finops_catalog", None),
+            "schema": getattr(settings, "finops_schema", None),
+        },
     }
