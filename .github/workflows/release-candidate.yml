@@ -48,14 +48,14 @@ jobs:
 
     steps:
       - name: Check out candidate
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.candidate_ref }}
           fetch-depth: 0
           path: candidate
 
       - name: Check out previous release
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.previous_tag }}
           fetch-depth: 0
@@ -67,9 +67,9 @@ jobs:
           python-version: "3.12"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: |
             candidate/frontend/package-lock.json
@@ -106,6 +106,7 @@ jobs:
       - name: Install candidate dependencies
         working-directory: candidate
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install \
             -r requirements.txt \
@@ -115,7 +116,10 @@ jobs:
             pillow \
             pyyaml
           npm ci --prefix frontend
+          test -x frontend/node_modules/.bin/tsc
+          test -x frontend/node_modules/.bin/vite
           npm ci --prefix docs-site
+          test -x docs-site/node_modules/.bin/docusaurus
 
       - name: Validate release policy and payload
         working-directory: candidate
@@ -336,7 +340,7 @@ jobs:
 
     steps:
       - name: Check out tested commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.candidate.outputs.candidate_sha }}
           fetch-depth: 0

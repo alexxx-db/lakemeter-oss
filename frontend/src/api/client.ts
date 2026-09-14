@@ -1314,8 +1314,6 @@ export const calculateWorkloadCost = async (
   }
 }
 
-}
-
 export interface PricingFreshness {
   available: boolean
   loaded_at: string | null

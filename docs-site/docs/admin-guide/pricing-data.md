@@ -66,4 +66,4 @@ Both CSV and UC loaders fail the run if critical tables are empty (`sync_pricing
 
 - [Installer Guide](./installer)
 - [Deployment Inventory](./deployment-inventory)
-- [Architecture](./architecture)
+- [Live FinOps](./finops)

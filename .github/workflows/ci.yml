@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -70,18 +70,23 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          test -x node_modules/.bin/tsc
+          test -x node_modules/.bin/vite
 
       - name: Build frontend
         working-directory: frontend
@@ -93,18 +98,22 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: docs-site/package-lock.json
 
       - name: Install documentation dependencies
         working-directory: docs-site
-        run: npm ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          test -x node_modules/.bin/docusaurus
 
       - name: Build documentation
         working-directory: docs-site
