@@ -48,7 +48,12 @@ jobs:
             tests/test_version_sync.py \
             tests/test_pricing_data_clouds.py \
             tests/test_release_hygiene.py \
+            tests/test_router_auth.py \
+            tests/test_finops_api.py \
+            tests/test_finops_scaffold.py \
+            tests/test_health_diagnostics.py \
             tests/test_installation/test_lakebase_autoscaling.py \
+            tests/test_installation/test_marketplace_package.py \
             tests/schema \
             tests/parity \
             tests/export/jobs/test_jobs_calculations.py \

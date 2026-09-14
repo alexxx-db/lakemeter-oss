@@ -12,6 +12,47 @@ Lakemeter follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## v0.2.1
+
+*2026-09-05*
+
+Application-only patch on `v0.2.0`: Marketplace packaging, Lakebase startup
+retry, and installation-doc cleanup. No Lakebase schema migration.
+
+### Marketplace and runtime
+
+- Made the Databricks App package Marketplace-ready
+  ([PR #65](https://github.com/databrickslabs/lakemeter-oss/pull/65))
+- Fixed Marketplace FMAPI pricing and version
+  ([PR #67](https://github.com/databrickslabs/lakemeter-oss/pull/67))
+- Retry Lakebase connection during app startup
+  ([PR #68](https://github.com/databrickslabs/lakemeter-oss/pull/68))
+- Documented Marketplace installation, security, and prerequisites
+  ([PR #69](https://github.com/databrickslabs/lakemeter-oss/pull/69),
+  [PR #70](https://github.com/databrickslabs/lakemeter-oss/pull/70),
+  [PR #71](https://github.com/databrickslabs/lakemeter-oss/pull/71),
+  [PR #72](https://github.com/databrickslabs/lakemeter-oss/pull/72),
+  [PR #73](https://github.com/databrickslabs/lakemeter-oss/pull/73))
+
+### Fork delta (alexxx-db)
+
+Production hardening and Live FinOps layered on Labs `v0.2.1`. Optional
+`pricing_metadata` and `ai_conversations` tables are created on next app start
+or installer run. No additional Lakebase schema migration.
+
+- Pricing freshness metadata, paused weekly refresh job, and UI “prices as of”
+- Durable AI conversation persistence bound to Apps SSO ownership
+- Locked down user APIs (no open list/create); Apps SSO identity headers only
+- Least-privilege Lakebase grants via `scripts/lakebase_grants.py`
+- Lakebase cold-start retries plus Postgres native login on create and reuse
+- Lakeflow Connect restored as a first-class workload
+- Live FinOps actuals plane (ADR-012): `etl/finops` gold job, `/actuals`, and
+  `/api/v1/finops/*` served from a SQL warehouse (not Lakebase)
+
+Upgrade: re-run grants notebooks if an older App SP still has `ALL PRIVILEGES`.
+
+---
+
 ## v0.2.0
 
 *2026-08-31*
@@ -98,23 +139,6 @@ Data and application release expanding workload coverage, DSU accounting, estima
 - Use the [Upgrade Guide](./admin-guide/upgrading.md) to validate and apply the
   release from a clean checkout
   ([PR #63](https://github.com/databrickslabs/lakemeter-oss/pull/63))
-
-### Fork delta (alexxx-db)
-
-Production hardening layered on Labs `v0.2.0` / `v0.2.1`. Optional
-`pricing_metadata` and `ai_conversations` tables are created on next app start
-or installer run. No additional Lakebase schema migration.
-
-- Pricing freshness metadata, paused weekly refresh job, and UI “prices as of”
-- Durable AI conversation persistence bound to Apps SSO ownership
-- Locked down user APIs (no open list/create); Apps SSO identity headers only
-- Least-privilege Lakebase grants via `scripts/lakebase_grants.py`
-- Lakebase cold-start retries plus Postgres native login on create and reuse
-- Lakeflow Connect restored as a first-class workload
-- Live FinOps actuals plane (ADR-012): `etl/finops` gold job, `/actuals`, and
-  `/api/v1/finops/*` served from a SQL warehouse (not Lakebase)
-
-Upgrade: re-run grants notebooks if an older App SP still has `ALL PRIVILEGES`.
 
 ---
 

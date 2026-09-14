@@ -16,8 +16,7 @@ dated `## vX.Y.Z` entries there to `VERSION`).
 
 ## [Unreleased]
 
-Security, trust, and platform hardening on top of v0.1.1 (also summarized in
-`docs-site/docs/changelog.md`).
+Fork delta on Labs `v0.2.1` (also summarized in `docs-site/docs/changelog.md`).
 
 ### Security / AuthZ
 - Locked down user APIs (no open list/create); self-or-admin updates only
@@ -36,6 +35,7 @@ Security, trust, and platform hardening on top of v0.1.1 (also summarized in
 
 ### Product / docs
 - Restored Lakeflow Connect as a first-class workload
+- Live FinOps actuals plane (ADR-012): gold job, `/actuals`, warehouse SQL APIs
 - Documented Databricks Support as commercial-only
 - Admin guides: pricing data path, AppKit evaluation note
 - Persist Shutterstock / Lakebase PITR-snapshot / AI Parse UI fields correctly

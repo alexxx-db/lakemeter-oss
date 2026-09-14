@@ -96,7 +96,6 @@ const sidebars: SidebarsConfig = {
       label: 'Admin Guide',
       collapsed: false,
       items: [
-<<<<<<< HEAD
         {
           type: 'doc',
           id: 'admin-guide/deployment',
