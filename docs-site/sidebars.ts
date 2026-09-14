@@ -122,6 +122,7 @@ const sidebars: SidebarsConfig = {
           label: 'Source Deployment Inventory',
         },
         'admin-guide/finops',
+        'admin-guide/pricing-data',
         'admin-guide/api-reference',
         'admin-guide/dependencies-license',
       ],
