@@ -81,6 +81,7 @@ const sidebars: SidebarsConfig = {
         'admin-guide/deployment',
         'admin-guide/installer',
         'admin-guide/upgrading',
+        'admin-guide/finops',
         'admin-guide/deployment-inventory',
         'admin-guide/api-reference',
         'admin-guide/dependencies-license',
