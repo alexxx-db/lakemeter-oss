@@ -303,10 +303,62 @@ tables = [t for _, t, _ in LOAD_MAP] + [
     "ref_fmapi_databricks_models",
     "ref_fmapi_proprietary_models",
 ]
+row_counts = {}
 for table in tables:
     cur.execute(f"SELECT COUNT(*) FROM lakemeter.{table}")
     count = cur.fetchone()[0]
+    row_counts[table] = count
     print(f"  {table}: {count}")
+
+# COMMAND ----------
+
+# Record pricing freshness metadata for API/UI "prices as of"
+from datetime import datetime, timezone
+import json
+
+cur.execute("""
+    CREATE TABLE IF NOT EXISTS lakemeter.pricing_metadata (
+        id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+        loaded_at TIMESTAMPTZ NOT NULL,
+        source TEXT NOT NULL,
+        total_rows INTEGER NOT NULL DEFAULT 0,
+        table_counts JSONB NOT NULL DEFAULT '{}'::jsonb,
+        notes TEXT
+    )
+""")
+
+loaded_at = datetime.now(timezone.utc)
+source = "bundled_csv"
+notes = (
+    "Snapshot loaded from installer/refresh CSV bundle. "
+    "Verify against official Databricks list prices before commercial use."
+)
+cur.execute(
+    """
+    INSERT INTO lakemeter.pricing_metadata (id, loaded_at, source, total_rows, table_counts, notes)
+    VALUES (1, %s, %s, %s, %s::jsonb, %s)
+    ON CONFLICT (id) DO UPDATE SET
+        loaded_at = EXCLUDED.loaded_at,
+        source = EXCLUDED.source,
+        total_rows = EXCLUDED.total_rows,
+        table_counts = EXCLUDED.table_counts,
+        notes = EXCLUDED.notes
+    """,
+    (loaded_at, source, total, json.dumps(row_counts), notes),
+)
+print(f"\nPricing freshness recorded: loaded_at={loaded_at.isoformat()} total_rows={total}")
+
+# Quality gates — fail the job if critical tables are empty
+critical = [
+    "sync_pricing_dbu_rates",
+    "sync_pricing_vm_costs",
+    "sync_ref_instance_dbu_rates",
+]
+empty_critical = [t for t in critical if row_counts.get(t, 0) == 0]
+if empty_critical:
+    raise RuntimeError(
+        f"Pricing quality check failed — empty critical tables: {empty_critical}"
+    )
 
 cur.close()
 conn.close()

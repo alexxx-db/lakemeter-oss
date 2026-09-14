@@ -183,6 +183,35 @@ async def get_current_user(
     return user
 
 
+async def require_authenticated(request: Request) -> str:
+    """
+    Lightweight authentication gate for routes that don't need a User row.
+
+    On Databricks Apps the platform terminates SSO and injects the user
+    identity headers, so this validates that the request actually came
+    through the authenticated proxy — defense in depth against direct-origin
+    access or a misconfigured exposure bypassing the Apps gateway.
+
+    Use get_current_user instead when the endpoint needs the User object.
+
+    Returns:
+        The authenticated user's email.
+
+    Raises:
+        HTTPException 401 if no user identity header is present.
+    """
+    email, _ = get_user_from_headers(request)
+
+    if not email:
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated. Please access through Databricks Apps.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    return email
+
+
 async def get_optional_user(
     request: Request,
     db: Session = Depends(_get_db)

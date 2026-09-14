@@ -2,6 +2,7 @@
 from app.auth.databricks_auth import (
     get_current_user,
     get_optional_user,
+    require_authenticated,
     get_or_create_user,
     get_user_from_headers,
     FORWARDED_EMAIL_HEADER,
@@ -12,6 +13,7 @@ from app.auth.databricks_auth import (
 __all__ = [
     "get_current_user",
     "get_optional_user",
+    "require_authenticated",
     "get_or_create_user",
     "get_user_from_headers",
     "FORWARDED_EMAIL_HEADER",

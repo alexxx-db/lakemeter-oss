@@ -99,6 +99,21 @@ Data and application release expanding workload coverage, DSU accounting, estima
   release from a clean checkout
   ([PR #63](https://github.com/databrickslabs/lakemeter-oss/pull/63))
 
+### Fork delta (alexxx-db)
+
+Production hardening layered on Labs `v0.2.0` / `v0.2.1`. Optional
+`pricing_metadata` and `ai_conversations` tables are created on next app start
+or installer run. No additional Lakebase schema migration.
+
+- Pricing freshness metadata, paused weekly refresh job, and UI “prices as of”
+- Durable AI conversation persistence bound to Apps SSO ownership
+- Locked down user APIs (no open list/create); Apps SSO identity headers only
+- Least-privilege Lakebase grants via `scripts/lakebase_grants.py`
+- Lakebase cold-start retries plus Postgres native login on create and reuse
+- Lakeflow Connect restored as a first-class workload
+
+Upgrade: re-run grants notebooks if an older App SP still has `ALL PRIVILEGES`.
+
 ---
 
 ## v0.1.2

@@ -61,6 +61,26 @@ def _endpoint_host(endpoint: Any) -> str | None:
     return str(host) if host else None
 
 
+def _ensure_pg_native_login(workspace_client: Any, project_name: str, project: Any) -> None:
+    """Enable Postgres password login when missing (Issue #19).
+
+    New Lakebase Autoscaling projects disable native password auth by default.
+    Lakemeter still provisions a password-auth fallback role for SP OAuth gaps,
+    so reused projects must have password connections enabled.
+    """
+    from databricks.sdk.common.types.fieldmask import FieldMask
+    from databricks.sdk.service.postgres import Project, ProjectSpec
+
+    spec = getattr(project, "spec", None)
+    if getattr(spec, "enable_pg_native_login", None) is True:
+        return
+    workspace_client.postgres.update_project(
+        name=project_name,
+        project=Project(spec=ProjectSpec(enable_pg_native_login=True)),
+        update_mask=FieldMask(field_mask=["spec.enable_pg_native_login"]),
+    ).wait()
+
+
 def ensure_autoscaling_project(
     workspace_client: Any,
     project_id: str,
@@ -85,6 +105,10 @@ def ensure_autoscaling_project(
     created = False
     try:
         project = workspace_client.postgres.get_project(name=project_name)
+        # Issue #19: new projects disable password auth by default. New creates
+        # set enable_pg_native_login=True; also repair reused projects so the
+        # lakemeter_sync_role password fallback keeps working.
+        _ensure_pg_native_login(workspace_client, project_name, project)
     except NotFound:
         project = workspace_client.postgres.create_project(
             project=Project(
