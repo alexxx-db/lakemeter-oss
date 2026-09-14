@@ -96,6 +96,7 @@ const sidebars: SidebarsConfig = {
       label: 'Admin Guide',
       collapsed: false,
       items: [
+<<<<<<< HEAD
         {
           type: 'doc',
           id: 'admin-guide/deployment',
@@ -121,6 +122,7 @@ const sidebars: SidebarsConfig = {
           id: 'admin-guide/deployment-inventory',
           label: 'Source Deployment Inventory',
         },
+        'admin-guide/finops',
         'admin-guide/api-reference',
         'admin-guide/dependencies-license',
       ],

@@ -111,6 +111,8 @@ or installer run. No additional Lakebase schema migration.
 - Least-privilege Lakebase grants via `scripts/lakebase_grants.py`
 - Lakebase cold-start retries plus Postgres native login on create and reuse
 - Lakeflow Connect restored as a first-class workload
+- Live FinOps actuals plane (ADR-012): `etl/finops` gold job, `/actuals`, and
+  `/api/v1/finops/*` served from a SQL warehouse (not Lakebase)
 
 Upgrade: re-run grants notebooks if an older App SP still has `ALL PRIVILEGES`.
 
