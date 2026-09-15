@@ -290,9 +290,9 @@ DEFAULT_WORKLOAD_TYPES = [
         "display_order": 12
     },
     {
-        "workload_type": "AI_EXTRACT",
-        "display_name": "AI Extract",
-        "description": "Structured extraction from raw text or parsed document input",
+        "workload_type": "LAKEFLOW_CONNECT",
+        "display_name": "Lakeflow Connect",
+        "description": "Managed ingestion: DLT Serverless pipeline with optional classic gateway",
         "show_compute_config": False,
         "show_serverless_toggle": False,
         "show_serverless_performance_mode": False,
@@ -304,12 +304,12 @@ DEFAULT_WORKLOAD_TYPES = [
         "show_lakebase_config": False,
         "show_vector_search_mode": False,
         "show_vm_pricing": False,
-        "show_usage_hours": False,
-        "show_usage_runs": False,
+        "show_usage_hours": True,
+        "show_usage_runs": True,
         "show_usage_tokens": False,
-        "sku_product_type_standard": "SERVERLESS_REAL_TIME_INFERENCE",
+        "sku_product_type_standard": None,
         "sku_product_type_photon": None,
-        "sku_product_type_serverless": None,
+        "sku_product_type_serverless": "DELTA_LIVE_TABLES_SERVERLESS",
         "display_order": 13
     },
     {
