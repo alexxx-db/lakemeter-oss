@@ -454,7 +454,7 @@ export const fetchDBSQLWarehouseHardware = async (params: {
 }
 
 // ============================================================================
-// Vector Search (NEW API)
+// AI Search (legacy route retained for compatibility)
 // ============================================================================
 export interface VectorSearchMode {
   mode: string
@@ -671,7 +671,8 @@ export const fetchFMAPIProprietaryModels = async (params: {
   rate_type?: string
 }): Promise<FMAPIProprietaryModel[]> => {
   const { data } = await api.get('/fmapi/proprietary-models', { params })
-  return data
+  const result = unwrap<any>(data)
+  return Array.isArray(result) ? result : (result?.models || [])
 }
 
 // Fetch ALL FMAPI Proprietary rates for all providers (for pre-caching)
@@ -797,12 +798,41 @@ export interface CostCalculationResponse {
       days_per_month?: number
       hours_per_month?: number
     }
+    usage_calculation?: {
+      inference_tables?: {
+        input_method: 'requests' | 'payload_gb'
+        monthly_payload_gb: number
+        monthly_dbus: number
+      }
+      usage_tracking?: {
+        input_method: 'requests' | 'payload_gb'
+        monthly_payload_gb: number
+        monthly_dbus: number
+      }
+    }
+    component_breakdown?: Array<{
+      component: string
+      display_name: string
+      enabled: boolean
+      quantity?: number
+      unit?: string
+      quantity_unit?: string
+      dbu_per_unit?: number
+      dbu_per_gb?: number
+      monthly_payload_gb?: number
+      monthly_dbus: number
+      dbu_price: number
+      monthly_dbu_cost: number
+    }>
     // Standard compute workloads use dbu_calculation
     dbu_calculation?: {
       dbu_per_hour?: number
       dbu_per_month?: number
+      monthly_dbus?: number
+      monthly_payload_gb?: number
       dbu_price?: number
       dbu_cost_per_month?: number
+      monthly_dbu_cost?: number
     }
     // DBSQL workloads use dbu_costs
     dbu_costs?: {
@@ -952,10 +982,13 @@ export const calculateDLTServerless = async (request: DLTServerlessRequest): Pro
   return data
 }
 
-// Vector Search
+// AI Search (legacy route name retained for compatibility)
 export interface VectorSearchRequest extends BaseCalculationRequest {
   mode: string
   vector_capacity_millions: number
+  storage_gb?: number
+  reranker_enabled?: boolean
+  reranker_requests_thousands?: number
   hours_per_month?: number
 }
 
@@ -995,6 +1028,7 @@ export const calculateFMAPI = async (request: FMAPIRequest): Promise<CostCalcula
 // FMAPI Databricks
 export interface FMAPIDatabricksRequest extends BaseCalculationRequest {
   model: string
+  endpoint_type?: string
   rate_type: string
   quantity: number
 }
@@ -1022,6 +1056,7 @@ export const calculateFMAPIProprietary = async (request: FMAPIProprietaryRequest
 // Databricks Apps
 export interface DatabricksAppsRequest extends BaseCalculationRequest {
   size?: string
+  num_apps?: number
   hours_per_month?: number
 }
 
@@ -1064,6 +1099,84 @@ export interface AIClassifyRequest extends BaseCalculationRequest {
 
 export const calculateAIClassify = async (request: AIClassifyRequest): Promise<CostCalculationResponse> => {
   const { data } = await api.post('/calculate/ai-classify', request)
+  return data
+}
+
+// Unity AI Gateway
+export interface AIGatewayRequest extends BaseCalculationRequest {
+  inference_tables_enabled: boolean
+  inference_tables_input_method?: 'requests' | 'payload_gb'
+  inference_tables_requests_millions?: number
+  inference_tables_avg_request_payload_kb?: number
+  inference_tables_avg_response_payload_kb?: number
+  inference_tables_monthly_payload_gb?: number
+  usage_tracking_enabled: boolean
+  usage_tracking_input_method?: 'requests' | 'payload_gb'
+  usage_tracking_requests_millions?: number
+  usage_tracking_avg_request_payload_kb?: number
+  usage_tracking_avg_response_payload_kb?: number
+  usage_tracking_monthly_payload_gb?: number
+  discount_config?: Record<string, unknown>
+}
+
+export const calculateAIGateway = async (request: AIGatewayRequest): Promise<CostCalculationResponse> => {
+  const { data } = await api.post('/calculate/ai-gateway', request)
+  return data
+}
+
+// Agent Evaluation
+export interface AgentEvaluationRequest extends BaseCalculationRequest {
+  labels_enabled: boolean
+  input_tokens_millions: number
+  output_tokens_millions: number
+  synthetic_data_enabled: boolean
+  synthetic_questions: number
+  discount_config?: Record<string, unknown>
+}
+
+export const calculateAgentEvaluation = async (request: AgentEvaluationRequest): Promise<CostCalculationResponse> => {
+  const { data } = await api.post('/calculate/agent-evaluation', request)
+  return data
+}
+
+// AI Runtime
+export interface AIRuntimeRequest extends BaseCalculationRequest {
+  accelerator_type: 'GPU_1xA10' | 'GPU_1xH100' | 'GPU_8xH100'
+  runs_per_day?: number | null
+  avg_runtime_minutes?: number | null
+  days_per_month?: number | null
+  hours_per_month?: number | null
+  discount_config?: Record<string, unknown>
+}
+
+export const calculateAIRuntime = async (request: AIRuntimeRequest): Promise<CostCalculationResponse> => {
+  const { data } = await api.post('/calculate/ai-runtime', request)
+  return data
+}
+
+// Databricks Default Storage
+export interface GeneralStorageRequest extends BaseCalculationRequest {
+  quantity: number
+  unit: 'gb' | 'tb'
+  tier_1_operations_thousands: number
+  tier_2_operations_thousands: number
+  discount_config?: Record<string, unknown>
+}
+
+export const calculateGeneralStorage = async (request: GeneralStorageRequest): Promise<CostCalculationResponse> => {
+  const { data } = await api.post('/calculate/general-storage', request)
+  return data
+}
+
+// Zerobus Ingest
+export interface ZerobusRequest extends BaseCalculationRequest {
+  mode: 'standard' | 'otel'
+  monthly_ingested_gb: number
+  discount_config?: Record<string, unknown>
+}
+
+export const calculateZerobus = async (request: ZerobusRequest): Promise<CostCalculationResponse> => {
+  const { data } = await api.post('/calculate/zerobus', request)
   return data
 }
 
@@ -1178,6 +1291,18 @@ export const calculateWorkloadCost = async (
     case 'AI_CLASSIFY':
       return calculateAIClassify(params as unknown as AIClassifyRequest)
 
+    case 'AI_GATEWAY':
+      return calculateAIGateway(params as unknown as AIGatewayRequest)
+
+    case 'AGENT_EVALUATION':
+      return calculateAgentEvaluation(params as unknown as AgentEvaluationRequest)
+
+    case 'AI_RUNTIME':
+      return calculateAIRuntime(params as unknown as AIRuntimeRequest)
+
+    case 'ZEROBUS':
+      return calculateZerobus(params as unknown as ZerobusRequest)
+
     case 'SHUTTERSTOCK_IMAGEAI':
       return calculateShutterstockImageAI(params as unknown as ShutterstockImageAIRequest)
 
@@ -1187,8 +1312,6 @@ export const calculateWorkloadCost = async (
     default:
       throw new Error(`Unknown workload type: ${workloadType}`)
   }
-}
-
 }
 
 export interface PricingFreshness {

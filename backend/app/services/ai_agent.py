@@ -16,6 +16,11 @@ from datetime import datetime
 
 from app.services.ai_client import ClaudeAIClient, get_claude_client
 from app.config import log_info, log_warning, log_error
+from app.services.platform_addons import (
+    calculate_platform_addon_cost,
+    get_platform_addon_discount,
+    get_selected_platform_addon,
+)
 
 
 # System prompt for the AI assistant
@@ -38,7 +43,7 @@ When presenting workload types to users, ALWAYS use these names:
 - **SDP (Spark Declarative Pipelines)**: Declarative ETL, CDC, materialized views, data quality (internal type: DLT)
 - **DBSQL (Databricks SQL)**: SQL analytics, BI dashboards, ad-hoc queries
 - **MODEL_SERVING**: Real-time ML inference endpoints
-- **VECTOR_SEARCH**: Vector similarity search for AI applications
+- **VECTOR_SEARCH (AI Search)**: Search and reranking for AI applications
 - **FMAPI_DATABRICKS**: Foundation Model APIs (Databricks-hosted models like Llama, DBRX)
 - **FMAPI_PROPRIETARY**: Foundation Model APIs (GPT-5+, Claude, Gemini - all within Databricks security)
 - **LAKEBASE**: PostgreSQL-compatible database
@@ -46,7 +51,19 @@ When presenting workload types to users, ALWAYS use these names:
 - **AI_PARSE**: Document AI parsing (DBU-based or per-page pricing, complexity levels)
 - **AI_EXTRACT**: Structured field extraction (per 1,000 inputs; raw STRING input is accepted, while document files require AI Parse first)
 - **AI_CLASSIFY**: Classification (per 1,000 inputs; raw STRING input is accepted, while document files require AI Parse first)
+- **AI_GATEWAY**: Additive Unity AI Gateway inference tables and usage tracking. Each enabled component has independent payload inputs and uses 1.429 DBU/GB. Prefer direct monthly payload GB for each component when its metered billable payload is known; otherwise use that component's requests in millions and average request/response KB. Underlying serving and guardrail costs are excluded.
+- **AGENT_EVALUATION**: Additive Agent Evaluation label scoring and synthetic data generation. Labels use separate monthly input/output token quantities; synthetic data uses generated question count. The evaluated app/model inference is excluded and must be modeled separately.
+- **AI_RUNTIME**: Serverless GPU model training. Billing-origin product AI_RUNTIME is charged on the MODEL_TRAINING SKU. Available on AWS and Azure with 1x A10, 1x H100, or 8x H100 accelerators.
+- **GENERAL_STORAGE**: Databricks Default Storage for Unity Catalog data and workspace assets. Estimate monthly capacity in GB or TB plus Tier 1 (PUT, COPY, POST, LIST) and Tier 2 API operations in thousands. Convert each component to DSUs and use exact regional DATABRICKS_STORAGE pricing. Customer-managed object storage, backups, and data transfer are excluded.
+- **ZEROBUS**: Direct ingestion into Unity Catalog Delta tables. Choose standard Zerobus Ingest at 0.143 DBU/GB or Zerobus OTel Ingest at 0.222 DBU/GB, enter monthly ingested GB, and use the exact regional JOBS_SERVERLESS_COMPUTE price. Available on AWS/GCP Premium or Enterprise and Azure Premium. Producer compute, target storage, downstream processing, and data transfer are excluded.
 - **SHUTTERSTOCK_IMAGEAI**: AI image generation (per-image pricing)
+
+## Platform Add-ons
+Platform add-ons are estimate-level uplifts, not workloads. When one is selected,
+use the calculated add-on details supplied in the estimate context. The uplift
+is based on Databricks Product Spend at List (DBU + DSU charges before
+discounts); cloud-provider VM costs are excluded. Users select or remove an
+add-on in the estimate Configuration panel.
 
 ## Key Questions to Ask Users
 
@@ -182,25 +199,27 @@ When presenting workload types to users, ALWAYS use these names:
    **FMAPI_PROPRIETARY (Anthropic, OpenAI, Google):**
    | Provider | Model ID | Display Name | Best For |
    |----------|----------|--------------|----------|
-   | anthropic | claude-sonnet-4-5 | Claude Sonnet 4.5 | General purpose, coding, reasoning |
-   | anthropic | claude-sonnet-4-1 | Claude Sonnet 4.1 | Balanced performance |
-   | anthropic | claude-sonnet-4 | Claude Sonnet 4 | Cost-effective |
-   | anthropic | claude-sonnet-3-7 | Claude Sonnet 3.7 | Legacy support |
-   | anthropic | claude-opus-4-5 | Claude Opus 4.5 | **Most capable**, complex reasoning |
-   | anthropic | claude-opus-4-1 | Claude Opus 4.1 | Advanced reasoning |
-   | anthropic | claude-opus-4 | Claude Opus 4 | Complex tasks |
+   | anthropic | claude-sonnet-5 | Claude Sonnet 5 | Latest balanced model |
+   | anthropic | claude-opus-5 | Claude Opus 5 | Complex reasoning |
+   | anthropic | claude-fable-5 | Claude Fable 5 | Highest-capability tier |
    | anthropic | claude-haiku-4-5 | Claude Haiku 4.5 | **Fastest**, simple tasks |
-   | openai | gpt-5 | GPT-5 | General purpose, multimodal |
-   | openai | gpt-5-1 | GPT-5.1 | Latest OpenAI model |
-   | openai | gpt-5-mini | GPT-5 Mini | Cost-effective |
-   | openai | gpt-5-nano | GPT-5 Nano | Lightest, fastest |
-   | google | gemini-2-5-pro | Gemini 2.5 Pro | Complex reasoning, multimodal |
-   | google | gemini-2-5-flash | Gemini 2.5 Flash | Fast, cost-effective |
+   | openai | gpt-5-6-sol | GPT 5.6 Sol | Highest-capability tier |
+   | openai | gpt-5-6-terra | GPT 5.6 Terra | Balanced reasoning |
+   | openai | gpt-5-6-luna | GPT 5.6 Luna | Fast, cost-effective |
+   | google | gemini-3-1-pro | Gemini 3.1 Pro | Complex reasoning, multimodal |
+   | google | gemini-3-6-flash | Gemini 3.6 Flash | Latest Flash model |
+   | google | gemini-3-5-flash-lite | Gemini 3.5 Flash Lite | Cost-effective |
 
    **FMAPI_DATABRICKS (Databricks-hosted open models):**
    | Provider | Model ID | Display Name | Best For |
    |----------|----------|--------------|----------|
-   | meta | llama-4-maverick | Llama 4 Maverick | Latest Llama, general purpose |
+   | moonshot | kimi-k3 | Kimi K3 | Advanced reasoning |
+   | moonshot | kimi-k2-7 | Kimi K2.7 | Balanced reasoning |
+   | zhipu | glm-5-2 | GLM-5.2 | General purpose |
+   | databricks | inkling | Inkling | General purpose |
+   | deepseek | deepseek-v4-pro-0813 | DeepSeek V4 Pro | Advanced reasoning |
+   | qwen | qwen35-122b-a10b | Qwen 3.5 122B | General purpose |
+   | meta | llama-4-maverick | Llama 4 Maverick | General purpose |
    | meta | llama-3-3-70b | Llama 3.3 70B | Large, capable |
    | meta | llama-3-1-8b | Llama 3.1 8B | Efficient, fast |
    | meta | llama-3-2-3b | Llama 3.2 3B | Lightweight |
@@ -208,15 +227,16 @@ When presenting workload types to users, ALWAYS use these names:
    | databricks | gpt-oss-120b | GPT-OSS 120B | Large open model |
    | databricks | gpt-oss-20b | GPT-OSS 20B | Medium open model |
    | databricks | gemma-3-12b | Gemma 3 12B | Efficient Google model |
+   | qwen | qwen3-embedding-0-6b | Qwen 3 0.6B | **Embeddings only** |
    | databricks | bge-large | BGE Large | **Embeddings only** |
    | databricks | gte | GTE | **Embeddings only** |
 
    **Model recommendations by use case:**
-   - **Best overall**: claude-sonnet-4-5 or gpt-5-1
-   - **Cost-sensitive**: claude-haiku-4-5, gpt-5-mini, or llama-3-1-8b
-   - **Complex reasoning**: claude-opus-4-5 or gemini-2-5-pro
-   - **Open source preference**: llama-4-maverick or llama-3-3-70b
-   - **Embeddings**: bge-large or gte (FMAPI_DATABRICKS only)
+   - **Best overall**: claude-sonnet-5 or gpt-5-6-terra
+   - **Cost-sensitive**: claude-haiku-4-5, gpt-5-6-luna, or deepseek-v4-flash-0731
+   - **Complex reasoning**: claude-opus-5, gpt-5-6-sol, or gemini-3-1-pro
+   - **Open model preference**: kimi-k3, glm-5-2, or qwen35-122b-a10b
+   - **Embeddings**: qwen3-embedding-0-6b, bge-large, or gte (FMAPI_DATABRICKS only)
 
 3. Expected volume?
    - Calculate: Users/day × Requests/user × Avg tokens/request
@@ -264,7 +284,9 @@ When presenting workload types to users, ALWAYS use these names:
    - What's the average query/context size?
    
 5. Other settings:
-   - fmapi_endpoint_type: "global" (default) or "in_geo" (regional)
+   - fmapi_endpoint_type: "global" (default), "in_geo" for proprietary
+     endpoints, or "regional" when a Databricks-hosted model publishes a
+     regional-processing uplift
    - fmapi_context_length: "all" (most common), "short", or "long"
 
 ### For Lakebase:
@@ -291,7 +313,7 @@ A typical RAG (Retrieval-Augmented Generation) chatbot requires MULTIPLE workloa
 1. **Data Preparation (JOBS)**: Process and chunk documents for embeddings
    - Lakeflow Jobs, Photon enabled, spot workers for cost savings
    - Run frequency: daily or when new documents added
-2. **Vector Search (VECTOR_SEARCH)**: Store and query document embeddings
+2. **AI Search (VECTOR_SEARCH)**: Store and query document embeddings
    - Estimate based on number of vectors and query volume
 3. **Foundation Model (FMAPI_PROPRIETARY or FMAPI_DATABRICKS)**: Generate responses
    - Input tokens: ~2000-4000 per query (context + question)
@@ -304,7 +326,7 @@ A typical RAG (Retrieval-Augmented Generation) chatbot requires MULTIPLE workloa
    - Higher input tokens (full document), lower output tokens
 
 ### Customer Support Bot
-1. **Vector Search**: FAQ and knowledge base retrieval
+1. **AI Search**: FAQ and knowledge base retrieval
 2. **Foundation Model**: Response generation
 3. **Optional Model Serving**: Custom intent classification model
 
@@ -588,10 +610,22 @@ Clearly hypothetical examples and public pricing/product facts are allowed, but 
 3. What's the knowledge base size? (number of documents)
 4. How often is content updated? (for data prep sizing)
 
-### For Vector Search:
-**COPY THIS EXACT TEXT** when user asks about Vector Search:
+### For Unity AI Gateway:
+1. Which paid components should be enabled: Inference Tables, Usage Tracking, or both?
+2. For Inference Tables, is its metered billable payload known in GB per month? If not, ask for its requests in millions per month and average request and response payload sizes in KB.
+3. For Usage Tracking, independently ask the same question; do not reuse the Inference Tables volume.
+4. Remind the user that each enabled component uses 1.429 DBU/GB and that underlying Model Serving, Foundation Model API inference, and guardrail evaluator costs are excluded.
+
+### For AI Runtime Model Training:
+1. Which accelerator should be modeled: 1x A10, 1x H100, or 8x H100?
+2. Is usage run-based or known directly as node runtime hours per month?
+3. For run-based usage, how many runs per day, average runtime minutes per run, and days per month?
+4. Confirm the estimate uses a currently supported AWS or Azure region.
+
+### For AI Search:
+**COPY THIS EXACT TEXT** when user asks about AI Search:
 ```
-I'll help you configure Vector Search! Please answer these 5 questions:
+I'll help you configure AI Search! Please answer these 6 questions:
 
 1. **Endpoint Type**: Which do you need?
    - Standard: 20-50ms latency, best for <320M vectors
@@ -609,14 +643,18 @@ I'll help you configure Vector Search! Please answer these 5 questions:
 
 5. **Query Volume**: Expected queries per second (QPS)?
 
-Note: Vector Search runs 24/7 continuously (730 hours/month) - it cannot be stopped.
+6. **Reranker**: Will you use AI Search Reranker? If yes, how many reranker requests per month?
+
+Note: AI Search runs 24/7 continuously (730 hours/month) - it cannot be stopped. The first 30 GB of storage is included. Reranker usage is billed at 28.571 DBU per 1,000 requests.
 ```
 DO NOT ask about "use case", "how many vectors", "index type preference", "hours per month", or any other questions.
 
-**When calling propose_workload for VECTOR_SEARCH, pass these 2 parameters:**
+**When calling propose_workload for VECTOR_SEARCH, pass these parameters:**
 - `vector_search_endpoint_type`: STANDARD (<320M vectors) or STORAGE_OPTIMIZED (10M+ vectors, 7x cheaper)
 - `vector_capacity_millions`: Calculate from answers: docs × pages × 1.2 × (dimensions÷768)
   Example: 1M docs × 1000 pages × 1.2 × (1024÷768) = 1600 → pass 1600
+- `ai_search_reranker_enabled`: Whether AI Search Reranker is used
+- `ai_search_reranker_requests_thousands`: Monthly reranker requests in thousands
 
 ## Using Context
 - The estimate details (name, cloud, region, tier) are provided in the context
@@ -691,7 +729,7 @@ You are on the home page where users can learn about Databricks pricing and work
    - Say: "To add workloads and calculate costs, please click 'New Estimate' in the navigation or select an existing estimate from the Estimates page."
 
 2. Be helpful and educational:
-   - Explain workload types: Jobs, All-Purpose, SDP (DLT), DBSQL, Model Serving, Vector Search, FMAPI, Lakebase
+   - Explain workload types: Jobs, All-Purpose, SDP (DLT), DBSQL, Model Serving, AI Search, FMAPI, Lakebase
    - Share the key pricing factors for each workload type
    - Provide architecture guidance based on their described use case
 
@@ -703,7 +741,7 @@ You are on the home page where users can learn about Databricks pricing and work
 - **SDP (Spark Declarative Pipelines)**: Declarative ETL, CDC, materialized views
 - **DBSQL (Databricks SQL)**: SQL analytics, BI dashboards, ad-hoc queries
 - **MODEL_SERVING**: Real-time ML inference endpoints
-- **VECTOR_SEARCH**: Vector similarity search for AI applications
+- **VECTOR_SEARCH (AI Search)**: Search and reranking for AI applications
 - **FMAPI_DATABRICKS**: Foundation Model APIs (Databricks-hosted open models)
 - **FMAPI_PROPRIETARY**: Foundation Model APIs (GPT, Claude, Gemini via Databricks)
 - **LAKEBASE**: PostgreSQL-compatible database
@@ -729,7 +767,7 @@ The user will review and confirm before it's added to the estimate.""",
                 # === Common Fields ===
                 "workload_type": {
                     "type": "string",
-                    "enum": ["JOBS", "ALL_PURPOSE", "DLT", "DBSQL", "MODEL_SERVING", "VECTOR_SEARCH", "FMAPI_DATABRICKS", "FMAPI_PROPRIETARY", "LAKEBASE", "DATABRICKS_APPS", "AI_PARSE", "AI_EXTRACT", "AI_CLASSIFY", "SHUTTERSTOCK_IMAGEAI"],
+                    "enum": ["JOBS", "ALL_PURPOSE", "DLT", "DBSQL", "MODEL_SERVING", "VECTOR_SEARCH", "FMAPI_DATABRICKS", "FMAPI_PROPRIETARY", "LAKEBASE", "DATABRICKS_APPS", "AI_PARSE", "AI_EXTRACT", "AI_CLASSIFY", "AI_GATEWAY", "AGENT_EVALUATION", "AI_RUNTIME", "GENERAL_STORAGE", "ZEROBUS", "SHUTTERSTOCK_IMAGEAI"],
                     "description": "Type of Databricks workload. Note: Use DLT for SDP (Spark Declarative Pipelines) workloads - present as 'SDP' to users but use 'DLT' as the enum value."
                 },
                 "workload_name": {
@@ -866,7 +904,7 @@ The user will review and confirm before it's added to the estimate.""",
                     "description": "Allow scaling to zero when idle (saves cost but adds cold start latency)"
                 },
                 
-                # === Vector Search Specific ===
+                # === AI Search Specific (internal type: VECTOR_SEARCH) ===
                 "vector_search_endpoint_type": {
                     "type": "string",
                     "enum": ["STANDARD", "STORAGE_OPTIMIZED"],
@@ -878,33 +916,42 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 "vector_search_storage_gb": {
                     "type": "integer",
-                    "description": "Storage in GB for Vector Search. Free tier: 20 GB per unit used. Billable storage = max(0, storage_gb - free_storage_gb). Cost: $0.023/GB/month for storage above free tier."
+                    "description": "Storage in GB for AI Search. The first 30 GB is free. Billable storage uses 10 DSU/GB for Standard or 2 DSU/GB for Storage Optimized, priced with the exact regional DATABRICKS_STORAGE rate."
+                },
+                "ai_search_reranker_enabled": {
+                    "type": "boolean",
+                    "description": "Enable AI Search Reranker at 28.571 DBU per 1,000 requests."
+                },
+                "ai_search_reranker_requests_thousands": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Monthly AI Search Reranker requests in thousands. For example, 250 means 250,000 requests."
                 },
                 
                 # === Foundation Model API Specific ===
                 "fmapi_provider": {
                     "type": "string",
-                    "enum": ["anthropic", "openai", "google", "meta", "databricks"],
+                    "enum": ["anthropic", "openai", "google", "meta", "databricks", "moonshot", "zhipu", "deepseek", "qwen"],
                     "description": "FMAPI provider (for proprietary: anthropic/openai/google, for databricks: meta/databricks)"
                 },
                 "fmapi_model": {
                     "type": "string",
-                    "description": "Model ID. Use EXACT IDs: Anthropic (claude-sonnet-4-5, claude-sonnet-4-1, claude-opus-4-5, claude-haiku-4-5), OpenAI (gpt-5, gpt-5-1, gpt-5-mini), Google (gemini-2-5-pro, gemini-2-5-flash), Meta (llama-4-maverick, llama-3-3-70b, llama-3-1-8b), Databricks (bge-large, gte for embeddings)"
+                    "description": "Model ID. Use an exact current catalog ID. Preferred current examples: claude-sonnet-5, claude-opus-5, claude-haiku-4-5, gpt-5-6-sol, gpt-5-6-terra, gpt-5-6-luna, gemini-3-1-pro, gemini-3-6-flash, kimi-k3, kimi-k2-7, glm-5-2, inkling, deepseek-v4-pro-0813, deepseek-v4-flash-0731, qwen35-122b-a10b, qwen3-next-80b-a3b-instruct, qwen3-embedding-0-6b, llama-4-maverick, bge-large, gte."
                 },
                 "fmapi_endpoint_type": {
                     "type": "string",
-                    "enum": ["global", "regional"],
-                    "description": "Endpoint type: global (multi-region) or regional (single region)"
+                    "enum": ["global", "in_geo", "regional"],
+                    "description": "Use global/in_geo for proprietary endpoints. Use regional only for a Databricks-hosted model that publishes a regional-processing uplift."
                 },
                 "fmapi_context_length": {
                     "type": "string",
                     "enum": ["all", "short", "long"],
-                    "description": "Context length tier: 'all' (any context), 'short' (up to 8K tokens), 'long' (up to 200K tokens). Use 'long' for RAG/document processing."
+                    "description": "Context pricing tier: all, short (up to 200K tokens), or long (over 200K tokens). Use only a tier published for the selected model."
                 },
                 "fmapi_rate_type": {
                     "type": "string",
-                    "enum": ["input_token", "output_token", "cache_read", "cache_write"],
-                    "description": "REQUIRED for FMAPI. Token billing type. ALWAYS create SEPARATE workloads for input_token and output_token. Chatbots need BOTH input (prompts/context) AND output (responses) workloads."
+                    "enum": ["input_token", "output_token", "cache_read", "cache_write", "batch_inference", "provisioned_entry", "provisioned_scaling", "provisioned_entry_1_month", "provisioned_entry_3_month", "provisioned_scaling_1_month", "provisioned_scaling_3_month"],
+                    "description": "REQUIRED for FMAPI. Use only a rate type published for the selected model, endpoint, context, and cloud. Token rates use millions of tokens; batch and provisioned rates use hours."
                 },
                 "fmapi_quantity": {
                     "type": "number",
@@ -942,15 +989,15 @@ The user will review and confirm before it's added to the estimate.""",
                 },
                 "lakebase_storage_gb": {
                     "type": "integer",
-                    "description": "Database storage in GB (0-8192 GB, 8TB max). 15x DSU multiplier. Example: 500GB × 15 DSU/GB × $0.023/DSU = $172.50/month."
+                    "description": "Database storage in GB (0-8192 GB, 8TB max). Uses 15 DSU/GB, priced with the exact regional DATABRICKS_STORAGE rate."
                 },
                 "lakebase_pitr_gb": {
                     "type": "integer",
-                    "description": "Point-in-time restore (PITR) storage in GB. 8.7x DSU multiplier. Example: 500GB × 8.7 DSU/GB × $0.023/DSU = $100.05/month."
+                    "description": "Point-in-time restore (PITR) storage in GB. Uses 8.7 DSU/GB, priced with the exact regional DATABRICKS_STORAGE rate."
                 },
                 "lakebase_snapshot_gb": {
                     "type": "integer",
-                    "description": "Snapshot storage in GB. 3.91x DSU multiplier. Example: 500GB × 3.91 DSU/GB × $0.023/DSU = $44.97/month."
+                    "description": "Snapshot storage in GB. Uses 3.91 DSU/GB, priced with the exact regional DATABRICKS_STORAGE rate."
                 },
 
                 # === Databricks Apps Specific ===
@@ -958,6 +1005,11 @@ The user will review and confirm before it's added to the estimate.""",
                     "type": "string",
                     "enum": ["medium", "large"],
                     "description": "App size: medium (default) or large"
+                },
+                "databricks_apps_num_apps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Number of identically sized Databricks Apps"
                 },
 
                 # === AI Parse Specific ===
@@ -1025,6 +1077,160 @@ The user will review and confirm before it's added to the estimate.""",
                     ),
                 },
 
+                # === AI Gateway Specific ===
+                "inference_tables_enabled": {
+                    "type": "boolean",
+                    "description": "Enable Inference Tables at 1.429 DBU/GB",
+                },
+                "inference_tables_input_method": {
+                    "type": "string",
+                    "enum": ["requests", "payload_gb"],
+                    "description": (
+                        "Independent input method for Inference Tables"
+                    ),
+                },
+                "inference_tables_requests_millions": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": (
+                        "Inference Tables monthly requests in millions"
+                    ),
+                },
+                "inference_tables_avg_request_payload_kb": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Inference Tables average request KB",
+                },
+                "inference_tables_avg_response_payload_kb": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Inference Tables average response KB",
+                },
+                "inference_tables_monthly_payload_gb": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Direct Inference Tables monthly payload GB",
+                },
+                "usage_tracking_enabled": {
+                    "type": "boolean",
+                    "description": "Enable Usage Tracking at 1.429 DBU/GB",
+                },
+                "usage_tracking_input_method": {
+                    "type": "string",
+                    "enum": ["requests", "payload_gb"],
+                    "description": "Independent input method for Usage Tracking",
+                },
+                "usage_tracking_requests_millions": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Usage Tracking monthly requests in millions",
+                },
+                "usage_tracking_avg_request_payload_kb": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Usage Tracking average request KB",
+                },
+                "usage_tracking_avg_response_payload_kb": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Usage Tracking average response KB",
+                },
+                "usage_tracking_monthly_payload_gb": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Direct Usage Tracking monthly payload GB",
+                },
+
+                # === Agent Evaluation Specific ===
+                "labels_enabled": {
+                    "type": "boolean",
+                    "description": "Enable Agent Evaluation label scoring",
+                },
+                "input_tokens_millions": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": (
+                        "Monthly evaluated input tokens in millions"
+                    ),
+                },
+                "output_tokens_millions": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": (
+                        "Monthly evaluated output tokens in millions"
+                    ),
+                },
+                "synthetic_data_enabled": {
+                    "type": "boolean",
+                    "description": (
+                        "Enable Agent Evaluation synthetic data generation"
+                    ),
+                },
+                "synthetic_questions": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Monthly generated synthetic questions",
+                },
+
+                # === AI Runtime Specific ===
+                "accelerator_type": {
+                    "type": "string",
+                    "enum": [
+                        "GPU_1xA10",
+                        "GPU_1xH100",
+                        "GPU_8xH100",
+                    ],
+                    "description": (
+                        "AI Runtime training accelerator. Supported on AWS "
+                        "and Azure only."
+                    ),
+                },
+
+                # === Databricks Default Storage Specific ===
+                "general_storage_quantity": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Average stored capacity per month",
+                },
+                "general_storage_unit": {
+                    "type": "string",
+                    "enum": ["gb", "tb"],
+                    "description": (
+                        "Capacity unit. One TB is converted to 1,024 binary GB."
+                    ),
+                },
+                "general_storage_tier1_operations_thousands": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": (
+                        "Monthly PUT, COPY, POST, and LIST operations in "
+                        "thousands"
+                    ),
+                },
+                "general_storage_tier2_operations_thousands": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": (
+                        "Monthly GET, SELECT, and other API operations in "
+                        "thousands"
+                    ),
+                },
+
+                # === Zerobus Ingest Specific ===
+                "zerobus_mode": {
+                    "type": "string",
+                    "enum": ["standard", "otel"],
+                    "description": (
+                        "standard for SDK/REST/Kafka ingestion or otel for "
+                        "OpenTelemetry/OTLP ingestion"
+                    ),
+                },
+                "zerobus_monthly_ingested_gb": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Monthly data ingested through Zerobus in GB",
+                },
+
                 # === Shutterstock ImageAI Specific ===
                 "shutterstock_images": {
                     "type": "integer",
@@ -1052,7 +1258,7 @@ Format as bullet points. This will be displayed to the user as the configuration
         "name": "ask_clarifying_questions",
         "description": """Use this tool to ask the user clarifying questions before proposing a workload.
 CRITICAL: You MUST use the EXACT questions from the 'Question Guidelines by Workload Type' section for each workload type.
-For Vector Search specifically: Ask the 6 questions (Endpoint Type, Embedding Model/Dimensions, Number of Documents, Pages per Document, Query Volume, Hours per Month).
+For AI Search specifically: Ask the 6 questions (Endpoint Type, Embedding Model/Dimensions, Number of Documents, Pages per Document, Query Volume, Reranker Usage).
 DO NOT make up generic questions like 'primary use case', 'how many vectors', or 'index type preference'.""",
         "parameters": {
             "type": "object",
@@ -1098,7 +1304,7 @@ DO NOT make up generic questions like 'primary use case', 'how many vectors', or
         "name": "propose_genai_architecture",
         "description": """Propose a complete GenAI architecture with MULTIPLE workloads for common use cases.
 Use this when user mentions: chatbot, RAG, knowledge base, document Q&A, assistant, AI agent, summarization.
-This will propose all necessary workloads (data prep, vector search, foundation models) together.""",
+This will propose all necessary workloads (data prep, AI Search, foundation models) together.""",
         "parameters": {
             "type": "object",
             "properties": {
@@ -1130,7 +1336,7 @@ This will propose all necessary workloads (data prep, vector search, foundation 
                 },
                 "document_count": {
                     "type": "integer",
-                    "description": "Approximate number of documents in knowledge base (for vector search sizing)"
+                    "description": "Approximate number of documents in knowledge base (for AI Search sizing)"
                 },
                 "data_prep_frequency": {
                     "type": "string",
@@ -1800,10 +2006,40 @@ class EstimateAgent:
         """Helper to handle proposal tracking - doesn't yield, just for side effects."""
         # This is called for side effects only (tracking in proposed_workloads happens in _execute_tool)
         pass
+
+    def _get_platform_addon_summary(self) -> Optional[Dict[str, Any]]:
+        """Calculate the saved estimate-level add-on from supplied costs."""
+        if not self.current_estimate:
+            return None
+        estimate = self.current_estimate
+        try:
+            selected = get_selected_platform_addon(
+                estimate.get("discount_config")
+            )
+            if not selected:
+                return None
+            product_spend_at_list = sum(
+                float(workload.get("dbu_cost") or 0)
+                + float(workload.get("dsu_cost") or 0)
+                for workload in self.current_workloads
+            )
+            return calculate_platform_addon_cost(
+                product_spend_at_list,
+                selected,
+                estimate.get("cloud", ""),
+                estimate.get("tier", ""),
+                discount_pct=get_platform_addon_discount(
+                    estimate.get("discount_config")
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            log_warning(f"Unable to resolve Platform add-on context: {exc}")
+            return None
     
     def _build_context(self) -> str:
         """Build context string with current estimate state and actual costs."""
         context = "\n\n## Current Session Context"
+        platform_addon = self._get_platform_addon_summary()
         
         if self.current_estimate:
             est = self.current_estimate
@@ -1843,6 +2079,24 @@ The following fields MUST be set before workloads can be added:
                 context += f"\n- **Customer**: {est.get('customer_name')}"
             if est.get('description'):
                 context += f"\n- **Description**: {est.get('description')}"
+            if platform_addon:
+                context += (
+                    f"\n- **Platform Add-on**: "
+                    f"{platform_addon['display_name']} "
+                    f"({platform_addon['applied_rate_pct']:g}% of "
+                    "Product Spend at List)"
+                )
+                if platform_addon['promotion']:
+                    context += (
+                        f"\n  - Promotional rate; regular uplift "
+                        f"{platform_addon['standard_rate_pct']:g}%, ends "
+                        f"{platform_addon['promotion']['end_date']}"
+                    )
+                if platform_addon['discount_pct']:
+                    context += (
+                        f"\n  - Negotiated add-on discount: "
+                        f"{platform_addon['discount_pct']:g}%"
+                    )
         else:
             context += "\n\nNo estimate loaded. User may be creating a new one."
         
@@ -1880,6 +2134,15 @@ The following fields MUST be set before workloads can be added:
                 if w.get('dlt_edition'):
                     context += f"\n- SDP Edition: {w.get('dlt_edition')}"
             
+            if platform_addon:
+                context += (
+                    f"\n\n### Workload Subtotal: ${total_cost:.2f}"
+                    f"\n### Product Spend at List: "
+                    f"${platform_addon['product_spend_at_list']:.2f}"
+                    f"\n### Platform Add-on Cost: "
+                    f"${platform_addon['cost']:.2f}"
+                )
+                total_cost += platform_addon['cost']
             context += f"\n\n### Total Monthly Cost: ${total_cost:.2f}"
         else:
             context += "\n\n### Workloads: None yet"
@@ -1954,7 +2217,7 @@ The following fields MUST be set before workloads can be added:
     ) -> Dict[str, Any]:
         """
         Propose a complete GenAI architecture with multiple workloads.
-        Creates workload proposals for data prep, vector search, and foundation models.
+        Creates workload proposals for data prep, AI Search, and foundation models.
         """
         # Check required estimate fields first
         if self.current_estimate:
@@ -2069,7 +2332,7 @@ The following fields MUST be set before workloads can be added:
             }
             add_workload_if_new(data_prep)
         
-        # 2. Vector Search (for retrieval)
+        # 2. AI Search (for retrieval)
         if use_case in ["rag_chatbot", "customer_support", "document_processing"]:
             # Estimate vector dimensions and storage based on chunking
             # Assume 10 pages per document, 1.2 chunks per page (with overlap)
@@ -2092,7 +2355,7 @@ The following fields MUST be set before workloads can be added:
             vector_search = {
                 "proposal_id": str(uuid.uuid4()),
                 "workload_type": "VECTOR_SEARCH",
-                "workload_name": f"{use_case_name} - Vector Search",
+                "workload_name": f"{use_case_name} - AI Search",
                 "cloud": cloud,
                 "vector_search_endpoint_type": endpoint_type,
                 "vector_search_index_type": "DELTA_SYNC",
@@ -2102,7 +2365,7 @@ The following fields MUST be set before workloads can be added:
                 "vector_search_qps": max(1, expected_conversations_per_day / (24 * 3600)),  # Convert daily conversations to QPS
                 "hours_per_month": 730,  # 24/7 for production
                 "reason": "Semantic search over document embeddings for RAG retrieval",
-                "notes": f"""**Vector Search Configuration** (AI-generated)
+                "notes": f"""**AI Search Configuration** (AI-generated)
 
 - **Endpoint**: {endpoint_type} ({"<100ms latency" if endpoint_type == "STANDARD" else "~250ms, 7x cheaper"})
 - **Documents**: ~{document_count:,} docs × {pages_per_doc} pages × 1.2 chunks = ~{estimated_vectors:,} vectors
@@ -2248,6 +2511,41 @@ Each workload needs to be confirmed individually. Review the configurations and 
                         "note": "Review and confirm the existing proposal."
                     }
         
+        # The assistant tool uses calculation-style component names, while
+        # persisted proposals use the public LineItem field names.
+        if workload_type.upper() == "AI_GATEWAY":
+            for component in ("inference_tables", "usage_tracking"):
+                for suffix in (
+                    "enabled",
+                    "input_method",
+                    "requests_millions",
+                    "avg_request_payload_kb",
+                    "avg_response_payload_kb",
+                    "monthly_payload_gb",
+                ):
+                    tool_field = f"{component}_{suffix}"
+                    if tool_field in kwargs:
+                        kwargs[f"ai_gateway_{tool_field}"] = kwargs.pop(
+                            tool_field
+                        )
+
+        if workload_type.upper() == "AGENT_EVALUATION":
+            for field in (
+                "labels_enabled",
+                "input_tokens_millions",
+                "output_tokens_millions",
+                "synthetic_data_enabled",
+                "synthetic_questions",
+            ):
+                if field in kwargs:
+                    kwargs[f"agent_evaluation_{field}"] = kwargs.pop(field)
+
+        if workload_type.upper() == "AI_RUNTIME":
+            if "accelerator_type" in kwargs:
+                kwargs["ai_runtime_accelerator_type"] = kwargs.pop(
+                    "accelerator_type"
+                )
+
         # Build workload configuration with defaults
         workload = {
             "proposal_id": str(uuid.uuid4()),
@@ -2316,7 +2614,10 @@ Each workload needs to be confirmed individually. Review the configurations and 
         default_driver = driver_instances.get(cloud, "m6i.xlarge")
         
         # Common defaults
-        workload.setdefault("hours_per_month", 730)
+        if wtype in ("AI_RUNTIME", "GENERAL_STORAGE", "ZEROBUS"):
+            workload.setdefault("hours_per_month", None)
+        else:
+            workload.setdefault("hours_per_month", 730)
         workload.setdefault("days_per_month", 22)
         
         notes_parts = []
@@ -2731,8 +3032,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
             notes_parts.append("  - Incremental writes: Use for updates/inserts")
             notes_parts.append("  - Reads: Can distribute across replicas for horizontal scaling")
             
-            # Storage / PITR / Snapshot cost info (DSU multipliers per SKU page)
-            price_per_dsu = 0.023
+            # Storage / PITR / Snapshot DSUs (priced regionally by calculator)
             storage_gb = workload.get("lakebase_storage_gb", 0)
             pitr_gb = workload.get("lakebase_pitr_gb", 0)
             snapshot_gb = workload.get("lakebase_snapshot_gb", 0)
@@ -2741,14 +3041,18 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("")
                 notes_parts.append(f"**Storage Costs (Databricks Storage SKU):**")
                 if storage_gb > 0:
-                    s_cost = storage_gb * 15 * price_per_dsu
-                    notes_parts.append(f"• **Database Storage**: {storage_gb} GB × 15 DSU/GB × ${price_per_dsu}/DSU = ${s_cost:.2f}/mo")
+                    storage_dsu = storage_gb * 15
+                    notes_parts.append(f"• **Database Storage**: {storage_gb} GB × 15 DSU/GB = {storage_dsu:g} DSU/mo")
                 if pitr_gb > 0:
-                    p_cost = pitr_gb * 8.7 * price_per_dsu
-                    notes_parts.append(f"• **PITR**: {pitr_gb} GB × 8.7 DSU/GB × ${price_per_dsu}/DSU = ${p_cost:.2f}/mo")
+                    pitr_dsu = pitr_gb * 8.7
+                    notes_parts.append(f"• **PITR**: {pitr_gb} GB × 8.7 DSU/GB = {pitr_dsu:g} DSU/mo")
                 if snapshot_gb > 0:
-                    sn_cost = snapshot_gb * 3.91 * price_per_dsu
-                    notes_parts.append(f"• **Snapshots**: {snapshot_gb} GB × 3.91 DSU/GB × ${price_per_dsu}/DSU = ${sn_cost:.2f}/mo")
+                    snapshot_dsu = snapshot_gb * 3.91
+                    notes_parts.append(f"• **Snapshots**: {snapshot_gb} GB × 3.91 DSU/GB = {snapshot_dsu:g} DSU/mo")
+                notes_parts.append(
+                    "• **Cost**: DSUs × exact regional "
+                    "DATABRICKS_STORAGE rate"
+                )
                 workload["lakebase_storage_gb"] = storage_gb
                 workload["lakebase_pitr_gb"] = pitr_gb
                 workload["lakebase_snapshot_gb"] = snapshot_gb
@@ -2764,17 +3068,19 @@ Each workload needs to be confirmed individually. Review the configurations and 
             
             # Ensure capacity is set
             workload["vector_capacity_millions"] = capacity_millions
+            workload.setdefault("ai_search_reranker_enabled", False)
+            workload.setdefault("ai_search_reranker_requests_thousands", 0)
             
             # Calculate total_vectors for display
             total_vectors = capacity_millions * 1_000_000
             workload["vector_search_total_vectors"] = total_vectors
             
-            # Vector Search runs 24/7 - cannot be stopped
+            # AI Search runs 24/7 - cannot be stopped
             workload["hours_per_month"] = 730
             
             notes_parts.append("")
             notes_parts.append("=" * 60)
-            notes_parts.append("**VECTOR SEARCH CONFIGURATION**")
+            notes_parts.append("**AI SEARCH CONFIGURATION**")
             notes_parts.append("=" * 60)
             notes_parts.append("")
             notes_parts.append(f"**🔍 Index Configuration:**")
@@ -2826,7 +3132,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 notes_parts.append("• Storage Optimized provides 7x cost savings at scale")
             notes_parts.append("")
             
-            notes_parts.append("**🎯 VECTOR SEARCH OPERATIONAL GUIDANCE:**")
+            notes_parts.append("**🎯 AI SEARCH OPERATIONAL GUIDANCE:**")
             notes_parts.append("• **Monitoring**: Track search latency, QPS, index size, sync lag (for DELTA_SYNC)")
             notes_parts.append("• **Optimization**:")
             notes_parts.append("  - Use filters to reduce search space (metadata filtering)")
@@ -2840,7 +3146,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
             notes_parts.append("• **Best Practices**:")
             notes_parts.append("  - Test both endpoint types with your latency requirements")
             notes_parts.append("  - Monitor p50/p95/p99 latencies, not just average")
-            notes_parts.append("  - Pre-filter large indexes using metadata before vector search")
+            notes_parts.append("  - Pre-filter large AI Search indexes using metadata")
             notes_parts.append("  - Consider approximate nearest neighbor (ANN) algorithms for ultra-scale")
             
             # Storage cost info
@@ -2848,15 +3154,43 @@ Each workload needs to be confirmed individually. Review the configurations and 
             if storage_gb > 0:
                 divisor = 64 if mode == "storage_optimized" else 2
                 units_used = (capacity_millions + divisor - 1) // divisor  # ceiling division
-                free_storage_gb = units_used * 20
+                free_storage_gb = 30 if units_used > 0 else 0
                 billable_storage_gb = max(0, storage_gb - free_storage_gb)
-                storage_cost = billable_storage_gb * 0.023
+                storage_dsu_per_gb = (
+                    2 if mode == "storage_optimized" else 10
+                )
+                storage_dsu = billable_storage_gb * storage_dsu_per_gb
                 notes_parts.append("")
                 notes_parts.append("**💾 Storage Configuration:**")
                 notes_parts.append(f"• **Total Storage**: {storage_gb} GB")
-                notes_parts.append(f"• **Free Storage**: {free_storage_gb} GB ({units_used} units × 20 GB/unit)")
+                notes_parts.append(f"• **Free Storage**: First {free_storage_gb} GB")
                 notes_parts.append(f"• **Billable Storage**: {billable_storage_gb} GB")
-                notes_parts.append(f"• **Storage Cost**: ${storage_cost:.2f}/month ($0.023/GB/month)")
+                notes_parts.append(
+                    f"• **Storage DSUs**: {billable_storage_gb} GB × "
+                    f"{storage_dsu_per_gb} DSU/GB = {storage_dsu:g} DSU/mo"
+                )
+                notes_parts.append(
+                    "• **Storage Cost**: DSUs × exact regional "
+                    "DATABRICKS_STORAGE rate"
+                )
+            if workload.get("ai_search_reranker_enabled"):
+                reranker_requests = float(
+                    workload.get(
+                        "ai_search_reranker_requests_thousands",
+                        0,
+                    )
+                    or 0
+                )
+                reranker_dbus = reranker_requests * 28.571
+                notes_parts.append("")
+                notes_parts.append("**🔄 AI Search Reranker:**")
+                notes_parts.append(
+                    f"• **Requests**: {reranker_requests:g}K/month"
+                )
+                notes_parts.append(
+                    f"• **Usage**: {reranker_requests:g}K × "
+                    f"28.571 DBU/1K = {reranker_dbus:.3f} DBU/month"
+                )
         
         if wtype in ["FMAPI_PROPRIETARY", "FMAPI_DATABRICKS"]:
             # Get FMAPI-specific fields - these should be PROVIDED by the AI, not defaulted
@@ -2970,6 +3304,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
         
         if wtype == "DATABRICKS_APPS":
             workload.setdefault("databricks_apps_size", "medium")
+            workload.setdefault("databricks_apps_num_apps", 1)
             workload["hours_per_month"] = workload.get("hours_per_month", 730)
 
         if wtype == "AI_PARSE":
@@ -2984,6 +3319,63 @@ Each workload needs to be confirmed individually. Review the configurations and 
         if wtype == "AI_CLASSIFY":
             workload.setdefault("ai_classify_document_type", "short_text")
             workload.setdefault("ai_classify_num_docs", 1000)
+
+        if wtype == "AI_GATEWAY":
+            workload.setdefault("ai_gateway_inference_tables_enabled", True)
+            workload.setdefault("ai_gateway_usage_tracking_enabled", True)
+            for component in ("inference_tables", "usage_tracking"):
+                prefix = f"ai_gateway_{component}"
+                workload.setdefault(f"{prefix}_input_method", "requests")
+                workload.setdefault(f"{prefix}_requests_millions", 1)
+                workload.setdefault(f"{prefix}_avg_request_payload_kb", 1)
+                workload.setdefault(f"{prefix}_avg_response_payload_kb", 1)
+                workload.setdefault(f"{prefix}_monthly_payload_gb", 2)
+
+        if wtype == "AGENT_EVALUATION":
+            workload.setdefault("agent_evaluation_labels_enabled", True)
+            workload.setdefault(
+                "agent_evaluation_input_tokens_millions",
+                1,
+            )
+            workload.setdefault(
+                "agent_evaluation_output_tokens_millions",
+                1,
+            )
+            workload.setdefault(
+                "agent_evaluation_synthetic_data_enabled",
+                False,
+            )
+            workload.setdefault("agent_evaluation_synthetic_questions", 0)
+
+        if wtype == "AI_RUNTIME":
+            workload.setdefault(
+                "ai_runtime_accelerator_type",
+                "GPU_1xA10",
+            )
+            if workload.get("hours_per_month") is None:
+                workload.setdefault("runs_per_day", 1)
+                workload.setdefault("avg_runtime_minutes", 60)
+                workload.setdefault("days_per_month", 22)
+            else:
+                workload["runs_per_day"] = None
+                workload["avg_runtime_minutes"] = None
+                workload["days_per_month"] = None
+
+        if wtype == "GENERAL_STORAGE":
+            workload.setdefault("general_storage_quantity", 100)
+            workload.setdefault("general_storage_unit", "gb")
+            workload.setdefault(
+                "general_storage_tier1_operations_thousands",
+                0,
+            )
+            workload.setdefault(
+                "general_storage_tier2_operations_thousands",
+                0,
+            )
+
+        if wtype == "ZEROBUS":
+            workload.setdefault("zerobus_mode", "standard")
+            workload.setdefault("zerobus_monthly_ingested_gb", 100)
 
         if wtype == "SHUTTERSTOCK_IMAGEAI":
             workload.setdefault("shutterstock_images", 1000)
@@ -3124,6 +3516,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
         
         total_cost = 0
         workload_summaries = []
+        platform_addon = self._get_platform_addon_summary()
         
         for w in self.current_workloads:
             cost = w.get('total_cost') or w.get('monthly_cost') or 0
@@ -3138,14 +3531,20 @@ Each workload needs to be confirmed individually. Review the configurations and 
                 "monthly_cost": f"${cost:.2f}"
             })
         
+        workload_subtotal = total_cost
+        if platform_addon:
+            total_cost += platform_addon["cost"]
+
         return {
             "estimate": {
                 "name": self.current_estimate.get("estimate_name") or self.current_estimate.get("name"),
                 "cloud": self.current_estimate.get("cloud", "").upper(),
-                "region": self.current_estimate.get("region")
+                "region": self.current_estimate.get("region"),
+                "platform_addon": platform_addon,
             },
             "workload_count": len(self.current_workloads),
             "workloads": workload_summaries,
+            "workload_subtotal": f"${workload_subtotal:.2f}",
             "total_monthly_cost": f"${total_cost:.2f}",
             "total_annual_cost": f"${total_cost * 12:.2f}",
             "pending_proposals": len(self.proposed_workloads)
@@ -3336,7 +3735,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
                         recommendations.append({
                             "workload": wname,
                             "type": "cost",
-                            "category": "Vector Search",
+                            "category": "AI Search",
                             "current_cost": f"${cost:.2f}/month",
                             "suggestion": "Consider OPTIMIZED endpoint if latency requirements allow",
                             "detail": "OPTIMIZED endpoints are 7x cheaper (~$0.07/hr vs $0.49/hr) with ~250ms latency vs <100ms.",
@@ -3404,6 +3803,11 @@ Each workload needs to be confirmed individually. Review the configurations and 
                             "impact": "Faster job completion, potentially lower cost"
                         })
         
+        platform_addon = self._get_platform_addon_summary()
+        if platform_addon:
+            total_cost += platform_addon["cost"]
+            cost_by_type["Platform Add-on"] = platform_addon["cost"]
+
         # ============================================
         # SUMMARY INSIGHTS
         # ============================================
@@ -3413,7 +3817,7 @@ Each workload needs to be confirmed individually. Review the configurations and 
         sorted_costs = sorted(cost_by_type.items(), key=lambda x: x[1], reverse=True)
         if sorted_costs:
             top_type = sorted_costs[0]
-            insights.append(f"**Top cost driver**: {top_type[0]} workloads account for ${top_type[1]:.2f}/month ({top_type[1]/total_cost*100:.1f}% of total)")
+            insights.append(f"**Top cost driver**: {top_type[0]} accounts for ${top_type[1]:.2f}/month ({top_type[1]/total_cost*100:.1f}% of total)")
         
         # High-cost workloads
         high_cost_workloads = [w for w in workload_details if w["cost"] > 1000]

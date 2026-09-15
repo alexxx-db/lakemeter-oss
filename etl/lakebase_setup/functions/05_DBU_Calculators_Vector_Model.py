@@ -1,11 +1,11 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Vector Search & Model Serving DBU Calculators
+# MAGIC # AI Search & Model Serving DBU Calculators
 # MAGIC
-# MAGIC **Purpose:** Calculate DBU per hour for Vector Search and Model Serving workloads
+# MAGIC **Purpose:** Calculate DBU per hour for AI Search and Model Serving workloads
 # MAGIC
 # MAGIC **Functions Created:**
-# MAGIC 1. `calculate_vector_search_dbu()` - Vector Search with capacity rounding
+# MAGIC 1. `calculate_vector_search_dbu()` - AI Search with capacity rounding
 # MAGIC 2. `calculate_model_serving_dbu()` - Model Serving with cloud-specific GPU types
 
 # COMMAND ----------
@@ -67,7 +67,7 @@ DECLARE
     v_units DECIMAL(18,4);
     v_total_dbu DECIMAL(18,4);
 BEGIN
-    -- Lookup DBU rate for vector search mode
+    -- Lookup DBU rate for AI Search mode
     SELECT dbu_rate INTO v_dbu_rate
     FROM lakemeter.sync_product_serverless_rates
     WHERE UPPER(cloud) = UPPER(p_cloud)
@@ -95,7 +95,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION lakemeter.calculate_vector_search_dbu IS 
-'Calculate DBU per hour for Vector Search workloads.
+'Calculate DBU per hour for AI Search workloads.
 Formula: CEILING(capacity_millions / divisor) × dbu_rate
 Divisors: standard=2M per unit, storage_optimized=64M per unit
 Always rounds UP to next unit.';
@@ -135,7 +135,8 @@ print("=" * 100)
 create_function_sql = """
 CREATE OR REPLACE FUNCTION lakemeter.calculate_model_serving_dbu(
     p_cloud VARCHAR,
-    p_serverless_size VARCHAR
+    p_serverless_size VARCHAR,
+    p_concurrency INT DEFAULT 4
 )
 RETURNS DECIMAL(18,4)
 LANGUAGE plpgsql
@@ -156,13 +157,18 @@ BEGIN
       AND UPPER(size_or_model) = UPPER(p_serverless_size)
     LIMIT 1;
     
-    RETURN COALESCE(v_dbu_rate, 0);
+    RETURN COALESCE(v_dbu_rate, 0) * CASE
+        WHEN LOWER(COALESCE(p_serverless_size, 'cpu')) LIKE 'cpu%'
+            THEN COALESCE(p_concurrency, 4)
+        ELSE COALESCE(p_concurrency, 4) / 4.0
+    END;
 END;
 $$;
 
 COMMENT ON FUNCTION lakemeter.calculate_model_serving_dbu IS 
 'Calculate DBU per hour for Model Serving workloads.
-GPU types are cloud-specific (e.g., AWS uses A10G, Azure uses A100, GCP uses L4).
+CPU rates are billed per concurrency unit. GPU rates are billed per replica,
+with one replica provisioned for every four concurrency units.
 Lookup from: sync_product_serverless_rates';
 """
 
@@ -172,6 +178,7 @@ try:
     print("\n   Parameters:")
     print("   • cloud: VARCHAR - Cloud provider (AWS, AZURE, GCP)")
     print("   • serverless_size: VARCHAR - GPU type (cloud-specific)")
+    print("   • concurrency: INT - Provisioned concurrency (default 4)")
     print("\n   Returns: DECIMAL (DBU per hour)")
     print("\n   GPU Types (cloud-specific, from pricing table):")
     print("   • AWS: cpu, gpu_small_t4, gpu_medium_a10g_1x/4x/8x, gpu_xlarge_a100_40gb_8x, gpu_xlarge_a100_80gb_8x")
@@ -179,8 +186,8 @@ try:
     print("   • GCP: cpu, gpu_medium_g2_standard_8")
     print("\n   Lookup from: sync_product_serverless_rates")
     print("\n   Example:")
-    print("   SELECT lakemeter.calculate_model_serving_dbu('AWS', 'gpu_medium_a10g_1x');")
-    print("   → Returns DBU rate for 1× A10G GPU on AWS")
+    print("   SELECT lakemeter.calculate_model_serving_dbu('AWS', 'gpu_medium_a10g_1x', 12);")
+    print("   → Returns DBU/hour for 3 A10G replicas on AWS")
 except Exception as e:
     print(f"\n❌ Error creating function: {e}")
     raise
@@ -193,21 +200,21 @@ except Exception as e:
 # COMMAND ----------
 
 print("\n" + "=" * 100)
-print("TESTING: Vector Search & Model Serving")
+print("TESTING: AI Search & Model Serving")
 print("=" * 100)
 
 test_query = """
-SELECT 'Vector Search Test 1: 3M standard' as test_case,
+SELECT 'AI Search Test 1: 3M standard' as test_case,
        lakemeter.calculate_vector_search_dbu('AWS', 'standard', 3.0) as dbu_per_hour
 UNION ALL
-SELECT 'Vector Search Test 2: 100M storage_optimized',
+SELECT 'AI Search Test 2: 100M storage_optimized',
        lakemeter.calculate_vector_search_dbu('AWS', 'storage_optimized', 100.0)
 UNION ALL
 SELECT 'Model Serving Test 1: CPU',
-       lakemeter.calculate_model_serving_dbu('AWS', 'cpu')
+       lakemeter.calculate_model_serving_dbu('AWS', 'cpu', 4)
 UNION ALL
 SELECT 'Model Serving Test 2: GPU A10G',
-       lakemeter.calculate_model_serving_dbu('AWS', 'gpu_medium_a10g_1x');
+       lakemeter.calculate_model_serving_dbu('AWS', 'gpu_medium_a10g_1x', 4);
 """
 
 try:
@@ -226,14 +233,14 @@ except Exception as e:
 # COMMAND ----------
 
 print("\n" + "=" * 100)
-print("✅ VECTOR SEARCH & MODEL SERVING DBU CALCULATORS CREATED")
+print("✅ AI SEARCH & MODEL SERVING DBU CALCULATORS CREATED")
 print("=" * 100)
 
 print("\n📋 Functions created:")
 print("   ✅ calculate_vector_search_dbu")
 print("   ✅ calculate_model_serving_dbu")
 
-print("\n🎯 Vector Search:")
+print("\n🎯 AI Search:")
 print("   • Handles capacity in millions of vectors")
 print("   • CEILING rounding (always round up)")
 print("   • Different divisors: standard (2M), storage_optimized (64M)")
@@ -243,7 +250,7 @@ print("   • Cloud-specific GPU types (see pricing table for exact list)")
 print("   • AWS: A10G, A100 variants")
 print("   • AZURE: A100 variants (1x, 2x, 4x)")
 print("   • GCP: G2 standard")
-print("   • Simple lookup from sync_product_serverless_rates")
+    print("   • CPU rate × concurrency; GPU rate × (concurrency / 4 replicas)")
 
 print("\n📝 Next step: Run 06_DBU_Calculators_FMAPI.py")
 print("=" * 100)

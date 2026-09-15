@@ -7,6 +7,10 @@ from app.services.lakebase_pricing import (
     calculate_lakebase_compute_usage,
     resolve_lakebase_autoscale_config,
 )
+from app.services.model_serving_pricing import (
+    calculate_model_serving_dbu_per_hour,
+)
+from app.services.serverless_pricing import get_serverless_mode_multiplier
 
 
 def _calculate_hours_per_month(item) -> float:
@@ -16,8 +20,8 @@ def _calculate_hours_per_month(item) -> float:
     calculate from those. Only fall back to hours_per_month if no run-based data.
     This prevents hours_per_month=730 default from overriding user's run config.
 
-    Always-on workloads (Vector Search, Model Serving, Lakebase, Databricks Apps)
-    default to 730 hours/month when no usage data is provided.
+    Always-on workloads (AI Search, Model Serving, Lakebase, Databricks Apps,
+    Lakeflow Connect) default to 730 hours/month when no usage data is provided.
     """
     wt = (getattr(item, 'workload_type', '') or '').upper()
     if wt == 'LAKEBASE':
@@ -33,7 +37,7 @@ def _calculate_hours_per_month(item) -> float:
         runtime = float(item.avg_runtime_minutes)
         days = float(item.days_per_month or 22)
         return (runs * runtime / 60) * days
-    if item.hours_per_month:
+    if item.hours_per_month is not None:
         return float(item.hours_per_month)
     # Always-on workloads default to 730 hours/month (24/7)
     if wt in ('VECTOR_SEARCH', 'MODEL_SERVING', 'LAKEBASE', 'DATABRICKS_APPS', 'LAKEFLOW_CONNECT'):
@@ -54,6 +58,28 @@ def _calculate_dbu_per_hour(item, cloud: str = 'aws', tier: str = 'PREMIUM') -> 
         return _calc_vector_search_dbu(item, cloud, warnings)
     elif wt == 'MODEL_SERVING':
         return _calc_model_serving_dbu(item, cloud, warnings)
+    elif wt == 'AI_RUNTIME':
+        from app.services.ai_runtime_pricing import (
+            get_ai_runtime_accelerator,
+        )
+
+        config = getattr(item, 'workload_config', None) or {}
+        accelerator_type = config.get(
+            'ai_runtime_accelerator_type',
+            'GPU_1xA10',
+        )
+        try:
+            profile = get_ai_runtime_accelerator(
+                cloud,
+                accelerator_type,
+            )
+        except ValueError as exc:
+            warnings.append(str(exc))
+            return 0, warnings
+        return (
+            profile['gpu_count'] * profile['dbu_per_gpu_hour'],
+            warnings,
+        )
     elif wt in ('FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY'):
         return 0, warnings  # FMAPI uses token-based, not hour-based
     elif wt == 'LAKEBASE':
@@ -82,7 +108,11 @@ def _calculate_dbu_per_hour(item, cloud: str = 'aws', tier: str = 'PREMIUM') -> 
     elif wt == 'DATABRICKS_APPS':
         size = (getattr(item, 'databricks_apps_size', None) or 'medium').lower()
         rates = {'medium': 0.5, 'large': 1.0}
-        return rates.get(size, 0.5), warnings
+        num_apps = max(
+            int(getattr(item, 'databricks_apps_num_apps', None) or 1),
+            1,
+        )
+        return rates.get(size, 0.5) * num_apps, warnings
     elif wt == 'AI_PARSE':
         # AI Parse is quantity-based, not hour-based; return 0, handled separately
         return 0, warnings
@@ -92,6 +122,15 @@ def _calculate_dbu_per_hour(item, cloud: str = 'aws', tier: str = 'PREMIUM') -> 
     elif wt in ('AI_EXTRACT', 'AI_CLASSIFY'):
         # Quantity-based (per 1,000 documents), not hour-based; handled separately
         return 0, warnings
+    elif wt == 'AI_GATEWAY':
+        # Quantity-based (payload GB), not hour-based; handled separately
+        return 0, warnings
+    elif wt == 'AGENT_EVALUATION':
+        # Quantity-based (tokens/questions), not hour-based; handled separately
+        return 0, warnings
+    elif wt == 'ZEROBUS':
+        # Quantity-based (ingested GB), not hour-based; handled separately
+        return 0, warnings
     elif wt == 'LAKEFLOW_CONNECT':
         # Pipeline: DLT Serverless (handled like DLT)
         return 0, warnings  # simplified; actual calc done at endpoint level
@@ -100,8 +139,8 @@ def _calculate_dbu_per_hour(item, cloud: str = 'aws', tier: str = 'PREMIUM') -> 
 
 def _calc_compute_dbu(item, cloud, wt, warnings):
     """Calculate DBU/hr for Jobs, All-Purpose, or DLT workloads."""
-    driver_dbu = 0.5  # Match frontend fallback (costCalculation.ts:250)
-    worker_dbu = 0.5
+    driver_dbu = 0.5 if item.driver_node_type else 0
+    worker_dbu = 0.5 if item.worker_node_type else 0
     driver_found = False
     worker_found = False
     if INSTANCE_DBU_RATES:
@@ -132,7 +171,10 @@ def _calc_compute_dbu(item, cloud, wt, warnings):
     if item.serverless_enabled:
         photon_mult = _get_photon_multiplier(cloud, sku_base)
         base_dbu *= photon_mult
-        mode_multiplier = 2 if (item.serverless_mode or '').lower() == 'performance' else 1
+        mode_multiplier = get_serverless_mode_multiplier(
+            wt,
+            item.serverless_mode,
+        )
         return base_dbu * mode_multiplier, warnings
 
     if item.photon_enabled:
@@ -159,7 +201,7 @@ def _calc_dbsql_dbu(item, warnings):
 
 
 def _calc_vector_search_dbu(item, cloud, warnings):
-    """Calculate DBU/hr for Vector Search workloads.
+    """Calculate DBU/hr for AI Search workloads.
 
     Uses CEILING(capacity / divisor) to determine endpoint units, matching
     the frontend's costCalculation.ts.  Defaults capacity to 1M vectors
@@ -174,7 +216,7 @@ def _calc_vector_search_dbu(item, cloud, warnings):
     key = f"{cloud_lc}:{mode}"
     info = VECTOR_SEARCH_RATES.get(key, {})
     if not info:
-        warnings.append(f"Vector Search rates not found for {key}, using defaults")
+        warnings.append(f"AI Search rates not found for {key}, using defaults")
     dbu_rate = info.get('dbu_rate', 4.0 if mode == 'standard' else 18.29)
     divisor = info.get('input_divisor', 2000000)
     vectors_total = capacity * 1_000_000
@@ -185,7 +227,8 @@ def _calc_vector_search_dbu(item, cloud, warnings):
 def _calc_model_serving_dbu(item, cloud, warnings):
     """Calculate DBU/hr for Model Serving workloads.
 
-    DBU/hr = gpu_dbu_rate × concurrency.
+    GPU DBU/hr = rate per replica × (concurrency / 4).
+    CPU DBU/hr = rate per concurrency unit × concurrency.
     Concurrency source priority: dedicated column > workload_config JSON > default 4.
     """
     gpu_type = (item.model_serving_gpu_type or 'cpu').lower()
@@ -202,14 +245,18 @@ def _calc_model_serving_dbu(item, cloud, warnings):
         concurrency = int(config.get('model_serving_concurrency', 4))
     else:
         concurrency = int(concurrency)
-    return base_rate * concurrency, warnings
+    return calculate_model_serving_dbu_per_hour(
+        base_rate, gpu_type, concurrency
+    ), warnings
 
 
 def _is_serverless_workload(item) -> bool:
     """Check if workload is serverless (no VM costs)."""
     wt = (item.workload_type or '').upper()
     if wt in ('VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY',
-              'LAKEBASE', 'DATABRICKS_APPS', 'AI_PARSE', 'AI_EXTRACT', 'AI_CLASSIFY',
+              'AI_RUNTIME', 'GENERAL_STORAGE', 'LAKEBASE', 'DATABRICKS_APPS',
+              'AI_PARSE', 'AI_EXTRACT', 'AI_CLASSIFY',
+              'AI_GATEWAY', 'AGENT_EVALUATION', 'ZEROBUS',
               'SHUTTERSTOCK_IMAGEAI', 'LAKEFLOW_CONNECT'):
         return True
     if wt in ('JOBS', 'ALL_PURPOSE', 'DLT') and item.serverless_enabled:

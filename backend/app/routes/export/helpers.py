@@ -5,6 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.models import Estimate, User
 from app.models.sharing import Sharing
+from app.services.model_serving_pricing import (
+    get_billing_capacity_units,
+    is_gpu_workload_type,
+)
 
 
 def _get_json_backed_value(item, field, default=None):
@@ -41,8 +45,10 @@ def _get_workload_display_name(workload_type: str) -> str:
         'ALL_PURPOSE': 'All-Purpose Compute',
         'DLT': 'Lakeflow Spark Declarative Pipelines',
         'DBSQL': 'Databricks SQL',
-        'VECTOR_SEARCH': 'Vector Search',
+        'VECTOR_SEARCH': 'AI Search',
         'MODEL_SERVING': 'Model Serving',
+        'AI_RUNTIME': 'AI Runtime',
+        'GENERAL_STORAGE': 'Databricks Default Storage',
         'FMAPI_DATABRICKS': 'Foundation Models (Databricks)',
         'FMAPI_PROPRIETARY': 'Foundation Models (Proprietary)',
         'LAKEBASE': 'Lakebase',
@@ -51,6 +57,9 @@ def _get_workload_display_name(workload_type: str) -> str:
         'SHUTTERSTOCK_IMAGEAI': 'Shutterstock ImageAI',
         'AI_EXTRACT': 'AI Extract',
         'AI_CLASSIFY': 'AI Classify',
+        'AI_GATEWAY': 'Unity AI Gateway',
+        'AGENT_EVALUATION': 'Agent Evaluation',
+        'ZEROBUS': 'Zerobus Ingest',
         'LAKEFLOW_CONNECT': 'Lakeflow Connect',
     }
     return names.get(workload_type, workload_type)
@@ -71,6 +80,50 @@ def _get_workload_config_details(item) -> str:
         details.extend(_vector_search_details(item))
     elif wt == 'MODEL_SERVING':
         details.extend(_model_serving_details(item))
+    elif wt == 'AI_RUNTIME':
+        from app.services.ai_runtime_pricing import (
+            get_ai_runtime_accelerator,
+        )
+
+        accelerator = _get_json_backed_value(
+            item,
+            'ai_runtime_accelerator_type',
+            'GPU_1xA10',
+        )
+        try:
+            profile = get_ai_runtime_accelerator(
+                'aws',
+                accelerator,
+            )
+            details.append(
+                f"Accelerator: {profile['display_name']}"
+            )
+        except ValueError:
+            details.append(f"Accelerator: {accelerator}")
+    elif wt == 'GENERAL_STORAGE':
+        quantity = float(_get_json_backed_value(
+            item,
+            'general_storage_quantity',
+            0,
+        ) or 0)
+        unit = str(_get_json_backed_value(
+            item,
+            'general_storage_unit',
+            'gb',
+        ) or 'gb').upper()
+        details.append(f"Stored capacity: {quantity:g} {unit}/mo")
+        tier1 = float(_get_json_backed_value(
+            item,
+            'general_storage_tier1_operations_thousands',
+            0,
+        ) or 0)
+        tier2 = float(_get_json_backed_value(
+            item,
+            'general_storage_tier2_operations_thousands',
+            0,
+        ) or 0)
+        details.append(f"Tier 1 operations: {tier1:g}K/mo")
+        details.append(f"Tier 2 operations: {tier2:g}K/mo")
     elif wt in ('FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY'):
         details.extend(_fmapi_details(item))
     elif wt == 'LAKEBASE':
@@ -80,6 +133,11 @@ def _get_workload_config_details(item) -> str:
     elif wt == 'DATABRICKS_APPS':
         size = (getattr(item, 'databricks_apps_size', None) or 'medium').capitalize()
         details.append(f"Size: {size}")
+        num_apps = max(
+            int(getattr(item, 'databricks_apps_num_apps', None) or 1),
+            1,
+        )
+        details.append(f"Apps: {num_apps}")
     elif wt == 'AI_PARSE':
         details.extend(_ai_parse_details(item))
     elif wt == 'SHUTTERSTOCK_IMAGEAI':
@@ -108,6 +166,36 @@ def _get_workload_config_details(item) -> str:
         details.append(f"Type: {doc_type}")
         details.append(f"Docs/mo: {docs:,.0f}")
         details.append("Document files require AI Parse")
+    elif wt == 'AI_GATEWAY':
+        from .excel_item_helpers import get_ai_gateway_usage
+
+        usage = get_ai_gateway_usage(item)
+        for component in usage["components"]:
+            details.append(
+                f"{component['display_name']}: "
+                f"{component['monthly_payload_gb']:g} GB, "
+                f"{component['monthly_dbus']:g} DBUs"
+            )
+    elif wt == 'AGENT_EVALUATION':
+        from .excel_item_helpers import get_agent_evaluation_usage
+
+        usage = get_agent_evaluation_usage(item)
+        for component in usage["components"]:
+            details.append(
+                f"{component['display_name']}: "
+                f"{component['quantity']:g} "
+                f"{component['quantity_unit'].replace('_', ' ')}, "
+                f"{component['monthly_dbus']:g} DBUs"
+            )
+    elif wt == 'ZEROBUS':
+        from .excel_item_helpers import get_zerobus_usage
+
+        usage = get_zerobus_usage(item)
+        details.append(f"Type: {usage['mode_display_name']}")
+        details.append(
+            f"Ingested data: {usage['monthly_ingested_gb']:g} GB/mo"
+        )
+        details.append(f"Metering: {usage['dbu_per_gb']:g} DBU/GB")
     elif wt == 'LAKEFLOW_CONNECT':
         details.extend(_lakeflow_connect_details(item))
 
@@ -132,6 +220,13 @@ def _vector_search_details(item) -> list:
     details.append(f"Mode: {mode_display}")
     if item.vector_capacity_millions:
         details.append(f"Capacity: {item.vector_capacity_millions}M vectors")
+    if _get_json_backed_value(item, 'ai_search_reranker_enabled', False):
+        requests = float(_get_json_backed_value(
+            item,
+            'ai_search_reranker_requests_thousands',
+            0,
+        ) or 0)
+        details.append(f"Reranker: {requests:g}K requests/mo")
     return details
 
 
@@ -155,6 +250,7 @@ MODEL_SERVING_GPU_NAMES = {
 
 def _model_serving_details(item) -> list:
     details = []
+    workload_type = item.model_serving_gpu_type or 'cpu'
     if item.model_serving_gpu_type:
         name = MODEL_SERVING_GPU_NAMES.get(
             item.model_serving_gpu_type, item.model_serving_gpu_type
@@ -166,6 +262,9 @@ def _model_serving_details(item) -> list:
     scale_labels = {'small': 'Small', 'medium': 'Medium', 'large': 'Large', 'custom': 'Custom'}
     label = scale_labels.get(scale_out, scale_out)
     details.append(f"Scale-Out: {label} ({concurrency} concurrency)")
+    if is_gpu_workload_type(workload_type):
+        replicas = get_billing_capacity_units(workload_type, concurrency)
+        details.append(f"GPU Replicas: {replicas:g}")
     return details
 
 
@@ -182,8 +281,15 @@ def _fmapi_details(item) -> list:
             'batch_inference': 'Batch Inference',
             'provisioned_scaling': 'Provisioned Scaling',
             'provisioned_entry': 'Provisioned Entry',
+            'provisioned_scaling_1_month': 'Provisioned Scaling (1-month reservation)',
+            'provisioned_scaling_3_month': 'Provisioned Scaling (3-month reservation)',
+            'provisioned_entry_1_month': 'Provisioned Entry (1-month reservation)',
+            'provisioned_entry_3_month': 'Provisioned Entry (3-month reservation)',
         }
-        details.append(f"Rate: {rate_type_display.get(item.fmapi_rate_type, item.fmapi_rate_type)}")
+        fallback_label = item.fmapi_rate_type.replace('_', ' ').title()
+        details.append(
+            f"Rate: {rate_type_display.get(item.fmapi_rate_type, fallback_label)}"
+        )
     if item.fmapi_quantity:
         token_types = ('input_token', 'output_token', 'cache_read', 'cache_write')
         if item.fmapi_rate_type in token_types:

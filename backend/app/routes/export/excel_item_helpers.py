@@ -1,5 +1,5 @@
 """Item-level calculation and storage sub-row helpers for Excel export."""
-from .pricing import _get_dbu_price, _get_fmapi_dbu_per_million, FMAPI_PROP_FALLBACK_RATES
+from .pricing import _get_dbu_price, _get_fmapi_dbu_per_million
 from .calculations import _calculate_hours_per_month
 from .excel_row_writer import write_data_row
 
@@ -12,20 +12,6 @@ TOKEN_TYPE_DISPLAY = {
     'batch_inference': 'Batch',
 }
 
-# Fallback DBU/1M token rates for FMAPI_DATABRICKS — matches frontend costCalculation.ts
-# These are much lower than proprietary rates (Databricks OSS models are cheaper)
-FMAPI_DB_FALLBACK_RATES = {
-    'input_token': 1.0, 'input': 1.0,
-    'output_token': 3.0, 'output': 3.0,
-}
-
-# Fallback DBU/hr rates for FMAPI_DATABRICKS provisioned — matches frontend costCalculation.ts
-FMAPI_DB_PROVISIONED_FALLBACK = {
-    'provisioned_scaling': 200,
-    'provisioned_entry': 50,
-}
-
-
 def _get_json_backed_value(item, field, default=None):
     """Read a public field from an attribute or workload_config."""
     value = getattr(item, field, None)
@@ -35,40 +21,261 @@ def _get_json_backed_value(item, field, default=None):
     return workload_config.get(field, default)
 
 
+def get_ai_gateway_usage(item):
+    """Calculate independent AI Gateway component usage from one line item."""
+    from app.routes.calculate.ai_gateway_calc import (
+        calculate_ai_gateway_usage,
+    )
+
+    values = {}
+    for component in ("inference_tables", "usage_tracking"):
+        values[f"{component}_enabled"] = bool(_get_json_backed_value(
+            item,
+            f"ai_gateway_{component}_enabled",
+            False,
+        ))
+        for suffix in (
+            "input_method",
+            "requests_millions",
+            "avg_request_payload_kb",
+            "avg_response_payload_kb",
+            "monthly_payload_gb",
+        ):
+            values[f"{component}_{suffix}"] = _get_json_backed_value(
+                item,
+                f"ai_gateway_{component}_{suffix}",
+            )
+    return calculate_ai_gateway_usage(**values)
+
+
+def get_agent_evaluation_usage(item):
+    """Calculate Agent Evaluation dimensions from one line item."""
+    from app.routes.calculate.agent_evaluation_calc import (
+        calculate_agent_evaluation_usage,
+    )
+
+    return calculate_agent_evaluation_usage(
+        labels_enabled=bool(_get_json_backed_value(
+            item,
+            "agent_evaluation_labels_enabled",
+            False,
+        )),
+        input_tokens_millions=float(_get_json_backed_value(
+            item,
+            "agent_evaluation_input_tokens_millions",
+            0,
+        ) or 0),
+        output_tokens_millions=float(_get_json_backed_value(
+            item,
+            "agent_evaluation_output_tokens_millions",
+            0,
+        ) or 0),
+        synthetic_data_enabled=bool(_get_json_backed_value(
+            item,
+            "agent_evaluation_synthetic_data_enabled",
+            False,
+        )),
+        synthetic_questions=_get_json_backed_value(
+            item,
+            "agent_evaluation_synthetic_questions",
+            0,
+        ) or 0,
+    )
+
+
+def get_zerobus_usage(item):
+    """Calculate Zerobus DBUs from JSON-backed monthly ingestion fields."""
+    from app.services.zerobus_pricing import calculate_zerobus_usage
+
+    return calculate_zerobus_usage(
+        _get_json_backed_value(
+            item,
+            "zerobus_monthly_ingested_gb",
+            0,
+        ),
+        _get_json_backed_value(item, "zerobus_mode", "standard"),
+    )
+
+
+def get_ai_search_reranker_usage(item):
+    """Calculate optional AI Search Reranker usage from one line item."""
+    from app.routes.calculate.vector_search_calc import (
+        AI_SEARCH_RERANKER_DBU_PER_THOUSAND_REQUESTS,
+    )
+
+    enabled = bool(_get_json_backed_value(
+        item,
+        "ai_search_reranker_enabled",
+        False,
+    ))
+    requests_thousands = float(_get_json_backed_value(
+        item,
+        "ai_search_reranker_requests_thousands",
+        0,
+    ) or 0)
+    return {
+        "enabled": enabled,
+        "requests_thousands": requests_thousands,
+        "dbu_per_thousand_requests": (
+            AI_SEARCH_RERANKER_DBU_PER_THOUSAND_REQUESTS
+        ),
+        "monthly_dbus": (
+            requests_thousands
+            * AI_SEARCH_RERANKER_DBU_PER_THOUSAND_REQUESTS
+            if enabled
+            else 0
+        ),
+    }
+
+
+def write_general_storage_row(
+    sheet,
+    fmt,
+    row,
+    item,
+    idx,
+    cloud,
+    dsu_price,
+    cost_accumulator=None,
+):
+    """Write stored-data and operation components as separate DSU rows."""
+    from app.services.general_storage_pricing import (
+        calculate_general_storage_usage,
+    )
+
+    usage = calculate_general_storage_usage(
+        _get_json_backed_value(item, 'general_storage_quantity', 0),
+        _get_json_backed_value(item, 'general_storage_unit', 'gb'),
+        cloud,
+        _get_json_backed_value(
+            item,
+            'general_storage_tier1_operations_thousands',
+            0,
+        ),
+        _get_json_backed_value(
+            item,
+            'general_storage_tier2_operations_thousands',
+            0,
+        ),
+    )
+    quantity = usage['quantity']
+    unit = usage['unit'].upper()
+    billable_gb = usage['billable_gb_months']
+    workload_name = getattr(
+        item,
+        'workload_name',
+        f'Workload {idx + 1}',
+    ) or f'Workload {idx + 1}'
+    components = [
+        {
+            'label': 'Stored Data',
+            'input': (
+                f'{quantity:g} {unit}/mo = {billable_gb:g} GB-month'
+            ),
+            'multiplier': usage['dsu_rates']['stored_data_per_gb_month'],
+            'multiplier_unit': 'DSU/GB-month',
+            'dsus': usage['stored_data_dsu'],
+        },
+        {
+            'label': 'Tier 1 Operations',
+            'input': (
+                f"{usage['tier_1_operations_thousands']:g}K operations"
+            ),
+            'multiplier': usage['dsu_rates']['tier_1_per_thousand'],
+            'multiplier_unit': 'DSU/1K',
+            'dsus': usage['tier_1_operations_dsu'],
+        },
+        {
+            'label': 'Tier 2 Operations',
+            'input': (
+                f"{usage['tier_2_operations_thousands']:g}K operations"
+            ),
+            'multiplier': usage['dsu_rates']['tier_2_per_thousand'],
+            'multiplier_unit': 'DSU/1K',
+            'dsus': usage['tier_2_operations_dsu'],
+        },
+    ]
+    for component_index, component in enumerate(components, start=1):
+        cost = component['dsus'] * dsu_price
+        config = (
+            f"{component['input']} × {component['multiplier']:g} "
+            f"{component['multiplier_unit']}"
+        )
+        notes = (
+            f"{component['dsus']:.4f} DSU × ${dsu_price:.3f}/DSU "
+            f"= ${cost:.2f}/mo"
+        )
+        if component_index == 3:
+            notes += (
+                '. Excludes customer-managed object storage, backups, '
+                'and data transfer. '
+                'https://www.databricks.com/product/pricing/storage'
+            )
+        dsu_row = {
+            'idx': f'{idx + 1}.{component_index}',
+            'name': f"{workload_name} – {component['label']}",
+            'type_display': 'Databricks Default Storage',
+            'config': config,
+            'sku': 'DATABRICKS_STORAGE',
+            'driver_node': '-',
+            'worker_node': '-',
+            'num_workers': 0,
+            'driver_tier': '-',
+            'worker_tier': '-',
+            'hours_per_month': 0,
+            'token_type': '',
+            'token_quantity_millions': 0,
+            'dbu_per_million': 0,
+            'dbu_per_hour': 0,
+            'total_dbus_month': 0,
+            'dbu_rate': 0,
+            'monthly_dsus': component['dsus'],
+            'dsu_rate': dsu_price,
+            'discount_pct': 0.0,
+            'driver_vm_cost_per_hour': 0,
+            'worker_vm_cost_per_hour': 0,
+            'notes': notes,
+        }
+        write_data_row(
+            sheet,
+            row,
+            dsu_row,
+            False,
+            True,
+            fmt,
+            is_storage_row=True,
+            cost_accumulator=cost_accumulator,
+        )
+        row += 1
+    return row
+
+
 def calc_item_values(item, is_fmapi_token, is_fmapi_provisioned,
-                     dbu_per_hour, cloud, auto_notes):
+                     dbu_per_hour, cloud, auto_notes, region=None):
     """Calculate hours, tokens, DBUs for a line item.
 
     Returns (hours, token_qty, dbu_per_m, total_dbus, token_type).
     """
     if is_fmapi_token:
         token_qty = float(item.fmapi_quantity or 0)
-        dbu_per_m, found = _get_fmapi_dbu_per_million(item, cloud)
+        dbu_per_m, found = _get_fmapi_dbu_per_million(item, cloud, region)
         if not found:
-            # Use workload-appropriate fallback rates matching frontend
-            rate_type = item.fmapi_rate_type or 'input_token'
-            wt = item.workload_type or ''
-            if wt == 'FMAPI_DATABRICKS':
-                dbu_per_m = FMAPI_DB_FALLBACK_RATES.get(rate_type, 1.0)
-            else:
-                dbu_per_m = FMAPI_PROP_FALLBACK_RATES.get(rate_type, 21.43)
+            dbu_per_m = 0
             auto_notes.append(
-                f"FMAPI rate not found for {item.fmapi_model or 'unknown model'}, using fallback {dbu_per_m}")
+                f"Unsupported FMAPI pricing combination for "
+                f"{item.fmapi_model or 'unknown model'}; no fallback rate applied"
+            )
         token_type = TOKEN_TYPE_DISPLAY.get(item.fmapi_rate_type, 'Input')
         return 0, token_qty, dbu_per_m, token_qty * dbu_per_m, token_type
     elif is_fmapi_provisioned:
         hours = float(item.fmapi_quantity or 0)
-        dbu_hr, found = _get_fmapi_dbu_per_million(item, cloud)
+        dbu_hr, found = _get_fmapi_dbu_per_million(item, cloud, region)
         if not found:
-            # Use workload-appropriate provisioned fallback matching frontend
-            rate_type = item.fmapi_rate_type or 'provisioned_scaling'
-            wt = item.workload_type or ''
-            if wt == 'FMAPI_DATABRICKS':
-                dbu_hr = FMAPI_DB_PROVISIONED_FALLBACK.get(rate_type, 200)
-            else:
-                dbu_hr = 150  # Frontend proprietary provisioned fallback
+            dbu_hr = 0
             auto_notes.append(
-                f"FMAPI rate not found for {item.fmapi_model or 'unknown model'}, using fallback {dbu_hr}")
+                f"Unsupported FMAPI pricing combination for "
+                f"{item.fmapi_model or 'unknown model'}; no fallback rate applied"
+            )
         return hours, 0, 0, dbu_hr * hours, ''
     else:
         wt = (item.workload_type or '').upper()
@@ -124,6 +331,18 @@ def calc_item_values(item, is_fmapi_token, is_fmapi_provisioned,
                 rate = rates[doc_type]
             total_dbus = (quantity / 1000.0) * rate
             return 0, 0, 0, total_dbus, ''
+        # AI Gateway: quantity-based (request-derived or direct payload GB)
+        if wt == 'AI_GATEWAY':
+            usage = get_ai_gateway_usage(item)
+            return 0, 0, 0, usage['monthly_dbus'], ''
+        # Agent Evaluation: quantity-based token/question dimensions
+        if wt == 'AGENT_EVALUATION':
+            usage = get_agent_evaluation_usage(item)
+            return 0, 0, 0, usage['monthly_dbus'], ''
+        # Zerobus: quantity-based monthly ingested GB
+        if wt == 'ZEROBUS':
+            usage = get_zerobus_usage(item)
+            return 0, 0, 0, usage['monthly_dbus'], ''
         # Shutterstock ImageAI: quantity-based (images × 0.857 DBU)
         if wt == 'SHUTTERSTOCK_IMAGEAI':
             images = getattr(item, 'shutterstock_images', None)
@@ -137,14 +356,14 @@ def calc_item_values(item, is_fmapi_token, is_fmapi_provisioned,
 
 
 def write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
-                         type_display, size_attr):
-    """Write a storage sub-row for Lakebase (storage/PITR/snapshots) or Vector Search.
+                         type_display, size_attr, cost_accumulator=None):
+    """Write a storage sub-row for Lakebase or AI Search.
 
     Lakebase uses DSU pricing with different multipliers per feature:
       - Database Storage: 15x DSU/GB
       - PITR: 8.7x DSU/GB
       - Snapshots: 3.91x DSU/GB
-    Vector Search uses standard storage pricing: cost = GB × $/GB/month.
+    AI Search uses mode-specific DSUs above its included allowance.
     """
     # DSU multipliers per Databricks SKU page
     DSU_MULTIPLIERS = {
@@ -158,13 +377,24 @@ def write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
         'lakebase_snapshot_gb': 'Snapshots',
     }
 
+    price_per_dsu, found = _get_dbu_price(
+        cloud,
+        region,
+        tier,
+        'DATABRICKS_STORAGE',
+        allow_cross_region=False,
+    )
+    if not found:
+        raise ValueError(
+            "DATABRICKS_STORAGE pricing is not available for "
+            f"{cloud.upper()} {region} {tier.upper()}"
+        )
+
     if size_attr in DSU_MULTIPLIERS:
         storage_gb = float(getattr(item, size_attr, 0) or 0)
         dsu_per_gb = DSU_MULTIPLIERS[size_attr]
         total_dsu = storage_gb * dsu_per_gb
-        price_per_dsu = 0.023
         storage_cost = total_dsu * price_per_dsu
-        storage_rate = price_per_dsu
         label = DSU_LABELS[size_attr]
         config = f'{label}: {storage_gb:.0f} GB'
         notes = f'{storage_gb:.0f} GB × {dsu_per_gb} DSU/GB × ${price_per_dsu}/DSU = ${storage_cost:.2f}/mo'
@@ -175,16 +405,20 @@ def write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
         mode = (item.vector_search_mode or 'standard').lower()
         divisor = 64_000_000 if mode == 'storage_optimized' else 2_000_000
         units = math.ceil(capacity_m * 1_000_000 / divisor) if divisor else 0
-        free_gb = units * 20
+        free_gb = 30 if units > 0 else 0
         billable_gb = max(0, storage_gb - free_gb)
-        price_per_gb = 0.023
-        storage_cost = billable_gb * price_per_gb
-        storage_rate = price_per_gb
+        dsu_per_gb = 2 if mode == 'storage_optimized' else 10
+        total_dsu = billable_gb * dsu_per_gb
+        storage_cost = total_dsu * price_per_dsu
         config = f'Storage: {storage_gb:.0f} GB (free: {free_gb} GB)'
-        notes = f'{storage_gb:.0f} GB total, {free_gb} GB free ({units} units × 20 GB), {billable_gb:.0f} GB billable × ${price_per_gb}/GB = ${storage_cost:.2f}/mo'
+        notes = (
+            f'{storage_gb:.0f} GB total, first {free_gb} GB free, '
+            f'{billable_gb:.0f} GB billable × {dsu_per_gb} DSU/GB '
+            f'× ${price_per_dsu}/DSU = ${storage_cost:.2f}/mo'
+        )
     else:
         storage_gb = 0
-        storage_rate = 0.023
+        total_dsu = 0
         storage_cost = 0
         config = 'Storage: 0 GB'
         notes = ''
@@ -203,11 +437,21 @@ def write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
         'token_type': '', 'token_quantity_millions': 0,
         'dbu_per_million': 0, 'dbu_per_hour': 0,
         'total_dbus_month': 0,
-        'dbu_rate': storage_rate,
+        'dbu_rate': 0,
+        'monthly_dsus': total_dsu,
+        'dsu_rate': price_per_dsu,
         'discount_pct': 0.0,
         'driver_vm_cost_per_hour': 0, 'worker_vm_cost_per_hour': 0,
         'notes': notes,
-        'storage_cost_monthly': storage_cost,
     }
-    write_data_row(sheet, row, storage_row, False, True, fmt, is_storage_row=True)
+    write_data_row(
+        sheet,
+        row,
+        storage_row,
+        False,
+        True,
+        fmt,
+        is_storage_row=True,
+        cost_accumulator=cost_accumulator,
+    )
     return row + 1

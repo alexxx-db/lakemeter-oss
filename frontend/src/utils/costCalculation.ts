@@ -7,6 +7,290 @@
 import type { LineItem, InstanceType, DBSQLSize, ModelServingGPUType } from '../types'
 import type { VectorSearchMode, PhotonMultiplier } from '../api/client'
 import { calculateLakebaseComputeUsage, resolveLakebaseAutoscaleConfig } from './lakebasePricing'
+import { calculateAIRuntimeUsage } from './aiRuntime'
+
+export const AI_GATEWAY_COMPONENT_RATES = {
+  inferenceTables: 1.429,
+  usageTracking: 1.429,
+} as const
+
+export const AGENT_EVALUATION_COMPONENT_RATES = {
+  inputTokens: 2.143,
+  outputTokens: 8.571,
+  syntheticQuestions: 5,
+} as const
+
+export const AI_SEARCH_INCLUDED_STORAGE_GB = 30
+export const AI_SEARCH_STANDARD_STORAGE_DSU_PER_GB = 10
+export const AI_SEARCH_STORAGE_OPTIMIZED_DSU_PER_GB = 2
+export const AI_SEARCH_RERANKER_DBU_PER_THOUSAND_REQUESTS = 28.571
+export const MODEL_SERVING_GPU_CONCURRENCY_PER_REPLICA = 4
+export const GENERAL_STORAGE_GB_PER_TB = 1024
+export const GENERAL_STORAGE_STORED_DATA_DSU_PER_GB = 1
+export const GENERAL_STORAGE_OPERATION_DSU_RATES = {
+  aws: { tier1: 0.2174, tier2: 0.0174 },
+  azure: { tier1: 0.3535, tier2: 0.0226 },
+  gcp: { tier1: 0.2174, tier2: 0.0174 },
+} as const
+export const ZEROBUS_DBU_PER_GB = {
+  standard: 0.143,
+  otel: 0.222,
+} as const
+
+export const DATABRICKS_APPS_DBU_PER_APP_HOUR = {
+  medium: 0.5,
+  large: 1.0,
+} as const
+
+export function calculateDatabricksAppsUsage(
+  item: Partial<LineItem>,
+  hoursPerMonth: number,
+) {
+  const size = (item.databricks_apps_size || 'medium').toLowerCase()
+  const requestedNumApps = item.databricks_apps_num_apps ?? 1
+  const numApps = Math.max(
+    1,
+    Number.isFinite(requestedNumApps) ? Math.trunc(requestedNumApps) : 1,
+  )
+  const dbuPerAppHour = size === 'large'
+    ? DATABRICKS_APPS_DBU_PER_APP_HOUR.large
+    : DATABRICKS_APPS_DBU_PER_APP_HOUR.medium
+  const dbuPerHour = dbuPerAppHour * numApps
+  return {
+    size,
+    numApps,
+    dbuPerAppHour,
+    dbuPerHour,
+    monthlyDBUs: dbuPerHour * hoursPerMonth,
+  }
+}
+
+export const ALWAYS_ON_WORKLOAD_TYPES = new Set([
+  'VECTOR_SEARCH',
+  'MODEL_SERVING',
+  'LAKEBASE',
+  'DATABRICKS_APPS',
+  'LAKEFLOW_CONNECT',
+])
+
+export function calculateHoursPerMonth(item: Partial<LineItem>): number {
+  const workloadType = (item.workload_type || '').toUpperCase()
+  if (
+    workloadType === 'FMAPI_DATABRICKS'
+    || workloadType === 'FMAPI_PROPRIETARY'
+  ) {
+    return 0
+  }
+  if (item.runs_per_day && item.avg_runtime_minutes) {
+    return (
+      item.runs_per_day
+      * (item.avg_runtime_minutes / 60)
+      * (item.days_per_month || 22)
+    )
+  }
+  if (item.hours_per_month != null) {
+    return item.hours_per_month
+  }
+  return ALWAYS_ON_WORKLOAD_TYPES.has(workloadType) ? 730 : 0
+}
+
+export function getGeneralStorageGB(item: Partial<LineItem>): number {
+  const quantity = item.general_storage_quantity ?? 0
+  return (item.general_storage_unit ?? 'gb') === 'tb'
+    ? quantity * GENERAL_STORAGE_GB_PER_TB
+    : quantity
+}
+
+export function getAISearchStorageDSUPerGB(mode?: string | null): number {
+  return mode === 'storage_optimized'
+    ? AI_SEARCH_STORAGE_OPTIMIZED_DSU_PER_GB
+    : AI_SEARCH_STANDARD_STORAGE_DSU_PER_GB
+}
+
+export function calculateGeneralStorageDSU(
+  item: Partial<LineItem>,
+  cloud: string,
+) {
+  const normalizedCloud = cloud.toLowerCase() as keyof typeof GENERAL_STORAGE_OPERATION_DSU_RATES
+  const rates = GENERAL_STORAGE_OPERATION_DSU_RATES[normalizedCloud]
+    ?? GENERAL_STORAGE_OPERATION_DSU_RATES.aws
+  const storedDataDSU = getGeneralStorageGB(item)
+    * GENERAL_STORAGE_STORED_DATA_DSU_PER_GB
+  const tier1OperationsThousands =
+    item.general_storage_tier1_operations_thousands ?? 0
+  const tier2OperationsThousands =
+    item.general_storage_tier2_operations_thousands ?? 0
+  const tier1OperationsDSU = tier1OperationsThousands * rates.tier1
+  const tier2OperationsDSU = tier2OperationsThousands * rates.tier2
+  return {
+    storedDataDSU,
+    tier1OperationsThousands,
+    tier2OperationsThousands,
+    tier1DSUPerThousand: rates.tier1,
+    tier2DSUPerThousand: rates.tier2,
+    tier1OperationsDSU,
+    tier2OperationsDSU,
+    totalDSU: storedDataDSU + tier1OperationsDSU + tier2OperationsDSU,
+  }
+}
+
+export function calculateZerobusUsage(item: Partial<LineItem>) {
+  const mode = item.zerobus_mode ?? 'standard'
+  const monthlyIngestedGB = item.zerobus_monthly_ingested_gb ?? 0
+  const dbuPerGB = ZEROBUS_DBU_PER_GB[mode]
+  return {
+    mode,
+    monthlyIngestedGB,
+    dbuPerGB,
+    monthlyDBUs: monthlyIngestedGB * dbuPerGB,
+  }
+}
+
+export function isModelServingGPUType(workloadType?: string | null): boolean {
+  return !(workloadType || 'cpu').trim().toLowerCase().startsWith('cpu')
+}
+
+export function getModelServingBillingCapacityUnits(
+  workloadType: string | null | undefined,
+  concurrency: number,
+): number {
+  return isModelServingGPUType(workloadType)
+    ? concurrency / MODEL_SERVING_GPU_CONCURRENCY_PER_REPLICA
+    : concurrency
+}
+
+export function calculateModelServingDBUPerHour(
+  dbuRate: number,
+  workloadType: string | null | undefined,
+  concurrency: number,
+): number {
+  return dbuRate * getModelServingBillingCapacityUnits(
+    workloadType,
+    concurrency,
+  )
+}
+
+export function calculateAISearchRerankerUsage(item: Partial<LineItem>) {
+  const enabled = item.ai_search_reranker_enabled ?? false
+  const requestsThousands = item.ai_search_reranker_requests_thousands ?? 0
+  return {
+    enabled,
+    requestsThousands,
+    monthlyDBUs: enabled
+      ? requestsThousands * AI_SEARCH_RERANKER_DBU_PER_THOUSAND_REQUESTS
+      : 0,
+  }
+}
+
+export interface AgentEvaluationUsage {
+  labelsEnabled: boolean
+  syntheticDataEnabled: boolean
+  inputTokensMillions: number
+  outputTokensMillions: number
+  syntheticQuestions: number
+  inputTokenDBUs: number
+  outputTokenDBUs: number
+  evaluationTokenDBUs: number
+  syntheticQuestionDBUs: number
+  monthlyDBUs: number
+}
+
+export function calculateAgentEvaluationUsage(item: Partial<LineItem>): AgentEvaluationUsage {
+  const labelsEnabled = item.agent_evaluation_labels_enabled ?? true
+  const syntheticDataEnabled = item.agent_evaluation_synthetic_data_enabled ?? false
+  const inputTokensMillions = item.agent_evaluation_input_tokens_millions ?? 1
+  const outputTokensMillions = item.agent_evaluation_output_tokens_millions ?? 1
+  const syntheticQuestions = item.agent_evaluation_synthetic_questions ?? 0
+  const inputTokenDBUs = labelsEnabled
+    ? inputTokensMillions * AGENT_EVALUATION_COMPONENT_RATES.inputTokens
+    : 0
+  const outputTokenDBUs = labelsEnabled
+    ? outputTokensMillions * AGENT_EVALUATION_COMPONENT_RATES.outputTokens
+    : 0
+  const syntheticQuestionDBUs = syntheticDataEnabled
+    ? syntheticQuestions * AGENT_EVALUATION_COMPONENT_RATES.syntheticQuestions
+    : 0
+
+  return {
+    labelsEnabled,
+    syntheticDataEnabled,
+    inputTokensMillions,
+    outputTokensMillions,
+    syntheticQuestions,
+    inputTokenDBUs,
+    outputTokenDBUs,
+    evaluationTokenDBUs: inputTokenDBUs + outputTokenDBUs,
+    syntheticQuestionDBUs,
+    monthlyDBUs: inputTokenDBUs + outputTokenDBUs + syntheticQuestionDBUs,
+  }
+}
+
+export interface AIGatewayComponentUsage {
+  enabled: boolean
+  inputMethod: 'requests' | 'payload_gb'
+  requestsMillions: number
+  payloadKBPerRequest: number
+  monthlyPayloadGB: number
+  monthlyDBUs: number
+}
+
+function calculateAIGatewayComponent(
+  enabled: boolean,
+  inputMethod: 'requests' | 'payload_gb',
+  requestsMillions: number,
+  requestKB: number,
+  responseKB: number,
+  directPayloadGB: number,
+  dbuPerGB: number,
+): AIGatewayComponentUsage {
+  const payloadKBPerRequest = requestKB + responseKB
+  const monthlyPayloadGB = !enabled
+    ? 0
+    : inputMethod === 'payload_gb'
+      ? directPayloadGB
+      : requestsMillions * payloadKBPerRequest
+  return {
+    enabled,
+    inputMethod,
+    requestsMillions,
+    payloadKBPerRequest,
+    monthlyPayloadGB,
+    monthlyDBUs: monthlyPayloadGB * dbuPerGB,
+  }
+}
+
+export interface AIGatewayUsage {
+  inferenceTables: AIGatewayComponentUsage
+  usageTracking: AIGatewayComponentUsage
+  monthlyDBUs: number
+}
+
+export function calculateAIGatewayUsage(item: Partial<LineItem>): AIGatewayUsage {
+  const inferenceTables = calculateAIGatewayComponent(
+    item.ai_gateway_inference_tables_enabled ?? true,
+    item.ai_gateway_inference_tables_input_method ?? 'requests',
+    item.ai_gateway_inference_tables_requests_millions ?? 1,
+    item.ai_gateway_inference_tables_avg_request_payload_kb ?? 1,
+    item.ai_gateway_inference_tables_avg_response_payload_kb ?? 1,
+    item.ai_gateway_inference_tables_monthly_payload_gb ?? 2,
+    AI_GATEWAY_COMPONENT_RATES.inferenceTables,
+  )
+  const usageTracking = calculateAIGatewayComponent(
+    item.ai_gateway_usage_tracking_enabled ?? true,
+    item.ai_gateway_usage_tracking_input_method ?? 'requests',
+    item.ai_gateway_usage_tracking_requests_millions ?? 1,
+    item.ai_gateway_usage_tracking_avg_request_payload_kb ?? 1,
+    item.ai_gateway_usage_tracking_avg_response_payload_kb ?? 1,
+    item.ai_gateway_usage_tracking_monthly_payload_gb ?? 2,
+    AI_GATEWAY_COMPONENT_RATES.usageTracking,
+  )
+
+  return {
+    inferenceTables,
+    usageTracking,
+    monthlyDBUs: inferenceTables.monthlyDBUs + usageTracking.monthlyDBUs,
+  }
+}
 
 // Fallback DBU rates if fetched data not available ($/DBU)
 // These should match the actual Databricks pricing (PREMIUM tier defaults)
@@ -30,8 +314,9 @@ export const DEFAULT_DBU_PRICING: Record<string, Record<string, number>> = {
     'SQL_COMPUTE': 0.22,
     'SQL_PRO_COMPUTE': 0.55,
     'SERVERLESS_SQL_COMPUTE': 0.70,
-    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // Used for Vector Search, Model Serving, FMAPI Databricks
+    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // Used for AI Search, Model Serving, FMAPI Databricks
     'SERVERLESS_REAL_TIME_INFERENCE_LAUNCH': 0.07,
+    'MODEL_TRAINING': 0.65,
     'OPENAI_MODEL_SERVING': 0.07,
     'ANTHROPIC_MODEL_SERVING': 0.07,
     'GOOGLE_MODEL_SERVING': 0.07,
@@ -55,19 +340,23 @@ export const DBSQL_DBU_RATES: Record<string, number> = {
 export interface CostBreakdown {
   monthlyDBUs: number
   dbuCost: number
+  monthlyDSUs: number
+  dsuCost: number
   vmCost: number
+  databricksListCost: number
   totalCost: number
   // Optional fields for specific workload types
-  unitsUsed?: number  // Vector Search units
+  unitsUsed?: number  // AI Search units
   dbuPerHour?: number // DBU per hour for display
   dbuPrice?: number   // $/DBU rate for display
-  // Storage costs for Vector Search and Lakebase
+  // Storage costs for AI Search and Lakebase
   storageCost?: number
+  dsuPrice?: number
   storageDetails?: {
     totalStorageGB: number
-    freeStorageGB?: number  // Vector Search only
+    freeStorageGB?: number  // AI Search only
     billableStorageGB: number
-    pricePerGB?: number     // Vector Search
+    pricePerGB?: number     // AI Search
     dsuPerGB?: number       // Lakebase
     totalDSU?: number       // Lakebase
     pricePerDSU?: number    // Lakebase
@@ -92,7 +381,11 @@ export interface CostCalculationContext {
   modelServingGPUTypes: ModelServingGPUType[]
   vectorSearchModes: VectorSearchMode[]
   getVMPrice: (cloud: string, region: string, instanceType: string, pricingTier: string, paymentOption: string) => number
-  getFMAPIDatabricksRate: (model: string, rateType: string) => { dbu_per_1M_tokens?: number, dbu_per_hour?: number } | null
+  getFMAPIDatabricksRate: (model: string, rateType: string) => {
+    dbu_per_1M_tokens?: number
+    dbu_per_hour?: number
+    regional_uplift_percent?: number
+  } | null
   getFMAPIProprietaryRate: (provider: string, model: string, rateType: string, endpointType?: string, contextLength?: string) => { dbu_per_1M_tokens?: number, dbu_per_hour?: number } | null
   getVectorSearchRate: (mode: string) => { dbu_per_hour?: number, input_divisor?: number } | null
   getDBSQLWarehouseConfig?: (warehouseType: string, warehouseSize: string) => DBSQLWarehouseConfig | null
@@ -100,6 +393,7 @@ export interface CostCalculationContext {
   getInstanceDBURate?: (instanceType: string) => number | null
   getPhotonMultiplier?: (skuType: string) => number | null
   getDBUPrice?: (productType: string) => number | null
+  getExactDBUPrice?: (productType: string) => number | null
 }
 
 /**
@@ -113,12 +407,21 @@ export function calculateWorkloadCost(
   const {
     cloud, region, tier, dbuRatesMap, instanceTypes, dbsqlSizes, photonMultipliers, modelServingGPUTypes,
     getVMPrice, getFMAPIDatabricksRate, getFMAPIProprietaryRate, getVectorSearchRate,
-    getInstanceDBURate, getPhotonMultiplier: getBundlePhotonMultiplier, getDBUPrice
+    getInstanceDBURate, getPhotonMultiplier: getBundlePhotonMultiplier, getDBUPrice,
+    getExactDBUPrice
   } = context
   
   // If no region selected, return zero costs
   if (!region) {
-    return { monthlyDBUs: 0, dbuCost: 0, vmCost: 0, totalCost: 0 }
+    return {
+      monthlyDBUs: 0,
+      dbuCost: 0,
+      monthlyDSUs: 0,
+      dsuCost: 0,
+      vmCost: 0,
+      databricksListCost: 0,
+      totalCost: 0,
+    }
   }
   
   // Try to use dynamic DBU rates first, fall back to hardcoded
@@ -128,16 +431,7 @@ export function calculateWorkloadCost(
   // ========================================
   // Step 1: Calculate hours per month
   // ========================================
-  let hoursPerMonth = 0
-  if (item.workload_type !== 'FMAPI_DATABRICKS' && item.workload_type !== 'FMAPI_PROPRIETARY') {
-    // Priority: run-based fields take precedence over hours_per_month
-    // This prevents hours_per_month=730 default from overriding run-based config
-    if (item.runs_per_day && item.avg_runtime_minutes) {
-      hoursPerMonth = (item.runs_per_day * (item.avg_runtime_minutes / 60)) * (item.days_per_month || 22)
-    } else if (item.hours_per_month) {
-      hoursPerMonth = item.hours_per_month
-    }
-  }
+  const hoursPerMonth = calculateHoursPerMonth(item)
   
   // ========================================
   // Step 2: Determine product_type_for_pricing (SKU)
@@ -190,12 +484,24 @@ export function calculateWorkloadCost(
       break
     
     case 'VECTOR_SEARCH':
-      // Vector Search uses SERVERLESS_REAL_TIME_INFERENCE pricing ($0.07/DBU)
+      // AI Search uses SERVERLESS_REAL_TIME_INFERENCE pricing
       productType = 'SERVERLESS_REAL_TIME_INFERENCE'
       break
     
     case 'MODEL_SERVING':
       productType = 'SERVERLESS_REAL_TIME_INFERENCE'
+      break
+
+    case 'AI_RUNTIME':
+      productType = 'MODEL_TRAINING'
+      break
+
+    case 'GENERAL_STORAGE':
+      productType = 'DATABRICKS_STORAGE'
+      break
+
+    case 'ZEROBUS':
+      productType = 'JOBS_SERVERLESS_COMPUTE'
       break
     
     case 'FMAPI_DATABRICKS':
@@ -226,6 +532,8 @@ export function calculateWorkloadCost(
     case 'AI_PARSE':
     case 'AI_EXTRACT':
     case 'AI_CLASSIFY':
+    case 'AI_GATEWAY':
+    case 'AGENT_EVALUATION':
     case 'SHUTTERSTOCK_IMAGEAI':
       productType = 'SERVERLESS_REAL_TIME_INFERENCE'
       break
@@ -240,7 +548,15 @@ export function calculateWorkloadCost(
   
   // Get DBU price for this product type - try pricing bundle function first
   let dbuPrice: number | null = null
-  if (getDBUPrice) {
+  if (
+    item.workload_type === 'AI_GATEWAY'
+    || item.workload_type === 'AGENT_EVALUATION'
+    || item.workload_type === 'AI_RUNTIME'
+    || item.workload_type === 'GENERAL_STORAGE'
+    || item.workload_type === 'ZEROBUS'
+  ) {
+    dbuPrice = getExactDBUPrice?.(productType) ?? dbuRatesMap[productType] ?? 0
+  } else if (getDBUPrice) {
     const bundlePrice = getDBUPrice(productType)
     if (bundlePrice !== null && bundlePrice > 0) {
       dbuPrice = bundlePrice
@@ -258,19 +574,23 @@ export function calculateWorkloadCost(
   let dbuPerHour = 0
   let monthlyDBUs = 0
   let vmCost = 0
-  let unitsUsed: number | undefined = undefined  // For Vector Search
-  let storageCost: number | undefined = undefined  // For Vector Search and Lakebase
+  let monthlyDSUs = 0
+  let dsuCost = 0
+  let dsuPrice = 0
+  let unitsUsed: number | undefined = undefined  // For AI Search
+  let storageCost: number | undefined = undefined  // For AI Search and Lakebase
   let storageDetails: CostBreakdown['storageDetails'] = undefined
   
-  // Get instance DBU rates - try pricing bundle function first, then fetched instanceTypes
-  let driverDBURate = 0.5 // Fallback
-  let workerDBURate = 0.5
+  // Use the legacy fallback only for a selected but unknown instance.
+  // An empty node selection contributes no hidden DBUs.
+  let driverDBURate = item.driver_node_type ? 0.5 : 0
+  let workerDBURate = item.worker_node_type ? 0.5 : 0
   
   if (getInstanceDBURate && item.driver_node_type) {
     const bundleRate = getInstanceDBURate(item.driver_node_type)
     if (bundleRate !== null && bundleRate > 0) driverDBURate = bundleRate
   }
-  if (driverDBURate === 0.5) {
+  if (item.driver_node_type && driverDBURate === 0.5) {
     const driverInstance = instanceTypes.find(it => it.id === item.driver_node_type || it.name === item.driver_node_type)
     if (driverInstance?.dbu_rate) driverDBURate = driverInstance.dbu_rate
   }
@@ -279,7 +599,7 @@ export function calculateWorkloadCost(
     const bundleRate = getInstanceDBURate(item.worker_node_type)
     if (bundleRate !== null && bundleRate > 0) workerDBURate = bundleRate
   }
-  if (workerDBURate === 0.5) {
+  if (item.worker_node_type && workerDBURate === 0.5) {
     const workerInstance = instanceTypes.find(it => it.id === item.worker_node_type || it.name === item.worker_node_type)
     if (workerInstance?.dbu_rate) workerDBURate = workerInstance.dbu_rate
   }
@@ -423,7 +743,7 @@ export function calculateWorkloadCost(
       break
     
     case 'VECTOR_SEARCH':
-      // Vector Search: Units = CEILING(vector_capacity / divisor)
+      // AI Search: Units = CEILING(vector_capacity / divisor)
       // Standard: 2M vectors per unit, 4.00 DBU/hour per unit
       // Storage Optimized: 64M vectors per unit, 18.29 DBU/hour per unit
       const vectorMode = item.vector_search_mode || 'standard'
@@ -442,25 +762,39 @@ export function calculateWorkloadCost(
       
       // DBU/Hour = units_used × mode_dbu_rate
       dbuPerHour = vectorUnitsUsed * vectorModeDBURate
-      monthlyDBUs = dbuPerHour * hoursPerMonth
+      monthlyDBUs = (
+        dbuPerHour * hoursPerMonth
+        + calculateAISearchRerankerUsage(item).monthlyDBUs
+      )
       
-      // Storage calculation for Vector Search
-      // Free Storage = units_used × 20 GB
+      // Storage calculation for AI Search
+      // The first 30 GB of storage is included
       // Billable Storage = MAX(0, storage_gb - free_storage_gb)
-      // Storage Cost = billable_storage_gb × price_per_gb_per_month ($0.023/GB/month)
+      // Storage cost = billable GB × 10 DSU/GB × exact regional $/DSU.
       const vectorStorageGB = item.vector_search_storage_gb || 0
-      const vectorFreeStorageGB = vectorUnitsUsed * 20
+      const vectorFreeStorageGB = vectorUnitsUsed > 0
+        ? AI_SEARCH_INCLUDED_STORAGE_GB
+        : 0
       const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
-      const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
-      const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
+      dsuPrice = getExactDBUPrice?.('DATABRICKS_STORAGE')
+        ?? dbuRatesMap.DATABRICKS_STORAGE
+        ?? 0
+      const vectorStorageDSUPerGB = getAISearchStorageDSUPerGB(
+        item.vector_search_mode,
+      )
+      monthlyDSUs = vectorBillableStorageGB * vectorStorageDSUPerGB
+      const vectorStorageCost = monthlyDSUs * dsuPrice
 
       if (vectorStorageGB > 0) {
+        dsuCost = vectorStorageCost
         storageCost = vectorStorageCost
         storageDetails = {
           totalStorageGB: vectorStorageGB,
           freeStorageGB: vectorFreeStorageGB,
           billableStorageGB: vectorBillableStorageGB,
-          pricePerGB: vectorStoragePricePerGB
+          dsuPerGB: vectorStorageDSUPerGB,
+          totalDSU: monthlyDSUs,
+          pricePerDSU: dsuPrice,
         }
       }
       break
@@ -475,7 +809,11 @@ export function calculateWorkloadCost(
         ? (item.model_serving_concurrency || 4)
         : (msScaleOutPresets[msScaleOut] || 4)
 
-      dbuPerHour = gpuDBURate * msConcurrency
+      dbuPerHour = calculateModelServingDBUPerHour(
+        gpuDBURate,
+        gpuType,
+        msConcurrency,
+      )
       monthlyDBUs = dbuPerHour * hoursPerMonth
       break
     
@@ -501,32 +839,38 @@ export function calculateWorkloadCost(
       
       // Storage calculation for Lakebase
       // Total DSU = storage_gb × 15 (each GB consumes 15 DSU)
-      // Storage Cost = Total DSU × price_per_dsu ($0.023/DSU/month)
+      // Storage Cost = Total DSU × exact regional price_per_dsu
       // Max storage: 8192 GB (8 TB)
       const lakebaseStorageGB = Math.min(item.lakebase_storage_gb || 0, 8192)
       const lakebaseDSUPerGB = 15
       const lakebaseTotalDSU = lakebaseStorageGB * lakebaseDSUPerGB
-      const lakebasePricePerDSU = 0.023  // $0.023 per DSU per month
-      const lakebaseStorageCost = lakebaseTotalDSU * lakebasePricePerDSU
+      dsuPrice = getExactDBUPrice?.('DATABRICKS_STORAGE')
+        ?? dbuRatesMap.DATABRICKS_STORAGE
+        ?? 0
+      const lakebaseStorageCost = lakebaseTotalDSU * dsuPrice
       
       // PITR: 8.7x DSU multiplier
       const pitrGB = item.lakebase_pitr_gb || 0
       const pitrDSUPerGB = 8.7
-      const pitrCost = pitrGB * pitrDSUPerGB * lakebasePricePerDSU
+      const pitrDSU = pitrGB * pitrDSUPerGB
+      const pitrCost = pitrDSU * dsuPrice
 
       // Snapshots: 3.91x DSU multiplier
       const snapshotGB = item.lakebase_snapshot_gb || 0
       const snapshotDSUPerGB = 3.91
-      const snapshotCost = snapshotGB * snapshotDSUPerGB * lakebasePricePerDSU
+      const snapshotDSU = snapshotGB * snapshotDSUPerGB
+      const snapshotCost = snapshotDSU * dsuPrice
 
       if (lakebaseStorageGB > 0 || pitrGB > 0 || snapshotGB > 0) {
+        monthlyDSUs = lakebaseTotalDSU + pitrDSU + snapshotDSU
+        dsuCost = lakebaseStorageCost + pitrCost + snapshotCost
         storageCost = lakebaseStorageCost + pitrCost + snapshotCost
         storageDetails = {
           totalStorageGB: lakebaseStorageGB,
           billableStorageGB: lakebaseStorageGB,
           dsuPerGB: lakebaseDSUPerGB,
-          totalDSU: lakebaseTotalDSU,
-          pricePerDSU: lakebasePricePerDSU
+          totalDSU: monthlyDSUs,
+          pricePerDSU: dsuPrice
         }
       }
       break
@@ -534,27 +878,37 @@ export function calculateWorkloadCost(
     case 'FMAPI_DATABRICKS':
       const fmapiDbxQuantity = item.fmapi_quantity || 0
       const fmapiDbxRateType = item.fmapi_rate_type || 'input_token'
-      const fmapiDbxIsProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(fmapiDbxRateType)
+      const fmapiDbxIsProvisioned = fmapiDbxRateType.startsWith('provisioned_')
       
       const dbxRateData = item.fmapi_model 
         ? getFMAPIDatabricksRate(item.fmapi_model, fmapiDbxRateType) 
         : null
+      const useRegionalProcessing = item.fmapi_endpoint_type === 'regional'
+      const regionalMultiplier = useRegionalProcessing
+        ? (
+            dbxRateData?.regional_uplift_percent
+              ? 1 + dbxRateData.regional_uplift_percent / 100
+              : 0
+          )
+        : 1
       
       if (fmapiDbxIsProvisioned) {
-        const provisionedDbxDbuPerHour = dbxRateData?.dbu_per_hour || 
-          (fmapiDbxRateType === 'provisioned_scaling' ? 200 : 50)
-        monthlyDBUs = fmapiDbxQuantity * provisionedDbxDbuPerHour
+        const provisionedDbxDbuPerHour = dbxRateData?.dbu_per_hour || 0
+        monthlyDBUs = (
+          fmapiDbxQuantity
+          * provisionedDbxDbuPerHour
+          * regionalMultiplier
+        )
       } else {
-        const tokenDbxRate = dbxRateData?.dbu_per_1M_tokens || 
-          (fmapiDbxRateType === 'output_token' ? 3.0 : 1.0)
-        monthlyDBUs = fmapiDbxQuantity * tokenDbxRate
+        const tokenDbxRate = dbxRateData?.dbu_per_1M_tokens || 0
+        monthlyDBUs = fmapiDbxQuantity * tokenDbxRate * regionalMultiplier
       }
       break
     
     case 'FMAPI_PROPRIETARY':
       const fmapiPropQuantity = item.fmapi_quantity || 0
       const fmapiPropRateType = item.fmapi_rate_type || 'input_token'
-      const fmapiPropIsProvisioned = fmapiPropRateType === 'provisioned_scaling'
+      const fmapiPropIsProvisioned = fmapiPropRateType === 'batch_inference'
       const fmapiEndpointType = item.fmapi_endpoint_type || 'global'
       const fmapiContextLength = item.fmapi_context_length || 'long'
       
@@ -563,29 +917,48 @@ export function calculateWorkloadCost(
         : null
       
       if (fmapiPropIsProvisioned) {
-        const provisionedPropDbuPerHour = propRateData?.dbu_per_hour || 150
+        const provisionedPropDbuPerHour = propRateData?.dbu_per_hour || 0
         monthlyDBUs = fmapiPropQuantity * provisionedPropDbuPerHour
       } else {
-        let tokenPropRate = propRateData?.dbu_per_1M_tokens
-        if (!tokenPropRate) {
-          // Fallback rates based on model complexity and rate type
-          switch (fmapiPropRateType) {
-            case 'output_token': tokenPropRate = 321.43; break  // Claude Sonnet 4.5 output
-            case 'cache_read': tokenPropRate = 8.57; break
-            case 'cache_write': tokenPropRate = 85.71; break
-            default: tokenPropRate = 21.43  // input_token
-          }
-        }
+        const tokenPropRate = propRateData?.dbu_per_1M_tokens || 0
         monthlyDBUs = fmapiPropQuantity * tokenPropRate
       }
       break
     
-    case 'DATABRICKS_APPS':
-      const appsSize = (item.databricks_apps_size || 'medium').toLowerCase()
-      const appsDbuRates: Record<string, number> = { medium: 0.5, large: 1.0 }
-      dbuPerHour = appsDbuRates[appsSize] || 0.5
-      monthlyDBUs = dbuPerHour * hoursPerMonth
+    case 'DATABRICKS_APPS': {
+      const usage = calculateDatabricksAppsUsage(item, hoursPerMonth)
+      dbuPerHour = usage.dbuPerHour
+      monthlyDBUs = usage.monthlyDBUs
       break
+    }
+
+    case 'AI_RUNTIME': {
+      const usage = calculateAIRuntimeUsage(
+        cloud,
+        item.ai_runtime_accelerator_type,
+        hoursPerMonth,
+      )
+      dbuPerHour = usage.dbuPerNodeHour
+      monthlyDBUs = usage.monthlyDBUs
+      break
+    }
+
+    case 'GENERAL_STORAGE': {
+      const storageGB = getGeneralStorageGB(item)
+      const usage = calculateGeneralStorageDSU(item, cloud)
+      monthlyDSUs = usage.totalDSU
+      dsuPrice = dbuPrice
+      dsuCost = monthlyDSUs * dsuPrice
+      storageCost = dsuCost
+      storageDetails = {
+        totalStorageGB: storageGB,
+        billableStorageGB: storageGB,
+        dsuPerGB: GENERAL_STORAGE_STORED_DATA_DSU_PER_GB,
+        totalDSU: monthlyDSUs,
+        pricePerDSU: dsuPrice,
+      }
+      break
+    }
 
     case 'AI_PARSE': {
       const complexityRates: Record<string, number> = {
@@ -625,6 +998,21 @@ export function calculateWorkloadCost(
       break
     }
 
+    case 'AI_GATEWAY': {
+      monthlyDBUs = calculateAIGatewayUsage(item).monthlyDBUs
+      break
+    }
+
+    case 'AGENT_EVALUATION': {
+      monthlyDBUs = calculateAgentEvaluationUsage(item).monthlyDBUs
+      break
+    }
+
+    case 'ZEROBUS': {
+      monthlyDBUs = calculateZerobusUsage(item).monthlyDBUs
+      break
+    }
+
     case 'SHUTTERSTOCK_IMAGEAI': {
       const ssImages = item.shutterstock_images || 0
       monthlyDBUs = ssImages * 0.857
@@ -639,8 +1027,9 @@ export function calculateWorkloadCost(
   // Step 4: Calculate final costs with NaN guards
   // ========================================
   const rawDbuCost = monthlyDBUs * dbuPrice
+  const safeDSUCost = !isNaN(dsuCost) ? dsuCost : 0
   const safeStorageCost = storageCost !== undefined && !isNaN(storageCost) ? storageCost : 0
-  const rawTotalCost = rawDbuCost + vmCost + safeStorageCost
+  const rawTotalCost = rawDbuCost + vmCost + safeDSUCost
   
   // NaN guards - ensure we never return NaN values
   const safeDbuCost = isNaN(rawDbuCost) ? 0 : rawDbuCost
@@ -653,11 +1042,15 @@ export function calculateWorkloadCost(
   return { 
     monthlyDBUs: safeMonthlyDBUs, 
     dbuCost: safeDbuCost, 
+    monthlyDSUs: isNaN(monthlyDSUs) ? 0 : monthlyDSUs,
+    dsuCost: safeDSUCost,
     vmCost: safeVmCost, 
+    databricksListCost: safeDbuCost + safeDSUCost,
     totalCost: safeTotalCost,
-    unitsUsed,  // For Vector Search
+    unitsUsed,  // For AI Search
     dbuPerHour: safeDbuPerHour, // For display
     dbuPrice: safeDbuPrice,    // $/DBU rate for display
+    dsuPrice,
     storageCost: safeStorageCost > 0 ? safeStorageCost : undefined,
     storageDetails
   }

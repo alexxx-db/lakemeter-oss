@@ -1,4 +1,4 @@
-"""Test Vector Search Excel export — storage sub-row, totals, NaN checks.
+"""Test AI Search Excel export — storage sub-row, totals, NaN checks.
 
 AC-10 to AC-14, AC-20: Storage sub-row, totals SUM, no NaN.
 """
@@ -10,6 +10,7 @@ from tests.export.vector_search.conftest import make_line_item
 from tests.export.vector_search.excel_helpers import (
     generate_xlsx, find_data_rows, find_storage_row,
     COL_TYPE, COL_CONFIG, COL_SKU, COL_DBU_COST_L, COL_NOTES,
+    COL_DSUS_MO, COL_DSU_RATE, COL_DSU_COST_L,
 )
 
 
@@ -17,7 +18,7 @@ class TestStorageSubRow:
     """AC-10 to AC-13: Storage sub-row emitted with correct values."""
 
     def test_storage_row_emitted(self):
-        """AC-10: Storage sub-row exists for Vector Search with storage_gb > 0."""
+        """AC-10: Storage sub-row exists for AI Search with storage_gb > 0."""
         items = [make_line_item(vector_capacity_millions=5, vector_search_storage_gb=50)]
         wb = generate_xlsx(items)
         ws = wb.active
@@ -34,14 +35,14 @@ class TestStorageSubRow:
         assert ws.cell(row=row, column=COL_SKU).value == 'DATABRICKS_STORAGE'
 
     def test_storage_row_type_display(self):
-        """Storage sub-row type should say 'Vector Search (Storage)'."""
+        """Storage sub-row type should say 'AI Search (Storage)'."""
         items = [make_line_item(vector_capacity_millions=5, vector_search_storage_gb=50)]
         wb = generate_xlsx(items)
         ws = wb.active
         row = find_storage_row(ws)
         assert row is not None
         type_val = ws.cell(row=row, column=COL_TYPE).value
-        assert 'Vector Search' in str(type_val)
+        assert 'AI Search' in str(type_val)
         assert 'Storage' in str(type_val)
 
     def test_storage_gb_approximation(self):
@@ -58,16 +59,17 @@ class TestStorageSubRow:
 
     def test_storage_cost_positive(self):
         """AC-13: Storage cost = storage_gb * rate > 0 (billable > free)."""
-        # 10M vectors, standard mode: units=ceil(10M/2M)=5, free=5*20=100GB
-        # Set storage_gb=200 so billable=200-100=100GB, cost=100*0.023=$2.30
+        # First 30 GB is free. Standard storage uses 10 DSU/GB.
         items = [make_line_item(vector_capacity_millions=10, vector_search_storage_gb=200)]
         wb = generate_xlsx(items)
         ws = wb.active
         row = find_storage_row(ws)
         assert row is not None
-        cost = ws.cell(row=row, column=COL_DBU_COST_L).value
-        if isinstance(cost, (int, float)):
-            assert cost > 0, f"Storage cost should be > 0, got {cost}"
+        assert ws.cell(row=row, column=COL_DBU_COST_L).value == 0
+        assert ws.cell(row=row, column=COL_DSUS_MO).value == 1700
+        assert ws.cell(row=row, column=COL_DSU_RATE).value == 0.023
+        cost = ws.cell(row=row, column=COL_DSU_COST_L).value
+        assert cost == f"=W{row}*X{row}"
 
     def test_storage_notes_mention_rate(self):
         """Notes should mention $/GB/month rate."""
@@ -77,7 +79,7 @@ class TestStorageSubRow:
         row = find_storage_row(ws)
         assert row is not None
         notes = ws.cell(row=row, column=COL_NOTES).value
-        assert notes and '/GB' in str(notes)
+        assert notes and '10 DSU/GB' in str(notes)
 
 
 class TestExcelTotals:
@@ -126,7 +128,7 @@ class TestExcelNoNaN:
         wb = generate_xlsx(items)
         ws = wb.active
         for row_idx in range(1, ws.max_row + 1):
-            for col_idx in range(1, 31):
+            for col_idx in range(1, ws.max_column + 1):
                 val = ws.cell(row=row_idx, column=col_idx).value
                 if isinstance(val, float):
                     assert not math.isnan(val), (
@@ -141,7 +143,7 @@ class TestExcelNoNaN:
         wb = generate_xlsx(items)
         ws = wb.active
         for row_idx in range(1, ws.max_row + 1):
-            for col_idx in range(1, 31):
+            for col_idx in range(1, ws.max_column + 1):
                 val = ws.cell(row=row_idx, column=col_idx).value
                 if isinstance(val, float):
                     assert not math.isnan(val), (

@@ -45,9 +45,25 @@ def _load_csv(name):
         return list(csv.DictReader(f))
 
 
+def _load_vm_costs_rows():
+    """Marketplace splits the VM price list across vm-costs_partN.csv files."""
+    single = os.path.join(PRICING_DIR, "vm-costs.csv")
+    if os.path.exists(single):
+        return _load_csv("vm-costs.csv")
+    rows = []
+    parts = sorted(
+        n for n in os.listdir(PRICING_DIR)
+        if n.startswith("vm-costs_part") and n.endswith(".csv")
+    )
+    assert parts, "expected vm-costs.csv or vm-costs_part*.csv"
+    for name in parts:
+        rows.extend(_load_csv(name))
+    return rows
+
+
 @pytest.fixture(scope="module")
 def vm_costs_rows():
-    return _load_csv("vm-costs.csv")
+    return _load_vm_costs_rows()
 
 
 @pytest.mark.parametrize("cloud", CLOUDS)

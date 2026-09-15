@@ -11,6 +11,8 @@
  * - Cached in memory for app lifetime
  */
 
+import { getAIRuntimeAccelerators } from './aiRuntime'
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -59,6 +61,43 @@ export interface FMAPIRate {
   input_divisor: number
   is_hourly: boolean
   sku_product_type: string
+  display_name?: string
+  status?: 'active' | 'retired'
+  promotional_dbu_rate?: number
+  promotion_end_date?: string
+  promotion_label?: string
+  regional_uplift_percent?: number
+  supported_region_group?: 'americas'
+  reservation_months?: number
+  batch_status?: 'coming_soon'
+}
+
+export interface PlatformAddonPromotion {
+  rate_pct: number
+  end_date: string
+  label: string
+}
+
+export interface PlatformAddonCloudConfig {
+  eligible_tiers: string[]
+  standard_rate_pct: number
+  promotion?: PlatformAddonPromotion
+}
+
+export interface PlatformAddonDefinition {
+  display_name: string
+  sku: string
+  description: string
+  includes?: string[]
+  clouds: Record<string, PlatformAddonCloudConfig>
+}
+
+export interface PlatformAddonCatalog {
+  version: number
+  as_of_date: string
+  source_url: string
+  basis: 'product_spend_at_list'
+  addons: Record<string, PlatformAddonDefinition>
 }
 
 export interface PricingBundle {
@@ -72,6 +111,7 @@ export interface PricingBundle {
   modelServingRates: Record<string, ModelServingRate>                // "cloud:gpu_type" -> rate
   fmapiDatabricksRates: Record<string, FMAPIRate>                    // "cloud:model:rate_type" -> rate
   fmapiProprietaryRates: Record<string, FMAPIRate>                   // "cloud:provider:model:endpoint:context:rate_type" -> rate
+  platformAddons: PlatformAddonCatalog
   loadedAt: Date | null
   isLoaded: boolean
 }
@@ -109,7 +149,8 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
       vectorSearchRates,
       modelServingRates,
       fmapiDatabricksRates,
-      fmapiProprietaryRates
+      fmapiProprietaryRates,
+      platformAddons
     ] = await Promise.all([
       loadJSON<Record<string, Record<string, InstanceDBURate>>>('instance-dbu-rates.json'),
       loadJSON<Record<string, DBUMultiplier>>('dbu-multipliers.json'),
@@ -119,7 +160,8 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
       loadJSON<Record<string, VectorSearchRate>>('vector-search-rates.json'),
       loadJSON<Record<string, ModelServingRate>>('model-serving-rates.json'),
       loadJSON<Record<string, FMAPIRate>>('fmapi-databricks-rates.json'),
-      loadJSON<Record<string, FMAPIRate>>('fmapi-proprietary-rates.json')
+      loadJSON<Record<string, FMAPIRate>>('fmapi-proprietary-rates.json'),
+      loadJSON<PlatformAddonCatalog>('platform-addons.json')
     ])
     
     const loadTime = Date.now() - startTime
@@ -135,6 +177,7 @@ export async function loadPricingBundle(): Promise<PricingBundle> {
       modelServingRates,
       fmapiDatabricksRates,
       fmapiProprietaryRates,
+      platformAddons,
       loadedAt: new Date(),
       isLoaded: true
     }
@@ -159,6 +202,13 @@ export function createEmptyBundle(): PricingBundle {
     modelServingRates: {},
     fmapiDatabricksRates: {},
     fmapiProprietaryRates: {},
+    platformAddons: {
+      version: 1,
+      as_of_date: '',
+      source_url: '',
+      basis: 'product_spend_at_list',
+      addons: {},
+    },
     loadedAt: null,
     isLoaded: false
   }
@@ -303,6 +353,23 @@ export function getDBUPrice(
 }
 
 /**
+ * Get a DBU price only when the exact cloud/region/tier entry exists.
+ * Quantity-priced features such as Unity AI Gateway must not use global,
+ * cross-region, or hardcoded fallbacks.
+ */
+export function getExactRegionalDBUPrice(
+  bundle: PricingBundle,
+  cloud: string,
+  region: string,
+  tier: string,
+  productType: string
+): number | null {
+  const key = `${cloud.toLowerCase()}:${region}:${tier.toUpperCase()}`
+  const price = bundle.dbuRates?.[key]?.[productType]
+  return price !== undefined ? price : null
+}
+
+/**
  * Get DBSQL warehouse rate.
  */
 export function getDBSQLRate(
@@ -329,7 +396,7 @@ export function getDBSQLWarehouseConfig(
 }
 
 /**
- * Get Vector Search rate.
+ * Get AI Search rate.
  */
 export function getVectorSearchRate(
   bundle: PricingBundle,
@@ -359,10 +426,28 @@ export function getFMAPIDatabricksRate(
   bundle: PricingBundle,
   cloud: string,
   model: string,
-  rateType: string
+  rateType: string,
+  region?: string,
+  processingType = 'global',
 ): FMAPIRate | null {
   const key = `${cloud.toLowerCase()}:${model}:${rateType}`
-  return bundle.fmapiDatabricksRates[key] ?? null
+  const rate = getEffectiveFMAPIRate(bundle.fmapiDatabricksRates[key])
+  if (!rate) return null
+  if (
+    region
+    && rateType.startsWith('provisioned_entry')
+    && !isFMAPIProvisionedEntryRegionSupported(cloud, region)
+  ) {
+    return null
+  }
+  if (processingType === 'regional') {
+    if (!rate.regional_uplift_percent) return null
+    return {
+      ...rate,
+      dbu_rate: rate.dbu_rate * (1 + rate.regional_uplift_percent / 100),
+    }
+  }
+  return processingType === 'global' ? rate : null
 }
 
 /**
@@ -378,7 +463,61 @@ export function getFMAPIProprietaryRate(
   rateType: string
 ): FMAPIRate | null {
   const key = `${cloud.toLowerCase()}:${provider}:${model}:${endpointType}:${contextLength}:${rateType}`
-  return bundle.fmapiProprietaryRates[key] ?? null
+  return getEffectiveFMAPIRate(bundle.fmapiProprietaryRates[key])
+}
+
+/**
+ * Resolve the currently billable rate while retaining list-price metadata.
+ */
+export function getEffectiveFMAPIRate(
+  rate: FMAPIRate | null | undefined,
+  asOf = new Date().toISOString().slice(0, 10)
+): FMAPIRate | null {
+  if (!rate) return null
+  const promotionIsActive = rate.promotional_dbu_rate !== undefined
+    && rate.promotion_end_date !== undefined
+    && asOf <= rate.promotion_end_date
+  if (!promotionIsActive) return rate
+  return {
+    ...rate,
+    dbu_rate: rate.promotional_dbu_rate!,
+  }
+}
+
+const FMAPI_PROVISIONED_ENTRY_REGIONS: Record<string, Set<string>> = {
+  aws: new Set([
+    'us-east-1',
+    'us-east-2',
+    'us-west-1',
+    'us-west-2',
+    'ca-central-1',
+    'ca-west-1',
+    'sa-east-1',
+  ]),
+  azure: new Set([
+    'brazilsouth',
+    'brazilsoutheast',
+    'canadacentral',
+    'canadaeast',
+    'centralus',
+    'eastus',
+    'eastus2',
+    'northcentralus',
+    'southcentralus',
+    'westcentralus',
+    'westus',
+    'westus2',
+    'westus3',
+  ]),
+}
+
+export function isFMAPIProvisionedEntryRegionSupported(
+  cloud: string,
+  region: string,
+): boolean {
+  return FMAPI_PROVISIONED_ENTRY_REGIONS[cloud.toLowerCase()]?.has(
+    region.toLowerCase(),
+  ) ?? false
 }
 
 // ============================================================================
@@ -419,7 +558,7 @@ const SKU_TO_WORKLOAD_MAP: Record<string, string> = {
   'SQL_PRO_COMPUTE': 'DBSQL',
   'SERVERLESS_SQL_COMPUTE': 'DBSQL',
   
-  // Vector Search
+  // AI Search
   'VECTOR_SEARCH_ENDPOINT': 'VECTOR_SEARCH',
   'MOSAIC_AI_VECTOR_SEARCH': 'VECTOR_SEARCH',
   
@@ -431,7 +570,6 @@ const SKU_TO_WORKLOAD_MAP: Record<string, string> = {
   
   // Foundation Models - Databricks
   'FOUNDATION_MODEL_TRAINING': 'FMAPI_DATABRICKS',
-  'MODEL_TRAINING': 'FMAPI_DATABRICKS',
   'MOSAIC_AI_FOUNDATION_MODEL_SERVING': 'FMAPI_DATABRICKS',
   'DATABRICKS_FOUNDATION_MODEL_TRAINING': 'FMAPI_DATABRICKS',
   
@@ -445,6 +583,9 @@ const SKU_TO_WORKLOAD_MAP: Record<string, string> = {
   // Lakebase
   'DATABASE_SERVERLESS_COMPUTE': 'LAKEBASE',
   'LAKEBASE_COMPUTE': 'LAKEBASE',
+
+  // Databricks Default Storage
+  'DATABRICKS_STORAGE': 'GENERAL_STORAGE',
 }
 
 /**
@@ -453,14 +594,14 @@ const SKU_TO_WORKLOAD_MAP: Record<string, string> = {
 const ALL_WORKLOAD_TYPES = [
   'JOBS', 'ALL_PURPOSE', 'DLT', 'DBSQL',
   'VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE',
-  'DATABRICKS_APPS', 'AI_PARSE', 'AI_EXTRACT', 'AI_CLASSIFY', 'SHUTTERSTOCK_IMAGEAI'
+  'DATABRICKS_APPS', 'AI_PARSE', 'AI_EXTRACT', 'AI_CLASSIFY', 'AI_GATEWAY', 'AGENT_EVALUATION', 'AI_RUNTIME', 'GENERAL_STORAGE', 'ZEROBUS', 'SHUTTERSTOCK_IMAGEAI'
 ]
 
 /**
  * Get available workload types for a specific cloud/region/tier combination from the pricing bundle.
  * Maps SKU product types to workload types.
  * 
- * Also checks serverless workloads (Vector Search, Model Serving, FMAPI, Lakebase) which are 
+ * Also checks serverless workloads (AI Search, Model Serving, FMAPI, Lakebase) which are
  * stored in separate bundle files and are typically available globally across regions.
  * 
  * @param bundle - The loaded pricing bundle
@@ -498,11 +639,18 @@ export function getAvailableWorkloadTypesForRegion(
       availableWorkloads.add(workloadType)
     }
   }
+
+  if (
+    productTypes.MODEL_TRAINING !== undefined
+    && getAIRuntimeAccelerators(cloudLower).length > 0
+  ) {
+    availableWorkloads.add('AI_RUNTIME')
+  }
   
   // Check serverless workloads which are in separate bundle files
   // These are typically globally available and keyed by cloud (not region)
   
-  // Vector Search: check if cloud has vector search rates
+  // AI Search: check if cloud has search rates
   if (bundle.vectorSearchRates) {
     const vsStandardKey = `${cloudLower}:standard`
     const vsOptimizedKey = `${cloudLower}:storage_optimized`
@@ -543,11 +691,24 @@ export function getAvailableWorkloadTypesForRegion(
     availableWorkloads.add('DATABRICKS_APPS')
   }
 
+  const normalizedTier = tier.toUpperCase()
+  const zerobusTierAvailable = cloudLower === 'azure'
+    ? normalizedTier === 'PREMIUM'
+    : ['PREMIUM', 'ENTERPRISE'].includes(normalizedTier)
+  if (
+    zerobusTierAvailable
+    && productTypes.JOBS_SERVERLESS_COMPUTE !== undefined
+  ) {
+    availableWorkloads.add('ZEROBUS')
+  }
+
   // AI Functions require an exact regional SERVERLESS_REAL_TIME_INFERENCE price.
-  if (productTypes['SERVERLESS_REAL_TIME_INFERENCE']) {
+  if (productTypes['SERVERLESS_REAL_TIME_INFERENCE'] !== undefined) {
     availableWorkloads.add('AI_PARSE')
     availableWorkloads.add('AI_EXTRACT')
     availableWorkloads.add('AI_CLASSIFY')
+    availableWorkloads.add('AI_GATEWAY')
+    availableWorkloads.add('AGENT_EVALUATION')
     availableWorkloads.add('SHUTTERSTOCK_IMAGEAI')
   }
 

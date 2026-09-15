@@ -1,4 +1,6 @@
 """FastAPI main application entry point."""
+from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +28,23 @@ from app.routes.chat import router as chat_router
 # Initialize logging based on environment
 setup_logging()
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Bootstrap a Marketplace-bound Lakebase database before serving."""
+    if os.getenv("LAKEMETER_BOOTSTRAP_DATABASE", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        from app import database
+        from app.bootstrap import bootstrap_database
+
+        database.initialize_database()
+        bootstrap_database(database.engine)
+    yield
+
+
 # Create FastAPI application
 # redirect_slashes=False prevents automatic redirects that break CORS
 # Disable docs in production for cleaner deployment
@@ -33,9 +52,10 @@ app = FastAPI(
     title="Lakemeter API",
     description="Databricks Pricing Calculator API - Estimate and manage Databricks workload costs",
     version=APP_VERSION,
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    redirect_slashes=False
+    docs_url=None if settings.is_production else "/api/docs",
+    redoc_url=None if settings.is_production else "/api/redoc",
+    redirect_slashes=False,
+    lifespan=lifespan,
 )
 
 # Log startup info

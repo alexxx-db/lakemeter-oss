@@ -79,7 +79,14 @@ interface ChatPanelProps {
   currentEstimate?: any
   currentWorkloads?: any[]
   // Calculated costs for each workload (keyed by item_id)
-  itemCosts?: Record<string, { total: number; dbu: number; vm: number }>
+  itemCosts?: Record<string, {
+    total: number
+    dbu: number
+    dsu: number
+    vm: number
+    dbus: number
+    dsus: number
+  }>
   // Controlled panel width for push layout
   panelWidth?: number
   onWidthChange?: (width: number) => void
@@ -280,7 +287,7 @@ Click **"+ New Estimate"** above to create one, then I can help you add workload
 I can assist you with:
 
 - 📊 **Analyze** your workloads and costs
-- 💡 **Optimize** spending with smart recommendations  
+- 💡 **Optimize** spending with smart recommendations
 - ➕ **Add workloads** based on your requirements
 - ❓ **Answer questions** about Databricks pricing
 
@@ -457,6 +464,7 @@ I can assist you with:
           ...w,
           total_cost: costs?.total || w.total_cost || 0,
           dbu_cost: costs?.dbu || w.dbu_cost || 0,
+          dsu_cost: costs?.dsu || w.dsu_cost || 0,
           vm_cost: costs?.vm || w.vm_cost || 0
         }
       })
@@ -904,7 +912,7 @@ I can assist you with:
                               {proposal.workload_name}
                             </span>
                             <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
-                              {proposal.workload_type}
+                              {proposal.workload_type === 'VECTOR_SEARCH' ? 'AI Search' : proposal.workload_type}
                             </span>
                           </div>
                           {proposal.reason && (
@@ -930,6 +938,23 @@ I can assist you with:
                               <span>{proposal.runs_per_day}×{proposal.avg_runtime_minutes}min</span>
                             )}
                             {proposal.dlt_edition && <span>{proposal.dlt_edition}</span>}
+                            {proposal.workload_type === 'VECTOR_SEARCH' && proposal.vector_search_mode && (
+                              <span>{proposal.vector_search_mode === 'storage_optimized' ? 'Storage Optimized' : 'Standard'}</span>
+                            )}
+                            {proposal.workload_type === 'VECTOR_SEARCH' && proposal.vector_capacity_millions != null && (
+                              <span>{proposal.vector_capacity_millions}M vectors</span>
+                            )}
+                            {proposal.workload_type === 'VECTOR_SEARCH' && proposal.vector_search_storage_gb > 0 && (
+                              <span>{proposal.vector_search_storage_gb} GB storage</span>
+                            )}
+                            {proposal.workload_type === 'VECTOR_SEARCH' && proposal.ai_search_reranker_enabled && (
+                              <>
+                                <span className="px-1.5 py-0.5 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded">
+                                  AI Search Reranker
+                                </span>
+                                <span>{proposal.ai_search_reranker_requests_thousands ?? 0}K requests/mo</span>
+                              </>
+                            )}
                             {proposal.ai_extract_document_type && (
                               <span>Extract: {proposal.ai_extract_document_type.replace(/_/g, ' ')}</span>
                             )}
@@ -947,6 +972,95 @@ I can assist you with:
                             )}
                             {proposal.ai_classify_dbus_per_thousand != null && (
                               <span>{proposal.ai_classify_dbus_per_thousand} DBU/1K docs</span>
+                            )}
+                            {proposal.ai_gateway_inference_tables_enabled && (
+                              <>
+                                <span className="px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded">
+                                  Inference Tables
+                                </span>
+                                <span>
+                                  {proposal.ai_gateway_inference_tables_input_method === 'payload_gb'
+                                    ? `${proposal.ai_gateway_inference_tables_monthly_payload_gb ?? 0} GB/mo`
+                                    : `${proposal.ai_gateway_inference_tables_requests_millions ?? 0}M requests/mo · ${proposal.ai_gateway_inference_tables_avg_request_payload_kb ?? 0}/${proposal.ai_gateway_inference_tables_avg_response_payload_kb ?? 0} KB`}
+                                </span>
+                              </>
+                            )}
+                            {proposal.ai_gateway_usage_tracking_enabled && (
+                              <>
+                                <span className="px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded">
+                                  Usage Tracking
+                                </span>
+                                <span>
+                                  {proposal.ai_gateway_usage_tracking_input_method === 'payload_gb'
+                                    ? `${proposal.ai_gateway_usage_tracking_monthly_payload_gb ?? 0} GB/mo`
+                                    : `${proposal.ai_gateway_usage_tracking_requests_millions ?? 0}M requests/mo · ${proposal.ai_gateway_usage_tracking_avg_request_payload_kb ?? 0}/${proposal.ai_gateway_usage_tracking_avg_response_payload_kb ?? 0} KB`}
+                                </span>
+                              </>
+                            )}
+                            {proposal.workload_type === 'AGENT_EVALUATION' && (proposal.agent_evaluation_labels_enabled ?? true) && (
+                              <>
+                                <span className="px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded">
+                                  Evaluation Labels
+                                </span>
+                                <span>
+                                  {proposal.agent_evaluation_input_tokens_millions ?? 1}M input · {proposal.agent_evaluation_output_tokens_millions ?? 1}M output tokens/mo
+                                </span>
+                              </>
+                            )}
+                            {proposal.agent_evaluation_synthetic_data_enabled && (
+                              <>
+                                <span className="px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded">
+                                  Synthetic Data
+                                </span>
+                                <span>{(proposal.agent_evaluation_synthetic_questions ?? 0).toLocaleString()} questions/mo</span>
+                              </>
+                            )}
+                            {proposal.workload_type === 'AI_RUNTIME' && (
+                              <>
+                                <span className="px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded">
+                                  AI Runtime
+                                </span>
+                                <span>{proposal.ai_runtime_accelerator_type ?? 'GPU_1xA10'}</span>
+                                <span>
+                                  {proposal.hours_per_month != null
+                                    ? `${proposal.hours_per_month} node-hours/mo`
+                                    : `${proposal.runs_per_day ?? 1} runs/day · ${proposal.avg_runtime_minutes ?? 60} min/run`}
+                                </span>
+                              </>
+                            )}
+                            {proposal.workload_type === 'GENERAL_STORAGE' && (
+                              <>
+                                <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded">
+                                  Default Storage
+                                </span>
+                                <span>
+                                  {(proposal.general_storage_quantity ?? 100).toLocaleString()}{' '}
+                                  {(proposal.general_storage_unit ?? 'gb').toUpperCase()}/mo
+                                </span>
+                                <span>
+                                  {(proposal.general_storage_tier1_operations_thousands ?? 0).toLocaleString()}K Tier 1
+                                </span>
+                                <span>
+                                  {(proposal.general_storage_tier2_operations_thousands ?? 0).toLocaleString()}K Tier 2
+                                </span>
+                              </>
+                            )}
+                            {proposal.workload_type === 'ZEROBUS' && (
+                              <>
+                                <span className="px-1.5 py-0.5 bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 rounded">
+                                  {proposal.zerobus_mode === 'otel'
+                                    ? 'Zerobus OTel'
+                                    : 'Zerobus'}
+                                </span>
+                                <span>
+                                  {(proposal.zerobus_monthly_ingested_gb ?? 100).toLocaleString()} GB/mo
+                                </span>
+                                <span>
+                                  {proposal.zerobus_mode === 'otel'
+                                    ? '0.222 DBU/GB'
+                                    : '0.143 DBU/GB'}
+                                </span>
+                              </>
                             )}
                           </div>
                         </div>

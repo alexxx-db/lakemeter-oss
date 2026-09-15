@@ -63,7 +63,7 @@ Live integration tests that verify the SP OAuth flow end-to-end. These tests are
 | Full SP OAuth flow | Token generation -> DB connection -> query execution |
 | Token reuse | Same token works across multiple connections |
 | App health endpoint | `GET /health` returns 200 with `status: healthy` |
-| Pricing data access | All 14 workload types readable, names match expected set |
+| Pricing data access | Installed reference workload types are readable and match the expected set for the release |
 | DBU rates populated | DBU rate values are present and > 0 |
 
 ### `test_cross_feature_consistency.py` (41 tests)
@@ -79,7 +79,7 @@ Data consistency checks across all pricing files:
 | FMAPI (Databricks) | 4 | Non-empty, correct key format |
 | FMAPI (Proprietary) | 4 | Non-empty, correct key format |
 | Model Serving | 4 | Non-empty, correct key format |
-| Vector Search | 4 | Non-empty, correct key format |
+| AI Search | 4 | Non-empty, correct key format |
 | Manifest integrity | 7 | File count = 9, total > 4000, all listed files exist |
 
 ## Running the Tests

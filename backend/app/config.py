@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     
     # Override with full DATABASE_URL if provided
     database_url: Optional[str] = None
-    
+
     # Auth is Databricks Apps SSO via X-Forwarded-* identity headers.
     # No application-issued JWTs are used.
 

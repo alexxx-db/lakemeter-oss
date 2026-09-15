@@ -134,7 +134,7 @@ class TestFMAPIDataConsistency:
 
 
 class TestServingDataConsistency:
-    """Model Serving and Vector Search data consistency."""
+    """Model Serving and AI Search data consistency."""
 
     @pytest.fixture(scope="class")
     def ms_rates(self):
@@ -173,9 +173,11 @@ class TestManifestConsistency:
         assert len(files) == 9, f"Expected 9 files in manifest, got {len(files)}"
 
     def test_manifest_total_matches_sum(self, manifest):
-        """Total entries should be consistent (> 4000 based on current data)."""
-        total = manifest.get("total_entries", 0)
-        assert total > 4000, f"Total entries {total} seems low"
+        expected_total = sum(
+            len(json.loads((PRICING_DIR / filename).read_text()))
+            for filename in manifest["files"]
+        )
+        assert manifest.get("total_entries") == expected_total
 
     def test_all_manifest_files_exist(self, manifest):
         files = manifest.get("files", [])

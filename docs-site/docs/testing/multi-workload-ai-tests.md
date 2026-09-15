@@ -85,7 +85,7 @@ Sprint 10 also fixed a critical infrastructure bug: the default `pytest` run was
 | `test_ai_conftest_has_fmapi_skip` | FMAPI skip fixture exists |
 | `test_default_pytest_collects_no_ai_tests` | Default run excludes AI tests |
 
-:::warning Important
+:::warning[Important]
 After Sprint 10, the default `pytest` command excludes AI tests. To run AI tests explicitly:
 ```bash
 pytest tests/ai_assistant/ --no-header --timeout=300
@@ -147,7 +147,7 @@ tests/sprint_10/test_regression_s10.py::TestBugS10005TestSuiteTimeout::test_defa
 
 ## Known Limitations
 
-- DLT and Vector Search SKUs still use fallback pricing (real pricing data gap)
+- DLT and AI Search SKUs still use fallback pricing (real pricing data gap)
 - AI assistant tests remain non-deterministic (LLM responses vary between runs)
 - FMAPI reachability check uses TCP socket to port 443 (5s timeout) — doesn't verify authentication
 - The AI may propose workloads in a different order than expected — tests check the set of types, not order

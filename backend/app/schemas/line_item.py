@@ -1,6 +1,8 @@
 """Line Item schemas."""
+from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal
+import math
 from typing import Optional, Dict, Any, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -13,6 +15,60 @@ AI_FUNCTION_CONFIG_FIELDS = (
     "ai_classify_document_type",
     "ai_classify_num_docs",
     "ai_classify_dbus_per_thousand",
+)
+
+AI_GATEWAY_CONFIG_FIELDS = (
+    "ai_gateway_inference_tables_enabled",
+    "ai_gateway_inference_tables_input_method",
+    "ai_gateway_inference_tables_requests_millions",
+    "ai_gateway_inference_tables_avg_request_payload_kb",
+    "ai_gateway_inference_tables_avg_response_payload_kb",
+    "ai_gateway_inference_tables_monthly_payload_gb",
+    "ai_gateway_usage_tracking_enabled",
+    "ai_gateway_usage_tracking_input_method",
+    "ai_gateway_usage_tracking_requests_millions",
+    "ai_gateway_usage_tracking_avg_request_payload_kb",
+    "ai_gateway_usage_tracking_avg_response_payload_kb",
+    "ai_gateway_usage_tracking_monthly_payload_gb",
+)
+
+AGENT_EVALUATION_CONFIG_FIELDS = (
+    "agent_evaluation_labels_enabled",
+    "agent_evaluation_input_tokens_millions",
+    "agent_evaluation_output_tokens_millions",
+    "agent_evaluation_synthetic_data_enabled",
+    "agent_evaluation_synthetic_questions",
+)
+
+AI_SEARCH_CONFIG_FIELDS = (
+    "ai_search_reranker_enabled",
+    "ai_search_reranker_requests_thousands",
+)
+
+AI_RUNTIME_CONFIG_FIELDS = (
+    "ai_runtime_accelerator_type",
+)
+
+GENERAL_STORAGE_CONFIG_FIELDS = (
+    "general_storage_quantity",
+    "general_storage_unit",
+    "general_storage_tier1_operations_thousands",
+    "general_storage_tier2_operations_thousands",
+)
+
+ZEROBUS_CONFIG_FIELDS = (
+    "zerobus_mode",
+    "zerobus_monthly_ingested_gb",
+)
+
+JSON_BACKED_CONFIG_FIELDS = (
+    *AI_FUNCTION_CONFIG_FIELDS,
+    *AI_GATEWAY_CONFIG_FIELDS,
+    *AGENT_EVALUATION_CONFIG_FIELDS,
+    *AI_SEARCH_CONFIG_FIELDS,
+    *AI_RUNTIME_CONFIG_FIELDS,
+    *GENERAL_STORAGE_CONFIG_FIELDS,
+    *ZEROBUS_CONFIG_FIELDS,
 )
 
 
@@ -45,13 +101,13 @@ def map_ai_parse_api_fields(
     data.pop("shutterstock_images", None)
 
     ai_fields_provided = any(
-        field in provided_fields for field in AI_FUNCTION_CONFIG_FIELDS
+        field in provided_fields for field in JSON_BACKED_CONFIG_FIELDS
     )
     if ai_fields_provided:
-        config = dict(existing_workload_config or {})
+        config = deepcopy(existing_workload_config or {})
         if "workload_config" in provided_fields:
-            config = dict(data.get("workload_config") or {})
-        for field in AI_FUNCTION_CONFIG_FIELDS:
+            config = deepcopy(data.get("workload_config") or {})
+        for field in JSON_BACKED_CONFIG_FIELDS:
             if field not in provided_fields:
                 continue
             value = data.get(field)
@@ -68,19 +124,31 @@ def map_ai_parse_api_fields(
             if "workload_config" in data
             else existing_workload_config
         )
-        config = dict(config_source or {})
+        config = deepcopy(config_source or {})
         fields_to_remove = []
         if workload_type != "AI_EXTRACT":
             fields_to_remove.extend(AI_FUNCTION_CONFIG_FIELDS[:3])
         if workload_type != "AI_CLASSIFY":
             fields_to_remove.extend(AI_FUNCTION_CONFIG_FIELDS[3:])
+        if workload_type != "AI_GATEWAY":
+            fields_to_remove.extend(AI_GATEWAY_CONFIG_FIELDS)
+        if workload_type != "AGENT_EVALUATION":
+            fields_to_remove.extend(AGENT_EVALUATION_CONFIG_FIELDS)
+        if workload_type != "VECTOR_SEARCH":
+            fields_to_remove.extend(AI_SEARCH_CONFIG_FIELDS)
+        if workload_type != "AI_RUNTIME":
+            fields_to_remove.extend(AI_RUNTIME_CONFIG_FIELDS)
+        if workload_type != "GENERAL_STORAGE":
+            fields_to_remove.extend(GENERAL_STORAGE_CONFIG_FIELDS)
+        if workload_type != "ZEROBUS":
+            fields_to_remove.extend(ZEROBUS_CONFIG_FIELDS)
         original_config = dict(config)
         for field in fields_to_remove:
             config.pop(field, None)
         if config != original_config:
             data["workload_config"] = config or None
 
-    for field in AI_FUNCTION_CONFIG_FIELDS:
+    for field in JSON_BACKED_CONFIG_FIELDS:
         data.pop(field, None)
 
     return data
@@ -142,6 +210,278 @@ def validate_ai_function_workload_config(
         )
 
 
+def validate_ai_gateway_workload_config(
+    workload_type: Optional[str],
+    workload_config: Optional[Dict[str, Any]],
+) -> None:
+    """Validate JSON-backed AI Gateway configuration."""
+    if (workload_type or "").upper() != "AI_GATEWAY":
+        return
+
+    config = workload_config or {}
+    components = ("inference_tables", "usage_tracking")
+    numeric_suffixes = (
+        "requests_millions",
+        "avg_request_payload_kb",
+        "avg_response_payload_kb",
+        "monthly_payload_gb",
+    )
+    numeric_fields = tuple(
+        f"ai_gateway_{component}_{suffix}"
+        for component in components
+        for suffix in numeric_suffixes
+    )
+    for field in numeric_fields:
+        value = config.get(field)
+        if value is None:
+            continue
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field} must be a number") from exc
+        if not math.isfinite(numeric_value):
+            raise ValueError(f"{field} must be finite")
+        if numeric_value < 0:
+            raise ValueError(f"{field} must be greater than or equal to 0")
+
+    feature_fields = (
+        "ai_gateway_inference_tables_enabled",
+        "ai_gateway_usage_tracking_enabled",
+    )
+    for field in feature_fields:
+        value = config.get(field)
+        if value is not None and not isinstance(value, bool):
+            raise ValueError(f"{field} must be a boolean")
+    if not any(config.get(field) is True for field in feature_fields):
+        raise ValueError(
+            "At least one paid AI Gateway feature must be enabled: "
+            "inference tables or usage tracking"
+        )
+
+    for component in components:
+        enabled_field = f"ai_gateway_{component}_enabled"
+        if config.get(enabled_field) is not True:
+            continue
+        input_method_field = f"ai_gateway_{component}_input_method"
+        input_method = config.get(input_method_field)
+        if input_method not in {"requests", "payload_gb"}:
+            raise ValueError(
+                f"{input_method_field} must be requests or payload_gb"
+            )
+        required_suffixes = (
+            numeric_suffixes[:3]
+            if input_method == "requests"
+            else ("monthly_payload_gb",)
+        )
+        missing_fields = [
+            f"ai_gateway_{component}_{suffix}"
+            for suffix in required_suffixes
+            if config.get(f"ai_gateway_{component}_{suffix}") is None
+        ]
+        if missing_fields:
+            raise ValueError(
+                f"{', '.join(missing_fields)} required for enabled "
+                f"{component}"
+            )
+
+
+def validate_agent_evaluation_workload_config(
+    workload_type: Optional[str],
+    workload_config: Optional[Dict[str, Any]],
+) -> None:
+    """Validate JSON-backed Agent Evaluation configuration."""
+    if (workload_type or "").upper() != "AGENT_EVALUATION":
+        return
+
+    config = workload_config or {}
+    labels_enabled = config.get("agent_evaluation_labels_enabled")
+    synthetic_enabled = config.get(
+        "agent_evaluation_synthetic_data_enabled"
+    )
+    for field, value in (
+        ("agent_evaluation_labels_enabled", labels_enabled),
+        ("agent_evaluation_synthetic_data_enabled", synthetic_enabled),
+    ):
+        if not isinstance(value, bool):
+            raise ValueError(f"{field} must be a boolean")
+    if not (labels_enabled or synthetic_enabled):
+        raise ValueError(
+            "At least one Agent Evaluation feature must be enabled: "
+            "labels or synthetic data"
+        )
+
+    numeric_fields = (
+        "agent_evaluation_input_tokens_millions",
+        "agent_evaluation_output_tokens_millions",
+        "agent_evaluation_synthetic_questions",
+    )
+    for field in numeric_fields:
+        value = config.get(field)
+        if value is None:
+            continue
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field} must be a number") from exc
+        if not math.isfinite(numeric_value):
+            raise ValueError(f"{field} must be finite")
+        if numeric_value < 0:
+            raise ValueError(f"{field} must be greater than or equal to 0")
+
+    if labels_enabled:
+        missing = [
+            field
+            for field in numeric_fields[:2]
+            if config.get(field) is None
+        ]
+        if missing:
+            raise ValueError(
+                f"{', '.join(missing)} required when labels are enabled"
+            )
+    questions = config.get("agent_evaluation_synthetic_questions")
+    if synthetic_enabled and questions is None:
+        raise ValueError(
+            "agent_evaluation_synthetic_questions is required when "
+            "synthetic data is enabled"
+        )
+    if questions is not None and (
+        isinstance(questions, bool)
+        or not float(questions).is_integer()
+    ):
+        raise ValueError(
+            "agent_evaluation_synthetic_questions must be an integer"
+        )
+
+
+def validate_ai_search_workload_config(
+    workload_type: Optional[str],
+    workload_config: Optional[Dict[str, Any]],
+) -> None:
+    """Validate JSON-backed AI Search reranker configuration."""
+    if (workload_type or "").upper() != "VECTOR_SEARCH":
+        return
+
+    config = workload_config or {}
+    enabled = config.get("ai_search_reranker_enabled")
+    if enabled is not None and not isinstance(enabled, bool):
+        raise ValueError("ai_search_reranker_enabled must be a boolean")
+
+    requests = config.get("ai_search_reranker_requests_thousands")
+    if requests is None:
+        if enabled:
+            raise ValueError(
+                "ai_search_reranker_requests_thousands is required when "
+                "AI Search Reranker is enabled"
+            )
+        return
+    try:
+        requests_value = float(requests)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "ai_search_reranker_requests_thousands must be a number"
+        ) from exc
+    if not math.isfinite(requests_value):
+        raise ValueError(
+            "ai_search_reranker_requests_thousands must be finite"
+        )
+    if requests_value < 0:
+        raise ValueError(
+            "ai_search_reranker_requests_thousands must be greater than "
+            "or equal to 0"
+        )
+
+
+def validate_ai_runtime_workload_config(
+    workload_type: Optional[str],
+    workload_config: Optional[Dict[str, Any]],
+) -> None:
+    """Validate the JSON-backed AI Runtime accelerator."""
+    if (workload_type or "").upper() != "AI_RUNTIME":
+        return
+    accelerator = (workload_config or {}).get(
+        "ai_runtime_accelerator_type"
+    )
+    allowed = {
+        "GPU_1xA10",
+        "GPU_1xH100",
+        "GPU_8xH100",
+    }
+    if accelerator not in allowed:
+        raise ValueError(
+            "ai_runtime_accelerator_type must be one of: "
+            f"{', '.join(sorted(allowed))}"
+        )
+
+
+def validate_general_storage_workload_config(
+    workload_type: Optional[str],
+    workload_config: Optional[Dict[str, Any]],
+) -> None:
+    """Validate JSON-backed Databricks Default Storage usage."""
+    if (workload_type or "").upper() != "GENERAL_STORAGE":
+        return
+    from app.services.general_storage_pricing import (
+        calculate_general_storage_usage,
+    )
+
+    config = workload_config or {}
+    if "general_storage_quantity" not in config:
+        raise ValueError("general_storage_quantity is required")
+    if "general_storage_unit" not in config:
+        raise ValueError("general_storage_unit is required")
+    calculate_general_storage_usage(
+        config["general_storage_quantity"],
+        config["general_storage_unit"],
+        "aws",
+        config.get("general_storage_tier1_operations_thousands", 0),
+        config.get("general_storage_tier2_operations_thousands", 0),
+    )
+
+
+def validate_zerobus_workload_config(
+    workload_type: Optional[str],
+    workload_config: Optional[Dict[str, Any]],
+) -> None:
+    """Validate JSON-backed Zerobus mode and monthly ingress volume."""
+    if (workload_type or "").upper() != "ZEROBUS":
+        return
+    from app.services.zerobus_pricing import calculate_zerobus_usage
+
+    config = workload_config or {}
+    if "zerobus_mode" not in config:
+        raise ValueError("zerobus_mode is required")
+    if "zerobus_monthly_ingested_gb" not in config:
+        raise ValueError("zerobus_monthly_ingested_gb is required")
+    calculate_zerobus_usage(
+        config["zerobus_monthly_ingested_gb"],
+        config["zerobus_mode"],
+    )
+
+
+def validate_compute_workload_config(
+    workload_type: Optional[str],
+    driver_node_type: Optional[str],
+    worker_node_type: Optional[str],
+    num_workers: Optional[int],
+) -> None:
+    """Validate node selections used to estimate compute workloads."""
+    if (workload_type or "").upper() not in {"JOBS", "ALL_PURPOSE", "DLT"}:
+        return
+
+    if not (driver_node_type or "").strip():
+        raise ValueError(
+            "driver_node_type is required for compute workloads"
+        )
+
+    worker_count = int(num_workers or 0)
+    if worker_count < 0:
+        raise ValueError("num_workers must be greater than or equal to 0")
+    if worker_count > 0 and not (worker_node_type or "").strip():
+        raise ValueError(
+            "worker_node_type is required when num_workers is greater than 0"
+        )
+
+
 class LineItemBase(BaseModel):
     """Base line item schema."""
     workload_name: str
@@ -157,7 +497,7 @@ class LineItemBase(BaseModel):
     photon_enabled: Optional[bool] = False
     driver_node_type: Optional[str] = None
     worker_node_type: Optional[str] = None
-    num_workers: Optional[int] = 1
+    num_workers: Optional[int] = Field(default=1, ge=0, le=100)
 
     # DLT Configuration
     dlt_edition: Optional[str] = None
@@ -169,16 +509,43 @@ class LineItemBase(BaseModel):
     dbsql_vm_pricing_tier: Optional[str] = None
     dbsql_vm_payment_option: Optional[str] = None
 
-    # Vector Search Configuration
+    # AI Search Configuration (internal workload type remains VECTOR_SEARCH)
     vector_search_mode: Optional[str] = None
     vector_capacity_millions: Optional[int] = None
     vector_search_storage_gb: Optional[int] = None
+    ai_search_reranker_enabled: Optional[bool] = None
+    ai_search_reranker_requests_thousands: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
 
     # Model Serving Configuration
     model_serving_gpu_type: Optional[str] = None
     model_serving_concurrency: Optional[int] = None
     model_serving_scale_out: Optional[str] = None
     model_servings_number_endpoints: Optional[int] = None
+
+    # AI Runtime Configuration (stored in workload_config)
+    ai_runtime_accelerator_type: Optional[
+        Literal["GPU_1xA10", "GPU_1xH100", "GPU_8xH100"]
+    ] = None
+
+    # Databricks Default Storage (stored in workload_config)
+    general_storage_quantity: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    general_storage_unit: Optional[Literal["gb", "tb"]] = None
+    general_storage_tier1_operations_thousands: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    general_storage_tier2_operations_thousands: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+
+    # Zerobus Ingest Configuration (stored in workload_config)
+    zerobus_mode: Optional[Literal["standard", "otel"]] = None
+    zerobus_monthly_ingested_gb: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
 
     # Foundation Model API Configuration (Proprietary)
     fmapi_provider: Optional[str] = None
@@ -191,7 +558,7 @@ class LineItemBase(BaseModel):
     # Databricks Apps Configuration
     databricks_apps_size: Optional[str] = None
     databricks_apps_hours_per_month: Optional[float] = None
-    databricks_apps_num_apps: Optional[int] = None
+    databricks_apps_num_apps: Optional[int] = Field(default=None, ge=1)
 
     # AI Parse Configuration
     ai_parse_calculation_method: Optional[str] = None
@@ -229,6 +596,61 @@ class LineItemBase(BaseModel):
     ai_classify_dbus_per_thousand: Optional[float] = Field(
         default=None,
         gt=0,
+    )
+
+    # AI Gateway Configuration (stored in workload_config)
+    ai_gateway_inference_tables_enabled: Optional[bool] = None
+    ai_gateway_inference_tables_input_method: Optional[
+        Literal["requests", "payload_gb"]
+    ] = None
+    ai_gateway_inference_tables_requests_millions: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_inference_tables_avg_request_payload_kb: Optional[
+        float
+    ] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_inference_tables_avg_response_payload_kb: Optional[
+        float
+    ] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_inference_tables_monthly_payload_gb: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_usage_tracking_enabled: Optional[bool] = None
+    ai_gateway_usage_tracking_input_method: Optional[
+        Literal["requests", "payload_gb"]
+    ] = None
+    ai_gateway_usage_tracking_requests_millions: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_usage_tracking_avg_request_payload_kb: Optional[
+        float
+    ] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_usage_tracking_avg_response_payload_kb: Optional[
+        float
+    ] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_usage_tracking_monthly_payload_gb: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+
+    # Agent Evaluation Configuration (stored in workload_config)
+    agent_evaluation_labels_enabled: Optional[bool] = None
+    agent_evaluation_input_tokens_millions: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    agent_evaluation_output_tokens_millions: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    agent_evaluation_synthetic_data_enabled: Optional[bool] = None
+    agent_evaluation_synthetic_questions: Optional[int] = Field(
+        default=None, ge=0
     )
 
     # Databricks Support Configuration
@@ -296,7 +718,7 @@ class LineItemUpdate(BaseModel):
     photon_enabled: Optional[bool] = None
     driver_node_type: Optional[str] = None
     worker_node_type: Optional[str] = None
-    num_workers: Optional[int] = None
+    num_workers: Optional[int] = Field(default=None, ge=0, le=100)
 
     # DLT Configuration
     dlt_edition: Optional[str] = None
@@ -308,16 +730,43 @@ class LineItemUpdate(BaseModel):
     dbsql_vm_pricing_tier: Optional[str] = None
     dbsql_vm_payment_option: Optional[str] = None
 
-    # Vector Search Configuration
+    # AI Search Configuration (internal workload type remains VECTOR_SEARCH)
     vector_search_mode: Optional[str] = None
     vector_capacity_millions: Optional[int] = None
     vector_search_storage_gb: Optional[int] = None
+    ai_search_reranker_enabled: Optional[bool] = None
+    ai_search_reranker_requests_thousands: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
 
     # Model Serving Configuration
     model_serving_gpu_type: Optional[str] = None
     model_serving_concurrency: Optional[int] = None
     model_serving_scale_out: Optional[str] = None
     model_servings_number_endpoints: Optional[int] = None
+
+    # AI Runtime Configuration (stored in workload_config)
+    ai_runtime_accelerator_type: Optional[
+        Literal["GPU_1xA10", "GPU_1xH100", "GPU_8xH100"]
+    ] = None
+
+    # Databricks Default Storage (stored in workload_config)
+    general_storage_quantity: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    general_storage_unit: Optional[Literal["gb", "tb"]] = None
+    general_storage_tier1_operations_thousands: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    general_storage_tier2_operations_thousands: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+
+    # Zerobus Ingest Configuration (stored in workload_config)
+    zerobus_mode: Optional[Literal["standard", "otel"]] = None
+    zerobus_monthly_ingested_gb: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
 
     # Foundation Model API Configuration (Proprietary)
     fmapi_provider: Optional[str] = None
@@ -330,7 +779,7 @@ class LineItemUpdate(BaseModel):
     # Databricks Apps Configuration
     databricks_apps_size: Optional[str] = None
     databricks_apps_hours_per_month: Optional[float] = None
-    databricks_apps_num_apps: Optional[int] = None
+    databricks_apps_num_apps: Optional[int] = Field(default=None, ge=1)
 
     # AI Parse Configuration
     ai_parse_calculation_method: Optional[str] = None
@@ -368,6 +817,61 @@ class LineItemUpdate(BaseModel):
     ai_classify_dbus_per_thousand: Optional[float] = Field(
         default=None,
         gt=0,
+    )
+
+    # AI Gateway Configuration (stored in workload_config)
+    ai_gateway_inference_tables_enabled: Optional[bool] = None
+    ai_gateway_inference_tables_input_method: Optional[
+        Literal["requests", "payload_gb"]
+    ] = None
+    ai_gateway_inference_tables_requests_millions: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_inference_tables_avg_request_payload_kb: Optional[
+        float
+    ] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_inference_tables_avg_response_payload_kb: Optional[
+        float
+    ] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_inference_tables_monthly_payload_gb: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_usage_tracking_enabled: Optional[bool] = None
+    ai_gateway_usage_tracking_input_method: Optional[
+        Literal["requests", "payload_gb"]
+    ] = None
+    ai_gateway_usage_tracking_requests_millions: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_usage_tracking_avg_request_payload_kb: Optional[
+        float
+    ] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_usage_tracking_avg_response_payload_kb: Optional[
+        float
+    ] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    ai_gateway_usage_tracking_monthly_payload_gb: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+
+    # Agent Evaluation Configuration (stored in workload_config)
+    agent_evaluation_labels_enabled: Optional[bool] = None
+    agent_evaluation_input_tokens_millions: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    agent_evaluation_output_tokens_millions: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    agent_evaluation_synthetic_data_enabled: Optional[bool] = None
+    agent_evaluation_synthetic_questions: Optional[int] = Field(
+        default=None, ge=0
     )
 
     # Databricks Support Configuration
@@ -450,7 +954,7 @@ class LineItemResponse(LineItemBase):
             )
 
         workload_config = data.get("workload_config") or {}
-        for field in AI_FUNCTION_CONFIG_FIELDS:
+        for field in JSON_BACKED_CONFIG_FIELDS:
             if data.get(field) is None:
                 data[field] = workload_config.get(field)
 

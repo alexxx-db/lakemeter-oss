@@ -29,6 +29,7 @@ import type {
   FMAPIDatabricksModel,
   FMAPIProprietaryModel
 } from '../api/client'
+import { calculateHoursPerMonth } from '../utils/costCalculation'
 import { 
   loadPricingBundle, 
   createEmptyBundle,
@@ -63,9 +64,20 @@ function normalizeVMPaymentOption(
 // =============================================================================
 // LOCAL STORAGE CACHE UTILITIES
 // =============================================================================
-const CACHE_VERSION = 'v9'  // Bumped - updated AI Function presets and availability
+const CACHE_VERSION = 'v14'  // Bumped - refresh Foundation Model catalogs
 const CACHE_KEY = `lakemeter_reference_data_${CACHE_VERSION}`
 const CACHE_TTL = 4 * 60 * 60 * 1000 // 4 hours in milliseconds (reduced from 24h)
+
+function canonicalizeWorkloadType(workloadType: WorkloadType): WorkloadType {
+  if (workloadType.workload_type !== 'VECTOR_SEARCH') {
+    return workloadType
+  }
+  return {
+    ...workloadType,
+    display_name: 'AI Search',
+    description: 'AI Search endpoints and optional reranking',
+  }
+}
 
 interface CachedReferenceData {
   workloadTypes: WorkloadType[]
@@ -130,6 +142,7 @@ function getCachedReferenceData(): CachedReferenceData | null {
       return null
     }
     
+    data.workloadTypes = data.workloadTypes.map(canonicalizeWorkloadType)
     return data
   } catch (e) {
     localStorage.removeItem(CACHE_KEY)
@@ -259,7 +272,7 @@ interface Store {
   serverlessModes: ServerlessMode[]
   photonMultipliers: PhotonMultiplier[]
   
-  // Vector Search & FMAPI Pricing (for local calculations)
+  // AI Search & FMAPI Pricing (for local calculations)
   vectorSearchModes: VectorSearchMode[]  // modes with dbu_per_hour and input_divisor
   fmapiDatabricksRates: Record<string, FMAPIDatabricksModel>  // "model:rate_type" -> rate data
   fmapiProprietaryRates: Record<string, FMAPIProprietaryModel>  // "provider:model:rate_type" -> rate data
@@ -271,7 +284,7 @@ interface Store {
   
   // Cost Calculations (NEW)
   workloadCosts: Record<string, CostCalculationResponse>  // Map of line_item_id -> cost (API results)
-  localCalculatedCosts: Record<string, { total: number; dbu: number; vm: number; dbus: number }>  // Map of line_item_id -> local calculation
+  localCalculatedCosts: Record<string, { total: number; dbu: number; dsu: number; vm: number; dbus: number; dsus: number }>  // Map of line_item_id -> local calculation
   isCalculatingCost: boolean
   calculatingCostIds: Set<string>  // Track which individual line items are calculating
   
@@ -326,7 +339,7 @@ interface Store {
   fetchServerlessModes: () => Promise<void>
   fetchPhotonMultipliers: (cloud: string) => Promise<void>
   
-  // Actions - Vector Search & FMAPI Pricing (for local calculations)
+  // Actions - AI Search & FMAPI Pricing (for local calculations)
   fetchVectorSearchModes: (cloud: string) => Promise<void>
   getVectorSearchRate: (mode: string) => { dbu_per_hour: number; input_divisor: number } | null
   fetchFMAPIDatabricksRate: (model: string, cloud: string, rate_type: string) => Promise<FMAPIDatabricksModel | null>
@@ -341,7 +354,7 @@ interface Store {
   clearWorkloadCosts: () => void
   clearSingleWorkloadCost: (lineItemId: string) => void
   markItemCalculating: (lineItemId: string) => void
-  setLocalCalculatedCosts: (costs: Record<string, { total: number; dbu: number; vm: number; dbus: number }>) => void
+  setLocalCalculatedCosts: (costs: Record<string, { total: number; dbu: number; dsu: number; vm: number; dbus: number; dsus: number }>) => void
   isItemCalculating: (lineItemId: string) => boolean
   
   // Actions - Clone
@@ -370,10 +383,10 @@ export const useStore = create<Store>((set, get) => ({
   // Note: display_name uses new Lakeflow branding, but workload_type remains unchanged for backend compatibility
   workloadTypes: [
     { workload_type: 'JOBS', display_name: 'Lakeflow Jobs', description: 'Batch job workloads', sku_product_type_standard: 'JOBS_COMPUTE', sku_product_type_photon: 'JOBS_COMPUTE_(PHOTON)', sku_product_type_serverless: 'JOBS_SERVERLESS_COMPUTE', show_compute_config: true, show_serverless_toggle: true, show_photon_toggle: true, show_usage_runs: true },
-    { workload_type: 'ALL_PURPOSE', display_name: 'All Purpose Compute', description: 'Interactive compute', sku_product_type_standard: 'ALL_PURPOSE_COMPUTE', sku_product_type_photon: 'ALL_PURPOSE_COMPUTE_(PHOTON)', sku_product_type_serverless: 'INTERACTIVE_SERVERLESS_COMPUTE', show_compute_config: true, show_serverless_toggle: true, show_photon_toggle: true, show_usage_runs: true },
+    { workload_type: 'ALL_PURPOSE', display_name: 'All Purpose Compute', description: 'Interactive compute', sku_product_type_standard: 'ALL_PURPOSE_COMPUTE', sku_product_type_photon: 'ALL_PURPOSE_COMPUTE_(PHOTON)', sku_product_type_serverless: 'ALL_PURPOSE_SERVERLESS_COMPUTE', show_compute_config: true, show_serverless_toggle: true, show_photon_toggle: true, show_usage_runs: true },
     { workload_type: 'DLT', display_name: 'Lakeflow Spark Declarative Pipelines', description: 'Spark Declarative Pipelines', sku_product_type_standard: 'DLT_CORE_COMPUTE', sku_product_type_photon: 'DLT_CORE_COMPUTE_(PHOTON)', sku_product_type_serverless: 'DELTA_LIVE_TABLES_SERVERLESS', show_compute_config: true, show_serverless_toggle: true, show_photon_toggle: true, show_dlt_config: true, show_usage_runs: true },
     { workload_type: 'DBSQL', display_name: 'Databricks SQL', description: 'SQL warehouse workloads', sku_product_type_standard: 'SQL_COMPUTE', sku_product_type_photon: 'SQL_PRO_COMPUTE', sku_product_type_serverless: 'SERVERLESS_SQL_COMPUTE', show_dbsql_config: true, show_usage_runs: true },
-    { workload_type: 'VECTOR_SEARCH', display_name: 'Vector Search', description: 'Vector search endpoints', sku_product_type_standard: 'VECTOR_SEARCH_ENDPOINT', show_vector_search_mode: true },
+    { workload_type: 'VECTOR_SEARCH', display_name: 'AI Search', description: 'AI Search endpoints and optional reranking', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE', show_vector_search_mode: true },
     { workload_type: 'MODEL_SERVING', display_name: 'Model Serving', description: 'Real-time ML inference', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE', show_model_serving_config: true },
     { workload_type: 'FMAPI_DATABRICKS', display_name: 'Foundation Models (Databricks)', description: 'Databricks foundation model APIs', sku_product_type_standard: 'FOUNDATION_MODEL_TRAINING', show_fmapi_config: true },
     { workload_type: 'FMAPI_PROPRIETARY', display_name: 'Foundation Models (Proprietary)', description: 'External foundation model APIs', sku_product_type_standard: 'FOUNDATION_MODEL_TRAINING', show_fmapi_config: true },
@@ -382,6 +395,11 @@ export const useStore = create<Store>((set, get) => ({
     { workload_type: 'AI_PARSE', display_name: 'AI Parse (Document AI)', description: 'Document parsing and extraction', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE' },
     { workload_type: 'AI_EXTRACT', display_name: 'AI Extract', description: 'Structured extraction from raw text or parsed document input', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE' },
     { workload_type: 'AI_CLASSIFY', display_name: 'AI Classify', description: 'Classification of raw text or parsed document input', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE' },
+    { workload_type: 'AI_GATEWAY', display_name: 'Unity AI Gateway', description: 'Additive inference tables and usage tracking', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE' },
+    { workload_type: 'AGENT_EVALUATION', display_name: 'Agent Evaluation', description: 'Evaluation labels and synthetic evaluation data', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE' },
+    { workload_type: 'AI_RUNTIME', display_name: 'AI Runtime', description: 'Serverless GPU model training', sku_product_type_standard: 'MODEL_TRAINING' },
+    { workload_type: 'GENERAL_STORAGE', display_name: 'Databricks Default Storage', description: 'Managed storage for Unity Catalog data and workspace assets', sku_product_type_standard: 'DATABRICKS_STORAGE' },
+    { workload_type: 'ZEROBUS', display_name: 'Zerobus Ingest', description: 'Direct standard or OpenTelemetry ingestion into Delta tables', sku_product_type_standard: 'JOBS_SERVERLESS_COMPUTE' },
     { workload_type: 'SHUTTERSTOCK_IMAGEAI', display_name: 'Shutterstock ImageAI', description: 'AI image generation', sku_product_type_standard: 'SERVERLESS_REAL_TIME_INFERENCE' },
   ] as WorkloadType[],
   // Use static data as defaults - instant display, no waiting for API
@@ -418,7 +436,7 @@ export const useStore = create<Store>((set, get) => ({
   serverlessModes: STATIC_SERVERLESS_MODES,
   photonMultipliers: [],
   
-  // Vector Search & FMAPI Pricing (for local calculations)
+  // AI Search & FMAPI Pricing (for local calculations)
   vectorSearchModes: [],
   fmapiDatabricksRates: {},
   fmapiProprietaryRates: {},
@@ -800,9 +818,14 @@ export const useStore = create<Store>((set, get) => ({
       })
       
       // Merge API workload types with fallback (ensure new types not yet in DB still appear)
-      const apiTypeSet = new Set((workloadTypes as WorkloadType[]).map((wt: WorkloadType) => wt.workload_type))
+      const canonicalWorkloadTypes = (
+        workloadTypes as WorkloadType[]
+      ).map(canonicalizeWorkloadType)
+      const apiTypeSet = new Set(
+        canonicalWorkloadTypes.map((wt: WorkloadType) => wt.workload_type)
+      )
       const mergedWorkloadTypes = [
-        ...(workloadTypes as WorkloadType[]),
+        ...canonicalWorkloadTypes,
         ...state.workloadTypes.filter((wt: WorkloadType) => !apiTypeSet.has(wt.workload_type)),
       ]
 
@@ -837,7 +860,7 @@ export const useStore = create<Store>((set, get) => ({
       
       // Save to localStorage cache (including all cloud regions)
       setCachedReferenceData({
-        workloadTypes,
+        workloadTypes: mergedWorkloadTypes,
         cloudProviders,
         dbsqlSizes,
         dltEditions,
@@ -1255,13 +1278,13 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   
-  // Vector Search & FMAPI Pricing Actions
+  // AI Search & FMAPI Pricing Actions
   fetchVectorSearchModes: async (cloud) => {
     try {
       const vectorSearchModes = await api.fetchVectorSearchModesWithPricing(cloud)
       set({ vectorSearchModes })
     } catch (error) {
-      console.error('Failed to fetch vector search modes:', error)
+      console.error('Failed to fetch AI Search modes:', error)
     }
   },
   
@@ -1460,7 +1483,10 @@ export const useStore = create<Store>((set, get) => ({
             ...baseParams,
             mode: lineItem.vector_search_mode || 'standard',
             vector_capacity_millions: lineItem.vector_capacity_millions || 1,
-            hours_per_month: lineItem.hours_per_month || 730
+            storage_gb: lineItem.vector_search_storage_gb || 0,
+            reranker_enabled: lineItem.ai_search_reranker_enabled || false,
+            reranker_requests_thousands: lineItem.ai_search_reranker_requests_thousands || 0,
+            hours_per_month: calculateHoursPerMonth(lineItem)
           })
           break
           
@@ -1470,7 +1496,7 @@ export const useStore = create<Store>((set, get) => ({
             gpu_type: lineItem.model_serving_gpu_type || 'cpu',
             scale_out: lineItem.model_serving_scale_out || 'small',
             ...(lineItem.model_serving_scale_out === 'custom' ? { custom_concurrency: lineItem.model_serving_concurrency || 4 } : {}),
-            hours_per_month: lineItem.hours_per_month || 730
+            hours_per_month: calculateHoursPerMonth(lineItem)
           })
           break
           
@@ -1478,6 +1504,7 @@ export const useStore = create<Store>((set, get) => ({
           result = await api.calculateFMAPIDatabricks({
             ...baseParams,
             model: lineItem.fmapi_model || 'llama-3-3-70b',
+            endpoint_type: lineItem.fmapi_endpoint_type || 'global',
             rate_type: lineItem.fmapi_rate_type || 'input_token',
             quantity: lineItem.fmapi_quantity || 1000000
           })
@@ -1507,7 +1534,7 @@ export const useStore = create<Store>((set, get) => ({
             scale_up_hours_per_month: lakebaseConfig.lakebase_scale_up_hours_per_month ?? 0,
             always_on_discount_pct: lakebaseConfig.lakebase_always_on_discount_pct ?? 25,
             num_nodes: lineItem.lakebase_ha_nodes || 1,
-            hours_per_month: lineItem.hours_per_month || 730,
+            hours_per_month: calculateHoursPerMonth(lineItem),
             storage_gb: lineItem.lakebase_storage_gb || 0,
             pitr_gb: lineItem.lakebase_pitr_gb || 0,
             snapshot_gb: lineItem.lakebase_snapshot_gb || 0,
@@ -1518,7 +1545,8 @@ export const useStore = create<Store>((set, get) => ({
           result = await api.calculateDatabricksApps({
             ...baseParams,
             size: lineItem.databricks_apps_size || 'medium',
-            hours_per_month: lineItem.hours_per_month || 730,
+            num_apps: lineItem.databricks_apps_num_apps ?? 1,
+            hours_per_month: calculateHoursPerMonth(lineItem),
           })
           break
 
@@ -1546,6 +1574,71 @@ export const useStore = create<Store>((set, get) => ({
             document_type: lineItem.ai_classify_document_type || 'short_text',
             num_docs: lineItem.ai_classify_num_docs || 0,
             dbus_per_thousand: lineItem.ai_classify_dbus_per_thousand || undefined,
+          })
+          break
+
+        case 'AI_GATEWAY':
+          result = await api.calculateAIGateway({
+            ...baseParams,
+            inference_tables_enabled: lineItem.ai_gateway_inference_tables_enabled ?? true,
+            inference_tables_input_method: lineItem.ai_gateway_inference_tables_input_method ?? 'requests',
+            inference_tables_requests_millions: lineItem.ai_gateway_inference_tables_requests_millions ?? 1,
+            inference_tables_avg_request_payload_kb: lineItem.ai_gateway_inference_tables_avg_request_payload_kb ?? 1,
+            inference_tables_avg_response_payload_kb: lineItem.ai_gateway_inference_tables_avg_response_payload_kb ?? 1,
+            inference_tables_monthly_payload_gb: lineItem.ai_gateway_inference_tables_monthly_payload_gb ?? 2,
+            usage_tracking_enabled: lineItem.ai_gateway_usage_tracking_enabled ?? true,
+            usage_tracking_input_method: lineItem.ai_gateway_usage_tracking_input_method ?? 'requests',
+            usage_tracking_requests_millions: lineItem.ai_gateway_usage_tracking_requests_millions ?? 1,
+            usage_tracking_avg_request_payload_kb: lineItem.ai_gateway_usage_tracking_avg_request_payload_kb ?? 1,
+            usage_tracking_avg_response_payload_kb: lineItem.ai_gateway_usage_tracking_avg_response_payload_kb ?? 1,
+            usage_tracking_monthly_payload_gb: lineItem.ai_gateway_usage_tracking_monthly_payload_gb ?? 2,
+          })
+          break
+
+        case 'AGENT_EVALUATION':
+          result = await api.calculateAgentEvaluation({
+            ...baseParams,
+            labels_enabled: lineItem.agent_evaluation_labels_enabled ?? true,
+            input_tokens_millions: lineItem.agent_evaluation_input_tokens_millions ?? 1,
+            output_tokens_millions: lineItem.agent_evaluation_output_tokens_millions ?? 1,
+            synthetic_data_enabled: lineItem.agent_evaluation_synthetic_data_enabled ?? false,
+            synthetic_questions: lineItem.agent_evaluation_synthetic_questions ?? 0,
+            discount_config: (lineItem.workload_config?.discount_config as Record<string, unknown> | undefined) ?? {},
+          })
+          break
+
+        case 'AI_RUNTIME':
+          result = await api.calculateAIRuntime({
+            ...baseParams,
+            accelerator_type: lineItem.ai_runtime_accelerator_type ?? 'GPU_1xA10',
+            runs_per_day: lineItem.runs_per_day ?? null,
+            avg_runtime_minutes: lineItem.avg_runtime_minutes ?? null,
+            days_per_month: lineItem.days_per_month ?? null,
+            hours_per_month: lineItem.hours_per_month ?? null,
+            discount_config: (lineItem.workload_config?.discount_config as Record<string, unknown> | undefined) ?? {},
+          })
+          break
+
+        case 'GENERAL_STORAGE':
+          result = await api.calculateGeneralStorage({
+            ...baseParams,
+            quantity: lineItem.general_storage_quantity ?? 0,
+            unit: lineItem.general_storage_unit ?? 'gb',
+            tier_1_operations_thousands:
+              lineItem.general_storage_tier1_operations_thousands ?? 0,
+            tier_2_operations_thousands:
+              lineItem.general_storage_tier2_operations_thousands ?? 0,
+            discount_config: (lineItem.workload_config?.discount_config as Record<string, unknown> | undefined) ?? {},
+          })
+          break
+
+        case 'ZEROBUS':
+          result = await api.calculateZerobus({
+            ...baseParams,
+            mode: lineItem.zerobus_mode ?? 'standard',
+            monthly_ingested_gb:
+              lineItem.zerobus_monthly_ingested_gb ?? 0,
+            discount_config: (lineItem.workload_config?.discount_config as Record<string, unknown> | undefined) ?? {},
           })
           break
 

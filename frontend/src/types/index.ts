@@ -1,4 +1,13 @@
 // API Types
+export type PlatformAddonType =
+  | 'ENHANCED_SECURITY_COMPLIANCE'
+  | 'MISSION_CRITICAL'
+
+export interface EstimateDiscountConfig {
+  platform_addons?: PlatformAddonType[]
+  [key: string]: unknown
+}
+
 export interface User {
   user_id: string
   email: string
@@ -22,6 +31,7 @@ export interface Estimate {
   version: number
   template_id?: string
   original_prompt?: string
+  discount_config?: EstimateDiscountConfig | null
   is_deleted: boolean
   created_at: string
   updated_at: string
@@ -82,18 +92,34 @@ export interface LineItem {
   dbsql_worker_pricing_tier?: string | null
   dbsql_worker_payment_option?: string | null
   
-  // Vector Search Configuration
+  // AI Search Configuration (internal workload type remains VECTOR_SEARCH)
   vector_search_mode?: string | null
   vector_capacity_millions?: number | null
   vector_search_storage_gb?: number | null
+  ai_search_reranker_enabled?: boolean | null
+  ai_search_reranker_requests_thousands?: number | null
   
   // Model Serving Configuration
   model_serving_gpu_type?: string | null
   model_serving_concurrency?: number | null
   model_serving_scale_out?: string | null
   
+  // AI Runtime Configuration
+  ai_runtime_accelerator_type?: 'GPU_1xA10' | 'GPU_1xH100' | 'GPU_8xH100' | null
+
+  // Databricks Default Storage Configuration
+  general_storage_quantity?: number | null
+  general_storage_unit?: 'gb' | 'tb' | null
+  general_storage_tier1_operations_thousands?: number | null
+  general_storage_tier2_operations_thousands?: number | null
+
+  // Zerobus Ingest Configuration
+  zerobus_mode?: 'standard' | 'otel' | null
+  zerobus_monthly_ingested_gb?: number | null
+
   // Databricks Apps Configuration
   databricks_apps_size?: string | null  // medium, large
+  databricks_apps_num_apps?: number | null
 
   // AI Parse Configuration
   ai_parse_mode?: string | null  // dbu, pages
@@ -108,6 +134,27 @@ export interface LineItem {
 
   // Shutterstock ImageAI Configuration
   shutterstock_images?: number | null
+
+  // Unity AI Gateway Configuration
+  ai_gateway_inference_tables_enabled?: boolean | null
+  ai_gateway_inference_tables_input_method?: 'requests' | 'payload_gb' | null
+  ai_gateway_inference_tables_requests_millions?: number | null
+  ai_gateway_inference_tables_avg_request_payload_kb?: number | null
+  ai_gateway_inference_tables_avg_response_payload_kb?: number | null
+  ai_gateway_inference_tables_monthly_payload_gb?: number | null
+  ai_gateway_usage_tracking_enabled?: boolean | null
+  ai_gateway_usage_tracking_input_method?: 'requests' | 'payload_gb' | null
+  ai_gateway_usage_tracking_requests_millions?: number | null
+  ai_gateway_usage_tracking_avg_request_payload_kb?: number | null
+  ai_gateway_usage_tracking_avg_response_payload_kb?: number | null
+  ai_gateway_usage_tracking_monthly_payload_gb?: number | null
+
+  // Agent Evaluation Configuration
+  agent_evaluation_labels_enabled?: boolean | null
+  agent_evaluation_input_tokens_millions?: number | null
+  agent_evaluation_output_tokens_millions?: number | null
+  agent_evaluation_synthetic_data_enabled?: boolean | null
+  agent_evaluation_synthetic_questions?: number | null
 
   // Lakeflow Connect Configuration
   lakeflow_connect_pipeline_mode?: string | null

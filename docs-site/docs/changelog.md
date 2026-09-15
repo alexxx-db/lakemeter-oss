@@ -12,31 +12,133 @@ Lakemeter follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## v0.2.1
+
+*2026-09-05*
+
+Application-only patch on `v0.2.0`: Marketplace packaging, Lakebase startup
+retry, and installation-doc cleanup. No Lakebase schema migration.
+
+### Marketplace and runtime
+
+- Made the Databricks App package Marketplace-ready
+  ([PR #65](https://github.com/databrickslabs/lakemeter-oss/pull/65))
+- Fixed Marketplace FMAPI pricing and version
+  ([PR #67](https://github.com/databrickslabs/lakemeter-oss/pull/67))
+- Retry Lakebase connection during app startup
+  ([PR #68](https://github.com/databrickslabs/lakemeter-oss/pull/68))
+- Documented Marketplace installation, security, and prerequisites
+  ([PR #69](https://github.com/databrickslabs/lakemeter-oss/pull/69),
+  [PR #70](https://github.com/databrickslabs/lakemeter-oss/pull/70),
+  [PR #71](https://github.com/databrickslabs/lakemeter-oss/pull/71),
+  [PR #72](https://github.com/databrickslabs/lakemeter-oss/pull/72),
+  [PR #73](https://github.com/databrickslabs/lakemeter-oss/pull/73))
+
+### Fork delta (alexxx-db)
+
+Production hardening and Live FinOps layered on Labs `v0.2.1`. Optional
+`pricing_metadata` and `ai_conversations` tables are created on next app start
+or installer run. No additional Lakebase schema migration.
+
+- Pricing freshness metadata, paused weekly refresh job, and UI “prices as of”
+- Durable AI conversation persistence bound to Apps SSO ownership
+- Locked down user APIs (no open list/create); Apps SSO identity headers only
+- Least-privilege Lakebase grants via `scripts/lakebase_grants.py`
+- Lakebase cold-start retries plus Postgres native login on create and reuse
+- Lakeflow Connect restored as a first-class workload
+- Live FinOps actuals plane (ADR-012): `etl/finops` gold job, `/actuals`, and
+  `/api/v1/finops/*` served from a SQL warehouse (not Lakebase)
+
+Upgrade: re-run grants notebooks if an older App SP still has `ALL PRIVILEGES`.
+
+---
+
 ## v0.2.0
 
-*2026-08-24*
+*2026-08-31*
 
-Minor release adding AI Extract / AI Classify calculators and production
-hardening. No Lakebase schema migration is required for existing installs;
-optional pricing-metadata and conversation tables are created on next app start.
+Data and application release expanding workload coverage, DSU accounting, estimate-level add-ons, and cross-surface calculation parity. The release includes reference-data updates but no Lakebase schema migration.
 
-### New capabilities
+### New workload coverage
 
-- AI Extract and AI Classify cost calculators and estimate persistence
-- Pricing freshness metadata + paused weekly refresh job + UI “prices as of”
-- Durable AI conversation persistence (`ai_conversations`)
+- Added AI Extract and AI Classify quantity-based estimates
+  ([PR #23](https://github.com/databrickslabs/lakemeter-oss/pull/23))
+- Added Unity AI Gateway inference-table and usage-tracking estimates
+  ([PR #28](https://github.com/databrickslabs/lakemeter-oss/pull/28))
+- Added Agent Evaluation labels, token, and synthetic-question estimates
+  ([PR #29](https://github.com/databrickslabs/lakemeter-oss/pull/29))
+- Added AI Runtime serverless GPU training for AWS and Azure
+  ([PR #32](https://github.com/databrickslabs/lakemeter-oss/pull/32))
+- Added General Storage (Databricks Default Storage) with stored-data and
+  Tier 1 and Tier 2 operation DSUs
+  ([PR #45](https://github.com/databrickslabs/lakemeter-oss/pull/45))
+- Added standard and OpenTelemetry Zerobus ingestion using Jobs Serverless DBUs
+  ([PR #57](https://github.com/databrickslabs/lakemeter-oss/pull/57))
+- Refreshed Databricks and proprietary Foundation Model API catalogs
+  ([PR #43](https://github.com/databrickslabs/lakemeter-oss/pull/43))
 
-### Security / trust
+### Platform and export enhancements
 
-- Locked down user APIs (no open list/create); chat conversations bound to SSO ownership
-- Apps SSO identity headers only (no application JWT gate)
-- Least-privilege Lakebase grants via `scripts/lakebase_grants.py`
-- Lakebase cold-start retries + Postgres native login on create and reuse
+- Added Enhanced Security and Compliance and Mission Critical Platform Add-ons,
+  calculated from DBU and DSU Product Spend at List
+  ([PR #57](https://github.com/databrickslabs/lakemeter-oss/pull/57))
+- Added first-class DSU totals and regional `DATABRICKS_STORAGE` pricing
+  ([PR #45](https://github.com/databrickslabs/lakemeter-oss/pull/45))
+- Expanded Excel exports to 34 columns with DSU costs, a pre-add-on workload
+  summary, a Platform Add-on section, and a final estimate summary
+  ([PR #45](https://github.com/databrickslabs/lakemeter-oss/pull/45),
+  [PR #57](https://github.com/databrickslabs/lakemeter-oss/pull/57))
+- Added AI Search reranker pricing and aligned AI Search and Lakebase storage
+  with DSU-based calculations
+  ([PR #31](https://github.com/databrickslabs/lakemeter-oss/pull/31))
+- Grouped region selectors into geographic areas while preserving each cloud
+  provider's region codes
+  ([PR #61](https://github.com/databrickslabs/lakemeter-oss/pull/61))
+- Fixed quantity-based Excel formulas so recalculated workbooks retain the
+  correct totals
+  ([PR #25](https://github.com/databrickslabs/lakemeter-oss/pull/25))
+
+### Calculation fixes
+
+- Fixed single-node cluster pricing so only the driver VM is charged
+  ([PR #38](https://github.com/databrickslabs/lakemeter-oss/pull/38))
+- Fixed Model Serving GPU estimates so replica counts multiply both DBUs and
+  VM costs
+  ([PR #37](https://github.com/databrickslabs/lakemeter-oss/pull/37))
+- Fixed All-Purpose Serverless rate parity
+  ([PR #42](https://github.com/databrickslabs/lakemeter-oss/pull/42))
+- Fixed saved always-on workloads so the UI, calculation APIs, and Excel
+  consistently resolve missing usage to 730 hours
+  ([PR #58](https://github.com/databrickslabs/lakemeter-oss/pull/58))
+- Fixed Databricks Apps counts so multiple apps multiply DBUs and cost across
+  the API, UI, and Excel
+  ([PR #59](https://github.com/databrickslabs/lakemeter-oss/pull/59))
+- Preserved explicit zero hours and run-based usage precedence
+  ([PR #58](https://github.com/databrickslabs/lakemeter-oss/pull/58))
+
+### Security and release reliability
+
+- Updated frontend and documentation dependencies to patched versions where
+  compatible fixes are available
+  ([PR #62](https://github.com/databrickslabs/lakemeter-oss/pull/62))
+- Hardened data upgrades for open PostgreSQL transactions, legacy Lakebase
+  installations, stopped apps, and overlapping Databricks Apps deployments
+  ([PR #62](https://github.com/databrickslabs/lakemeter-oss/pull/62))
+- Extended the release gate to verify a fresh installation, upgrade, manual
+  rollback, and a second upgrade of the rolled-back installation
+  ([PR #62](https://github.com/databrickslabs/lakemeter-oss/pull/62))
 
 ### Upgrade notes
 
-- Application-only for most workspaces; re-run grants notebooks if upgrading
-  an older App SP that still has `ALL PRIVILEGES`
+- Supports direct upgrades from `v0.1.0`, `v0.1.1`, and `v0.1.2`
+  ([PR #62](https://github.com/databrickslabs/lakemeter-oss/pull/62))
+- Applies data updates `020` through `027` for the new workload reference entries
+  ([PR #62](https://github.com/databrickslabs/lakemeter-oss/pull/62))
+- Does not add or alter Lakebase columns
+  ([PR #62](https://github.com/databrickslabs/lakemeter-oss/pull/62))
+- Use the [Upgrade Guide](./admin-guide/upgrading.md) to validate and apply the
+  release from a clean checkout
+  ([PR #63](https://github.com/databrickslabs/lakemeter-oss/pull/63))
 
 ---
 
@@ -113,7 +215,7 @@ Patch release introducing safer upgrades and correcting AI Parse estimate persis
 
 Initial public open-source release.
 
-- Workload coverage for Jobs, All-Purpose, DBSQL, DLT/Lakeflow, Model Serving, FMAPI (Databricks + Proprietary), Vector Search, Lakebase, Databricks Apps, AI Parse, and Shutterstock ImageAI
+- Workload coverage for Jobs, All-Purpose, DBSQL, DLT/Lakeflow, Model Serving, FMAPI (Databricks + Proprietary), AI Search, Lakebase, Databricks Apps, AI Parse, and Shutterstock ImageAI
 - AI assistant with streaming chat, workload suggestions, and one-click accept
 - Excel export with full cost breakdowns, SKU details, and discount calculations
 - One-command installer (`scripts/install.sh`) using Databricks Asset Bundles

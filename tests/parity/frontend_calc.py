@@ -7,13 +7,22 @@ import math
 
 
 def fe_hours_per_month(*, runs_per_day=None, avg_runtime_minutes=None,
-                       days_per_month=None, hours_per_month=None):
+                       days_per_month=None, hours_per_month=None,
+                       workload_type=""):
     """Frontend hours-per-month calculation (matches costCalculation.ts)."""
     if runs_per_day and avg_runtime_minutes:
         days = days_per_month or 22
         return (float(runs_per_day) * float(avg_runtime_minutes) / 60) * float(days)
-    if hours_per_month:
+    if hours_per_month is not None:
         return float(hours_per_month)
+    if workload_type.upper() in {
+        "VECTOR_SEARCH",
+        "MODEL_SERVING",
+        "LAKEBASE",
+        "DATABRICKS_APPS",
+        "LAKEFLOW_CONNECT",
+    }:
+        return 730
     return 0
 
 
@@ -50,7 +59,7 @@ def fe_dbsql_dbu_per_hour(*, warehouse_size='Small', num_clusters=1):
 
 def fe_vector_search_dbu_per_hour(*, capacity_millions=1, mode='standard',
                                   dbu_rate=None, input_divisor=None):
-    """Frontend Vector Search DBU/hr (matches costCalculation.ts ceiling calc)."""
+    """Frontend AI Search DBU/hr (matches costCalculation.ts ceiling calc)."""
     if dbu_rate is None:
         dbu_rate = 4.0 if mode == 'standard' else 18.29
     if input_divisor is None:
@@ -60,22 +69,38 @@ def fe_vector_search_dbu_per_hour(*, capacity_millions=1, mode='standard',
     return units * dbu_rate
 
 
-def fe_vector_search_storage_cost(*, storage_gb, units_used):
-    """Frontend Vector Search storage cost (matches costCalculation.ts).
+def fe_vector_search_storage_cost(
+    *,
+    storage_gb,
+    units_used,
+    mode="standard",
+    price_per_dsu=0.023,
+):
+    """Frontend AI Search storage cost (matches costCalculation.ts).
 
-    Free storage = units_used × 20 GB
+    The first 30 GB is free when an endpoint unit is provisioned.
     Billable = max(0, total - free)
-    Cost = billable × $0.023/GB/month
+    Cost = billable × mode-specific DSU/GB × regional $/DSU
     """
-    free_gb = units_used * 20
+    free_gb = 30 if units_used > 0 else 0
     billable_gb = max(0, storage_gb - free_gb)
-    price_per_gb = 0.023
-    return billable_gb * price_per_gb
+    dsu_per_gb = 2 if mode == "storage_optimized" else 10
+    return billable_gb * dsu_per_gb * price_per_dsu
 
 
-def fe_model_serving_dbu_per_hour(*, gpu_dbu_rate):
-    """Frontend Model Serving DBU/hr (direct rate lookup)."""
-    return gpu_dbu_rate
+def fe_model_serving_dbu_per_hour(
+    *,
+    gpu_dbu_rate,
+    workload_type="gpu",
+    concurrency=4,
+):
+    """Frontend Model Serving DBU/hr from CPU concurrency or GPU replicas."""
+    capacity = (
+        concurrency
+        if workload_type.lower().startswith("cpu")
+        else concurrency / 4
+    )
+    return gpu_dbu_rate * capacity
 
 
 def fe_fmapi_token_cost(*, quantity_millions, dbu_per_million, dbu_price):
@@ -95,11 +120,41 @@ def fe_lakebase_dbu_per_hour(*, cu, ha_nodes=1):
     return float(cu) * float(ha_nodes) * 0.230 * 0.75
 
 
-def fe_lakebase_storage_cost(*, storage_gb):
-    """Frontend Lakebase storage: GB * 15 DSU/GB * $0.023/DSU."""
+def fe_lakebase_storage_cost(*, storage_gb, price_per_dsu=0.023):
+    """Frontend Lakebase storage: GB * 15 DSU/GB * regional $/DSU."""
     dsu_per_gb = 15
-    price_per_dsu = 0.023
     return float(storage_gb) * dsu_per_gb * price_per_dsu
+
+
+def fe_general_storage_cost(
+    *,
+    quantity,
+    unit,
+    cloud="aws",
+    tier1_operations_thousands=0,
+    tier2_operations_thousands=0,
+    price_per_dsu,
+):
+    """Frontend Default Storage DSUs × exact regional rate."""
+    billable_gb = float(quantity) * 1024 if unit.lower() == "tb" else float(quantity)
+    operation_rates = {
+        "aws": (0.2174, 0.0174),
+        "azure": (0.3535, 0.0226),
+        "gcp": (0.2174, 0.0174),
+    }
+    tier1_rate, tier2_rate = operation_rates[cloud.lower()]
+    total_dsu = (
+        billable_gb
+        + float(tier1_operations_thousands) * tier1_rate
+        + float(tier2_operations_thousands) * tier2_rate
+    )
+    return total_dsu * float(price_per_dsu)
+
+
+def fe_zerobus_cost(*, monthly_ingested_gb, mode, dbu_price):
+    """Frontend Zerobus monthly DBUs times the regional serverless rate."""
+    dbu_per_gb = 0.222 if mode == "otel" else 0.143
+    return float(monthly_ingested_gb) * dbu_per_gb * float(dbu_price)
 
 
 def fe_monthly_dbu_cost(*, dbu_per_hour, hours_per_month, dbu_price):

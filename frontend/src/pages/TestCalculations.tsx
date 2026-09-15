@@ -22,8 +22,10 @@ import {
   getInstanceDBURate as getBundleInstanceDBURate,
   getPhotonMultiplier as getBundlePhotonMultiplier,
   getDBUPrice as getBundleDBUPrice,
+  getExactRegionalDBUPrice,
   getDBSQLWarehouseConfig,
   getAvailableWorkloadTypesForRegion,
+  getEffectiveFMAPIRate,
   type PricingBundle
 } from '../utils/pricingBundle'
 import type { LineItem } from '../types'
@@ -92,11 +94,14 @@ function getTiersForCloud(cloud: string): string[] {
 // LLMs support both input_token and output_token
 // Embedding models only support input_token
 const FMAPI_DATABRICKS_LLM_MODELS = [
+  'kimi-k3', 'kimi-k2-7', 'glm-5-2', 'inkling',
+  'deepseek-v4-pro-0813', 'deepseek-v4-flash-0731',
+  'qwen35-122b-a10b', 'qwen3-next-80b-a3b-instruct',
   'llama-3-3-70b', 'llama-3-1-8b', 'llama-4-maverick',
-  'gpt-oss-120b', 'gpt-oss-20b', 'gemma-3-12b'
+  'gpt-oss-120b', 'gpt-oss-20b', 'gemma-3-12b',
 ]
 const FMAPI_DATABRICKS_EMBEDDING_MODELS = [
-  'bge-large', 'gte'
+  'qwen3-embedding-0-6b', 'bge-large', 'gte',
 ]
 
 // FMAPI Proprietary configurations (validated against pricing bundle)
@@ -124,7 +129,7 @@ const GPU_TYPES_BY_CLOUD: Record<string, string[]> = {
 // Fallback for backward compatibility
 const GPU_TYPES = ['cpu', 'gpu_small_t4']
 
-// Vector search modes
+// AI Search modes
 const VECTOR_MODES = ['standard', 'storage_optimized']
 
 // Manual test environment configuration interface
@@ -184,6 +189,9 @@ interface TestConfig {
   includeFMAPIDB: boolean
   includeFMAPIProp: boolean
   includeLakebase: boolean
+  includeAIGateway: boolean
+  includeAgentEvaluation: boolean
+  includeAIRuntime: boolean
   // Manual environment override (tests only this environment when enabled)
   manualEnvironment: ManualTestEnvironment
 }
@@ -209,7 +217,7 @@ function generateTestsForEnvironment(
   let idCounter = startIdCounter
   
   // Get available workload types for this region from pricing bundle
-  // This filters out workloads not available in the region (e.g., no Vector Search in ap-southeast-3)
+  // This filters out workloads not available in the region (e.g., no AI Search in ap-southeast-3)
   const availableWorkloads = bundle?.isLoaded 
     ? getAvailableWorkloadTypesForRegion(bundle, env.cloud, env.region, env.tier)
     : null
@@ -421,18 +429,21 @@ function generateTestsForEnvironment(
     })
   }
   
-  // Vector Search tests
+  // AI Search tests
   if (config.includeVectorSearch && isAvailable('VECTOR_SEARCH')) {
     for (const mode of VECTOR_MODES) {
       testCases.push({
         id: `${++idCounter}`,
-        name: `Vector Search ${mode}`,
-        category: 'Vector Search',
+        name: `AI Search ${mode}`,
+        category: 'AI Search',
         workloadType: 'VECTOR_SEARCH',
         environment: env,
         config: {
           vector_search_mode: mode,
           vector_capacity_millions: 5,
+          vector_search_storage_gb: 100,
+          ai_search_reranker_enabled: mode === 'standard',
+          ai_search_reranker_requests_thousands: mode === 'standard' ? 10 : 0,
           hours_per_month: 730
         }
       })
@@ -535,6 +546,95 @@ function generateTestsForEnvironment(
       })
     }
   }
+
+  // Unity AI Gateway tests exercise request-derived payload and feature rates.
+  if (
+    config.includeAIGateway &&
+    env.tier.toUpperCase() !== 'STANDARD' &&
+    isAvailable('AI_GATEWAY')
+  ) {
+    const featureCases = [
+      { name: 'Both Features', inferenceTables: true, usageTracking: true },
+      { name: 'Inference Tables', inferenceTables: true, usageTracking: false },
+      { name: 'Usage Tracking', inferenceTables: false, usageTracking: true },
+    ]
+    for (const featureCase of featureCases) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `AI Gateway - ${featureCase.name}`,
+        category: 'AI Gateway',
+        workloadType: 'AI_GATEWAY',
+        environment: env,
+        config: {
+          ai_gateway_inference_tables_enabled: featureCase.inferenceTables,
+          ai_gateway_inference_tables_input_method: 'requests',
+          ai_gateway_inference_tables_requests_millions: 1,
+          ai_gateway_inference_tables_avg_request_payload_kb: 0.1,
+          ai_gateway_inference_tables_avg_response_payload_kb: 1.9,
+          ai_gateway_inference_tables_monthly_payload_gb: 2,
+          ai_gateway_usage_tracking_enabled: featureCase.usageTracking,
+          ai_gateway_usage_tracking_input_method: 'payload_gb',
+          ai_gateway_usage_tracking_requests_millions: 1,
+          ai_gateway_usage_tracking_avg_request_payload_kb: 0.1,
+          ai_gateway_usage_tracking_avg_response_payload_kb: 1.9,
+          ai_gateway_usage_tracking_monthly_payload_gb: 5,
+        },
+      })
+    }
+  }
+
+  // Agent Evaluation tests cover both billable components and each component independently.
+  if (
+    config.includeAgentEvaluation &&
+    env.tier.toUpperCase() !== 'STANDARD' &&
+    isAvailable('AGENT_EVALUATION')
+  ) {
+    const componentCases = [
+      { name: 'Both Components', labels: true, syntheticData: true },
+      { name: 'Evaluation Labels', labels: true, syntheticData: false },
+      { name: 'Synthetic Data', labels: false, syntheticData: true },
+    ]
+    for (const componentCase of componentCases) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `Agent Evaluation - ${componentCase.name}`,
+        category: 'Agent Evaluation',
+        workloadType: 'AGENT_EVALUATION',
+        environment: env,
+        config: {
+          agent_evaluation_labels_enabled: componentCase.labels,
+          agent_evaluation_input_tokens_millions: 2,
+          agent_evaluation_output_tokens_millions: 0.5,
+          agent_evaluation_synthetic_data_enabled: componentCase.syntheticData,
+          agent_evaluation_synthetic_questions: 25,
+        },
+      })
+    }
+  }
+
+  if (
+    config.includeAIRuntime
+    && env.tier.toUpperCase() !== 'STANDARD'
+    && isAvailable('AI_RUNTIME')
+  ) {
+    for (const accelerator of [
+      'GPU_1xA10',
+      'GPU_1xH100',
+      'GPU_8xH100',
+    ] as const) {
+      testCases.push({
+        id: `${++idCounter}`,
+        name: `AI Runtime - ${accelerator}`,
+        category: 'AI Runtime',
+        workloadType: 'AI_RUNTIME',
+        environment: env,
+        config: {
+          ai_runtime_accelerator_type: accelerator,
+          hours_per_month: 10,
+        },
+      })
+    }
+  }
   
   return testCases
 }
@@ -623,6 +723,12 @@ function getAPIEndpoint(workloadType: string, config: Partial<LineItem>): string
       return '/api/v1/calculate/fmapi-databricks'
     case 'FMAPI_PROPRIETARY':
       return '/api/v1/calculate/fmapi-proprietary'
+    case 'AI_GATEWAY':
+      return '/api/v1/calculate/ai-gateway'
+    case 'AGENT_EVALUATION':
+      return '/api/v1/calculate/agent-evaluation'
+    case 'AI_RUNTIME':
+      return '/api/v1/calculate/ai-runtime'
     default:
       return '/api/v1/calculate/jobs-classic'
   }
@@ -727,11 +833,14 @@ function buildAPIRequest(testCase: TestCase): Record<string, unknown> {
       }
       
     case 'VECTOR_SEARCH':
-      // Vector Search
+      // AI Search
       return {
         ...base,
         mode: config.vector_search_mode || 'standard',
         vector_capacity_millions: config.vector_capacity_millions || 1,
+        storage_gb: config.vector_search_storage_gb || 0,
+        reranker_enabled: config.ai_search_reranker_enabled || false,
+        reranker_requests_thousands: config.ai_search_reranker_requests_thousands || 0,
         hours_per_month: config.hours_per_month || 730
       }
       
@@ -787,6 +896,42 @@ function buildAPIRequest(testCase: TestCase): Record<string, unknown> {
           rate_type: config.fmapi_rate_type || 'input_token',
           quantity
         }
+      }
+
+    case 'AI_GATEWAY':
+      return {
+        ...base,
+        inference_tables_enabled: config.ai_gateway_inference_tables_enabled ?? true,
+        inference_tables_input_method: config.ai_gateway_inference_tables_input_method ?? 'requests',
+        inference_tables_requests_millions: config.ai_gateway_inference_tables_requests_millions ?? 1,
+        inference_tables_avg_request_payload_kb: config.ai_gateway_inference_tables_avg_request_payload_kb ?? 1,
+        inference_tables_avg_response_payload_kb: config.ai_gateway_inference_tables_avg_response_payload_kb ?? 1,
+        inference_tables_monthly_payload_gb: config.ai_gateway_inference_tables_monthly_payload_gb ?? 2,
+        usage_tracking_enabled: config.ai_gateway_usage_tracking_enabled ?? true,
+        usage_tracking_input_method: config.ai_gateway_usage_tracking_input_method ?? 'requests',
+        usage_tracking_requests_millions: config.ai_gateway_usage_tracking_requests_millions ?? 1,
+        usage_tracking_avg_request_payload_kb: config.ai_gateway_usage_tracking_avg_request_payload_kb ?? 1,
+        usage_tracking_avg_response_payload_kb: config.ai_gateway_usage_tracking_avg_response_payload_kb ?? 1,
+        usage_tracking_monthly_payload_gb: config.ai_gateway_usage_tracking_monthly_payload_gb ?? 2,
+      }
+
+    case 'AGENT_EVALUATION':
+      return {
+        ...base,
+        labels_enabled: config.agent_evaluation_labels_enabled ?? true,
+        input_tokens_millions: config.agent_evaluation_input_tokens_millions ?? 1,
+        output_tokens_millions: config.agent_evaluation_output_tokens_millions ?? 1,
+        synthetic_data_enabled: config.agent_evaluation_synthetic_data_enabled ?? false,
+        synthetic_questions: config.agent_evaluation_synthetic_questions ?? 0,
+        discount_config: {},
+      }
+
+    case 'AI_RUNTIME':
+      return {
+        ...base,
+        accelerator_type: config.ai_runtime_accelerator_type ?? 'GPU_1xA10',
+        ...getTimeParams(),
+        discount_config: {},
       }
       
     default:
@@ -889,6 +1034,9 @@ export default function TestCalculations() {
     includeFMAPIDB: true,
     includeFMAPIProp: true,
     includeLakebase: true,
+    includeAIGateway: true,
+    includeAgentEvaluation: true,
+    includeAIRuntime: true,
     manualEnvironment: {
       enabled: false,
       cloud: 'aws',
@@ -966,11 +1114,12 @@ export default function TestCalculations() {
       getFMAPIDatabricksRate: (model: string, rateType: string) => {
         if (isPricingBundleLoaded && pricingBundle.fmapiDatabricksRates) {
           const key = `${cloud.toLowerCase()}:${model}:${rateType}`
-          const data = pricingBundle.fmapiDatabricksRates[key]
+          const data = getEffectiveFMAPIRate(pricingBundle.fmapiDatabricksRates[key])
           if (data) {
             return {
               dbu_per_1M_tokens: data.is_hourly ? undefined : data.dbu_rate,
-              dbu_per_hour: data.is_hourly ? data.dbu_rate : undefined
+              dbu_per_hour: data.is_hourly ? data.dbu_rate : undefined,
+              regional_uplift_percent: data.regional_uplift_percent,
             }
           }
         }
@@ -982,7 +1131,7 @@ export default function TestCalculations() {
           const ep = endpointType || 'global'
           const ctx = contextLength || 'all'
           const key = `${cloud.toLowerCase()}:${provider.toLowerCase()}:${model.toLowerCase()}:${ep}:${ctx}:${rateType}`
-          const data = pricingBundle.fmapiProprietaryRates[key]
+          const data = getEffectiveFMAPIRate(pricingBundle.fmapiProprietaryRates[key])
           if (data) {
             return {
               dbu_per_1M_tokens: data.is_hourly ? undefined : data.dbu_rate,
@@ -992,7 +1141,7 @@ export default function TestCalculations() {
         }
         return getFMAPIProprietaryRate(provider, model, rateType)
       },
-      // Transform Vector Search rate from pricing bundle (dbu_rate -> dbu_per_hour)
+      // Transform AI Search rate from pricing bundle (dbu_rate -> dbu_per_hour)
       getVectorSearchRate: (mode: string) => {
         if (isPricingBundleLoaded && pricingBundle.vectorSearchRates) {
           const key = `${cloud.toLowerCase()}:${mode}`
@@ -1017,6 +1166,10 @@ export default function TestCalculations() {
       getDBUPrice: (productType: string) => {
         if (!isPricingBundleLoaded) return null
         return getBundleDBUPrice(pricingBundle, cloud, region, tier, productType)
+      },
+      getExactDBUPrice: (productType: string) => {
+        if (!isPricingBundleLoaded) return null
+        return getExactRegionalDBUPrice(pricingBundle, cloud, region, tier, productType)
       },
       getDBSQLWarehouseConfig: (warehouseType: string, warehouseSize: string) => {
         if (!isPricingBundleLoaded) return null
@@ -1135,12 +1288,29 @@ export default function TestCalculations() {
         const data = responseData.data || responseData
         
         // Extract from nested structure with detailed logging
-        const monthlyDBUs = data.dbu_calculation?.dbu_per_month ?? 
+        const componentDBUs = Array.isArray(data.component_breakdown) && data.component_breakdown.length > 0
+          ? data.component_breakdown.reduce(
+              (sum: number, component: { monthly_dbus?: number }) => sum + (component.monthly_dbus ?? 0),
+              0,
+            )
+          : undefined
+        const componentCost = Array.isArray(data.component_breakdown) && data.component_breakdown.length > 0
+          ? data.component_breakdown.reduce(
+              (sum: number, component: { monthly_dbu_cost?: number }) => sum + (component.monthly_dbu_cost ?? 0),
+              0,
+            )
+          : undefined
+        const monthlyDBUs = data.dbu_calculation?.dbu_per_month ??
+          data.dbu_calculation?.monthly_dbus ??
+          data.monthly_dbus ??
+          componentDBUs ??
           data.dbu_per_month ?? 
           (data.dbu_calculation?.dbu_per_hour ?? data.dbu_per_hour ?? 0) * (config.hours_per_month || 730)
         
-        const dbuCost = data.dbu_calculation?.dbu_cost_per_month ?? 
+        const dbuCost = data.dbu_calculation?.dbu_cost_per_month ??
+          data.dbu_calculation?.monthly_dbu_cost ??
           data.total_cost?.breakdown?.dbu_cost ??
+          componentCost ??
           data.dbu_cost_per_month ?? 
           data.dbu_cost ?? 0
         
@@ -1148,18 +1318,34 @@ export default function TestCalculations() {
           data.total_cost?.breakdown?.vm_cost ??
           data.vm_cost_per_month ?? 
           data.vm_cost ?? 0
+        const monthlyDSUs = data.dsu_calculation?.total_dsu ??
+          data.storage_calculation?.total_dsu ??
+          0
+        const dsuCost = data.total_cost?.breakdown?.dsu_cost ??
+          data.dsu_calculation?.monthly_dsu_cost ??
+          0
         
         // Handle totalCost - be careful with 'total_cost' as object vs number
         let totalCost = 0
         if (typeof data.total_cost === 'object' && data.total_cost !== null) {
-          totalCost = data.total_cost.cost_per_month ?? (dbuCost + vmCost)
+          totalCost = data.total_cost.cost_per_month ??
+            (dbuCost + dsuCost + vmCost)
         } else if (typeof data.total_cost === 'number') {
           totalCost = data.total_cost
         } else {
-          totalCost = data.total_cost_per_month ?? (dbuCost + vmCost)
+          totalCost = data.total_cost_per_month ??
+            (dbuCost + dsuCost + vmCost)
         }
         
-        apiResult = { monthlyDBUs, dbuCost, vmCost, totalCost }
+        apiResult = {
+          monthlyDBUs,
+          dbuCost,
+          monthlyDSUs,
+          dsuCost,
+          vmCost,
+          databricksListCost: dbuCost + dsuCost,
+          totalCost,
+        }
         
         // Debug logging for first few tests
         if (testCase.name.includes('Serverless')) {
@@ -1586,7 +1772,13 @@ export default function TestCalculations() {
               <input
                 type="number"
                 value={singleTestConfig.numWorkers}
-                onChange={(e) => setSingleTestConfig({ ...singleTestConfig, numWorkers: parseInt(e.target.value) || 1 })}
+                onChange={(e) => {
+                  const value = Number.parseInt(e.target.value, 10)
+                  setSingleTestConfig({
+                    ...singleTestConfig,
+                    numWorkers: Number.isNaN(value) ? 0 : Math.max(0, Math.min(100, value)),
+                  })
+                }}
                 min={0}
                 max={100}
                 className="w-full text-sm"
@@ -1791,7 +1983,7 @@ export default function TestCalculations() {
                   { key: 'includeAllPurpose', label: 'All Purpose' },
                   { key: 'includeDLT', label: 'DLT' },
                   { key: 'includeDBSQL', label: 'DBSQL' },
-                  { key: 'includeVectorSearch', label: 'Vector Search' }
+                  { key: 'includeVectorSearch', label: 'AI Search' }
                 ].map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-2 text-sm">
                     <input
@@ -1814,7 +2006,10 @@ export default function TestCalculations() {
                   { key: 'includeModelServing', label: 'Model Serving' },
                   { key: 'includeFMAPIDB', label: 'FMAPI Databricks' },
                   { key: 'includeFMAPIProp', label: 'FMAPI Proprietary' },
-                  { key: 'includeLakebase', label: 'Lakebase' }
+                  { key: 'includeLakebase', label: 'Lakebase' },
+                  { key: 'includeAIGateway', label: 'Unity AI Gateway' },
+                  { key: 'includeAgentEvaluation', label: 'Agent Evaluation' },
+                  { key: 'includeAIRuntime', label: 'AI Runtime' }
                 ].map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-2 text-sm">
                     <input
@@ -1968,7 +2163,7 @@ export default function TestCalculations() {
                     <tr
                       key={test.id}
                       className={`
-                        border-t border-[var(--border-primary)] 
+                        border-t border-[var(--border-primary)]
                         ${result && !result.matches ? 'bg-red-500/5' : ''}
                         ${isRunning ? 'bg-blue-500/10' : ''}
                         hover:bg-[var(--bg-hover)] cursor-pointer

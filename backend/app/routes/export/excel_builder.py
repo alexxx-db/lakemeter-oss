@@ -8,18 +8,45 @@ from .excel_row_writer import (
     NUM_COLS, COLUMN_WIDTHS, get_headers, write_data_row,
 )
 from .excel_sections import (
-    write_totals, write_cost_summary, write_dbu_summary,
-    write_legend, write_assumptions, write_footer,
+    write_assumptions,
+    write_cost_summary,
+    write_final_estimate_summary,
+    write_footer,
+    write_legend,
+    write_platform_addon_summary,
+    write_totals,
 )
-from .pricing import _get_dbu_price, _get_sku_type
+from .pricing import _get_dbu_price, _get_sku_type, _is_fmapi_hourly
 from .helpers import (
     _get_workload_display_name, _get_workload_config_details,
     _get_pricing_tier_display,
 )
 from .calculations import _calculate_dbu_per_hour, _is_serverless_workload
-from .excel_item_helpers import calc_item_values, write_storage_subrow
+from .excel_item_helpers import (
+    _get_json_backed_value,
+    calc_item_values,
+    get_ai_search_reranker_usage,
+    get_agent_evaluation_usage,
+    get_ai_gateway_usage,
+    write_general_storage_row,
+    write_storage_subrow,
+)
 from app.routes.vm_pricing import DEFAULT_VM_PRICING
+from app.routes.calculate.ai_gateway_calc import (
+    AI_GATEWAY_DIRECT_GB_NOTE,
+    AI_GATEWAY_EXCLUSION_NOTE,
+)
+from app.routes.calculate.agent_evaluation_calc import (
+    AGENT_EVALUATION_EXCLUSION_NOTE,
+)
+from app.routes.calculate.zerobus_calc import ZEROBUS_EXCLUSION_NOTE
 from app.services.vm_pricing_resolver import resolve_vm_hourly_rate
+from app.services.platform_addons import (
+    calculate_platform_addon_cost,
+    get_platform_addon_discount,
+    get_selected_platform_addon,
+)
+from app.services.zerobus_pricing import validate_zerobus_availability
 
 
 def build_estimate_excel(estimate, line_items, cloud, region, tier, db=None):
@@ -35,12 +62,48 @@ def build_estimate_excel(estimate, line_items, cloud, region, tier, db=None):
 
     row = _write_header_section(sheet, fmt, estimate, cloud, region, tier, max_col)
     row, header_row, data_start_row = _write_table_headers(sheet, fmt, row, max_col)
-    row = _write_line_items(sheet, fmt, row, line_items, cloud, region, tier, db=db)
+    cost_accumulator = {'product_spend_at_list': 0.0}
+    row = _write_line_items(
+        sheet,
+        fmt,
+        row,
+        line_items,
+        cloud,
+        region,
+        tier,
+        db=db,
+        cost_accumulator=cost_accumulator,
+    )
     data_end_row = row - 1
+    discount_config = _get_val(estimate, 'discount_config', None)
+    selected_addon = get_selected_platform_addon(discount_config)
+    addon = None
+    if selected_addon:
+        addon = calculate_platform_addon_cost(
+            cost_accumulator['product_spend_at_list'],
+            selected_addon,
+            cloud,
+            tier,
+            discount_pct=get_platform_addon_discount(discount_config),
+        )
     row = write_totals(sheet, fmt, row, data_start_row, data_end_row)
     totals_row = row - 2
     row = write_cost_summary(sheet, fmt, row, totals_row)
-    row = write_dbu_summary(sheet, fmt, row, data_start_row, data_end_row)
+    row, addon_cells = write_platform_addon_summary(
+        sheet,
+        fmt,
+        row,
+        totals_row,
+        addon,
+        cost_accumulator['product_spend_at_list'],
+    )
+    row = write_final_estimate_summary(
+        sheet,
+        fmt,
+        row,
+        totals_row,
+        addon_cells,
+    )
     row = write_legend(sheet, fmt, row)
     row = write_assumptions(sheet, fmt, row, max_col)
     write_footer(sheet, workbook, row, max_col)
@@ -278,18 +341,69 @@ def _write_table_headers(sheet, fmt, row, max_col):
     return row, header_row, data_start_row
 
 
-def _write_line_items(sheet, fmt, row, line_items, cloud, region, tier, db=None):
+def _write_line_items(
+    sheet,
+    fmt,
+    row,
+    line_items,
+    cloud,
+    region,
+    tier,
+    db=None,
+    cost_accumulator=None,
+):
     """Write all line item data rows including storage sub-rows."""
     for idx, item in enumerate(line_items):
-        row = _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier, db=db)
+        row = _write_single_item(
+            sheet,
+            fmt,
+            row,
+            idx,
+            item,
+            cloud,
+            region,
+            tier,
+            db=db,
+            cost_accumulator=cost_accumulator,
+        )
     return row
 
 
-def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier, db=None):
+def _write_single_item(
+    sheet,
+    fmt,
+    row,
+    idx,
+    item,
+    cloud,
+    region,
+    tier,
+    db=None,
+    cost_accumulator=None,
+):
     """Write one line item (and its storage sub-row if applicable)."""
     wt = (item.workload_type or 'JOBS').upper()
+    if wt == 'AGENT_EVALUATION' and (tier or '').upper() == 'STANDARD':
+        raise ValueError(
+            "Agent Evaluation requires Premium or Enterprise tier"
+        )
+    if wt == 'AI_RUNTIME':
+        if (tier or '').upper() == 'STANDARD':
+            raise ValueError(
+                "AI Runtime requires Premium or Enterprise tier"
+            )
+    if wt == 'ZEROBUS':
+        validate_zerobus_availability(cloud, tier)
     sku = _get_sku_type(item, cloud)
-    requires_exact_regional_price = wt in ('AI_EXTRACT', 'AI_CLASSIFY')
+    requires_exact_regional_price = wt in (
+        'AI_EXTRACT',
+        'AI_CLASSIFY',
+        'AI_GATEWAY',
+        'AGENT_EVALUATION',
+        'AI_RUNTIME',
+        'GENERAL_STORAGE',
+        'ZEROBUS',
+    )
     dbu_rate, dbu_rate_found = _get_dbu_price(
         cloud,
         region,
@@ -305,24 +419,72 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier, db=None)
     dbu_per_hour, dbu_warnings = _calculate_dbu_per_hour(item, cloud, tier)
     is_serverless = _is_serverless_workload(item)
     is_fmapi = wt in ('FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY')
-    is_fmapi_token = is_fmapi and item.fmapi_rate_type in (
-        'input_token', 'output_token', 'input', 'output',
-        'cache_read', 'cache_write', 'batch_inference')
-    is_fmapi_provisioned = is_fmapi and item.fmapi_rate_type in (
-        'provisioned_scaling', 'provisioned_entry')
+    is_fmapi_provisioned = is_fmapi and _is_fmapi_hourly(
+        item,
+        cloud,
+        region,
+    )
+    is_fmapi_token = is_fmapi and not is_fmapi_provisioned
     is_quantity_based = wt in (
         'AI_PARSE',
         'AI_EXTRACT',
         'AI_CLASSIFY',
+        'AI_GATEWAY',
+        'AGENT_EVALUATION',
+        'ZEROBUS',
         'SHUTTERSTOCK_IMAGEAI',
     )
 
     auto_notes = list(dbu_warnings)
+    if wt == 'ZEROBUS':
+        auto_notes.append(ZEROBUS_EXCLUSION_NOTE)
+    if wt == 'AI_GATEWAY':
+        return _write_ai_gateway_component_rows(
+            sheet,
+            fmt,
+            row,
+            idx,
+            item,
+            dbu_rate,
+            auto_notes,
+            cost_accumulator,
+        )
+    if wt == 'AGENT_EVALUATION':
+        return _write_agent_evaluation_component_rows(
+            sheet,
+            fmt,
+            row,
+            idx,
+            item,
+            dbu_rate,
+            auto_notes,
+            cost_accumulator,
+        )
+    if wt == 'GENERAL_STORAGE':
+        return write_general_storage_row(
+            sheet,
+            fmt,
+            row,
+            item,
+            idx,
+            cloud,
+            dbu_rate,
+            cost_accumulator,
+        )
     if not dbu_rate_found:
         auto_notes.append(f"DBU rate not found for {sku}, using fallback ${dbu_rate:.2f}")
 
     hours, token_qty, dbu_per_m, total_dbus, token_type = calc_item_values(
-        item, is_fmapi_token, is_fmapi_provisioned, dbu_per_hour, cloud, auto_notes)
+        item,
+        is_fmapi_token,
+        is_fmapi_provisioned,
+        dbu_per_hour,
+        cloud,
+        auto_notes,
+        region,
+    )
+    if is_fmapi_provisioned and hours > 0:
+        dbu_per_hour = total_dbus / hours
 
     num_workers = int(item.num_workers or 0)
     dbsql_driver_inst = ''
@@ -363,7 +525,7 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier, db=None)
                     component="Driver",
                     auto_notes=auto_notes,
                 )
-            if worker_node:
+            if worker_node and num_workers > 0:
                 worker_vm_hr = _resolve_vm_rate(
                     db,
                     cloud=cloud,
@@ -392,6 +554,14 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier, db=None)
         display_worker_tier = _get_pricing_tier_display(
             item.worker_pricing_tier) if hasattr(item, 'worker_pricing_tier') and item.worker_pricing_tier else '-'
 
+    display_worker_node = (
+        dbsql_worker_inst or _get_val(item, 'worker_node_type', '-') or '-'
+    )
+    if num_workers == 0:
+        display_worker_node = '-'
+        display_worker_tier = '-'
+        worker_vm_hr = 0
+
     base_row = {
         'idx': idx + 1,
         'name': _get_val(item, 'workload_name', f'Workload {idx + 1}'),
@@ -399,7 +569,7 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier, db=None)
         'config': _get_workload_config_details(item),
         'sku': sku,
         'driver_node': dbsql_driver_inst or _get_val(item, 'driver_node_type', '-') or '-',
-        'worker_node': dbsql_worker_inst or _get_val(item, 'worker_node_type', '-') or '-',
+        'worker_node': display_worker_node,
         'num_workers': num_workers,
         'driver_tier': display_driver_tier,
         'worker_tier': display_worker_tier,
@@ -417,21 +587,305 @@ def _write_single_item(sheet, fmt, row, idx, item, cloud, region, tier, db=None)
         'notes': ' — '.join(notes_parts) if notes_parts else '',
     }
 
-    write_data_row(sheet, row, base_row, is_fmapi_token, is_serverless, fmt)
+    write_data_row(
+        sheet,
+        row,
+        base_row,
+        is_fmapi_token,
+        is_serverless,
+        fmt,
+        cost_accumulator=cost_accumulator,
+    )
     row += 1
 
     if wt == 'LAKEBASE':
-        row = write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
-                                   'Lakebase (Storage)', 'lakebase_storage_gb')
+        row = write_storage_subrow(
+            sheet, fmt, row, item, idx, cloud, region, tier,
+            'Lakebase (Storage)', 'lakebase_storage_gb', cost_accumulator,
+        )
         if getattr(item, 'lakebase_pitr_gb', 0) and item.lakebase_pitr_gb > 0:
-            row = write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
-                                       'Lakebase (PITR)', 'lakebase_pitr_gb')
+            row = write_storage_subrow(
+                sheet, fmt, row, item, idx, cloud, region, tier,
+                'Lakebase (PITR)', 'lakebase_pitr_gb', cost_accumulator,
+            )
         if getattr(item, 'lakebase_snapshot_gb', 0) and item.lakebase_snapshot_gb > 0:
-            row = write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
-                                       'Lakebase (Snapshots)', 'lakebase_snapshot_gb')
-    elif wt == 'VECTOR_SEARCH' and (getattr(item, 'vector_search_storage_gb', 0) or 0) > 0:
-        row = write_storage_subrow(sheet, fmt, row, item, idx, cloud, region, tier,
-                                   'Vector Search (Storage)', 'vector_search_storage_gb')
+            row = write_storage_subrow(
+                sheet, fmt, row, item, idx, cloud, region, tier,
+                'Lakebase (Snapshots)', 'lakebase_snapshot_gb', cost_accumulator,
+            )
+    elif wt == 'VECTOR_SEARCH':
+        row = _write_ai_search_reranker_row(
+            sheet,
+            fmt,
+            row,
+            idx,
+            item,
+            dbu_rate,
+            cost_accumulator,
+        )
+        if (getattr(item, 'vector_search_storage_gb', 0) or 0) > 0:
+            row = write_storage_subrow(
+                sheet,
+                fmt,
+                row,
+                item,
+                idx,
+                cloud,
+                region,
+                tier,
+                'AI Search (Storage)',
+                'vector_search_storage_gb',
+                cost_accumulator,
+            )
+    return row
+
+
+def _write_ai_search_reranker_row(
+    sheet,
+    fmt,
+    row,
+    idx,
+    item,
+    dbu_rate,
+    cost_accumulator=None,
+):
+    """Write a DBU/month row for optional AI Search Reranker usage."""
+    usage = get_ai_search_reranker_usage(item)
+    if not usage['enabled']:
+        return row
+
+    workload_name = _get_val(
+        item,
+        'workload_name',
+        f'Workload {idx + 1}',
+    )
+    requests = usage['requests_thousands']
+    component_rate = usage['dbu_per_thousand_requests']
+    monthly_dbus = usage['monthly_dbus']
+    config = (
+        f"{requests:g}K requests × {component_rate:.3f} DBU/1K "
+        f"= {monthly_dbus:.3f} DBU/mo"
+    )
+    row_data = {
+        'idx': f'{idx + 1}.1',
+        'name': f'{workload_name} – AI Search Reranker',
+        'type_display': 'AI Search (Reranker)',
+        'config': config,
+        'sku': 'SERVERLESS_REAL_TIME_INFERENCE',
+        'driver_node': '-',
+        'worker_node': '-',
+        'num_workers': 0,
+        'driver_tier': '-',
+        'worker_tier': '-',
+        'hours_per_month': 0,
+        'token_type': '',
+        'token_quantity_millions': 0,
+        'dbu_per_million': 0,
+        'dbu_per_hour': 0,
+        'total_dbus_month': monthly_dbus,
+        'is_quantity_based': True,
+        'token_columns_na': True,
+        'show_dbu_month_decimals': True,
+        'dbu_rate': dbu_rate,
+        'discount_pct': 0.0,
+        'driver_vm_cost_per_hour': 0,
+        'worker_vm_cost_per_hour': 0,
+        'notes': _get_val(item, 'notes', '') or '',
+    }
+    write_data_row(
+        sheet,
+        row,
+        row_data,
+        False,
+        True,
+        fmt,
+        cost_accumulator=cost_accumulator,
+    )
+    return row + 1
+
+
+def _write_ai_gateway_component_rows(
+    sheet,
+    fmt,
+    row,
+    idx,
+    item,
+    dbu_rate,
+    auto_notes,
+    cost_accumulator=None,
+):
+    """Write one recalculation-safe row for each enabled gateway component."""
+    usage = get_ai_gateway_usage(item)
+    workload_name = _get_val(
+        item,
+        'workload_name',
+        f'Workload {idx + 1}',
+    )
+    user_notes = _get_val(item, 'notes', '') or ''
+    notes_parts = [user_notes] if user_notes else []
+    notes_parts.extend(auto_notes)
+    notes_parts.extend([
+        AI_GATEWAY_DIRECT_GB_NOTE,
+        AI_GATEWAY_EXCLUSION_NOTE,
+    ])
+    for component_index, component in enumerate(usage['components'], start=1):
+        component_config = _get_ai_gateway_component_config(
+            item,
+            component,
+        )
+        config = (
+            f"{component_config} | Component: {component['display_name']} | "
+            f"Component rate: {component['dbu_per_gb']:.3f} DBU/GB"
+        )
+        row_data = {
+            'idx': f'{idx + 1}.{component_index}',
+            'name': f"{workload_name} – {component['display_name']}",
+            'type_display': 'Unity AI Gateway',
+            'config': config,
+            'sku': 'SERVERLESS_REAL_TIME_INFERENCE',
+            'driver_node': '-',
+            'worker_node': '-',
+            'num_workers': 0,
+            'driver_tier': '-',
+            'worker_tier': '-',
+            'hours_per_month': 0,
+            'token_type': '',
+            'token_quantity_millions': 0,
+            'dbu_per_million': 0,
+            'dbu_per_hour': 0,
+            'total_dbus_month': component['monthly_dbus'],
+            'is_quantity_based': True,
+            'dbu_rate': dbu_rate,
+            'discount_pct': 0.0,
+            'driver_vm_cost_per_hour': 0,
+            'worker_vm_cost_per_hour': 0,
+            'notes': ' — '.join(notes_parts),
+        }
+        write_data_row(
+            sheet,
+            row,
+            row_data,
+            False,
+            True,
+            fmt,
+            cost_accumulator=cost_accumulator,
+        )
+        row += 1
+    return row
+
+
+def _get_ai_gateway_component_config(item, component):
+    """Return export configuration for one independent gateway component."""
+    prefix = f"ai_gateway_{component['component']}"
+    input_method = _get_json_backed_value(
+        item,
+        f"{prefix}_input_method",
+    )
+    details = []
+    if input_method == "payload_gb":
+        details.append("Input: Direct metered payload")
+    else:
+        requests_millions = float(_get_json_backed_value(
+            item,
+            f"{prefix}_requests_millions",
+            0,
+        ) or 0)
+        request_kb = float(_get_json_backed_value(
+            item,
+            f"{prefix}_avg_request_payload_kb",
+            0,
+        ) or 0)
+        response_kb = float(_get_json_backed_value(
+            item,
+            f"{prefix}_avg_response_payload_kb",
+            0,
+        ) or 0)
+        details.append(f"Input: {requests_millions:g}M requests/mo")
+        details.append(
+            f"Payload/request: {request_kb:g} KB request + "
+            f"{response_kb:g} KB response"
+        )
+    details.append(
+        f"Monthly payload: {component['monthly_payload_gb']:g} GB"
+    )
+    return " | ".join(details)
+
+
+def _write_agent_evaluation_component_rows(
+    sheet,
+    fmt,
+    row,
+    idx,
+    item,
+    dbu_rate,
+    auto_notes,
+    cost_accumulator=None,
+):
+    """Write one formula-backed row per enabled evaluation dimension."""
+    usage = get_agent_evaluation_usage(item)
+    workload_name = _get_val(
+        item,
+        'workload_name',
+        f'Workload {idx + 1}',
+    )
+    user_notes = _get_val(item, 'notes', '') or ''
+    notes_parts = [user_notes] if user_notes else []
+    notes_parts.extend(auto_notes)
+    notes_parts.append(AGENT_EVALUATION_EXCLUSION_NOTE)
+
+    token_type_names = {
+        'input_tokens': 'Input Tokens',
+        'output_tokens': 'Output Tokens',
+        'synthetic_questions': 'Synthetic Questions',
+    }
+    for component_index, component in enumerate(
+        usage['components'],
+        start=1,
+    ):
+        quantity_unit = (
+            'million tokens'
+            if component['quantity_unit'] == 'million_tokens'
+            else 'questions'
+        )
+        config = (
+            f"Quantity: {component['quantity']:g} {quantity_unit}/mo | "
+            f"Canonical rate: {component['dbu_per_unit']:.3f} "
+            f"DBU/{quantity_unit}"
+        )
+        row_data = {
+            'idx': f'{idx + 1}.{component_index}',
+            'name': f"{workload_name} – {component['display_name']}",
+            'type_display': 'Agent Evaluation',
+            'config': config,
+            'sku': 'SERVERLESS_REAL_TIME_INFERENCE',
+            'driver_node': '-',
+            'worker_node': '-',
+            'num_workers': 0,
+            'driver_tier': '-',
+            'worker_tier': '-',
+            'hours_per_month': 0,
+            'token_type': token_type_names[component['component']],
+            'token_quantity_millions': component['quantity'],
+            'dbu_per_million': component['dbu_per_unit'],
+            'dbu_per_hour': 0,
+            'total_dbus_month': component['monthly_dbus'],
+            'is_quantity_based': False,
+            'dbu_rate': dbu_rate,
+            'discount_pct': 0.0,
+            'driver_vm_cost_per_hour': 0,
+            'worker_vm_cost_per_hour': 0,
+            'notes': ' — '.join(notes_parts),
+        }
+        write_data_row(
+            sheet,
+            row,
+            row_data,
+            True,
+            True,
+            fmt,
+            cost_accumulator=cost_accumulator,
+        )
+        row += 1
     return row
 
 

@@ -1,6 +1,6 @@
 """Pydantic request/response models for calculation endpoints."""
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Literal, Optional
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class GlobalDiscountConfig(BaseModel):
@@ -55,8 +55,8 @@ class JobsClassicCalculationRequest(BaseModel):
     region: str = Field(..., description="Region code (e.g., us-east-1)")
     tier: str = Field(..., description="Pricing tier: STANDARD, PREMIUM, ENTERPRISE")
     driver_node_type: str = Field(..., description="Driver instance type")
-    worker_node_type: str = Field(..., description="Worker instance type")
-    num_workers: int = Field(..., ge=0, description="Number of worker nodes")
+    worker_node_type: Optional[str] = Field(None, description="Worker instance type")
+    num_workers: int = Field(..., ge=0, le=100, description="Number of worker nodes")
     photon_enabled: bool = Field(default=False, description="Enable Photon acceleration")
     driver_pricing_tier: str = Field(default="on_demand", description="Driver VM pricing tier")
     worker_pricing_tier: str = Field(default="on_demand", description="Worker VM pricing tier")
@@ -67,6 +67,14 @@ class JobsClassicCalculationRequest(BaseModel):
     days_per_month: Optional[int] = Field(None, ge=1, le=31, description="Number of days per month")
     hours_per_month: Optional[float] = Field(None, ge=0, description="Direct hours per month")
     discount_config: Optional[DiscountConfig] = Field(None, description="Discount configuration")
+
+    @model_validator(mode="after")
+    def validate_worker_selection(self):
+        if self.num_workers > 0 and not (self.worker_node_type or "").strip():
+            raise ValueError(
+                "worker_node_type is required when num_workers is greater than 0"
+            )
+        return self
 
 
 class JobsServerlessCalculationRequest(BaseModel):
@@ -89,8 +97,8 @@ class AllPurposeClassicCalculationRequest(BaseModel):
     region: str = Field(...)
     tier: str = Field(...)
     driver_node_type: str = Field(...)
-    worker_node_type: str = Field(...)
-    num_workers: int = Field(..., ge=0)
+    worker_node_type: Optional[str] = Field(None)
+    num_workers: int = Field(..., ge=0, le=100)
     photon_enabled: bool = Field(default=False)
     driver_pricing_tier: str = Field(default="on_demand")
     worker_pricing_tier: str = Field(default="on_demand")
@@ -100,6 +108,14 @@ class AllPurposeClassicCalculationRequest(BaseModel):
     days_per_month: Optional[int] = Field(None, ge=1, le=31)
     hours_per_month: Optional[float] = Field(None, ge=0)
     discount_config: Optional[DiscountConfig] = Field(None)
+
+    @model_validator(mode="after")
+    def validate_worker_selection(self):
+        if self.num_workers > 0 and not (self.worker_node_type or "").strip():
+            raise ValueError(
+                "worker_node_type is required when num_workers is greater than 0"
+            )
+        return self
 
 
 class AllPurposeServerlessCalculationRequest(BaseModel):
@@ -112,7 +128,10 @@ class AllPurposeServerlessCalculationRequest(BaseModel):
     hours_per_day: Optional[float] = Field(None, ge=0)
     days_per_month: Optional[int] = Field(None, ge=1, le=31)
     hours_per_month: Optional[float] = Field(None, ge=0)
-    serverless_mode: str = Field(default="standard")
+    serverless_mode: str = Field(
+        default="performance",
+        description="All-Purpose Serverless always uses Performance Optimized mode",
+    )
     discount_config: Optional[DiscountConfig] = Field(None)
 
 
@@ -149,8 +168,8 @@ class DLTClassicCalculationRequest(BaseModel):
     tier: str = Field(...)
     dlt_edition: str = Field(default="CORE", description="CORE, PRO, ADVANCED")
     driver_node_type: str = Field(...)
-    worker_node_type: str = Field(...)
-    num_workers: int = Field(..., ge=0)
+    worker_node_type: Optional[str] = Field(None)
+    num_workers: int = Field(..., ge=0, le=100)
     photon_enabled: bool = Field(default=False)
     driver_pricing_tier: str = Field(default="on_demand")
     worker_pricing_tier: str = Field(default="on_demand")
@@ -161,6 +180,14 @@ class DLTClassicCalculationRequest(BaseModel):
     days_per_month: Optional[int] = Field(None, ge=1, le=31)
     hours_per_month: Optional[float] = Field(None, ge=0)
     discount_config: Optional[DiscountConfig] = Field(None)
+
+    @model_validator(mode="after")
+    def validate_worker_selection(self):
+        if self.num_workers > 0 and not (self.worker_node_type or "").strip():
+            raise ValueError(
+                "worker_node_type is required when num_workers is greater than 0"
+            )
+        return self
 
 
 class DLTServerlessCalculationRequest(BaseModel):
@@ -197,9 +224,20 @@ class FMAPIDatabricksCalculationRequest(BaseModel):
     region: str = Field(...)
     tier: str = Field(...)
     model: str = Field(...)
+    endpoint_type: str = Field(
+        default="global",
+        description="Processing type: global or regional when published for the model",
+    )
     # Frontend sends quantity + rate_type (single rate per request)
-    quantity: Optional[float] = Field(None, ge=0, description="Token quantity (in millions) or hours")
-    rate_type: Optional[str] = Field(None, description="input_token, output_token, cache_read, cache_write, batch_inference")
+    quantity: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Token quantity (in millions) or provisioned hours",
+    )
+    rate_type: Optional[str] = Field(
+        None,
+        description="Exact token or provisioned rate type published for the model",
+    )
     # Legacy fields (still supported for backward compat)
     input_tokens_per_month: Optional[float] = Field(None, ge=0)
     output_tokens_per_month: Optional[float] = Field(None, ge=0)
@@ -213,10 +251,14 @@ class FMAPIProprietaryCalculationRequest(BaseModel):
     tier: str = Field(...)
     provider: str = Field(...)
     model: str = Field(...)
-    endpoint_type: str = Field(default="in_geo")
-    context_length: Optional[str] = Field(None)
+    endpoint_type: str = Field(default="global")
+    context_length: Optional[str] = Field(default="all")
     # Frontend sends quantity + rate_type (single rate per request)
-    quantity: Optional[float] = Field(None, ge=0, description="Token quantity (in millions) or hours")
+    quantity: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Token quantity (in millions) or batch inference hours",
+    )
     rate_type: Optional[str] = Field(None, description="input_token, output_token, cache_read, cache_write, batch_inference")
     # Legacy fields (still supported for backward compat)
     input_tokens_per_month: Optional[float] = Field(None, ge=0)
@@ -230,7 +272,18 @@ class VectorSearchCalculationRequest(BaseModel):
     region: str = Field(...)
     tier: str = Field(...)
     mode: str = Field(..., description="standard or storage_optimized")
-    num_vectors_millions: float = Field(..., ge=0, description="Number of vectors in millions")
+    num_vectors_millions: float = Field(
+        ...,
+        ge=0,
+        validation_alias=AliasChoices(
+            "num_vectors_millions",
+            "vector_capacity_millions",
+        ),
+        description="Number of AI Search vectors in millions",
+    )
+    storage_gb: float = Field(default=0, ge=0)
+    reranker_enabled: bool = Field(default=False)
+    reranker_requests_thousands: float = Field(default=0, ge=0)
     hours_per_day: Optional[float] = Field(None, ge=0)
     days_per_month: Optional[int] = Field(None, ge=1, le=31)
     hours_per_month: Optional[float] = Field(None, ge=0)
@@ -242,6 +295,7 @@ class DatabricksAppsCalculationRequest(BaseModel):
     region: str = Field(...)
     tier: str = Field(...)
     size: str = Field(default="medium", description="medium or large")
+    num_apps: int = Field(default=1, ge=1)
     hours_per_month: Optional[float] = Field(None, ge=0)
     discount_config: Optional[DiscountConfig] = Field(None)
 
@@ -283,6 +337,173 @@ class AIClassifyCalculationRequest(BaseModel):
     num_docs: Optional[float] = Field(None, ge=0, description="Documents classified per month")
     dbus_per_thousand: Optional[float] = Field(None, gt=0, description="DBU per 1,000 documents (custom document_type only)")
     discount_config: Optional[DiscountConfig] = Field(None)
+
+
+class AIGatewayCalculationRequest(BaseModel):
+    cloud: str = Field(...)
+    region: str = Field(...)
+    tier: str = Field(...)
+    inference_tables_enabled: bool = Field(default=False)
+    inference_tables_input_method: Optional[
+        Literal["requests", "payload_gb"]
+    ] = None
+    inference_tables_requests_millions: Optional[float] = Field(
+        default=None, ge=0
+    )
+    inference_tables_avg_request_payload_kb: Optional[float] = Field(
+        default=None, ge=0
+    )
+    inference_tables_avg_response_payload_kb: Optional[float] = Field(
+        default=None, ge=0
+    )
+    inference_tables_monthly_payload_gb: Optional[float] = Field(
+        default=None, ge=0
+    )
+    usage_tracking_enabled: bool = Field(default=False)
+    usage_tracking_input_method: Optional[
+        Literal["requests", "payload_gb"]
+    ] = None
+    usage_tracking_requests_millions: Optional[float] = Field(
+        default=None, ge=0
+    )
+    usage_tracking_avg_request_payload_kb: Optional[float] = Field(
+        default=None, ge=0
+    )
+    usage_tracking_avg_response_payload_kb: Optional[float] = Field(
+        default=None, ge=0
+    )
+    usage_tracking_monthly_payload_gb: Optional[float] = Field(
+        default=None, ge=0
+    )
+    discount_config: Optional[DiscountConfig] = Field(None)
+
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_gateway_configuration(self):
+        if not (
+            self.inference_tables_enabled
+            or self.usage_tracking_enabled
+        ):
+            raise ValueError(
+                "At least one paid AI Gateway feature must be enabled"
+            )
+        for component in ("inference_tables", "usage_tracking"):
+            if not getattr(self, f"{component}_enabled"):
+                continue
+            input_method = getattr(self, f"{component}_input_method")
+            if input_method is None:
+                raise ValueError(
+                    f"{component}_input_method is required when enabled"
+                )
+            if input_method == "requests":
+                suffixes = (
+                    "requests_millions",
+                    "avg_request_payload_kb",
+                    "avg_response_payload_kb",
+                )
+            else:
+                suffixes = ("monthly_payload_gb",)
+            missing = [
+                f"{component}_{suffix}"
+                for suffix in suffixes
+                if getattr(self, f"{component}_{suffix}") is None
+            ]
+            if missing:
+                raise ValueError(
+                    f"{', '.join(missing)} required for enabled {component}"
+                )
+        return self
+
+
+class AgentEvaluationCalculationRequest(BaseModel):
+    cloud: str = Field(...)
+    region: str = Field(...)
+    tier: str = Field(...)
+    labels_enabled: bool = Field(default=False)
+    input_tokens_millions: float = Field(
+        default=0,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    output_tokens_millions: float = Field(
+        default=0,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    synthetic_data_enabled: bool = Field(default=False)
+    synthetic_questions: int = Field(default=0, ge=0)
+    discount_config: Optional[DiscountConfig] = Field(None)
+
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_agent_evaluation_configuration(self):
+        if not (self.labels_enabled or self.synthetic_data_enabled):
+            raise ValueError(
+                "At least one Agent Evaluation feature must be enabled"
+            )
+        return self
+
+
+class AIRuntimeCalculationRequest(BaseModel):
+    cloud: str = Field(...)
+    region: str = Field(...)
+    tier: str = Field(...)
+    accelerator_type: Literal[
+        "GPU_1xA10",
+        "GPU_1xH100",
+        "GPU_8xH100",
+    ] = Field(default="GPU_1xA10")
+    runs_per_day: Optional[float] = Field(default=None, ge=0)
+    avg_runtime_minutes: Optional[float] = Field(default=None, ge=0)
+    days_per_month: Optional[int] = Field(default=None, ge=1, le=31)
+    hours_per_month: Optional[float] = Field(default=None, ge=0)
+    discount_config: Optional[DiscountConfig] = Field(None)
+
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_usage_configuration(self):
+        if self.hours_per_month is not None:
+            return self
+        if self.runs_per_day is None or self.avg_runtime_minutes is None:
+            raise ValueError(
+                "Provide hours_per_month or both runs_per_day and "
+                "avg_runtime_minutes"
+            )
+        return self
+
+
+class GeneralStorageCalculationRequest(BaseModel):
+    cloud: str = Field(...)
+    region: str = Field(...)
+    tier: str = Field(...)
+    quantity: float = Field(default=0, ge=0)
+    unit: Literal["gb", "tb"] = Field(default="gb")
+    tier_1_operations_thousands: float = Field(default=0, ge=0)
+    tier_2_operations_thousands: float = Field(default=0, ge=0)
+    discount_config: Optional[DiscountConfig] = Field(None)
+
+    model_config = ConfigDict(allow_inf_nan=False)
+
+
+class ZerobusCalculationRequest(BaseModel):
+    cloud: str = Field(...)
+    region: str = Field(...)
+    tier: str = Field(...)
+    mode: str = Field(
+        default="standard",
+        description="standard or otel",
+    )
+    monthly_ingested_gb: float = Field(
+        default=0,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    discount_config: Optional[DiscountConfig] = Field(None)
+
+    model_config = ConfigDict(allow_inf_nan=False)
 
 
 class ShutterstockImageAICalculationRequest(BaseModel):

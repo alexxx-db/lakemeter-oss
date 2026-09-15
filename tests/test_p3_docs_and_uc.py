@@ -13,20 +13,19 @@ NOTEBOOKS = REPO / "scripts" / "notebooks"
 def test_lakeflow_connect_guide_and_catalog():
     connect = (DOCS / "user-guide" / "lakeflow-connect.md").read_text()
     assert "Lakeflow Connect" in connect
-    assert "DLT Serverless" in connect
-    assert "Gateway" in connect
+    assert "serverless pipeline compute" in connect
+    assert "gateway" in connect.lower()
 
     workloads = (DOCS / "user-guide" / "workloads.md").read_text()
     assert "lakeflow-connect" in workloads
-    assert "Commercial items" in workloads or "commercial" in workloads.lower()
-    assert "databricks_support" in workloads or "Support" in workloads
+    assert "commercial" in workloads.lower()
 
 
 def test_sidebars_include_connect_pricing_architecture():
     text = SIDEBARS.read_text()
     assert "user-guide/lakeflow-connect" in text
     assert "admin-guide/pricing-data" in text
-    assert "admin-guide/architecture" in text
+    assert "admin-guide/finops" in text
 
 
 def test_admin_pricing_and_architecture_docs():
@@ -35,10 +34,9 @@ def test_admin_pricing_and_architecture_docs():
     assert "bundled_csv" in pricing
     assert "10_refresh_pricing_from_uc" in pricing
 
-    arch = (DOCS / "admin-guide" / "architecture.md").read_text()
-    assert "AppKit" in arch
+    arch = (REPO / "ARCHITECTURE.md").read_text()
     assert "Lakebase" in arch
-    assert "when not" in arch.lower() or "Keep the current" in arch
+    assert "Databricks App" in arch
 
 
 def test_uc_refresh_notebook_and_job_params():

@@ -8,8 +8,248 @@ import type { LineItem, WorkloadType } from '../types'
 import { 
   getDBSQLWarehouseConfig,
   getAvailableWorkloadTypesForRegion,
-  type PricingBundle 
+  isFMAPIProvisionedEntryRegionSupported,
+  type FMAPIRate,
+  type PricingBundle,
 } from '../utils/pricingBundle'
+import { getAIRuntimeAccelerators } from '../utils/aiRuntime'
+
+const WORKLOAD_TYPE_GROUPS: ReadonlyArray<{
+  label: string
+  workloadTypes: readonly string[]
+}> = [
+  {
+    label: 'Data Engineering',
+    workloadTypes: ['JOBS', 'DLT', 'LAKEFLOW_CONNECT', 'ZEROBUS'],
+  },
+  {
+    label: 'Data Warehousing',
+    workloadTypes: ['DBSQL'],
+  },
+  {
+    label: 'Interactive Workloads',
+    workloadTypes: ['ALL_PURPOSE', 'DATABRICKS_APPS'],
+  },
+  {
+    label: 'Storage',
+    workloadTypes: ['GENERAL_STORAGE'],
+  },
+  {
+    label: 'Operational Database',
+    workloadTypes: ['LAKEBASE'],
+  },
+  {
+    label: 'Artificial Intelligence',
+    workloadTypes: [
+      'VECTOR_SEARCH',
+      'MODEL_SERVING',
+      'FMAPI_DATABRICKS',
+      'FMAPI_PROPRIETARY',
+      'AI_PARSE',
+      'AI_EXTRACT',
+      'AI_CLASSIFY',
+      'AI_GATEWAY',
+      'AGENT_EVALUATION',
+      'AI_RUNTIME',
+      'SHUTTERSTOCK_IMAGEAI',
+    ],
+  },
+]
+
+function AIGatewayComponentPanel({
+  component,
+  label,
+  otherComponent,
+  form,
+  setForm,
+}: {
+  component: 'inference_tables' | 'usage_tracking'
+  label: string
+  otherComponent: 'inference_tables' | 'usage_tracking'
+  form: Record<string, any>
+  setForm: (value: any) => void
+}) {
+  const prefix = `ai_gateway_${component}`
+  const enabledField = `${prefix}_enabled`
+  const inputMethodField = `${prefix}_input_method`
+  const enabled = Boolean(form[enabledField])
+  const inputMethod = form[inputMethodField] ?? 'requests'
+  const otherEnabled = Boolean(form[`ai_gateway_${otherComponent}_enabled`])
+  const update = (field: string, value: unknown) => {
+    setForm((current: Record<string, any>) => ({ ...current, [field]: value }))
+  }
+
+  return (
+    <div className="col-span-full space-y-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-4">
+      <label className="flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={enabled && !otherEnabled}
+          onChange={(event) => update(enabledField, event.target.checked)}
+          className="w-4 h-4 rounded border-lava-400 text-lava-600 focus:ring-lava-500"
+        />
+        {label}
+        <span className="text-xs font-normal text-[var(--text-muted)]">(1.429 DBU/GB)</span>
+      </label>
+
+      {enabled && (
+        <>
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-medium text-[var(--text-secondary)]">Usage Input Method:</span>
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => update(inputMethodField, 'requests')}
+                className={clsx(
+                  'px-3 py-1 text-xs rounded-l-md border transition-colors',
+                  inputMethod === 'requests'
+                    ? 'bg-lava-600 text-white border-lava-600'
+                    : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]',
+                )}
+              >
+                Request-Based
+              </button>
+              <button
+                type="button"
+                onClick={() => update(inputMethodField, 'payload_gb')}
+                className={clsx(
+                  'px-3 py-1 text-xs rounded-r-md border-y border-r transition-colors',
+                  inputMethod === 'payload_gb'
+                    ? 'bg-lava-600 text-white border-lava-600'
+                    : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]',
+                )}
+              >
+                Direct GB
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {inputMethod === 'requests' ? (
+              <>
+                {[
+                  ['requests_millions', 'Requests/Month (millions)'],
+                  ['avg_request_payload_kb', 'Avg Request Payload (KB)'],
+                  ['avg_response_payload_kb', 'Avg Response Payload (KB)'],
+                ].map(([suffix, fieldLabel]) => (
+                  <div key={suffix}>
+                    <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">{fieldLabel}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={form[`${prefix}_${suffix}`]}
+                      onChange={(event) => update(`${prefix}_${suffix}`, Number(event.target.value))}
+                      className="w-full text-sm"
+                    />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Monthly Billable Payload (GB)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={form[`${prefix}_monthly_payload_gb`]}
+                  onChange={(event) => update(`${prefix}_monthly_payload_gb`, Number(event.target.value))}
+                  className="w-full text-sm"
+                />
+              </div>
+            )}
+          </div>
+          <p className="text-[10px] text-[var(--text-muted)]">
+            Direct GB is preferred when this component's metered billable payload is known.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+function AgentEvaluationComponentPanel({
+  component,
+  form,
+  setForm,
+}: {
+  component: 'labels' | 'synthetic_data'
+  form: Record<string, any>
+  setForm: (value: any) => void
+}) {
+  const isLabels = component === 'labels'
+  const enabledField = isLabels
+    ? 'agent_evaluation_labels_enabled'
+    : 'agent_evaluation_synthetic_data_enabled'
+  const otherEnabledField = isLabels
+    ? 'agent_evaluation_synthetic_data_enabled'
+    : 'agent_evaluation_labels_enabled'
+  const enabled = Boolean(form[enabledField])
+  const otherEnabled = Boolean(form[otherEnabledField])
+  const update = (field: string, value: unknown) => {
+    setForm((current: Record<string, any>) => ({ ...current, [field]: value }))
+  }
+
+  return (
+    <div className="col-span-full space-y-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-4">
+      <label className="flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={enabled && !otherEnabled}
+          onChange={(event) => update(enabledField, event.target.checked)}
+          className="w-4 h-4 rounded border-lava-400 text-lava-600 focus:ring-lava-500"
+        />
+        {isLabels ? 'Evaluation Labels' : 'Synthetic Data'}
+      </label>
+
+      {enabled && (
+        isLabels ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Input Tokens/Month (millions)</label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={form.agent_evaluation_input_tokens_millions}
+                onChange={(event) => update('agent_evaluation_input_tokens_millions', Number(event.target.value))}
+                className="w-full text-sm"
+              />
+              <span className="text-[10px] text-[var(--text-tertiary)]">2.143 DBU per million input tokens</span>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Output Tokens/Month (millions)</label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={form.agent_evaluation_output_tokens_millions}
+                onChange={(event) => update('agent_evaluation_output_tokens_millions', Number(event.target.value))}
+                className="w-full text-sm"
+              />
+              <span className="text-[10px] text-[var(--text-tertiary)]">8.571 DBU per million output tokens</span>
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-md">
+            <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Synthetic Questions/Month</label>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={form.agent_evaluation_synthetic_questions}
+              onChange={(event) => update('agent_evaluation_synthetic_questions', Number(event.target.value))}
+              className="w-full text-sm"
+            />
+            <span className="text-[10px] text-[var(--text-tertiary)]">5 DBU per synthetic question</span>
+          </div>
+        )
+      )}
+    </div>
+  )
+}
 
 // Helper to get available context lengths for FMAPI Proprietary models from pricing bundle
 function getAvailableContextLengths(
@@ -23,7 +263,8 @@ function getAvailableContextLengths(
   const contextLengths = new Set<string>()
   const prefix = `${cloud.toLowerCase()}:${provider.toLowerCase()}:${model.toLowerCase()}:`
   
-  Object.keys(bundle.fmapiProprietaryRates).forEach(key => {
+  Object.entries(bundle.fmapiProprietaryRates).forEach(([key, rate]) => {
+    if (rate.status === 'retired') return
     if (key.startsWith(prefix)) {
       // Key format: cloud:provider:model:endpoint:context:rate_type
       const parts = key.split(':')
@@ -54,7 +295,8 @@ function getAvailableRateTypes(
   const rateTypes = new Set<string>()
   const prefix = `${cloud.toLowerCase()}:${provider.toLowerCase()}:${model.toLowerCase()}:${endpointType}:${contextLength}:`
   
-  Object.keys(bundle.fmapiProprietaryRates).forEach(key => {
+  Object.entries(bundle.fmapiProprietaryRates).forEach(([key, rate]) => {
+    if (rate.status === 'retired') return
     if (key.startsWith(prefix)) {
       const parts = key.split(':')
       if (parts.length >= 6) {
@@ -63,8 +305,93 @@ function getAvailableRateTypes(
     }
   })
   
-  const result = Array.from(rateTypes)
+  const result = sortFMAPIRateTypes(Array.from(rateTypes))
   return result.length > 0 ? result : ['input_token', 'output_token', 'cache_read', 'cache_write']
+}
+
+function sortFMAPIRateTypes(rateTypes: string[]): string[] {
+  const preferredOrder = [
+    'input_token',
+    'output_token',
+    'cache_write',
+    'cache_read',
+    'batch_inference',
+    'provisioned_entry',
+    'provisioned_scaling',
+    'provisioned_entry_1_month',
+    'provisioned_entry_3_month',
+    'provisioned_scaling_1_month',
+    'provisioned_scaling_3_month',
+  ]
+  return [...rateTypes].sort((left, right) => {
+    const leftIndex = preferredOrder.indexOf(left)
+    const rightIndex = preferredOrder.indexOf(right)
+    if (leftIndex === -1 && rightIndex === -1) return left.localeCompare(right)
+    if (leftIndex === -1) return 1
+    if (rightIndex === -1) return -1
+    return leftIndex - rightIndex
+  })
+}
+
+function getAvailableDatabricksRateTypes(
+  bundle: PricingBundle,
+  cloud: string,
+  model: string,
+  region?: string,
+): string[] {
+  if (!bundle.isLoaded || !bundle.fmapiDatabricksRates || !model) {
+    return ['input_token', 'output_token', 'provisioned_scaling']
+  }
+  const prefix = `${cloud.toLowerCase()}:${model.toLowerCase()}:`
+  return sortFMAPIRateTypes(Object.entries(bundle.fmapiDatabricksRates)
+    .filter(([key, rate]) => {
+      if (!key.startsWith(prefix) || rate.status === 'retired') return false
+      const rateType = key.split(':')[2]
+      return !rateType.startsWith('provisioned_entry')
+        || !region
+        || isFMAPIProvisionedEntryRegionSupported(cloud, region)
+    })
+    .map(([key]) => key.split(':')[2]))
+}
+
+function getSelectedFMAPIRate(
+  bundle: PricingBundle,
+  key: string
+): FMAPIRate | null {
+  return bundle.isLoaded ? bundle.fmapiDatabricksRates[key] ?? bundle.fmapiProprietaryRates[key] ?? null : null
+}
+
+function getDatabricksRegionalUplift(
+  bundle: PricingBundle,
+  cloud: string,
+  model: string,
+): number | undefined {
+  if (!bundle.isLoaded || !model) return undefined
+  const prefix = `${cloud.toLowerCase()}:${model.toLowerCase()}:`
+  return Object.entries(bundle.fmapiDatabricksRates).find(
+    ([key, rate]) => (
+      key.startsWith(prefix)
+      && rate.status !== 'retired'
+      && Boolean(rate.regional_uplift_percent)
+    ),
+  )?.[1].regional_uplift_percent
+}
+
+function formatFMAPIRateType(rateType: string): string {
+  const labels: Record<string, string> = {
+    input_token: 'Input Token',
+    output_token: 'Output Token',
+    cache_read: 'Cache Read',
+    cache_write: 'Cache Write',
+    batch_inference: 'Batch Inference',
+    provisioned_scaling: 'Provisioned Scaling',
+    provisioned_entry: 'Provisioned Entry',
+    provisioned_scaling_1_month: 'Provisioned Scaling (1-month reservation)',
+    provisioned_scaling_3_month: 'Provisioned Scaling (3-month reservation)',
+    provisioned_entry_1_month: 'Provisioned Entry (1-month reservation)',
+    provisioned_entry_3_month: 'Provisioned Entry (3-month reservation)',
+  }
+  return labels[rateType] || rateType.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
 }
 
 // ===== TIER-BASED WORKLOAD RESTRICTIONS =====
@@ -86,7 +413,11 @@ const PREMIUM_ONLY_WORKLOAD_TYPES = new Set([
   'AI_PARSE',
   'AI_EXTRACT',
   'AI_CLASSIFY',
+  'AI_GATEWAY',
+  'AGENT_EVALUATION',
+  'AI_RUNTIME',
   'SHUTTERSTOCK_IMAGEAI',
+  'ZEROBUS',
 ])
 
 import {
@@ -350,6 +681,16 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     ],
     models: {
       llm: [
+        { id: 'kimi-k3', name: 'Kimi K3' },
+        { id: 'kimi-k2-7', name: 'Kimi K2.7' },
+        { id: 'glm-5-2', name: 'GLM-5.2' },
+        { id: 'glm-5-2-priority', name: 'GLM-5.2 (Priority)' },
+        { id: 'inkling', name: 'Inkling' },
+        { id: 'deepseek-v4-pro-0813', name: 'DeepSeek V4 Pro (0813)' },
+        { id: 'deepseek-v4-flash-0731', name: 'DeepSeek V4 Flash (0731)' },
+        { id: 'qwen35-122b-a10b', name: 'Qwen 3.5 122B' },
+        { id: 'qwen35-122b-a10b-priority', name: 'Qwen 3.5 122B (Priority)' },
+        { id: 'qwen3-next-80b-a3b-instruct', name: 'Qwen 3 Next 80B' },
         { id: 'llama-4-maverick', name: 'Llama 4 Maverick' },
         { id: 'llama-3-3-70b', name: 'Llama 3.3 70B' },
         { id: 'llama-3-1-8b', name: 'Llama 3.1 8B' },
@@ -360,6 +701,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         { id: 'gemma-3-12b', name: 'Gemma 3 12B' },
       ],
       embedding: [
+        { id: 'qwen3-embedding-0-6b', name: 'Qwen 3 0.6B Embedding' },
         { id: 'bge-large', name: 'BGE Large' },
         { id: 'gte', name: 'GTE' },
       ],
@@ -382,24 +724,34 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         id: 'anthropic',
         name: 'Anthropic',
         models: [
+          { id: 'claude-fable-5', name: 'Claude Fable 5' },
+          { id: 'claude-opus-5', name: 'Claude Opus 5' },
+          { id: 'claude-sonnet-5', name: 'Claude Sonnet 5' },
+          { id: 'claude-opus-4-8', name: 'Claude Opus 4.8' },
+          { id: 'claude-opus-4-7', name: 'Claude Opus 4.7' },
           { id: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
           { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
           { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5' },
           { id: 'claude-opus-4-5', name: 'Claude Opus 4.5' },
           { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' },
           { id: 'claude-opus-4-1', name: 'Claude Opus 4.1' },
-          { id: 'claude-sonnet-4-1', name: 'Claude Sonnet 4.1' },
           { id: 'claude-opus-4', name: 'Claude Opus 4' },
           { id: 'claude-sonnet-4', name: 'Claude Sonnet 4' },
-          { id: 'claude-sonnet-3-7', name: 'Claude Sonnet 3.7' },
         ],
       },
       {
         id: 'openai',
         name: 'OpenAI',
         models: [
+          { id: 'gpt-5-6-sol', name: 'GPT 5.6 Sol' },
+          { id: 'gpt-5-6-terra', name: 'GPT 5.6 Terra' },
+          { id: 'gpt-5-6-luna', name: 'GPT 5.6 Luna' },
+          { id: 'gpt-5-5-pro', name: 'GPT 5.5 Pro' },
+          { id: 'gpt-5-5', name: 'GPT 5.5' },
           { id: 'gpt-5-4-pro', name: 'GPT-5.4 Pro' },
           { id: 'gpt-5-4', name: 'GPT-5.4' },
+          { id: 'gpt-5-4-mini', name: 'GPT 5.4 Mini' },
+          { id: 'gpt-5-4-nano', name: 'GPT 5.4 Nano' },
           { id: 'gpt-5-2-5-3-codex', name: 'GPT-5.2/5.3 Codex' },
           { id: 'gpt-5-2', name: 'GPT-5.2' },
           { id: 'gpt-5-1', name: 'GPT-5.1' },
@@ -414,10 +766,16 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         id: 'google',
         name: 'Google',
         models: [
+          { id: 'gemini-3-6-flash', name: 'Gemini 3.6 Flash' },
+          { id: 'gemini-3-5-flash', name: 'Gemini 3.5 Flash' },
+          { id: 'gemini-3-5-flash-lite', name: 'Gemini 3.5 Flash Lite' },
+          { id: 'gemini-3-1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
+          { id: 'gemini-3-0-pro', name: 'Gemini 3.0 Pro' },
           { id: 'gemini-3-1-pro', name: 'Gemini 3.1 Pro' },
           { id: 'gemini-3-0-flash', name: 'Gemini 3.0 Flash' },
           { id: 'gemini-2-5-pro', name: 'Gemini 2.5 Pro' },
           { id: 'gemini-2-5-flash', name: 'Gemini 2.5 Flash' },
+          { id: 'gemini-2-5-flash-lite', name: 'Gemini 2.5 Flash Lite' },
         ],
       },
     ],
@@ -434,6 +792,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
   const fmapiProprietaryModels = (fmapiProprietaryConfig && Array.isArray(fmapiProprietaryConfig.providers))
     ? fmapiProprietaryConfig
     : defaultFmapiProprietaryConfig
+  const aiRuntimeAccelerators = getAIRuntimeAccelerators(selectedCloud)
   
   const [isSaving, setIsSaving] = useState(false)
   // Initialize useDirectHours from lineItem if available to prevent flash
@@ -456,7 +815,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         serverless_mode: lineItem.serverless_mode || 'standard',
         driver_node_type: lineItem.driver_node_type || '',
         worker_node_type: lineItem.worker_node_type || '',
-        num_workers: lineItem.num_workers || 2,
+        num_workers: lineItem.num_workers ?? 2,
         photon_enabled: lineItem.photon_enabled || false,
         dlt_edition: lineItem.dlt_edition || 'PRO',
         dbsql_warehouse_type: (lineItem.dbsql_warehouse_type || 'SERVERLESS').toUpperCase(),
@@ -469,10 +828,13 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         vector_search_mode: lineItem.vector_search_mode || 'standard',
         vector_capacity_millions: lineItem.vector_capacity_millions || 1,
         vector_search_storage_gb: lineItem.vector_search_storage_gb || 0,
+        ai_search_reranker_enabled: lineItem.ai_search_reranker_enabled ?? false,
+        ai_search_reranker_requests_thousands: lineItem.ai_search_reranker_requests_thousands ?? 0,
         model_serving_gpu_type: lineItem.model_serving_gpu_type || 'cpu',
         model_serving_scale_out: lineItem.model_serving_scale_out || 'small',
         model_serving_concurrency: lineItem.model_serving_concurrency || 4,
         databricks_apps_size: lineItem.databricks_apps_size || 'medium',
+        databricks_apps_num_apps: lineItem.databricks_apps_num_apps ?? 1,
         ai_parse_mode: lineItem.ai_parse_mode || 'pages',
         ai_parse_complexity: lineItem.ai_parse_complexity || 'medium',
         ai_parse_pages_thousands: lineItem.ai_parse_pages_thousands || 0,
@@ -483,6 +845,33 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         ai_classify_num_docs: (lineItem.ai_classify_num_docs || 0) / 1000,
         ai_classify_dbus_per_thousand: lineItem.ai_classify_dbus_per_thousand || 0,
         shutterstock_images: lineItem.shutterstock_images || 0,
+        ai_gateway_inference_tables_enabled: lineItem.ai_gateway_inference_tables_enabled ?? true,
+        ai_gateway_inference_tables_input_method: lineItem.ai_gateway_inference_tables_input_method ?? 'requests',
+        ai_gateway_inference_tables_requests_millions: lineItem.ai_gateway_inference_tables_requests_millions ?? 1,
+        ai_gateway_inference_tables_avg_request_payload_kb: lineItem.ai_gateway_inference_tables_avg_request_payload_kb ?? 1,
+        ai_gateway_inference_tables_avg_response_payload_kb: lineItem.ai_gateway_inference_tables_avg_response_payload_kb ?? 1,
+        ai_gateway_inference_tables_monthly_payload_gb: lineItem.ai_gateway_inference_tables_monthly_payload_gb ?? 2,
+        ai_gateway_usage_tracking_enabled: lineItem.ai_gateway_usage_tracking_enabled ?? true,
+        ai_gateway_usage_tracking_input_method: lineItem.ai_gateway_usage_tracking_input_method ?? 'requests',
+        ai_gateway_usage_tracking_requests_millions: lineItem.ai_gateway_usage_tracking_requests_millions ?? 1,
+        ai_gateway_usage_tracking_avg_request_payload_kb: lineItem.ai_gateway_usage_tracking_avg_request_payload_kb ?? 1,
+        ai_gateway_usage_tracking_avg_response_payload_kb: lineItem.ai_gateway_usage_tracking_avg_response_payload_kb ?? 1,
+        ai_gateway_usage_tracking_monthly_payload_gb: lineItem.ai_gateway_usage_tracking_monthly_payload_gb ?? 2,
+        agent_evaluation_labels_enabled: lineItem.agent_evaluation_labels_enabled ?? true,
+        agent_evaluation_input_tokens_millions: lineItem.agent_evaluation_input_tokens_millions ?? 1,
+        agent_evaluation_output_tokens_millions: lineItem.agent_evaluation_output_tokens_millions ?? 1,
+        agent_evaluation_synthetic_data_enabled: lineItem.agent_evaluation_synthetic_data_enabled ?? false,
+        agent_evaluation_synthetic_questions: lineItem.agent_evaluation_synthetic_questions ?? 0,
+        ai_runtime_accelerator_type: lineItem.ai_runtime_accelerator_type ?? 'GPU_1xA10',
+        general_storage_quantity: lineItem.general_storage_quantity ?? 100,
+        general_storage_unit: lineItem.general_storage_unit ?? 'gb',
+        general_storage_tier1_operations_thousands:
+          lineItem.general_storage_tier1_operations_thousands ?? 0,
+        general_storage_tier2_operations_thousands:
+          lineItem.general_storage_tier2_operations_thousands ?? 0,
+        zerobus_mode: lineItem.zerobus_mode ?? 'standard',
+        zerobus_monthly_ingested_gb:
+          lineItem.zerobus_monthly_ingested_gb ?? 100,
         lakeflow_connect_pipeline_mode: lineItem.lakeflow_connect_pipeline_mode || 'serverless',
         lakeflow_connect_gateway_enabled: lineItem.lakeflow_connect_gateway_enabled || false,
         lakeflow_connect_gateway_instance: lineItem.lakeflow_connect_gateway_instance || '',
@@ -537,9 +926,50 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       vector_search_mode: 'standard',
       vector_capacity_millions: 1,
       vector_search_storage_gb: 0,
+      ai_search_reranker_enabled: false,
+      ai_search_reranker_requests_thousands: 0,
       model_serving_gpu_type: 'cpu',
       model_serving_scale_out: 'small',
       model_serving_concurrency: 4,
+      databricks_apps_size: 'medium',
+      databricks_apps_num_apps: 1,
+      ai_parse_mode: 'pages',
+      ai_parse_complexity: 'medium',
+      ai_parse_pages_thousands: 0,
+      ai_extract_document_type: 'invoice',
+      ai_extract_num_inputs: 0,
+      ai_extract_dbus_per_thousand: 0,
+      ai_classify_document_type: 'short_text',
+      ai_classify_num_docs: 0,
+      ai_classify_dbus_per_thousand: 0,
+      shutterstock_images: 0,
+      ai_gateway_inference_tables_enabled: true,
+      ai_gateway_inference_tables_input_method: 'requests',
+      ai_gateway_inference_tables_requests_millions: 1,
+      ai_gateway_inference_tables_avg_request_payload_kb: 1,
+      ai_gateway_inference_tables_avg_response_payload_kb: 1,
+      ai_gateway_inference_tables_monthly_payload_gb: 2,
+      ai_gateway_usage_tracking_enabled: true,
+      ai_gateway_usage_tracking_input_method: 'requests',
+      ai_gateway_usage_tracking_requests_millions: 1,
+      ai_gateway_usage_tracking_avg_request_payload_kb: 1,
+      ai_gateway_usage_tracking_avg_response_payload_kb: 1,
+      ai_gateway_usage_tracking_monthly_payload_gb: 2,
+      agent_evaluation_labels_enabled: true,
+      agent_evaluation_input_tokens_millions: 1,
+      agent_evaluation_output_tokens_millions: 1,
+      agent_evaluation_synthetic_data_enabled: false,
+      agent_evaluation_synthetic_questions: 0,
+      ai_runtime_accelerator_type: 'GPU_1xA10',
+      general_storage_quantity: 100,
+      general_storage_unit: 'gb',
+      general_storage_tier1_operations_thousands: 0,
+      general_storage_tier2_operations_thousands: 0,
+      zerobus_mode: 'standard',
+      zerobus_monthly_ingested_gb: 100,
+      lakeflow_connect_pipeline_mode: 'serverless',
+      lakeflow_connect_gateway_enabled: false,
+      lakeflow_connect_gateway_instance: '',
       lakebase_cu: 1,
       lakebase_compute_mode: 'autoscale',
       lakebase_min_cu: 1,
@@ -570,6 +1000,59 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       notes: ''
     }
   })
+  const fmapiDatabricksRateTypes = getAvailableDatabricksRateTypes(
+    pricingBundle,
+    selectedCloud || 'aws',
+    form.fmapi_model || '',
+    selectedRegion,
+  )
+  const selectedFmapiDatabricksRate = getSelectedFMAPIRate(
+    pricingBundle,
+    `${(selectedCloud || 'aws').toLowerCase()}:${form.fmapi_model || ''}:${form.fmapi_rate_type || 'input_token'}`
+  )
+  const fmapiDatabricksRegionalUplift = getDatabricksRegionalUplift(
+    pricingBundle,
+    selectedCloud || 'aws',
+    form.fmapi_model || '',
+  )
+  const selectedFmapiProprietaryRate = getSelectedFMAPIRate(
+    pricingBundle,
+    `${(selectedCloud || 'aws').toLowerCase()}:${form.fmapi_provider || ''}:${form.fmapi_model || ''}:${form.fmapi_endpoint_type || 'global'}:${form.fmapi_context_length || 'all'}:${form.fmapi_rate_type || 'input_token'}`
+  )
+  const fmapiDatabricksIsHourly = selectedFmapiDatabricksRate?.is_hourly
+    ?? (form.fmapi_rate_type || '').startsWith('provisioned_')
+  const fmapiProprietaryIsHourly = selectedFmapiProprietaryRate?.is_hourly
+    ?? form.fmapi_rate_type === 'batch_inference'
+
+  useEffect(() => {
+    if (
+      form.workload_type === 'FMAPI_DATABRICKS'
+      && !fmapiDatabricksRateTypes.includes(form.fmapi_rate_type)
+    ) {
+      setForm(current => ({
+        ...current,
+        fmapi_rate_type: fmapiDatabricksRateTypes[0] || 'input_token',
+      }))
+    }
+  }, [
+    form.workload_type,
+    form.fmapi_rate_type,
+    fmapiDatabricksRateTypes.join(':'),
+  ])
+
+  useEffect(() => {
+    if (
+      form.workload_type === 'FMAPI_DATABRICKS'
+      && !fmapiDatabricksRegionalUplift
+      && form.fmapi_endpoint_type === 'regional'
+    ) {
+      setForm(current => ({ ...current, fmapi_endpoint_type: 'global' }))
+    }
+  }, [
+    form.workload_type,
+    form.fmapi_endpoint_type,
+    fmapiDatabricksRegionalUplift,
+  ])
 
   // Default form values for new workloads
   const defaultFormValues = {
@@ -593,10 +1076,13 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     vector_search_mode: 'standard',
     vector_capacity_millions: 1,
     vector_search_storage_gb: 0,
+    ai_search_reranker_enabled: false,
+    ai_search_reranker_requests_thousands: 0,
     model_serving_gpu_type: 'cpu',
     model_serving_scale_out: 'small',
     model_serving_concurrency: 4,
     databricks_apps_size: 'medium',
+    databricks_apps_num_apps: 1,
     ai_parse_mode: 'pages',
     ai_parse_complexity: 'medium',
     ai_parse_pages_thousands: 0,
@@ -607,6 +1093,30 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     ai_classify_num_docs: 0,
     ai_classify_dbus_per_thousand: 0,
     shutterstock_images: 0,
+    ai_gateway_inference_tables_enabled: true,
+    ai_gateway_inference_tables_input_method: 'requests',
+    ai_gateway_inference_tables_requests_millions: 1,
+    ai_gateway_inference_tables_avg_request_payload_kb: 1,
+    ai_gateway_inference_tables_avg_response_payload_kb: 1,
+    ai_gateway_inference_tables_monthly_payload_gb: 2,
+    ai_gateway_usage_tracking_enabled: true,
+    ai_gateway_usage_tracking_input_method: 'requests',
+    ai_gateway_usage_tracking_requests_millions: 1,
+    ai_gateway_usage_tracking_avg_request_payload_kb: 1,
+    ai_gateway_usage_tracking_avg_response_payload_kb: 1,
+    ai_gateway_usage_tracking_monthly_payload_gb: 2,
+    agent_evaluation_labels_enabled: true,
+    agent_evaluation_input_tokens_millions: 1,
+    agent_evaluation_output_tokens_millions: 1,
+    agent_evaluation_synthetic_data_enabled: false,
+    agent_evaluation_synthetic_questions: 0,
+    ai_runtime_accelerator_type: 'GPU_1xA10',
+    general_storage_quantity: 100,
+    general_storage_unit: 'gb',
+    general_storage_tier1_operations_thousands: 0,
+    general_storage_tier2_operations_thousands: 0,
+    zerobus_mode: 'standard',
+    zerobus_monthly_ingested_gb: 100,
     lakeflow_connect_pipeline_mode: 'serverless',
     lakeflow_connect_gateway_enabled: false,
     lakeflow_connect_gateway_instance: '',
@@ -650,7 +1160,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         serverless_mode: lineItem.serverless_mode || 'standard',
         driver_node_type: lineItem.driver_node_type || '',
         worker_node_type: lineItem.worker_node_type || '',
-        num_workers: lineItem.num_workers || 2,
+        num_workers: lineItem.num_workers ?? 2,
         photon_enabled: lineItem.photon_enabled || false,
         dlt_edition: lineItem.dlt_edition || 'PRO',
         dbsql_warehouse_type: (lineItem.dbsql_warehouse_type || 'SERVERLESS').toUpperCase(),
@@ -664,10 +1174,13 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         vector_search_mode: lineItem.vector_search_mode || 'standard',
         vector_capacity_millions: lineItem.vector_capacity_millions || 1,
         vector_search_storage_gb: lineItem.vector_search_storage_gb || 0,
+        ai_search_reranker_enabled: lineItem.ai_search_reranker_enabled ?? false,
+        ai_search_reranker_requests_thousands: lineItem.ai_search_reranker_requests_thousands ?? 0,
         model_serving_gpu_type: lineItem.model_serving_gpu_type || 'cpu',
         model_serving_scale_out: lineItem.model_serving_scale_out || 'small',
         model_serving_concurrency: lineItem.model_serving_concurrency || 4,
         databricks_apps_size: lineItem.databricks_apps_size || 'medium',
+        databricks_apps_num_apps: lineItem.databricks_apps_num_apps ?? 1,
         ai_parse_mode: lineItem.ai_parse_mode || 'pages',
         ai_parse_complexity: lineItem.ai_parse_complexity || 'medium',
         ai_parse_pages_thousands: lineItem.ai_parse_pages_thousands || 0,
@@ -678,6 +1191,33 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         ai_classify_num_docs: (lineItem.ai_classify_num_docs || 0) / 1000,
         ai_classify_dbus_per_thousand: lineItem.ai_classify_dbus_per_thousand || 0,
         shutterstock_images: lineItem.shutterstock_images || 0,
+        ai_gateway_inference_tables_enabled: lineItem.ai_gateway_inference_tables_enabled ?? true,
+        ai_gateway_inference_tables_input_method: lineItem.ai_gateway_inference_tables_input_method ?? 'requests',
+        ai_gateway_inference_tables_requests_millions: lineItem.ai_gateway_inference_tables_requests_millions ?? 1,
+        ai_gateway_inference_tables_avg_request_payload_kb: lineItem.ai_gateway_inference_tables_avg_request_payload_kb ?? 1,
+        ai_gateway_inference_tables_avg_response_payload_kb: lineItem.ai_gateway_inference_tables_avg_response_payload_kb ?? 1,
+        ai_gateway_inference_tables_monthly_payload_gb: lineItem.ai_gateway_inference_tables_monthly_payload_gb ?? 2,
+        ai_gateway_usage_tracking_enabled: lineItem.ai_gateway_usage_tracking_enabled ?? true,
+        ai_gateway_usage_tracking_input_method: lineItem.ai_gateway_usage_tracking_input_method ?? 'requests',
+        ai_gateway_usage_tracking_requests_millions: lineItem.ai_gateway_usage_tracking_requests_millions ?? 1,
+        ai_gateway_usage_tracking_avg_request_payload_kb: lineItem.ai_gateway_usage_tracking_avg_request_payload_kb ?? 1,
+        ai_gateway_usage_tracking_avg_response_payload_kb: lineItem.ai_gateway_usage_tracking_avg_response_payload_kb ?? 1,
+        ai_gateway_usage_tracking_monthly_payload_gb: lineItem.ai_gateway_usage_tracking_monthly_payload_gb ?? 2,
+        agent_evaluation_labels_enabled: lineItem.agent_evaluation_labels_enabled ?? true,
+        agent_evaluation_input_tokens_millions: lineItem.agent_evaluation_input_tokens_millions ?? 1,
+        agent_evaluation_output_tokens_millions: lineItem.agent_evaluation_output_tokens_millions ?? 1,
+        agent_evaluation_synthetic_data_enabled: lineItem.agent_evaluation_synthetic_data_enabled ?? false,
+        agent_evaluation_synthetic_questions: lineItem.agent_evaluation_synthetic_questions ?? 0,
+        ai_runtime_accelerator_type: lineItem.ai_runtime_accelerator_type ?? 'GPU_1xA10',
+        general_storage_quantity: lineItem.general_storage_quantity ?? 100,
+        general_storage_unit: lineItem.general_storage_unit ?? 'gb',
+        general_storage_tier1_operations_thousands:
+          lineItem.general_storage_tier1_operations_thousands ?? 0,
+        general_storage_tier2_operations_thousands:
+          lineItem.general_storage_tier2_operations_thousands ?? 0,
+        zerobus_mode: lineItem.zerobus_mode ?? 'standard',
+        zerobus_monthly_ingested_gb:
+          lineItem.zerobus_monthly_ingested_gb ?? 100,
         lakeflow_connect_pipeline_mode: lineItem.lakeflow_connect_pipeline_mode || 'serverless',
         lakeflow_connect_gateway_enabled: lineItem.lakeflow_connect_gateway_enabled || false,
         lakeflow_connect_gateway_instance: lineItem.lakeflow_connect_gateway_instance || '',
@@ -809,6 +1349,22 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
     // If regional availability not loaded yet, show all tier-available types
     return true
   })
+
+  const groupedWorkloadTypes = WORKLOAD_TYPE_GROUPS
+    .map(group => ({
+      ...group,
+      workloadTypes: filteredWorkloadTypes.filter(workload =>
+        group.workloadTypes.includes(workload.workload_type),
+      ),
+    }))
+    .filter(group => group.workloadTypes.length > 0)
+
+  const groupedWorkloadTypeNames = new Set(
+    WORKLOAD_TYPE_GROUPS.flatMap(group => group.workloadTypes),
+  )
+  const uncategorizedWorkloadTypes = filteredWorkloadTypes.filter(
+    workload => !groupedWorkloadTypeNames.has(workload.workload_type),
+  )
   
   // Check if some workload types are hidden due to regional restrictions
   const hasRegionalRestrictions = availableWorkloadTypesForRegion !== null &&
@@ -849,7 +1405,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       serverless_enabled: form.serverless_enabled,
       serverless_mode: form.serverless_mode,
       driver_node_type: form.driver_node_type || undefined,
-      worker_node_type: form.worker_node_type || undefined,
+      worker_node_type: form.num_workers > 0
+        ? form.worker_node_type || undefined
+        : undefined,
       num_workers: form.num_workers,
       photon_enabled: form.photon_enabled,
       dlt_edition: form.dlt_edition,
@@ -863,10 +1421,13 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       vector_search_mode: form.vector_search_mode,
       vector_capacity_millions: form.vector_capacity_millions,
       vector_search_storage_gb: form.vector_search_storage_gb,
+      ai_search_reranker_enabled: form.ai_search_reranker_enabled,
+      ai_search_reranker_requests_thousands: form.ai_search_reranker_requests_thousands,
       model_serving_gpu_type: form.model_serving_gpu_type,
       model_serving_concurrency: form.model_serving_concurrency,
       model_serving_scale_out: form.model_serving_scale_out,
       databricks_apps_size: form.databricks_apps_size,
+      databricks_apps_num_apps: form.databricks_apps_num_apps,
       ai_parse_mode: form.ai_parse_mode,
       ai_parse_complexity: form.ai_parse_complexity,
       ai_parse_pages_thousands: form.ai_parse_pages_thousands,
@@ -877,6 +1438,32 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       ai_classify_num_docs: form.ai_classify_num_docs * 1000,
       ai_classify_dbus_per_thousand: form.ai_classify_dbus_per_thousand,
       shutterstock_images: form.shutterstock_images,
+      ai_gateway_inference_tables_enabled: form.ai_gateway_inference_tables_enabled,
+      ai_gateway_inference_tables_input_method: form.ai_gateway_inference_tables_input_method,
+      ai_gateway_inference_tables_requests_millions: form.ai_gateway_inference_tables_requests_millions,
+      ai_gateway_inference_tables_avg_request_payload_kb: form.ai_gateway_inference_tables_avg_request_payload_kb,
+      ai_gateway_inference_tables_avg_response_payload_kb: form.ai_gateway_inference_tables_avg_response_payload_kb,
+      ai_gateway_inference_tables_monthly_payload_gb: form.ai_gateway_inference_tables_monthly_payload_gb,
+      ai_gateway_usage_tracking_enabled: form.ai_gateway_usage_tracking_enabled,
+      ai_gateway_usage_tracking_input_method: form.ai_gateway_usage_tracking_input_method,
+      ai_gateway_usage_tracking_requests_millions: form.ai_gateway_usage_tracking_requests_millions,
+      ai_gateway_usage_tracking_avg_request_payload_kb: form.ai_gateway_usage_tracking_avg_request_payload_kb,
+      ai_gateway_usage_tracking_avg_response_payload_kb: form.ai_gateway_usage_tracking_avg_response_payload_kb,
+      ai_gateway_usage_tracking_monthly_payload_gb: form.ai_gateway_usage_tracking_monthly_payload_gb,
+      agent_evaluation_labels_enabled: form.agent_evaluation_labels_enabled,
+      agent_evaluation_input_tokens_millions: form.agent_evaluation_input_tokens_millions,
+      agent_evaluation_output_tokens_millions: form.agent_evaluation_output_tokens_millions,
+      agent_evaluation_synthetic_data_enabled: form.agent_evaluation_synthetic_data_enabled,
+      agent_evaluation_synthetic_questions: form.agent_evaluation_synthetic_questions,
+      ai_runtime_accelerator_type: form.ai_runtime_accelerator_type,
+      general_storage_quantity: form.general_storage_quantity,
+      general_storage_unit: form.general_storage_unit,
+      general_storage_tier1_operations_thousands:
+        form.general_storage_tier1_operations_thousands,
+      general_storage_tier2_operations_thousands:
+        form.general_storage_tier2_operations_thousands,
+      zerobus_mode: form.zerobus_mode,
+      zerobus_monthly_ingested_gb: form.zerobus_monthly_ingested_gb,
       lakeflow_connect_pipeline_mode: form.lakeflow_connect_pipeline_mode,
       lakeflow_connect_gateway_enabled: form.lakeflow_connect_gateway_enabled,
       lakeflow_connect_gateway_instance: form.lakeflow_connect_gateway_instance || undefined,
@@ -923,6 +1510,16 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       toast.error('Enter a workload name')
       return
     }
+    if (selectedWorkloadType?.show_compute_config) {
+      if (!form.driver_node_type) {
+        toast.error('Select a driver instance type')
+        return
+      }
+      if (form.num_workers > 0 && !form.worker_node_type) {
+        toast.error('Select a worker instance type or set worker count to 0 for single node')
+        return
+      }
+    }
     if (
       availableWorkloadTypesForRegion !== null &&
       !availableWorkloadTypesForRegion.includes(form.workload_type)
@@ -946,6 +1543,120 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         form.ai_classify_dbus_per_thousand <= 0)
     ) {
       toast.error('AI Classify custom rate must be greater than 0')
+      return
+    }
+    if (
+      form.workload_type === 'VECTOR_SEARCH' &&
+      form.ai_search_reranker_enabled &&
+      (!Number.isFinite(form.ai_search_reranker_requests_thousands) ||
+        form.ai_search_reranker_requests_thousands < 0)
+    ) {
+      toast.error('Enter a non-negative AI Search Reranker request volume')
+      return
+    }
+    if (
+      form.workload_type === 'DATABRICKS_APPS' &&
+      (
+        !Number.isInteger(form.databricks_apps_num_apps) ||
+        form.databricks_apps_num_apps < 1
+      )
+    ) {
+      toast.error('Enter at least one Databricks App')
+      return
+    }
+    if (
+      form.workload_type === 'AI_GATEWAY' &&
+      !form.ai_gateway_inference_tables_enabled &&
+      !form.ai_gateway_usage_tracking_enabled
+    ) {
+      toast.error('Enable at least one paid AI Gateway feature')
+      return
+    }
+    if (form.workload_type === 'AI_GATEWAY') {
+      for (const component of ['inference_tables', 'usage_tracking']) {
+        const prefix = `ai_gateway_${component}`
+        if (!form[`${prefix}_enabled`]) continue
+        if (form[`${prefix}_input_method`] === 'requests') {
+          const values = [
+            form[`${prefix}_requests_millions`],
+            form[`${prefix}_avg_request_payload_kb`],
+            form[`${prefix}_avg_response_payload_kb`],
+          ]
+          if (values.some(value => !Number.isFinite(value) || value < 0)) {
+            toast.error(`Enter non-negative request volume and payload sizes for ${component === 'inference_tables' ? 'Inference Tables' : 'Usage Tracking'}`)
+            return
+          }
+        } else {
+          const payloadGB = form[`${prefix}_monthly_payload_gb`]
+          if (!Number.isFinite(payloadGB) || payloadGB < 0) {
+            toast.error(`Enter a non-negative monthly payload for ${component === 'inference_tables' ? 'Inference Tables' : 'Usage Tracking'}`)
+            return
+          }
+        }
+      }
+    }
+    if (
+      form.workload_type === 'AGENT_EVALUATION' &&
+      !form.agent_evaluation_labels_enabled &&
+      !form.agent_evaluation_synthetic_data_enabled
+    ) {
+      toast.error('Enable Evaluation Labels or Synthetic Data')
+      return
+    }
+    if (
+      form.workload_type === 'GENERAL_STORAGE' &&
+      [
+        form.general_storage_quantity,
+        form.general_storage_tier1_operations_thousands,
+        form.general_storage_tier2_operations_thousands,
+      ].some(value => !Number.isFinite(value) || value < 0)
+    ) {
+      toast.error('Enter non-negative storage and operation quantities')
+      return
+    }
+    if (
+      form.workload_type === 'ZEROBUS' &&
+      (!Number.isFinite(form.zerobus_monthly_ingested_gb) ||
+        form.zerobus_monthly_ingested_gb < 0)
+    ) {
+      toast.error('Enter a non-negative monthly Zerobus ingestion volume')
+      return
+    }
+    if (
+      form.workload_type === 'ZEROBUS' &&
+      (
+        selectedTier?.toUpperCase() === 'STANDARD' ||
+        (
+          selectedCloud?.toUpperCase() === 'AZURE' &&
+          selectedTier?.toUpperCase() !== 'PREMIUM'
+        )
+      )
+    ) {
+      toast.error(
+        selectedCloud?.toUpperCase() === 'AZURE'
+          ? 'Zerobus pricing on Azure requires Premium tier'
+          : 'Zerobus requires Premium or Enterprise tier',
+      )
+      return
+    }
+    if (form.workload_type === 'AGENT_EVALUATION' && form.agent_evaluation_labels_enabled) {
+      const tokenValues = [
+        form.agent_evaluation_input_tokens_millions,
+        form.agent_evaluation_output_tokens_millions,
+      ]
+      if (tokenValues.some(value => !Number.isFinite(value) || value < 0)) {
+        toast.error('Enter non-negative input and output token quantities')
+        return
+      }
+    }
+    if (
+      form.workload_type === 'AGENT_EVALUATION' &&
+      form.agent_evaluation_synthetic_data_enabled &&
+      (!Number.isFinite(form.agent_evaluation_synthetic_questions) ||
+        form.agent_evaluation_synthetic_questions < 0 ||
+        !Number.isInteger(form.agent_evaluation_synthetic_questions))
+    ) {
+      toast.error('Enter a non-negative whole number of synthetic questions')
       return
     }
     
@@ -976,7 +1687,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         // Serverless compute automatically includes Photon acceleration
         data.photon_enabled = form.serverless_enabled ? true : form.photon_enabled
         data.driver_node_type = form.driver_node_type || null
-        data.worker_node_type = form.worker_node_type || null
+        data.worker_node_type = form.num_workers > 0
+          ? form.worker_node_type || null
+          : null
         data.num_workers = form.num_workers
         data.driver_pricing_tier = form.driver_pricing_tier || 'on_demand'
         data.worker_pricing_tier = form.worker_pricing_tier || 'spot'
@@ -1027,15 +1740,19 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         data.dbsql_worker_payment_option = null
       }
       
-      // Vector Search config
+      // AI Search config
       if (selectedWorkloadType?.show_vector_search_mode) {
         data.vector_search_mode = form.vector_search_mode
         data.vector_capacity_millions = form.vector_capacity_millions
         data.vector_search_storage_gb = form.vector_search_storage_gb || 0
+        data.ai_search_reranker_enabled = form.ai_search_reranker_enabled
+        data.ai_search_reranker_requests_thousands = form.ai_search_reranker_requests_thousands
       } else {
         data.vector_search_mode = null
         data.vector_capacity_millions = null
         data.vector_search_storage_gb = null
+        data.ai_search_reranker_enabled = null
+        data.ai_search_reranker_requests_thousands = null
       }
       
       // Model Serving config
@@ -1052,8 +1769,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       // Databricks Apps config
       if (form.workload_type === 'DATABRICKS_APPS') {
         data.databricks_apps_size = form.databricks_apps_size
+        data.databricks_apps_num_apps = form.databricks_apps_num_apps
       } else {
         data.databricks_apps_size = null
+        data.databricks_apps_num_apps = null
       }
 
       // AI Parse config (pages-based only)
@@ -1096,6 +1815,79 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         data.shutterstock_images = form.shutterstock_images
       } else {
         data.shutterstock_images = null
+      }
+
+      // Unity AI Gateway config
+      if (form.workload_type === 'AI_GATEWAY') {
+        data.ai_gateway_inference_tables_enabled = form.ai_gateway_inference_tables_enabled
+        data.ai_gateway_inference_tables_input_method = form.ai_gateway_inference_tables_input_method
+        data.ai_gateway_inference_tables_requests_millions = form.ai_gateway_inference_tables_requests_millions
+        data.ai_gateway_inference_tables_avg_request_payload_kb = form.ai_gateway_inference_tables_avg_request_payload_kb
+        data.ai_gateway_inference_tables_avg_response_payload_kb = form.ai_gateway_inference_tables_avg_response_payload_kb
+        data.ai_gateway_inference_tables_monthly_payload_gb = form.ai_gateway_inference_tables_monthly_payload_gb
+        data.ai_gateway_usage_tracking_enabled = form.ai_gateway_usage_tracking_enabled
+        data.ai_gateway_usage_tracking_input_method = form.ai_gateway_usage_tracking_input_method
+        data.ai_gateway_usage_tracking_requests_millions = form.ai_gateway_usage_tracking_requests_millions
+        data.ai_gateway_usage_tracking_avg_request_payload_kb = form.ai_gateway_usage_tracking_avg_request_payload_kb
+        data.ai_gateway_usage_tracking_avg_response_payload_kb = form.ai_gateway_usage_tracking_avg_response_payload_kb
+        data.ai_gateway_usage_tracking_monthly_payload_gb = form.ai_gateway_usage_tracking_monthly_payload_gb
+      } else {
+        data.ai_gateway_inference_tables_enabled = null
+        data.ai_gateway_inference_tables_input_method = null
+        data.ai_gateway_inference_tables_requests_millions = null
+        data.ai_gateway_inference_tables_avg_request_payload_kb = null
+        data.ai_gateway_inference_tables_avg_response_payload_kb = null
+        data.ai_gateway_inference_tables_monthly_payload_gb = null
+        data.ai_gateway_usage_tracking_enabled = null
+        data.ai_gateway_usage_tracking_input_method = null
+        data.ai_gateway_usage_tracking_requests_millions = null
+        data.ai_gateway_usage_tracking_avg_request_payload_kb = null
+        data.ai_gateway_usage_tracking_avg_response_payload_kb = null
+        data.ai_gateway_usage_tracking_monthly_payload_gb = null
+      }
+
+      // Agent Evaluation config (token values are already in millions)
+      if (form.workload_type === 'AGENT_EVALUATION') {
+        data.agent_evaluation_labels_enabled = form.agent_evaluation_labels_enabled
+        data.agent_evaluation_input_tokens_millions = form.agent_evaluation_input_tokens_millions
+        data.agent_evaluation_output_tokens_millions = form.agent_evaluation_output_tokens_millions
+        data.agent_evaluation_synthetic_data_enabled = form.agent_evaluation_synthetic_data_enabled
+        data.agent_evaluation_synthetic_questions = form.agent_evaluation_synthetic_questions
+      } else {
+        data.agent_evaluation_labels_enabled = null
+        data.agent_evaluation_input_tokens_millions = null
+        data.agent_evaluation_output_tokens_millions = null
+        data.agent_evaluation_synthetic_data_enabled = null
+        data.agent_evaluation_synthetic_questions = null
+      }
+
+      if (form.workload_type === 'AI_RUNTIME') {
+        data.ai_runtime_accelerator_type = form.ai_runtime_accelerator_type
+      } else {
+        data.ai_runtime_accelerator_type = null
+      }
+
+      if (form.workload_type === 'GENERAL_STORAGE') {
+        data.general_storage_quantity = form.general_storage_quantity
+        data.general_storage_unit = form.general_storage_unit
+        data.general_storage_tier1_operations_thousands =
+          form.general_storage_tier1_operations_thousands
+        data.general_storage_tier2_operations_thousands =
+          form.general_storage_tier2_operations_thousands
+      } else {
+        data.general_storage_quantity = null
+        data.general_storage_unit = null
+        data.general_storage_tier1_operations_thousands = null
+        data.general_storage_tier2_operations_thousands = null
+      }
+
+      if (form.workload_type === 'ZEROBUS') {
+        data.zerobus_mode = form.zerobus_mode
+        data.zerobus_monthly_ingested_gb =
+          form.zerobus_monthly_ingested_gb
+      } else {
+        data.zerobus_mode = null
+        data.zerobus_monthly_ingested_gb = null
       }
 
       // Lakebase config
@@ -1151,7 +1943,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
       
       // Hours per month vs Run-based usage
       // For compute workloads, check if using direct hours
-      const isComputeWorkload = selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config
+      const isComputeWorkload = selectedWorkloadType?.show_compute_config
+        || selectedWorkloadType?.show_dlt_config
+        || selectedWorkloadType?.show_dbsql_config
+        || form.workload_type === 'AI_RUNTIME'
       
       if (isComputeWorkload) {
         if (useDirectHours) {
@@ -1168,7 +1963,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           data.days_per_month = form.days_per_month
         }
       } else if (selectedWorkloadType?.show_vector_search_mode || form.workload_type === 'MODEL_SERVING' || selectedWorkloadType?.show_lakebase_config || form.workload_type === 'DATABRICKS_APPS') {
-        // For Vector Search, Model Serving, Lakebase, Databricks Apps - always use hours_per_month
+        // For AI Search, Model Serving, Lakebase, Databricks Apps - always use hours_per_month
         data.hours_per_month = form.hours_per_month || 730
         data.runs_per_day = null
         data.avg_runtime_minutes = null
@@ -1177,6 +1972,10 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         form.workload_type === 'AI_PARSE' ||
         form.workload_type === 'AI_EXTRACT' ||
         form.workload_type === 'AI_CLASSIFY' ||
+        form.workload_type === 'AI_GATEWAY' ||
+        form.workload_type === 'AGENT_EVALUATION' ||
+        form.workload_type === 'GENERAL_STORAGE' ||
+        form.workload_type === 'ZEROBUS' ||
         form.workload_type === 'SHUTTERSTOCK_IMAGEAI'
       ) {
         // Quantity-based workloads - no hours, runs, or days needed
@@ -1270,25 +2069,45 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               const existingType = workloadTypes.find(wt => wt.workload_type === form.workload_type)
               return existingType ? (
                 <option key={existingType.workload_type} value={existingType.workload_type}>
-                  {existingType.display_name} (unavailable in region)
+                  {existingType.workload_type === 'VECTOR_SEARCH' ? 'AI Search' : existingType.display_name} (unavailable in region)
                 </option>
               ) : null
             })()}
-            {filteredWorkloadTypes.map(wt => (
-              <option 
-                key={wt.workload_type} 
-                value={wt.workload_type}
-              >
-                {wt.display_name}
-              </option>
+            {groupedWorkloadTypes.map(group => (
+              <optgroup key={group.label} label={group.label}>
+                {group.workloadTypes.map(workload => (
+                  <option
+                    key={workload.workload_type}
+                    value={workload.workload_type}
+                  >
+                    {workload.workload_type === 'VECTOR_SEARCH'
+                      ? 'AI Search'
+                      : workload.display_name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
+            {uncategorizedWorkloadTypes.length > 0 && (
+              <optgroup label="Other">
+                {uncategorizedWorkloadTypes.map(workload => (
+                  <option
+                    key={workload.workload_type}
+                    value={workload.workload_type}
+                  >
+                    {workload.workload_type === 'VECTOR_SEARCH'
+                      ? 'AI Search'
+                      : workload.display_name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           {isWorkloadTypeInvalid && (
             <p className="text-xs text-red-500 mt-1">Unknown workload type: {form.workload_type}</p>
           )}
           {isExistingWithUnavailableType && (
             <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-              ⚠️ {form.workload_type.replace(/_/g, ' ')} is not available in {selectedRegion}
+              ⚠️ {form.workload_type === 'VECTOR_SEARCH' ? 'AI Search' : selectedWorkloadType?.display_name || form.workload_type.replace(/_/g, ' ')} is not available in {selectedRegion}
             </p>
           )}
           {hasRegionalRestrictions && !isExistingWithUnavailableType && (
@@ -1496,18 +2315,24 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 <label className="flex items-center gap-1.5 cursor-pointer group">
                   <input
                     type="checkbox"
-                    checked={form.driver_node_type === form.worker_node_type && form.driver_node_type !== ''}
+                    checked={
+                      form.num_workers > 0 &&
+                      form.driver_node_type === form.worker_node_type &&
+                      form.driver_node_type !== ''
+                    }
                     onChange={(e) => {
                       if (e.target.checked && form.driver_node_type) {
                         setForm(f => ({ ...f, worker_node_type: f.driver_node_type }))
                       }
                     }}
-                    disabled={!form.driver_node_type}
+                    disabled={!form.driver_node_type || form.num_workers === 0}
                     className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
                   />
                   <span className={clsx(
                     "text-xs font-medium transition-colors",
-                    form.driver_node_type === form.worker_node_type && form.driver_node_type !== ''
+                    form.num_workers > 0 &&
+                    form.driver_node_type === form.worker_node_type &&
+                    form.driver_node_type !== ''
                       ? "text-blue-500"
                       : "text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
                   )}>
@@ -1529,8 +2354,9 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                       }))}
                       value={form.worker_node_type}
                       onChange={(value) => setForm(f => ({ ...f, worker_node_type: value }))}
-                      placeholder="Select type..."
+                      placeholder={form.num_workers === 0 ? 'Not used' : 'Select type...'}
                       searchPlaceholder="Search instance types..."
+                      disabled={form.num_workers === 0}
                       grouped
                     />
                   </div>
@@ -1538,17 +2364,23 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                     <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Count</label>
                     <input
                       type="number"
-                      min={1}
+                      min={0}
                       max={100}
                       value={form.num_workers}
-                      onChange={(e) => setForm(f => ({ ...f, num_workers: parseInt(e.target.value) || 1 }))}
+                      onChange={(e) => {
+                        const value = Number.parseInt(e.target.value, 10)
+                        setForm(f => ({
+                          ...f,
+                          num_workers: Number.isNaN(value) ? 0 : Math.max(0, Math.min(100, value)),
+                        }))
+                      }}
                       className="w-full text-sm text-center"
                     />
                   </div>
                 </div>
                 
                 {/* Pricing Tier & Payment Option Row - Hide for serverless */}
-                {!form.serverless_enabled && (
+                {!form.serverless_enabled && form.num_workers > 0 && (
                   <div className={clsx(
                     "grid gap-2",
                     selectedCloud === 'aws' && form.worker_pricing_tier.startsWith('reserved') 
@@ -1856,11 +2688,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           </>
         )}
         
-        {/* Vector Search Config */}
+        {/* AI Search Config */}
         {selectedWorkloadType?.show_vector_search_mode && (
           <>
             <div>
-              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Vector Search Type</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">AI Search Type</label>
               <select
                 value={form.vector_search_mode}
                 onChange={(e) => setForm(f => ({ ...f, vector_search_mode: e.target.value }))}
@@ -1895,8 +2727,43 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 placeholder="e.g., 100"
               />
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                Free: {Math.ceil((form.vector_capacity_millions || 1) * 1000000 / (form.vector_search_mode === 'storage_optimized' ? 64000000 : 2000000)) * 20} GB (20 GB/unit). Charged at $0.023/GB/mo above free tier.
+                The first 30 GB is free. Billable storage uses 10 DSU/GB for
+                Standard or 2 DSU/GB for Storage Optimized at the exact regional
+                DSU rate.
               </p>
+            </div>
+            <div className="lg:col-span-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-3">
+              <label className="flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)]">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.ai_search_reranker_enabled)}
+                  onChange={(e) => setForm(f => ({ ...f, ai_search_reranker_enabled: e.target.checked }))}
+                  className="h-4 w-4 rounded border-[var(--border-primary)] text-lava-600"
+                />
+                Enable AI Search Reranker
+              </label>
+              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                Billed at 28.571 DBU per 1,000 reranker requests.
+              </p>
+              {form.ai_search_reranker_enabled && (
+                <div className="mt-3 max-w-sm">
+                  <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
+                    Reranker Requests/Month (thousands)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={form.ai_search_reranker_requests_thousands}
+                    onChange={(e) => setForm(f => ({
+                      ...f,
+                      ai_search_reranker_requests_thousands: Number(e.target.value),
+                    }))}
+                    className="w-full text-sm"
+                    placeholder="e.g., 250"
+                  />
+                </div>
+              )}
             </div>
           </>
         )}
@@ -1913,7 +2780,11 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               >
                 {modelServingGPUTypes.map(gpu => (
                   <option key={gpu.id} value={gpu.id}>
-                    {gpu.name} ({gpu.dbu_per_hour} DBU/hr)
+                    {gpu.name} ({gpu.dbu_per_hour} {
+                      gpu.id.toLowerCase().startsWith('cpu')
+                        ? 'DBU/concurrency-hr'
+                        : 'DBU/replica-hr'
+                    })
                   </option>
                 ))}
               </select>
@@ -1959,6 +2830,159 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             )}
           </>
         )}
+
+        {/* AI Runtime Config */}
+        {form.workload_type === 'AI_RUNTIME' && (
+          <>
+            <div className="col-span-full lg:col-span-2">
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Training Accelerator</label>
+              <select
+                value={form.ai_runtime_accelerator_type}
+                onChange={(e) => setForm(f => ({ ...f, ai_runtime_accelerator_type: e.target.value }))}
+                className="w-full text-sm"
+              >
+                {aiRuntimeAccelerators.map(accelerator => (
+                  <option key={accelerator.id} value={accelerator.id}>
+                    {accelerator.label} ({(accelerator.gpuCount * accelerator.dbuPerGpuHour).toFixed(3)} DBU/node-hr)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-full text-[11px] leading-relaxed text-[var(--text-muted)]">
+              AI Runtime is available on AWS and Azure where an exact MODEL_TRAINING price is published. Billing origin AI_RUNTIME is charged on that SKU.
+            </div>
+          </>
+        )}
+
+        {/* Databricks Default Storage Config */}
+        {form.workload_type === 'GENERAL_STORAGE' && (
+          <>
+            <div className="col-span-full md:col-span-2">
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
+                Average Stored Capacity / Month
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={form.general_storage_quantity}
+                onChange={(e) => setForm(f => ({
+                  ...f,
+                  general_storage_quantity: Number(e.target.value),
+                }))}
+                className="w-full text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
+                Unit
+              </label>
+              <select
+                value={form.general_storage_unit}
+                onChange={(e) => setForm(f => ({
+                  ...f,
+                  general_storage_unit: e.target.value,
+                }))}
+                className="w-full text-sm"
+              >
+                <option value="gb">GB</option>
+                <option value="tb">TB (1,024 GB)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
+                Tier 1 Operations / Month (K)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={form.general_storage_tier1_operations_thousands}
+                onChange={(e) => setForm(f => ({
+                  ...f,
+                  general_storage_tier1_operations_thousands:
+                    Number(e.target.value),
+                }))}
+                className="w-full text-sm"
+              />
+              <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                PUT, COPY, POST, and LIST operations, in thousands.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
+                Tier 2 Operations / Month (K)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={form.general_storage_tier2_operations_thousands}
+                onChange={(e) => setForm(f => ({
+                  ...f,
+                  general_storage_tier2_operations_thousands:
+                    Number(e.target.value),
+                }))}
+                className="w-full text-sm"
+              />
+              <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                GET, SELECT, and other operations, in thousands.
+              </p>
+            </div>
+            <div className="col-span-full text-[11px] leading-relaxed text-[var(--text-muted)]">
+              Databricks-managed Default Storage is billed in DSUs for stored
+              data and API operations. Customer-managed object storage,
+              backups, and data transfer are not included.
+            </div>
+          </>
+        )}
+
+        {/* Zerobus Ingest Config */}
+        {form.workload_type === 'ZEROBUS' && (
+          <>
+            <div className="col-span-full md:col-span-2">
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
+                Ingestion Type
+              </label>
+              <select
+                value={form.zerobus_mode}
+                onChange={(e) => setForm(f => ({
+                  ...f,
+                  zerobus_mode: e.target.value,
+                }))}
+                className="w-full text-sm"
+              >
+                <option value="standard">
+                  Zerobus Ingest (0.143 DBU/GB)
+                </option>
+                <option value="otel">
+                  Zerobus OTel Ingest (0.222 DBU/GB)
+                </option>
+              </select>
+            </div>
+            <div className="col-span-full md:col-span-2">
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
+                Data Ingested / Month (GB)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={form.zerobus_monthly_ingested_gb}
+                onChange={(e) => setForm(f => ({
+                  ...f,
+                  zerobus_monthly_ingested_gb: Number(e.target.value),
+                }))}
+                className="w-full text-sm"
+              />
+            </div>
+            <div className="col-span-full text-[11px] leading-relaxed text-[var(--text-muted)]">
+              Billed through the regional Jobs Serverless SKU. Producer
+              compute, target Delta storage, downstream processing, and data
+              transfer are not included.
+            </div>
+          </>
+        )}
         
         {/* FMAPI Config - Foundation Models (Databricks) */}
         {selectedWorkloadType?.show_fmapi_config && form.workload_type === 'FMAPI_DATABRICKS' && (
@@ -1968,7 +2992,22 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Model</label>
               <select
                 value={form.fmapi_model}
-                onChange={(e) => setForm(f => ({ ...f, fmapi_model: e.target.value }))}
+                onChange={(e) => {
+                  const model = e.target.value
+                  const availableRateTypes = getAvailableDatabricksRateTypes(
+                    pricingBundle,
+                    selectedCloud || 'aws',
+                    model,
+                    selectedRegion,
+                  )
+                  setForm(f => ({
+                    ...f,
+                    fmapi_model: model,
+                    fmapi_rate_type: availableRateTypes.includes(f.fmapi_rate_type)
+                      ? f.fmapi_rate_type
+                      : availableRateTypes[0] || 'input_token',
+                  }))
+                }}
                 className="w-full text-sm"
               >
                 <optgroup label="LLMs">
@@ -1990,54 +3029,76 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                 onChange={(e) => setForm(f => ({ ...f, fmapi_rate_type: e.target.value }))}
                 className="w-full text-sm"
               >
-                <optgroup label="Token-based">
-                  <option value="input_token">Input Token</option>
-                  {/* Only show output tokens for LLMs, not embedding models */}
-                  {!['gte', 'bge-large'].includes(form.fmapi_model) && (
-                    <option value="output_token">Output Token</option>
-                  )}
-                </optgroup>
-                <optgroup label="Provisioned">
-                  <option value="provisioned_scaling">Provisioned Scaling</option>
-                  <option value="provisioned_entry">Provisioned Entry</option>
-                </optgroup>
+                {fmapiDatabricksRateTypes.map(rateType => (
+                  <option key={rateType} value={rateType}>
+                    {formatFMAPIRateType(rateType)}
+                  </option>
+                ))}
               </select>
             </div>
             
             {/* Row 2: Quantity - different label based on rate type */}
             <div>
               <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
-                {['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) 
+                {fmapiDatabricksIsHourly
                   ? 'Hours/Month' 
                   : 'Quantity (M tokens/month)'}
               </label>
               <input
                 type="number"
                 min={0}
-                step={['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) ? 1 : 0.1}
+                step={fmapiDatabricksIsHourly ? 1 : 0.1}
                 value={form.fmapi_quantity}
                 onChange={(e) => setForm(f => ({ ...f, fmapi_quantity: parseFloat(e.target.value) || 0 }))}
                 className="w-full text-sm"
-                placeholder={['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) 
+                placeholder={fmapiDatabricksIsHourly
                   ? 'e.g., 730 = 24/7' 
                   : 'e.g., 10'}
               />
-              {!['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) && (
+              {!fmapiDatabricksIsHourly && (
                 <p className="text-xs text-[var(--text-muted)] mt-1">
                   Enter in millions: 1 = 1M, 5 = 5M, 10 = 10M tokens
                 </p>
               )}
             </div>
+
+            {fmapiDatabricksRegionalUplift && (
+              <div>
+                <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
+                  Processing Type
+                </label>
+                <select
+                  value={form.fmapi_endpoint_type || 'global'}
+                  onChange={(e) => setForm(current => ({
+                    ...current,
+                    fmapi_endpoint_type: e.target.value,
+                  }))}
+                  className="w-full text-sm"
+                >
+                  <option value="global">Global processing</option>
+                  <option value="regional">
+                    Regional processing (+{fmapiDatabricksRegionalUplift}%)
+                  </option>
+                </select>
+              </div>
+            )}
             
             {/* Info: Add multiple line items for complete endpoint cost */}
             <div className="col-span-full p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
               <p className="text-xs text-blue-700 dark:text-blue-300">
-                {['provisioned_scaling', 'provisioned_entry'].includes(form.fmapi_rate_type) ? (
+                {fmapiDatabricksIsHourly ? (
                   <><strong>Provisioned Throughput:</strong> Cost = hours × DBU/hour × DBU price</>
                 ) : (
                   <><strong>Tip:</strong> Add separate workloads for Input Token and Output Token to calculate total cost.</>
                 )}
               </p>
+              {fmapiDatabricksRegionalUplift && (
+                <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                  {form.fmapi_endpoint_type === 'regional'
+                    ? `The ${fmapiDatabricksRegionalUplift}% regional-processing uplift is included in this estimate.`
+                    : `Regional processing is available with a ${fmapiDatabricksRegionalUplift}% DBU uplift.`}
+                </p>
+              )}
             </div>
           </>
         )}
@@ -2080,7 +3141,22 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                   const newCtxLength = availableCtxLengths.includes(form.fmapi_context_length) 
                     ? form.fmapi_context_length 
                     : availableCtxLengths[0] || 'all'
-                  setForm(f => ({ ...f, fmapi_model: newModel, fmapi_context_length: newCtxLength }))
+                  const availableRateTypes = getAvailableRateTypes(
+                    pricingBundle,
+                    selectedCloud || 'aws',
+                    form.fmapi_provider,
+                    newModel,
+                    form.fmapi_endpoint_type,
+                    newCtxLength
+                  )
+                  setForm(f => ({
+                    ...f,
+                    fmapi_model: newModel,
+                    fmapi_context_length: newCtxLength,
+                    fmapi_rate_type: availableRateTypes.includes(f.fmapi_rate_type)
+                      ? f.fmapi_rate_type
+                      : availableRateTypes[0] || 'input_token',
+                  }))
                 }}
                 className="w-full text-sm"
               >
@@ -2099,7 +3175,24 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Endpoint Type</label>
               <select
                 value={form.fmapi_endpoint_type}
-                onChange={(e) => setForm(f => ({ ...f, fmapi_endpoint_type: e.target.value }))}
+                onChange={(e) => {
+                  const endpointType = e.target.value
+                  const availableRateTypes = getAvailableRateTypes(
+                    pricingBundle,
+                    selectedCloud || 'aws',
+                    form.fmapi_provider,
+                    form.fmapi_model,
+                    endpointType,
+                    form.fmapi_context_length
+                  )
+                  setForm(f => ({
+                    ...f,
+                    fmapi_endpoint_type: endpointType,
+                    fmapi_rate_type: availableRateTypes.includes(f.fmapi_rate_type)
+                      ? f.fmapi_rate_type
+                      : availableRateTypes[0] || 'input_token',
+                  }))
+                }}
                 className="w-full text-sm"
               >
                 {fmapiProprietaryModels.endpoint_types.map(type => (
@@ -2111,7 +3204,24 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
               <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Context Length</label>
               <select
                 value={form.fmapi_context_length}
-                onChange={(e) => setForm(f => ({ ...f, fmapi_context_length: e.target.value }))}
+                onChange={(e) => {
+                  const contextLength = e.target.value
+                  const availableRateTypes = getAvailableRateTypes(
+                    pricingBundle,
+                    selectedCloud || 'aws',
+                    form.fmapi_provider,
+                    form.fmapi_model,
+                    form.fmapi_endpoint_type,
+                    contextLength
+                  )
+                  setForm(f => ({
+                    ...f,
+                    fmapi_context_length: contextLength,
+                    fmapi_rate_type: availableRateTypes.includes(f.fmapi_rate_type)
+                      ? f.fmapi_rate_type
+                      : availableRateTypes[0] || 'input_token',
+                  }))
+                }}
                 className="w-full text-sm"
               >
                 {(() => {
@@ -2157,46 +3267,52 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
                       )
                     : ['input_token', 'output_token', 'cache_read', 'cache_write']
                   
-                  // Map to display names
-                  const rateTypeNames: Record<string, string> = {
-                    'input_token': 'Input Token',
-                    'output_token': 'Output Token',
-                    'cache_read': 'Cache Read',
-                    'cache_write': 'Cache Write',
-                    'batch_inference': 'Batch Inference',
-                    'provisioned_scaling': 'Provisioned Scaling'
-                  }
-                  
                   return availableRateTypes.map(type => (
                     <option key={type} value={type}>
-                      {rateTypeNames[type] || type}
+                      {formatFMAPIRateType(type)}
                     </option>
                   ))
                 })()}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Quantity (M tokens/month)</label>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">
+                {fmapiProprietaryIsHourly ? 'Hours/Month' : 'Quantity (M tokens/month)'}
+              </label>
               <input
                 type="number"
                 min={0}
-                step={0.1}
+                step={fmapiProprietaryIsHourly ? 1 : 0.1}
                 value={form.fmapi_quantity}
                 onChange={(e) => setForm(f => ({ ...f, fmapi_quantity: parseFloat(e.target.value) || 0 }))}
                 className="w-full text-sm"
-                placeholder="e.g., 10"
+                placeholder={fmapiProprietaryIsHourly ? 'e.g., 730 = 24/7' : 'e.g., 10'}
               />
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                Enter in millions: 1 = 1M, 5 = 5M, 10 = 10M tokens
-              </p>
+              {!fmapiProprietaryIsHourly && (
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  Enter in millions: 1 = 1M, 5 = 5M, 10 = 10M tokens
+                </p>
+              )}
             </div>
             
             {/* Info: Add multiple line items for complete endpoint cost */}
             <div className="col-span-full p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
               <p className="text-xs text-blue-700 dark:text-blue-300">
-                <strong>Tip:</strong> Add separate workloads for each rate type (Input Token, Output Token, Cache Read, Cache Write) 
-                to calculate the total cost of your Foundation Model endpoint.
+                {fmapiProprietaryIsHourly ? (
+                  <><strong>Batch Inference:</strong> Cost = hours × DBU/hour × DBU price.</>
+                ) : (
+                  <><strong>Tip:</strong> Add separate workloads for each token rate type to calculate the total endpoint cost.</>
+                )}
               </p>
+              {selectedFmapiProprietaryRate?.promotional_dbu_rate !== undefined
+                && selectedFmapiProprietaryRate.promotion_end_date
+                && new Date().toISOString().slice(0, 10) <= selectedFmapiProprietaryRate.promotion_end_date && (
+                <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                  {selectedFmapiProprietaryRate.promotion_label}: {selectedFmapiProprietaryRate.promotional_dbu_rate} DBU
+                  {fmapiProprietaryIsHourly ? '/hour' : '/1M tokens'} through {selectedFmapiProprietaryRate.promotion_end_date}
+                  {' '}(list rate {selectedFmapiProprietaryRate.dbu_rate}).
+                </p>
+              )}
             </div>
           </>
         )}
@@ -2407,17 +3523,34 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         
         {/* Databricks Apps Config */}
         {form.workload_type === 'DATABRICKS_APPS' && (
-          <div>
-            <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">App Size</label>
-            <select
-              value={form.databricks_apps_size || 'medium'}
-              onChange={(e) => setForm(f => ({ ...f, databricks_apps_size: e.target.value }))}
-              className="w-full text-sm"
-            >
-              <option value="medium">Medium (0.5 DBU/hr)</option>
-              <option value="large">Large (1.0 DBU/hr)</option>
-            </select>
-          </div>
+          <>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">App Size</label>
+              <select
+                value={form.databricks_apps_size || 'medium'}
+                onChange={(e) => setForm(f => ({ ...f, databricks_apps_size: e.target.value }))}
+                className="w-full text-sm"
+              >
+                <option value="medium">Medium (0.5 DBU/app/hr)</option>
+                <option value="large">Large (1.0 DBU/app/hr)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Number of Apps</label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={form.databricks_apps_num_apps}
+                onChange={(e) => setForm(f => ({
+                  ...f,
+                  databricks_apps_num_apps: parseInt(e.target.value, 10) || 1,
+                }))}
+                className="w-full text-sm"
+              />
+              <span className="text-[10px] text-[var(--text-tertiary)]">Each app is billed independently.</span>
+            </div>
+          </>
         )}
 
         {/* AI Parse Config */}
@@ -2549,6 +3682,49 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           </>
         )}
 
+        {/* Unity AI Gateway Config */}
+        {form.workload_type === 'AI_GATEWAY' && (
+          <>
+            <AIGatewayComponentPanel
+              component="inference_tables"
+              label="Inference Tables"
+              otherComponent="usage_tracking"
+              form={form}
+              setForm={setForm}
+            />
+            <AIGatewayComponentPanel
+              component="usage_tracking"
+              label="Usage Tracking"
+              otherComponent="inference_tables"
+              form={form}
+              setForm={setForm}
+            />
+            <div className="col-span-full space-y-1 text-[11px] leading-relaxed text-[var(--text-muted)]">
+              <p>Each component has independent payload inputs. Request-Based mode uses decimal billing units: 1 million KB = 1 GB.</p>
+              <p>Underlying Model Serving or Foundation Model API inference and guardrail evaluator costs are excluded. Add them as separate workloads.</p>
+            </div>
+          </>
+        )}
+
+        {/* Agent Evaluation Config */}
+        {form.workload_type === 'AGENT_EVALUATION' && (
+          <>
+            <AgentEvaluationComponentPanel
+              component="labels"
+              form={form}
+              setForm={setForm}
+            />
+            <AgentEvaluationComponentPanel
+              component="synthetic_data"
+              form={form}
+              setForm={setForm}
+            />
+            <div className="col-span-full text-[11px] leading-relaxed text-[var(--text-muted)]">
+              Evaluated application or model inference is excluded. Add Model Serving or Foundation Model API workloads separately.
+            </div>
+          </>
+        )}
+
         {/* Shutterstock ImageAI Config */}
         {form.workload_type === 'SHUTTERSTOCK_IMAGEAI' && (
           <div>
@@ -2567,7 +3743,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         )}
 
         {/* Usage Input Method Toggle - for compute workloads only */}
-        {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
+        {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config || form.workload_type === 'AI_RUNTIME') && (
           <div className="col-span-full">
             <div className="flex items-center gap-4 mb-3">
               <span className="text-xs font-medium text-[var(--text-secondary)]">Usage Input Method:</span>
@@ -2604,7 +3780,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         {/* Run-based usage inputs */}
         {!useDirectHours && (
           <>
-            {/* Usage - Runs (not for Lakebase, Vector Search, Model Serving, FMAPI which use hours_per_month directly) */}
+            {/* Usage - Runs (not for Lakebase, AI Search, Model Serving, FMAPI which use hours_per_month directly) */}
             {selectedWorkloadType?.show_usage_runs && !selectedWorkloadType?.show_lakebase_config && !selectedWorkloadType?.show_vector_search_mode && !selectedWorkloadType?.show_fmapi_config && form.workload_type !== 'MODEL_SERVING' && (
               <div>
                 <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Runs/Day</label>
@@ -2619,7 +3795,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             )}
             
             {/* Avg Runtime - for Jobs, All Purpose, DLT, and SQL Warehouse */}
-            {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
+            {(selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config || form.workload_type === 'AI_RUNTIME') && (
               <div>
                 <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Avg Runtime (min)</label>
                 <input
@@ -2633,7 +3809,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
             )}
             
             {/* Days per month - hide for workloads that use hours or quantity directly */}
-            {!selectedWorkloadType?.show_fmapi_config && !selectedWorkloadType?.show_vector_search_mode && !selectedWorkloadType?.show_lakebase_config && form.workload_type !== 'MODEL_SERVING' && form.workload_type !== 'DATABRICKS_APPS' && form.workload_type !== 'AI_PARSE' && form.workload_type !== 'AI_EXTRACT' && form.workload_type !== 'AI_CLASSIFY' && form.workload_type !== 'SHUTTERSTOCK_IMAGEAI' && (
+            {!selectedWorkloadType?.show_fmapi_config && !selectedWorkloadType?.show_vector_search_mode && !selectedWorkloadType?.show_lakebase_config && form.workload_type !== 'MODEL_SERVING' && form.workload_type !== 'DATABRICKS_APPS' && form.workload_type !== 'AI_PARSE' && form.workload_type !== 'AI_EXTRACT' && form.workload_type !== 'AI_CLASSIFY' && form.workload_type !== 'AI_GATEWAY' && form.workload_type !== 'AGENT_EVALUATION' && form.workload_type !== 'GENERAL_STORAGE' && form.workload_type !== 'ZEROBUS' && form.workload_type !== 'SHUTTERSTOCK_IMAGEAI' && (
               <div>
                 <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Days/Month</label>
                 <input
@@ -2650,7 +3826,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
         )}
         
         {/* Direct hours input */}
-        {useDirectHours && (selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config) && (
+        {useDirectHours && (selectedWorkloadType?.show_compute_config || selectedWorkloadType?.show_dlt_config || selectedWorkloadType?.show_dbsql_config || form.workload_type === 'AI_RUNTIME') && (
           <div className="col-span-full md:col-span-1">
             <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Hours/Month</label>
             <input
@@ -2666,7 +3842,7 @@ export default function WorkloadForm({ estimateId, lineItem, onClose, onSave, in
           </div>
         )}
         
-        {/* For Vector Search, Model Serving, and Lakebase - always show direct hours */}
+        {/* For AI Search, Model Serving, and Lakebase - always show direct hours */}
         {(selectedWorkloadType?.show_vector_search_mode || form.workload_type === 'MODEL_SERVING' || selectedWorkloadType?.show_lakebase_config || form.workload_type === 'DATABRICKS_APPS') && (
           <div>
             <label className="block text-xs font-medium mb-1 text-[var(--text-secondary)]">Hours/Month</label>

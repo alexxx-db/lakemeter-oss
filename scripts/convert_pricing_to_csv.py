@@ -39,6 +39,8 @@ def convert_dbu_rates():
     now = datetime.utcnow().isoformat()
     rows = []
     for key, rate in data.items():
+        if isinstance(rate, dict) and rate.get("status") == "retired":
+            continue
         parts = key.split(":")
         if len(parts) < 3:
             continue
@@ -235,7 +237,7 @@ def convert_serverless_rates():
                 "description": info.get("description", ""),
             })
 
-    # Vector search
+    # AI Search
     src = PRICING_DIR / "vector-search-rates.json"
     with open(src) as f:
         data = json.load(f)
@@ -283,6 +285,8 @@ def convert_fmapi_databricks():
                 "sku_product_type": "",
             })
         elif isinstance(rate, dict):
+            if rate.get("status", "active") != "active":
+                continue
             rows.append({
                 "cloud": cloud, "model": model, "rate_type": rate_type,
                 "dbu_rate": rate.get("dbu_rate", 0),
@@ -306,38 +310,25 @@ def convert_fmapi_proprietary():
 
     rows = []
     for key, rate in data.items():
-        parts = key.split(":")
-        if len(parts) < 3:
+        if isinstance(rate, dict) and rate.get("status") == "retired":
             continue
-        cloud_or_provider = parts[0]
-        model = parts[1]
-        rate_type = parts[2]
+        parts = key.split(":")
+        if len(parts) != 6:
+            continue
+        cloud, provider, model, endpoint_type, context_length, rate_type = parts
 
         if isinstance(rate, dict):
             rows.append({
-                "provider": rate.get("provider", cloud_or_provider),
+                "provider": provider,
                 "model": model,
-                "endpoint_type": rate.get("endpoint_type", ""),
-                "context_length": rate.get("context_length", ""),
+                "endpoint_type": endpoint_type,
+                "context_length": context_length,
                 "rate_type": rate_type,
                 "dbu_rate": rate.get("dbu_rate", 0),
                 "input_divisor": rate.get("input_divisor", ""),
                 "is_hourly": rate.get("is_hourly", False),
                 "sku_product_type": rate.get("sku_product_type", ""),
-                "cloud": rate.get("cloud", cloud_or_provider.upper()),
-            })
-        elif isinstance(rate, (int, float)):
-            rows.append({
-                "provider": cloud_or_provider,
-                "model": model,
-                "endpoint_type": "",
-                "context_length": "",
-                "rate_type": rate_type,
-                "dbu_rate": rate,
-                "input_divisor": "",
-                "is_hourly": False,
-                "sku_product_type": "",
-                "cloud": cloud_or_provider.upper(),
+                "cloud": cloud.upper(),
             })
 
     cols = ["provider", "model", "endpoint_type", "context_length", "rate_type",
@@ -347,7 +338,7 @@ def convert_fmapi_proprietary():
 
 
 def export_uc_vm_costs(profile: str):
-    """Export lakemeter_catalog.lakemeter.pricing_vm_costs -> vm-costs.csv"""
+    """Export VM prices into deployment-safe CSV parts."""
     from databricks.sdk import WorkspaceClient
 
     w = WorkspaceClient(profile=profile)
@@ -365,6 +356,7 @@ def export_uc_vm_costs(profile: str):
         "FROM lakemeter_catalog.lakemeter.pricing_vm_costs"
     )
     _write_csv(dst, cols, [dict(zip(cols, r)) for r in rows])
+    _split_csv_for_workspace(dst)
     return len(rows)
 
 
@@ -442,6 +434,49 @@ def _write_csv(path: Path, columns: list, rows: list):
         writer.writeheader()
         writer.writerows(rows)
     print(f"  Wrote {path.name}: {len(rows)} rows")
+
+
+def _split_csv_for_workspace(
+    path: Path,
+    max_bytes: int = 9 * 1024 * 1024,
+) -> None:
+    """Split a CSV that exceeds the Workspace Files import limit."""
+    for old_part in path.parent.glob(f"{path.stem}_part*.csv"):
+        old_part.unlink()
+
+    if path.stat().st_size <= max_bytes:
+        return
+
+    with path.open("r", encoding="utf-8", newline="") as source:
+        header = source.readline()
+        part_number = 1
+        part_path = path.with_name(f"{path.stem}_part{part_number}.csv")
+        target = part_path.open("w", encoding="utf-8", newline="")
+        try:
+            target.write(header)
+            current_size = len(header.encode("utf-8"))
+            for line in source:
+                line_size = len(line.encode("utf-8"))
+                if current_size + line_size > max_bytes:
+                    target.close()
+                    part_number += 1
+                    part_path = path.with_name(
+                        f"{path.stem}_part{part_number}.csv"
+                    )
+                    target = part_path.open(
+                        "w",
+                        encoding="utf-8",
+                        newline="",
+                    )
+                    target.write(header)
+                    current_size = len(header.encode("utf-8"))
+                target.write(line)
+                current_size += line_size
+        finally:
+            target.close()
+
+    path.unlink()
+    print(f"  Split {path.name} into {part_number} deployment-safe parts")
 
 
 def update_manifest(has_uc: bool):

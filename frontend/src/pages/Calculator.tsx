@@ -33,7 +33,9 @@ import {
   CalculatorIcon,
   BarsArrowDownIcon,
   BarsArrowUpIcon,
-  Bars3Icon
+  Bars3Icon,
+  ShieldCheckIcon,
+  BeakerIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -46,7 +48,7 @@ import {
 import { saveAs } from 'file-saver'
 import WorkloadForm from '../components/WorkloadForm'
 import FinOpsTagsButton from '../components/FinOpsTagsButton'
-import type { LineItem } from '../types'
+import type { LineItem, PlatformAddonType } from '../types'
 import {
   getInstanceDBURate as getBundleInstanceDBURate,
   getPhotonMultiplier as getBundlePhotonMultiplier,
@@ -57,9 +59,39 @@ import {
   getModelServingRate as getBundleModelServingRate,
   getFMAPIDatabricksRate as getBundleFMAPIDatabricksRate,
   getFMAPIProprietaryRate as getBundleFMAPIProprietaryRate,
-  getAvailableRegionsFromBundle
+  getAvailableRegionsFromBundle,
+  getExactRegionalDBUPrice
 } from '../utils/pricingBundle'
 import { calculateLakebaseComputeUsage, resolveLakebaseAutoscaleConfig } from '../utils/lakebasePricing'
+import {
+  AGENT_EVALUATION_COMPONENT_RATES,
+  AI_SEARCH_INCLUDED_STORAGE_GB,
+  AI_SEARCH_RERANKER_DBU_PER_THOUSAND_REQUESTS,
+  calculateAgentEvaluationUsage,
+  calculateAISearchRerankerUsage,
+  calculateAIGatewayUsage,
+  calculateDatabricksAppsUsage,
+  calculateGeneralStorageDSU,
+  calculateHoursPerMonth,
+  calculateModelServingDBUPerHour,
+  calculateZerobusUsage,
+  getAISearchStorageDSUPerGB,
+  getGeneralStorageGB,
+  getModelServingBillingCapacityUnits,
+  isModelServingGPUType,
+} from '../utils/costCalculation'
+import { calculateAIRuntimeUsage } from '../utils/aiRuntime'
+import {
+  PLATFORM_ADDON_TYPES,
+  calculatePlatformAddonCost,
+  getPlatformAddonAvailabilityError,
+  getPlatformAddonDefinition,
+  getPlatformAddonDiscountPct,
+} from '../utils/platformAddons'
+import {
+  createRegionOptions,
+  groupRegionOptions,
+} from '../utils/regionGeography'
 
 // Error Boundary for catching render errors
 interface ErrorBoundaryState {
@@ -105,6 +137,75 @@ class WorkloadErrorBoundary extends Component<{ children: ReactNode; onReset?: (
   }
 }
 
+interface ServerlessComputeDbuBreakdownProps {
+  workloadType: string
+  serverlessMode?: string | null
+  driverNode: string
+  workerNode: string
+  driverDBURate: number
+  workerDBURate: number
+  numWorkers: number
+  dbuPerHour: number
+}
+
+const ServerlessComputeDbuBreakdown: React.FC<ServerlessComputeDbuBreakdownProps> = ({
+  workloadType,
+  serverlessMode,
+  driverNode,
+  workerNode,
+  driverDBURate,
+  workerDBURate,
+  numWorkers,
+  dbuPerHour,
+}) => {
+  const baseDBUPerHour = driverDBURate + (workerDBURate * numWorkers)
+  const performanceOptimized = workloadType === 'ALL_PURPOSE'
+    || serverlessMode === 'performance'
+  const modeMultiplier = performanceOptimized ? 2 : 1
+  const calculatedPhotonMultiplier = baseDBUPerHour > 0
+    ? dbuPerHour / (baseDBUPerHour * modeMultiplier)
+    : 0
+  const photonMultiplier = Number.isFinite(calculatedPhotonMultiplier)
+    ? calculatedPhotonMultiplier
+    : 0
+
+  return (
+    <>
+      <span>(</span>
+      <span className="font-medium text-[var(--text-primary)]">Driver</span>
+      <span>{driverNode || 'Not selected'}</span>
+      <span className="text-[var(--text-muted)]">
+        ({driverDBURate.toFixed(2)} DBU/hr)
+      </span>
+      {numWorkers > 0 ? (
+        <>
+          <span>+</span>
+          <span className="font-medium text-[var(--text-primary)]">
+            {numWorkers} worker{numWorkers !== 1 ? 's' : ''}
+          </span>
+          <span>{workerNode || 'Not selected'}</span>
+          <span className="text-[var(--text-muted)]">
+            ({workerDBURate.toFixed(2)} DBU/hr each)
+          </span>
+        </>
+      ) : (
+        <span className="text-[var(--text-muted)]">Single node — driver only</span>
+      )}
+      <span>)</span>
+      <span>×</span>
+      <span className="text-[var(--text-muted)]">
+        Photon {photonMultiplier.toFixed(2)}×
+      </span>
+      <span>×</span>
+      <span className="text-[var(--text-muted)]">
+        {performanceOptimized ? 'Performance Optimized' : 'Standard'} {modeMultiplier}×
+      </span>
+      <span>=</span>
+      <span className="font-semibold">{dbuPerHour.toFixed(2)} DBU/hr</span>
+    </>
+  )
+}
+
 // Cloud provider visual options
 const CLOUD_PROVIDERS = [
   { id: 'aws', name: 'AWS', logo: '/aws.svg', bgClass: 'from-amber-600/20 to-amber-900/10' },
@@ -147,7 +248,7 @@ const WORKLOAD_TYPE_CONFIG: Record<string, {
     icon: MagnifyingGlassCircleIcon, 
     color: 'text-rose-500', 
     bgColor: 'bg-rose-500/10',
-    label: 'VS'
+    label: 'AI Search'
   },
   'MODEL_SERVING': { 
     icon: SparklesIcon, 
@@ -172,6 +273,36 @@ const WORKLOAD_TYPE_CONFIG: Record<string, {
     color: 'text-indigo-500', 
     bgColor: 'bg-indigo-500/10',
     label: 'Lakebase'
+  },
+  'AI_GATEWAY': {
+    icon: ShieldCheckIcon,
+    color: 'text-violet-500',
+    bgColor: 'bg-violet-500/10',
+    label: 'AI Gateway'
+  },
+  'AGENT_EVALUATION': {
+    icon: BeakerIcon,
+    color: 'text-fuchsia-500',
+    bgColor: 'bg-fuchsia-500/10',
+    label: 'Agent Eval'
+  },
+  'AI_RUNTIME': {
+    icon: CpuChipIcon,
+    color: 'text-cyan-500',
+    bgColor: 'bg-cyan-500/10',
+    label: 'AI Runtime'
+  },
+  'GENERAL_STORAGE': {
+    icon: CircleStackIcon,
+    color: 'text-emerald-500',
+    bgColor: 'bg-emerald-500/10',
+    label: 'Storage'
+  },
+  'ZEROBUS': {
+    icon: ArrowsRightLeftIcon,
+    color: 'text-sky-500',
+    bgColor: 'bg-sky-500/10',
+    label: 'Zerobus'
   }
 }
 
@@ -230,8 +361,11 @@ const formatNumber = (num: number, decimals: number = 2) => {
 interface CostBreakdown {
   totalCost: number
   dbuCost: number
+  dsuCost: number
   vmCost: number
+  databricksListCost: number
   monthlyDBUs: number
+  monthlyDSUs: number
   unitsUsed?: number
 }
 
@@ -277,12 +411,18 @@ const VMCalculationLine: React.FC<VMCalculationLineProps> = React.memo(({
         <span className="font-medium text-[var(--text-primary)]">Driver</span>
         <span>{driverType}</span>
         <span className="text-[var(--text-muted)]">(${driverRate.toFixed(4)}/hr)</span>
-        <span>+</span>
-        <span className="font-medium text-[var(--text-primary)]">
-          {workerCount} worker{workerCount !== 1 ? 's' : ''}
-        </span>
-        <span>{workerType}</span>
-        <span className="text-[var(--text-muted)]">(${workerRate.toFixed(4)}/hr each)</span>
+        {workerCount > 0 ? (
+          <>
+            <span>+</span>
+            <span className="font-medium text-[var(--text-primary)]">
+              {workerCount} worker{workerCount !== 1 ? 's' : ''}
+            </span>
+            <span>{workerType}</span>
+            <span className="text-[var(--text-muted)]">(${workerRate.toFixed(4)}/hr each)</span>
+          </>
+        ) : (
+          <span className="text-[var(--text-muted)]">Single node — driver VM only</span>
+        )}
         <span>)</span>
         {clusters !== undefined && (
           <>
@@ -327,6 +467,11 @@ const WorkloadCostDisplay: React.FC<WorkloadCostDisplayProps> = React.memo(({
           {formatNumber(costs.monthlyDBUs)} DBUs/mo
         </span>
       )}
+      {costs.monthlyDSUs > 0 && (
+        <span className={clsx("text-purple-600 dark:text-purple-400 tabular-nums", sizeClasses[size].dbu)}>
+          {formatNumber(costs.monthlyDSUs)} DSUs/mo
+        </span>
+      )}
     </div>
   )
 })
@@ -353,7 +498,7 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
     'SQL_COMPUTE': 0.22,
     'SQL_PRO_COMPUTE': 0.55,
     'SERVERLESS_SQL_COMPUTE': 0.70,
-    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // Vector Search, Model Serving, FMAPI Databricks
+    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // AI Search, Model Serving, FMAPI Databricks
     'DATABASE_SERVERLESS_COMPUTE': 0.48  // Lakebase
   },
   azure: {
@@ -371,7 +516,7 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
     'SQL_COMPUTE': 0.22,
     'SQL_PRO_COMPUTE': 0.55,
     'SERVERLESS_SQL_COMPUTE': 0.70,
-    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // Vector Search, Model Serving, FMAPI Databricks
+    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // AI Search, Model Serving, FMAPI Databricks
     'DATABASE_SERVERLESS_COMPUTE': 0.48  // Lakebase
   },
   gcp: {
@@ -389,7 +534,7 @@ const DBU_PRICING: Record<string, Record<string, number>> = {
     'SQL_COMPUTE': 0.22,
     'SQL_PRO_COMPUTE': 0.55,
     'SERVERLESS_SQL_COMPUTE': 0.70,
-    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // Vector Search, Model Serving, FMAPI Databricks
+    'SERVERLESS_REAL_TIME_INFERENCE': 0.07,  // AI Search, Model Serving, FMAPI Databricks
     'DATABASE_SERVERLESS_COMPUTE': 0.48  // Lakebase
   }
 }
@@ -401,6 +546,8 @@ const SERVERLESS_REAL_TIME_INFERENCE_WORKLOADS = new Set([
   'AI_PARSE',
   'AI_EXTRACT',
   'AI_CLASSIFY',
+  'AI_GATEWAY',
+  'AGENT_EVALUATION',
   'SHUTTERSTOCK_IMAGEAI',
 ])
 
@@ -422,23 +569,454 @@ const DBSQL_DBU_RATES: Record<string, number> = {
 interface CostBreakdown {
   monthlyDBUs: number
   dbuCost: number
+  monthlyDSUs: number
+  dsuCost: number
   vmCost: number
+  databricksListCost: number
   totalCost: number
   // Optional fields for specific workload types
-  unitsUsed?: number  // Vector Search units
+  unitsUsed?: number  // AI Search units
   dbuPerHour?: number // DBU per hour for display
   dbuPrice?: number   // $/DBU rate for display
-  // Storage costs for Vector Search and Lakebase
+  // Storage costs for AI Search and Lakebase
   storageCost?: number
+  dsuPrice?: number
   storageDetails?: {
     totalStorageGB: number
-    freeStorageGB?: number  // Vector Search only
+    freeStorageGB?: number  // AI Search only
     billableStorageGB: number
-    pricePerGB?: number     // Vector Search
+    pricePerGB?: number     // AI Search
     dsuPerGB?: number       // Lakebase
     totalDSU?: number       // Lakebase
     pricePerDSU?: number    // Lakebase
   }
+}
+
+function AIGatewayCostFormula({
+  item,
+  costs,
+  dbuPriceDisplay,
+}: {
+  item: Partial<LineItem>
+  costs: CostBreakdown
+  dbuPriceDisplay: string
+}) {
+  const usage = calculateAIGatewayUsage(item)
+  const components = [
+    {
+      label: 'Inference Tables',
+      usage: usage.inferenceTables,
+      requestKB: item.ai_gateway_inference_tables_avg_request_payload_kb ?? 1,
+      responseKB: item.ai_gateway_inference_tables_avg_response_payload_kb ?? 1,
+    },
+    {
+      label: 'Usage Tracking',
+      usage: usage.usageTracking,
+      requestKB: item.ai_gateway_usage_tracking_avg_request_payload_kb ?? 1,
+      responseKB: item.ai_gateway_usage_tracking_avg_response_payload_kb ?? 1,
+    },
+  ].filter(component => component.usage.enabled)
+
+  return (
+    <div className="space-y-2">
+      {components.map(component => {
+        const subtotal = usage.monthlyDBUs > 0
+          ? costs.totalCost * component.usage.monthlyDBUs / usage.monthlyDBUs
+          : 0
+        return (
+          <div key={component.label} className="rounded border border-[var(--border-primary)] p-2 space-y-1">
+            <div className="text-[10px] font-semibold text-[var(--text-secondary)]">{component.label}</div>
+            <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+              {component.usage.inputMethod === 'payload_gb' ? (
+                <span>Direct metered payload</span>
+              ) : (
+                <>
+                  <span>{component.usage.requestsMillions.toLocaleString()}M requests</span>
+                  <span>×</span>
+                  <span>({component.requestKB} + {component.responseKB}) KB/request</span>
+                  <span>=</span>
+                </>
+              )}
+              <span className="font-medium">{formatNumber(component.usage.monthlyPayloadGB, 3)} GB</span>
+              <span>×</span>
+              <span>1.429 DBU/GB</span>
+              <span>=</span>
+              <span className="font-medium">{formatNumber(component.usage.monthlyDBUs, 3)} DBUs</span>
+              <span>→</span>
+              <span className="font-semibold">{formatCurrency(subtotal)}</span>
+            </div>
+          </div>
+        )
+      })}
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span className="text-blue-600 font-semibold">Combined total:</span>
+        <span>{formatNumber(costs.monthlyDBUs)} DBUs/mo</span>
+        <span>×</span>
+        <span>${dbuPriceDisplay}/DBU</span>
+        <span>=</span>
+        <span className="font-semibold">{formatCurrency(costs.totalCost)}</span>
+      </div>
+      <p className="text-[10px] text-[var(--text-muted)]">
+        Direct GB is preferred when metered billable payload is known. Excludes underlying Model Serving/Foundation Model API inference and guardrail evaluator costs; add those as separate workloads.
+      </p>
+    </div>
+  )
+}
+
+function AgentEvaluationCostFormula({
+  item,
+  costs,
+  dbuPriceDisplay,
+}: {
+  item: Partial<LineItem>
+  costs: CostBreakdown
+  dbuPriceDisplay: string
+}) {
+  const usage = calculateAgentEvaluationUsage(item)
+  const dbuPrice = costs.dbuPrice || 0
+
+  return (
+    <div className="space-y-2">
+      {usage.labelsEnabled && (
+        <div className="rounded border border-[var(--border-primary)] p-2 space-y-1">
+          <div className="text-[10px] font-semibold text-[var(--text-secondary)]">Evaluation Labels</div>
+          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+            <span className="font-medium">{formatNumber(usage.inputTokensMillions, 3)}M input tokens</span>
+            <span>×</span>
+            <span>{AGENT_EVALUATION_COMPONENT_RATES.inputTokens.toFixed(3)} DBU/M</span>
+            <span>=</span>
+            <span className="font-medium">{formatNumber(usage.inputTokenDBUs, 3)} DBUs</span>
+            <span>×</span>
+            <span>${dbuPriceDisplay}/DBU</span>
+            <span>=</span>
+            <span className="font-semibold">{formatCurrency(usage.inputTokenDBUs * dbuPrice)}</span>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+            <span className="font-medium">{formatNumber(usage.outputTokensMillions, 3)}M output tokens</span>
+            <span>×</span>
+            <span>{AGENT_EVALUATION_COMPONENT_RATES.outputTokens.toFixed(3)} DBU/M</span>
+            <span>=</span>
+            <span className="font-medium">{formatNumber(usage.outputTokenDBUs, 3)} DBUs</span>
+            <span>×</span>
+            <span>${dbuPriceDisplay}/DBU</span>
+            <span>=</span>
+            <span className="font-semibold">{formatCurrency(usage.outputTokenDBUs * dbuPrice)}</span>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
+            <span className="font-semibold">Labels subtotal:</span>
+            <span>{formatNumber(usage.evaluationTokenDBUs, 3)} DBUs</span>
+            <span>×</span>
+            <span>${dbuPriceDisplay}/DBU</span>
+            <span>=</span>
+            <span className="font-semibold">{formatCurrency(usage.evaluationTokenDBUs * dbuPrice)}</span>
+          </div>
+        </div>
+      )}
+      {usage.syntheticDataEnabled && (
+        <div className="rounded border border-[var(--border-primary)] p-2 space-y-1">
+          <div className="text-[10px] font-semibold text-[var(--text-secondary)]">Synthetic Data</div>
+          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+            <span className="font-medium">{usage.syntheticQuestions.toLocaleString()} questions</span>
+            <span>×</span>
+            <span>{AGENT_EVALUATION_COMPONENT_RATES.syntheticQuestions.toFixed(3)} DBU/question</span>
+            <span>=</span>
+            <span className="font-medium">{formatNumber(usage.syntheticQuestionDBUs, 3)} DBUs</span>
+            <span>×</span>
+            <span>${dbuPriceDisplay}/DBU</span>
+            <span>=</span>
+            <span className="font-semibold">{formatCurrency(usage.syntheticQuestionDBUs * dbuPrice)}</span>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
+            <span className="font-semibold">Synthetic subtotal:</span>
+            <span>{formatNumber(usage.syntheticQuestionDBUs, 3)} DBUs</span>
+            <span>×</span>
+            <span>${dbuPriceDisplay}/DBU</span>
+            <span>=</span>
+            <span className="font-semibold">{formatCurrency(usage.syntheticQuestionDBUs * dbuPrice)}</span>
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span className="text-blue-600 font-semibold">Combined total:</span>
+        <span>{formatNumber(costs.monthlyDBUs, 3)} DBUs/mo</span>
+        <span>×</span>
+        <span>${dbuPriceDisplay}/DBU</span>
+        <span>=</span>
+        <span className="font-semibold">{formatCurrency(costs.totalCost)}</span>
+      </div>
+      <p className="text-[10px] text-[var(--text-muted)]">
+        Evaluated application or model inference is excluded. Add it separately as a Model Serving or Foundation Model API workload.
+      </p>
+    </div>
+  )
+}
+
+function AIRuntimeCostFormula({
+  item,
+  costs,
+  cloud,
+  dbuPriceDisplay,
+}: {
+  item: Partial<LineItem>
+  costs: CostBreakdown
+  cloud: string
+  dbuPriceDisplay: string
+}) {
+  const isRunBased = Boolean(
+    item.runs_per_day
+    && item.avg_runtime_minutes
+    && item.hours_per_month == null,
+  )
+  const runtimeHours = isRunBased
+    ? (
+        (item.runs_per_day || 0)
+        * ((item.avg_runtime_minutes || 0) / 60)
+        * (item.days_per_month || 22)
+      )
+    : (item.hours_per_month || 0)
+  const usage = calculateAIRuntimeUsage(
+    cloud,
+    item.ai_runtime_accelerator_type,
+    runtimeHours,
+  )
+
+  return (
+    <div className="space-y-1">
+      {isRunBased && (
+        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+          <span className="font-semibold">Runtime:</span>
+          <span>{item.runs_per_day} runs/day</span>
+          <span>×</span>
+          <span>{item.avg_runtime_minutes} min/run</span>
+          <span>÷ 60</span>
+          <span>×</span>
+          <span>{item.days_per_month || 22} days/mo</span>
+          <span>=</span>
+          <span className="font-medium">{formatNumber(runtimeHours, 3)} node-hours/mo</span>
+        </div>
+      )}
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span className="text-blue-600 font-semibold">DBU:</span>
+        <span className="font-medium">{formatNumber(runtimeHours, 3)} node-hours/mo</span>
+        <span>×</span>
+        <span>{usage.accelerator?.gpuCount || 0} GPU/node</span>
+        <span>×</span>
+        <span>{formatNumber(usage.accelerator?.dbuPerGpuHour || 0, 3)} DBU/GPU-hr</span>
+        <span>=</span>
+        <span className="font-medium">{formatNumber(costs.monthlyDBUs, 3)} DBUs/mo</span>
+      </div>
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span className="text-blue-600 font-semibold">Cost:</span>
+        <span>{formatNumber(costs.monthlyDBUs, 3)} DBUs/mo</span>
+        <span>×</span>
+        <span>${dbuPriceDisplay}/DBU</span>
+        <span>=</span>
+        <span className="font-semibold">{formatCurrency(costs.totalCost)}</span>
+      </div>
+      <p className="text-[10px] text-[var(--text-muted)]">
+        Billing origin AI_RUNTIME is charged on the MODEL_TRAINING SKU.
+      </p>
+    </div>
+  )
+}
+
+function GeneralStorageCostFormula({
+  item,
+  costs,
+  cloud,
+  unitPrice,
+}: {
+  item: Partial<LineItem>
+  costs: CostBreakdown
+  cloud: string
+  unitPrice: number
+}) {
+  const quantity = item.general_storage_quantity ?? 0
+  const unit = (item.general_storage_unit ?? 'gb').toUpperCase()
+  const billableGB = getGeneralStorageGB(item)
+  const usage = calculateGeneralStorageDSU(item, cloud)
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span>{quantity.toLocaleString()} {unit}/month</span>
+        {unit === 'TB' && (
+          <>
+            <span>=</span>
+            <span>{billableGB.toLocaleString()} GB-month</span>
+          </>
+        )}
+      </div>
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span className="text-purple-600 font-semibold">Stored Data:</span>
+        <span>{billableGB.toLocaleString()} GB-month</span>
+        <span>×</span>
+        <span>1 DSU/GB-month</span>
+        <span>=</span>
+        <span>{formatNumber(usage.storedDataDSU, 4)} DSUs</span>
+      </div>
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span className="text-purple-600 font-semibold">Tier 1:</span>
+        <span>{formatNumber(usage.tier1OperationsThousands, 3)}K operations</span>
+        <span>×</span>
+        <span>{usage.tier1DSUPerThousand} DSU/1K</span>
+        <span>=</span>
+        <span>{formatNumber(usage.tier1OperationsDSU, 4)} DSUs</span>
+      </div>
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span className="text-purple-600 font-semibold">Tier 2:</span>
+        <span>{formatNumber(usage.tier2OperationsThousands, 3)}K operations</span>
+        <span>×</span>
+        <span>{usage.tier2DSUPerThousand} DSU/1K</span>
+        <span>=</span>
+        <span>{formatNumber(usage.tier2OperationsDSU, 4)} DSUs</span>
+      </div>
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
+        <span>{formatNumber(costs.monthlyDSUs, 4)} DSUs</span>
+        <span>×</span>
+        <span>${unitPrice.toFixed(3)}/DSU</span>
+        <span>=</span>
+        <span className="font-semibold">{formatCurrency(costs.dsuCost)}</span>
+      </div>
+      <p className="text-[10px] text-[var(--text-muted)]">
+        Tier 1 includes PUT, COPY, POST, and LIST. Tier 2 includes other API operations.
+      </p>
+    </div>
+  )
+}
+
+function ZerobusCostFormula({
+  item,
+  costs,
+  dbuPriceDisplay,
+}: {
+  item: Partial<LineItem>
+  costs: CostBreakdown
+  dbuPriceDisplay: string
+}) {
+  const usage = calculateZerobusUsage(item)
+  const modeName = usage.mode === 'otel'
+    ? 'Zerobus OTel Ingest'
+    : 'Zerobus Ingest'
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span className="text-blue-600 font-semibold">{modeName}:</span>
+        <span>{formatNumber(usage.monthlyIngestedGB, 3)} GB/mo</span>
+        <span>×</span>
+        <span>{usage.dbuPerGB.toFixed(3)} DBU/GB</span>
+        <span>=</span>
+        <span className="font-medium">
+          {formatNumber(usage.monthlyDBUs, 3)} DBUs/mo
+        </span>
+      </div>
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span>{formatNumber(usage.monthlyDBUs, 3)} DBUs/mo</span>
+        <span>×</span>
+        <span>${dbuPriceDisplay}/DBU</span>
+        <span>=</span>
+        <span className="font-semibold">{formatCurrency(costs.dbuCost)}</span>
+      </div>
+      <p className="text-[10px] text-[var(--text-muted)]">
+        Uses the regional Jobs Serverless list price. Producer compute,
+        target storage, downstream processing, and transfer are excluded.
+      </p>
+    </div>
+  )
+}
+
+function AISearchCostFormula({
+  item,
+  costs,
+  dbuPriceDisplay,
+}: {
+  item: Partial<LineItem>
+  costs: CostBreakdown
+  dbuPriceDisplay: string
+}) {
+  const capacity = item.vector_capacity_millions || 1
+  const mode = item.vector_search_mode || 'standard'
+  const divisor = mode === 'storage_optimized' ? 64 : 2
+  const unitsUsed = Math.ceil(capacity / divisor)
+  const hoursPerMonth = calculateHoursPerMonth(item)
+  const dbuPerUnit = unitsUsed > 0
+    ? (costs.dbuPerHour || (mode === 'storage_optimized' ? 18.29 : 4)) / unitsUsed
+    : 0
+  const servingDBUs = unitsUsed * dbuPerUnit * hoursPerMonth
+  const reranker = calculateAISearchRerankerUsage(item)
+  const dbuPrice = costs.dbuPrice || 0
+  const storageGB = item.vector_search_storage_gb || 0
+  const freeStorageGB = unitsUsed > 0 ? AI_SEARCH_INCLUDED_STORAGE_GB : 0
+  const billableStorageGB = Math.max(0, storageGB - freeStorageGB)
+  const storageDSUPerGB = getAISearchStorageDSUPerGB(mode)
+  const storageDSUs = billableStorageGB * storageDSUPerGB
+  const dsuPrice = costs.dsuPrice || 0
+  const storageCost = storageDSUs * dsuPrice
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+        <span className="text-blue-600 font-semibold">Serving:</span>
+        <span>⌈<span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{capacity}M</span> vectors ÷ {divisor}M⌉</span>
+        <span>=</span>
+        <span className="font-semibold">{unitsUsed} unit{unitsUsed !== 1 ? 's' : ''}</span>
+        <span>×</span>
+        <span>{dbuPerUnit.toFixed(2)} DBU/hr/unit</span>
+        <span>×</span>
+        <span>{hoursPerMonth}h</span>
+        <span>=</span>
+        <span>{formatNumber(servingDBUs, 3)} DBUs</span>
+        <span>×</span>
+        <span>${dbuPriceDisplay}/DBU</span>
+        <span>=</span>
+        <span className="text-blue-500 font-semibold">{formatCurrency(servingDBUs * dbuPrice)}</span>
+      </div>
+      {reranker.enabled && (
+        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+          <span className="text-rose-600 font-semibold">Reranker:</span>
+          <span>{formatNumber(reranker.requestsThousands, 3)}K requests</span>
+          <span>×</span>
+          <span>{AI_SEARCH_RERANKER_DBU_PER_THOUSAND_REQUESTS.toFixed(3)} DBU/1K</span>
+          <span>=</span>
+          <span>{formatNumber(reranker.monthlyDBUs, 3)} DBUs</span>
+          <span>×</span>
+          <span>${dbuPriceDisplay}/DBU</span>
+          <span>=</span>
+          <span className="text-rose-500 font-semibold">{formatCurrency(reranker.monthlyDBUs * dbuPrice)}</span>
+        </div>
+      )}
+      {storageGB > 0 && (
+        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+          <span className="text-purple-600 font-semibold">Storage:</span>
+          <span>{storageGB} GB</span>
+          <span>−</span>
+          <span>{freeStorageGB} GB free</span>
+          <span className="text-[var(--text-muted)]">(first 30 GB included)</span>
+          <span>=</span>
+          <span>{billableStorageGB} GB</span>
+          <span>×</span>
+          <span>{storageDSUPerGB} DSU/GB</span>
+          <span>=</span>
+          <span>{formatNumber(storageDSUs, 3)} DSUs</span>
+          <span>×</span>
+          <span>${dsuPrice.toFixed(3)}/DSU</span>
+          <span>=</span>
+          <span className="text-purple-500 font-semibold">{formatCurrency(storageCost)}</span>
+        </div>
+      )}
+      <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
+        <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
+        <span>{formatNumber(costs.monthlyDBUs, 3)} DBUs × ${dbuPriceDisplay}/DBU</span>
+        {storageGB > 0 && (
+          <>
+            <span>+</span>
+            <span>{formatCurrency(storageCost)} DSU</span>
+          </>
+        )}
+        <span>=</span>
+        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
+      </div>
+    </div>
+  )
 }
 
 function SortableRow({ id, disabled, children }: { id: string; disabled?: boolean; children: React.ReactNode }) {
@@ -496,7 +1074,7 @@ export default function Calculator() {
     dbsqlSizes,
     // Model Serving GPU types for DBU rates
     modelServingGPUTypes,
-    // Vector Search modes for DBU rates
+    // AI Search modes for DBU rates
     vectorSearchModes,
     getVectorSearchRate,
     // FMAPI rates (cached lookups)
@@ -544,8 +1122,16 @@ export default function Calculator() {
     customer_name: '',
     cloud: 'aws',
     region: '',
-    tier: ''  // No default - must be selected
+    tier: '',  // No default - must be selected
+    platform_addons: [] as PlatformAddonType[],
   })
+  const regionOptionGroups = useMemo(
+    () => groupRegionOptions(
+      formData.cloud,
+      createRegionOptions(formData.cloud, regions),
+    ),
+    [formData.cloud, regions],
+  )
   
   // Configuration panel collapsed state - auto-collapse for saved estimates
   const [isConfigCollapsed, setIsConfigCollapsed] = useState(!!id)
@@ -750,7 +1336,8 @@ export default function Calculator() {
     customer_name: '',
     cloud: 'aws',
     region: '',
-    tier: ''
+    tier: '',
+    platform_addons: [] as PlatformAddonType[],
   }
 
   useEffect(() => {
@@ -762,7 +1349,8 @@ export default function Calculator() {
         // Convert to lowercase for UI matching (DB stores uppercase)
         cloud: (currentEstimate.cloud || 'aws').toLowerCase(),
         region: currentEstimate.region || '',
-        tier: (currentEstimate.tier || '').toLowerCase()
+        tier: (currentEstimate.tier || '').toLowerCase(),
+        platform_addons: currentEstimate.discount_config?.platform_addons || [],
       })
       if (currentEstimate.cloud) {
         setSelectedCloud(currentEstimate.cloud.toLowerCase())
@@ -816,23 +1404,22 @@ export default function Calculator() {
     
     // If no region selected, return zero costs
     if (!region) {
-      return { monthlyDBUs: 0, dbuCost: 0, vmCost: 0, totalCost: 0 }
+      return {
+        monthlyDBUs: 0,
+        dbuCost: 0,
+        monthlyDSUs: 0,
+        dsuCost: 0,
+        vmCost: 0,
+        databricksListCost: 0,
+        totalCost: 0,
+      }
     }
     
     // ========================================
     // Step 1: Calculate hours per month
     // Formula: runs_per_day * (avg_runtime_minutes / 60) * days_per_month
     // ========================================
-    let hoursPerMonth = 0
-    if (effectiveItem.workload_type !== 'FMAPI_DATABRICKS' && effectiveItem.workload_type !== 'FMAPI_PROPRIETARY') {
-      if (effectiveItem.hours_per_month) {
-        // Direct hours input
-        hoursPerMonth = effectiveItem.hours_per_month
-      } else if (effectiveItem.runs_per_day && effectiveItem.avg_runtime_minutes) {
-        // Calculate from runs: runs_per_day * (avg_runtime_minutes / 60) * days_per_month
-        hoursPerMonth = (effectiveItem.runs_per_day * (effectiveItem.avg_runtime_minutes / 60)) * (effectiveItem.days_per_month || 30)
-      }
-    }
+    const hoursPerMonth = calculateHoursPerMonth(effectiveItem)
     
     // ========================================
     // Step 2: Determine product_type_for_pricing (SKU)
@@ -886,12 +1473,24 @@ export default function Calculator() {
         break
       
       case 'VECTOR_SEARCH':
-        // Vector Search uses SERVERLESS_REAL_TIME_INFERENCE pricing ($0.07/DBU)
+        // AI Search uses SERVERLESS_REAL_TIME_INFERENCE pricing
         productType = 'SERVERLESS_REAL_TIME_INFERENCE'
         break
       
       case 'MODEL_SERVING':
         productType = 'SERVERLESS_REAL_TIME_INFERENCE'
+        break
+
+      case 'AI_RUNTIME':
+        productType = 'MODEL_TRAINING'
+        break
+
+      case 'GENERAL_STORAGE':
+        productType = 'DATABRICKS_STORAGE'
+        break
+
+      case 'ZEROBUS':
+        productType = 'JOBS_SERVERLESS_COMPUTE'
         break
       
       case 'FMAPI_DATABRICKS':
@@ -924,6 +1523,8 @@ export default function Calculator() {
 
       case 'AI_EXTRACT':
       case 'AI_CLASSIFY':
+      case 'AI_GATEWAY':
+      case 'AGENT_EVALUATION':
         productType = 'SERVERLESS_REAL_TIME_INFERENCE'
         break
 
@@ -938,7 +1539,31 @@ export default function Calculator() {
     // Get DBU price for this product type
     // Try pricing bundle first (static data), then runtime dbuRatesMap, then hardcoded fallback
     let dbuPrice = 0.20
-    if (isPricingBundleLoaded && formData.tier) {
+    if (
+      effectiveItem.workload_type === 'AI_GATEWAY'
+      || effectiveItem.workload_type === 'AGENT_EVALUATION'
+      || effectiveItem.workload_type === 'AI_RUNTIME'
+      || effectiveItem.workload_type === 'GENERAL_STORAGE'
+      || effectiveItem.workload_type === 'ZEROBUS'
+    ) {
+      const exactSku = effectiveItem.workload_type === 'AI_RUNTIME'
+        ? 'MODEL_TRAINING'
+        : effectiveItem.workload_type === 'GENERAL_STORAGE'
+          ? 'DATABRICKS_STORAGE'
+          : effectiveItem.workload_type === 'ZEROBUS'
+            ? 'JOBS_SERVERLESS_COMPUTE'
+            : 'SERVERLESS_REAL_TIME_INFERENCE'
+      const exactBundlePrice = isPricingBundleLoaded && formData.tier
+        ? getExactRegionalDBUPrice(
+            pricingBundle,
+            cloud,
+            region,
+            formData.tier,
+            exactSku,
+          )
+        : null
+      dbuPrice = exactBundlePrice ?? dbuRatesMap[exactSku] ?? 0
+    } else if (isPricingBundleLoaded && formData.tier) {
       const bundlePrice = getBundleDBUPrice(pricingBundle, cloud, region, formData.tier, productType)
       if (bundlePrice > 0) {
         dbuPrice = bundlePrice
@@ -948,6 +1573,20 @@ export default function Calculator() {
     } else {
       dbuPrice = pricing[productType] || 0.20
     }
+    let dsuPrice = isPricingBundleLoaded && formData.tier
+      ? (
+          getExactRegionalDBUPrice(
+            pricingBundle,
+            cloud,
+            region,
+            formData.tier,
+            'DATABRICKS_STORAGE',
+          ) ?? dbuRatesMap.DATABRICKS_STORAGE ?? 0
+        )
+      : (dbuRatesMap.DATABRICKS_STORAGE ?? 0)
+    if (effectiveItem.workload_type === 'GENERAL_STORAGE') {
+      dsuPrice = dbuPrice
+    }
     
     // ========================================
     // Step 3: Calculate DBU per hour based on workload type
@@ -955,20 +1594,23 @@ export default function Calculator() {
     // ========================================
     let dbuPerHour = 0
     let monthlyDBUs = 0
+    let monthlyDSUs = 0
+    let dsuCost = 0
     let vmCost = 0
-    let unitsUsed: number | undefined = undefined  // For Vector Search
-    let storageCost: number | undefined = undefined  // For Vector Search and Lakebase
+    let unitsUsed: number | undefined = undefined  // For AI Search
+    let storageCost: number | undefined = undefined  // For AI Search and Lakebase
     let storageDetails: CostBreakdown['storageDetails'] = undefined
     
-    // Get instance DBU rates - try pricing bundle first, then fetched instanceTypes
-    let driverDBURate = 0.5 // Fallback
-    let workerDBURate = 0.5
+    // Use the legacy fallback only for a selected but unknown instance.
+    // An empty node selection contributes no hidden DBUs.
+    let driverDBURate = effectiveItem.driver_node_type ? 0.5 : 0
+    let workerDBURate = effectiveItem.worker_node_type ? 0.5 : 0
     
     if (isPricingBundleLoaded && effectiveItem.driver_node_type) {
       const bundleDriverRate = getBundleInstanceDBURate(pricingBundle, cloud, effectiveItem.driver_node_type)
       if (bundleDriverRate > 0) driverDBURate = bundleDriverRate
     }
-    if (!driverDBURate || driverDBURate === 0.5) {
+    if (effectiveItem.driver_node_type && driverDBURate === 0.5) {
       const driverInstance = instanceTypes.find(it => it.id === effectiveItem.driver_node_type || it.name === effectiveItem.driver_node_type)
       if (driverInstance?.dbu_rate) driverDBURate = driverInstance.dbu_rate
     }
@@ -977,7 +1619,7 @@ export default function Calculator() {
       const bundleWorkerRate = getBundleInstanceDBURate(pricingBundle, cloud, effectiveItem.worker_node_type)
       if (bundleWorkerRate > 0) workerDBURate = bundleWorkerRate
     }
-    if (!workerDBURate || workerDBURate === 0.5) {
+    if (effectiveItem.worker_node_type && workerDBURate === 0.5) {
       const workerInstance = instanceTypes.find(it => it.id === effectiveItem.worker_node_type || it.name === effectiveItem.worker_node_type)
       if (workerInstance?.dbu_rate) workerDBURate = workerInstance.dbu_rate
     }
@@ -1166,7 +1808,7 @@ export default function Calculator() {
         break
       
       case 'VECTOR_SEARCH':
-        // Vector Search: Units = CEILING(vector_capacity / divisor)
+        // AI Search: Units = CEILING(vector_capacity / divisor)
         // Standard: 2M vectors per unit, 4.00 DBU/hour per unit
         // Storage Optimized: 64M vectors per unit, 18.29 DBU/hour per unit
         const vectorMode = effectiveItem.vector_search_mode || 'standard'
@@ -1198,25 +1840,36 @@ export default function Calculator() {
         
         // DBU/Hour = units_used × mode_dbu_rate
         dbuPerHour = vectorUnitsUsed * vectorModeDBURate
-        monthlyDBUs = dbuPerHour * hoursPerMonth
+        monthlyDBUs = (
+          dbuPerHour * hoursPerMonth
+          + calculateAISearchRerankerUsage(effectiveItem).monthlyDBUs
+        )
         
-        // Storage calculation for Vector Search
-        // Free Storage = units_used × 20 GB
+        // Storage calculation for AI Search
+        // The first 30 GB of storage is included
         // Billable Storage = MAX(0, storage_gb - free_storage_gb)
-        // Storage Cost = billable_storage_gb × price_per_gb_per_month ($0.023/GB/month)
+        // Storage Cost = billable GB × 10 DSU/GB × exact regional $/DSU.
         const vectorStorageGB = effectiveItem.vector_search_storage_gb || 0
-        const vectorFreeStorageGB = vectorUnitsUsed * 20
+        const vectorFreeStorageGB = vectorUnitsUsed > 0
+          ? AI_SEARCH_INCLUDED_STORAGE_GB
+          : 0
         const vectorBillableStorageGB = Math.max(0, vectorStorageGB - vectorFreeStorageGB)
-        const vectorStoragePricePerGB = 0.023  // $0.023 per GB per month
-        const vectorStorageCost = vectorBillableStorageGB * vectorStoragePricePerGB
+        const vectorStorageDSUPerGB = getAISearchStorageDSUPerGB(
+          effectiveItem.vector_search_mode,
+        )
+        monthlyDSUs = vectorBillableStorageGB * vectorStorageDSUPerGB
+        const vectorStorageCost = monthlyDSUs * dsuPrice
 
         if (vectorStorageGB > 0) {
+          dsuCost = vectorStorageCost
           storageCost = vectorStorageCost
           storageDetails = {
             totalStorageGB: vectorStorageGB,
             freeStorageGB: vectorFreeStorageGB,
             billableStorageGB: vectorBillableStorageGB,
-            pricePerGB: vectorStoragePricePerGB
+            dsuPerGB: vectorStorageDSUPerGB,
+            totalDSU: monthlyDSUs,
+            pricePerDSU: dsuPrice,
           }
         }
         break
@@ -1241,15 +1894,19 @@ export default function Calculator() {
           if (gpuTypeData?.dbu_per_hour) gpuDBURate = gpuTypeData.dbu_per_hour
         }
         
-        // Apply concurrency multiplier
+        // GPU rates are per replica (one replica per four concurrency units).
+        // CPU rates remain per concurrency unit.
         const msScaleOutCalc = effectiveItem.model_serving_scale_out || 'small'
         const msPresets: Record<string, number> = { small: 4, medium: 12, large: 40 }
         const msConcurrencyCalc = msScaleOutCalc === 'custom'
           ? (effectiveItem.model_serving_concurrency || 4)
           : (msPresets[msScaleOutCalc] || 4)
 
-        // Total Cost = DBU/Hour × concurrency × hours_per_month × dbu_price
-        dbuPerHour = gpuDBURate * msConcurrencyCalc
+        dbuPerHour = calculateModelServingDBUPerHour(
+          gpuDBURate,
+          gpuType,
+          msConcurrencyCalc,
+        )
         monthlyDBUs = dbuPerHour * hoursPerMonth
         break
 
@@ -1276,24 +1933,32 @@ export default function Calculator() {
         
         // Storage calculation for Lakebase (DSU-based pricing)
         // Storage: 15x DSU/GB, PITR: 8.7x DSU/GB, Snapshots: 3.91x DSU/GB
-        // Cost = GB × DSU_multiplier × $/DSU ($0.023/DSU/month)
+        // Cost = GB × DSU multiplier × exact regional $/DSU.
         const lakebaseStorageGB = Math.min(effectiveItem.lakebase_storage_gb || 0, 8192)
         const lakebasePitrGB = effectiveItem.lakebase_pitr_gb || 0
         const lakebaseSnapshotGB = effectiveItem.lakebase_snapshot_gb || 0
-        const lakebasePricePerDSU = 0.023
-        const lakebaseStorageCost = lakebaseStorageGB * 15 * lakebasePricePerDSU
-        const lakebasePitrCost = lakebasePitrGB * 8.7 * lakebasePricePerDSU
-        const lakebaseSnapshotCost = lakebaseSnapshotGB * 3.91 * lakebasePricePerDSU
+        const lakebaseStorageDSU = lakebaseStorageGB * 15
+        const lakebasePitrDSU = lakebasePitrGB * 8.7
+        const lakebaseSnapshotDSU = lakebaseSnapshotGB * 3.91
+        monthlyDSUs = (
+          lakebaseStorageDSU
+          + lakebasePitrDSU
+          + lakebaseSnapshotDSU
+        )
+        const lakebaseStorageCost = lakebaseStorageDSU * dsuPrice
+        const lakebasePitrCost = lakebasePitrDSU * dsuPrice
+        const lakebaseSnapshotCost = lakebaseSnapshotDSU * dsuPrice
         const lakebaseTotalStorageCost = lakebaseStorageCost + lakebasePitrCost + lakebaseSnapshotCost
 
         if (lakebaseTotalStorageCost > 0) {
+          dsuCost = lakebaseTotalStorageCost
           storageCost = lakebaseTotalStorageCost
           storageDetails = {
             totalStorageGB: lakebaseStorageGB,
             billableStorageGB: lakebaseStorageGB,
             dsuPerGB: 15,
-            totalDSU: lakebaseStorageGB * 15,
-            pricePerDSU: lakebasePricePerDSU
+            totalDSU: monthlyDSUs,
+            pricePerDSU: dsuPrice
           }
         }
         break
@@ -1302,20 +1967,31 @@ export default function Calculator() {
         // Foundation Models (Databricks) - llama, gpt-oss, gemma, bge, gte, etc.
         const fmapiDbxQuantity = effectiveItem.fmapi_quantity || 0
         const fmapiDbxRateType = effectiveItem.fmapi_rate_type || 'input_token'
-        const fmapiDbxIsProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(fmapiDbxRateType)
+        const fmapiDbxIsProvisioned = fmapiDbxRateType.startsWith('provisioned_')
         
         // Try pricing bundle first
         let dbxDbuRate: number | null = null
         
         if (isPricingBundleLoaded && effectiveItem.fmapi_model) {
-          const bundleDbxRate = getBundleFMAPIDatabricksRate(pricingBundle, cloud, effectiveItem.fmapi_model, fmapiDbxRateType)
+          const bundleDbxRate = getBundleFMAPIDatabricksRate(
+            pricingBundle,
+            cloud,
+            effectiveItem.fmapi_model,
+            fmapiDbxRateType,
+            region,
+            effectiveItem.fmapi_endpoint_type || 'global',
+          )
           if (bundleDbxRate) {
             dbxDbuRate = bundleDbxRate.dbu_rate
           }
         }
         
         // Fall back to store's cached rate
-        if (dbxDbuRate === null && effectiveItem.fmapi_model) {
+        if (
+          dbxDbuRate === null
+          && !isPricingBundleLoaded
+          && effectiveItem.fmapi_model
+        ) {
           const dbxRateData = getFMAPIDatabricksRate(effectiveItem.fmapi_model, fmapiDbxRateType)
           if (dbxRateData) {
             if (fmapiDbxIsProvisioned) {
@@ -1326,14 +2002,8 @@ export default function Calculator() {
           }
         }
         
-        // Apply defaults if still no rate found
-        if (dbxDbuRate === null) {
-          if (fmapiDbxIsProvisioned) {
-            dbxDbuRate = fmapiDbxRateType === 'provisioned_scaling' ? 200 : 50
-          } else {
-            dbxDbuRate = fmapiDbxRateType === 'output_token' ? 3.0 : 1.0
-          }
-        }
+        // Unsupported combinations must not silently use another model's rate.
+        if (dbxDbuRate === null) dbxDbuRate = 0
         
         monthlyDBUs = fmapiDbxQuantity * dbxDbuRate
         break
@@ -1342,7 +2012,7 @@ export default function Calculator() {
         // Foundation Models (Proprietary) - OpenAI, Anthropic, Google
         const fmapiPropQuantity = effectiveItem.fmapi_quantity || 0
         const fmapiPropRateType = effectiveItem.fmapi_rate_type || 'input_token'
-        const fmapiPropIsProvisioned = fmapiPropRateType === 'provisioned_scaling'
+        const fmapiPropIsProvisioned = fmapiPropRateType === 'batch_inference'
         
         // Try pricing bundle first
         let propDbuRate: number | null = null
@@ -1362,7 +2032,12 @@ export default function Calculator() {
         }
         
         // Fall back to store's cached rate
-        if (propDbuRate === null && effectiveItem.fmapi_provider && effectiveItem.fmapi_model) {
+        if (
+          propDbuRate === null
+          && !isPricingBundleLoaded
+          && effectiveItem.fmapi_provider
+          && effectiveItem.fmapi_model
+        ) {
           const propRateData = getFMAPIProprietaryRate(effectiveItem.fmapi_provider, effectiveItem.fmapi_model, fmapiPropRateType)
           if (propRateData) {
             if (fmapiPropIsProvisioned) {
@@ -1373,28 +2048,46 @@ export default function Calculator() {
           }
         }
         
-        // Apply defaults if still no rate found
-        if (propDbuRate === null) {
-          if (fmapiPropIsProvisioned) {
-            propDbuRate = 150
-          } else {
-            switch (fmapiPropRateType) {
-              case 'output_token': propDbuRate = 6.0; break
-              case 'cache_read': propDbuRate = 0.5; break
-              case 'cache_write': propDbuRate = 1.0; break
-              default: propDbuRate = 2.0 // input_token
-            }
-          }
-        }
+        // Unsupported combinations must not silently use another model's rate.
+        if (propDbuRate === null) propDbuRate = 0
         
         monthlyDBUs = fmapiPropQuantity * propDbuRate
         break
 
       case 'DATABRICKS_APPS': {
-        const appsSize = (effectiveItem.databricks_apps_size || 'medium').toLowerCase()
-        const appsDbuRates: Record<string, number> = { medium: 0.5, large: 1.0 }
-        dbuPerHour = appsDbuRates[appsSize] || 0.5
-        monthlyDBUs = dbuPerHour * hoursPerMonth
+        const usage = calculateDatabricksAppsUsage(
+          effectiveItem,
+          hoursPerMonth,
+        )
+        dbuPerHour = usage.dbuPerHour
+        monthlyDBUs = usage.monthlyDBUs
+        break
+      }
+
+      case 'AI_RUNTIME': {
+        const usage = calculateAIRuntimeUsage(
+          cloud,
+          effectiveItem.ai_runtime_accelerator_type,
+          hoursPerMonth,
+        )
+        dbuPerHour = usage.dbuPerNodeHour
+        monthlyDBUs = usage.monthlyDBUs
+        break
+      }
+
+      case 'GENERAL_STORAGE': {
+        const storageGB = getGeneralStorageGB(effectiveItem)
+        const usage = calculateGeneralStorageDSU(effectiveItem, cloud)
+        monthlyDSUs = usage.totalDSU
+        dsuCost = monthlyDSUs * dsuPrice
+        storageCost = dsuCost
+        storageDetails = {
+          totalStorageGB: storageGB,
+          billableStorageGB: storageGB,
+          dsuPerGB: 1,
+          totalDSU: monthlyDSUs,
+          pricePerDSU: dsuPrice,
+        }
         break
       }
 
@@ -1439,6 +2132,21 @@ export default function Calculator() {
         break
       }
 
+      case 'AI_GATEWAY': {
+        monthlyDBUs = calculateAIGatewayUsage(effectiveItem).monthlyDBUs
+        break
+      }
+
+      case 'AGENT_EVALUATION': {
+        monthlyDBUs = calculateAgentEvaluationUsage(effectiveItem).monthlyDBUs
+        break
+      }
+
+      case 'ZEROBUS': {
+        monthlyDBUs = calculateZerobusUsage(effectiveItem).monthlyDBUs
+        break
+      }
+
       case 'SHUTTERSTOCK_IMAGEAI': {
         // 0.857 DBU per image
         const imageCount = effectiveItem.shutterstock_images || 0
@@ -1455,20 +2163,26 @@ export default function Calculator() {
     // ========================================
     const safeDbuPrice = isNaN(dbuPrice) || dbuPrice === undefined ? 0 : dbuPrice
     const safeMonthlyDBUs = isNaN(monthlyDBUs) || monthlyDBUs === undefined ? 0 : monthlyDBUs
+    const safeMonthlyDSUs = isNaN(monthlyDSUs) || monthlyDSUs === undefined ? 0 : monthlyDSUs
+    const safeDSUCost = isNaN(dsuCost) || dsuCost === undefined ? 0 : dsuCost
     const safeVmCost = isNaN(vmCost) || vmCost === undefined ? 0 : vmCost
     const safeStorageCost = storageCost !== undefined && !isNaN(storageCost) ? storageCost : 0
     
     const dbuCost = safeMonthlyDBUs * safeDbuPrice
-    const totalCost = dbuCost + safeVmCost + safeStorageCost
+    const totalCost = dbuCost + safeVmCost + safeDSUCost
     
     return { 
       monthlyDBUs: safeMonthlyDBUs, 
       dbuCost: isNaN(dbuCost) ? 0 : dbuCost, 
+      monthlyDSUs: safeMonthlyDSUs,
+      dsuCost: safeDSUCost,
       vmCost: safeVmCost, 
+      databricksListCost: dbuCost + safeDSUCost,
       totalCost: isNaN(totalCost) ? 0 : totalCost,
-      unitsUsed,  // For Vector Search
+      unitsUsed,  // For AI Search
       dbuPerHour, // For display
       dbuPrice: safeDbuPrice,  // $/DBU rate for display
+      dsuPrice,
       storageCost: safeStorageCost > 0 ? safeStorageCost : undefined,
       storageDetails
     }
@@ -1478,31 +2192,66 @@ export default function Calculator() {
   const totalCosts = useMemo(() => {
     let totalDBUs = 0
     let totalDBUCost = 0
+    let totalDSUs = 0
+    let totalDSUCost = 0
     let totalVMCost = 0
-    let totalCost = 0
+    let workloadTotalCost = 0
+    let productSpendAtList = 0
     
     lineItems.forEach(item => {
       const costs = calculateItemCost(item)
       // Guard against NaN values propagating
       totalDBUs += isNaN(costs.monthlyDBUs) ? 0 : costs.monthlyDBUs
       totalDBUCost += isNaN(costs.dbuCost) ? 0 : costs.dbuCost
+      totalDSUs += isNaN(costs.monthlyDSUs) ? 0 : costs.monthlyDSUs
+      totalDSUCost += isNaN(costs.dsuCost) ? 0 : costs.dsuCost
       totalVMCost += isNaN(costs.vmCost) ? 0 : costs.vmCost
-      totalCost += isNaN(costs.totalCost) ? 0 : costs.totalCost
+      workloadTotalCost += isNaN(costs.totalCost) ? 0 : costs.totalCost
+      productSpendAtList += isNaN(costs.databricksListCost)
+        ? 0
+        : costs.databricksListCost
     })
+
+    const selectedAddon = formData.platform_addons[0] ?? null
+    const platformAddonDiscountPct = getPlatformAddonDiscountPct(
+      currentEstimate?.discount_config,
+    )
+    const platformAddon = calculatePlatformAddonCost(
+      pricingBundle.platformAddons,
+      selectedAddon,
+      formData.cloud,
+      formData.tier,
+      productSpendAtList,
+      platformAddonDiscountPct,
+    )
+    const totalPlatformAddonCost = platformAddon?.cost ?? 0
     
-    return { totalDBUs, totalDBUCost, totalVMCost, totalCost }
-  }, [lineItems, formData.cloud, formData.region, formData.tier, workloadTypes, getVMPrice, vmPricingMap, getInstanceDbuRate, instanceDbuRateMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
+    return {
+      totalDBUs,
+      totalDBUCost,
+      totalDSUs,
+      totalDSUCost,
+      totalVMCost,
+      productSpendAtList,
+      workloadTotalCost,
+      platformAddon,
+      totalPlatformAddonCost,
+      totalCost: workloadTotalCost + totalPlatformAddonCost,
+    }
+  }, [lineItems, formData.cloud, formData.region, formData.tier, formData.platform_addons, currentEstimate?.discount_config, workloadTypes, getVMPrice, vmPricingMap, getInstanceDbuRate, instanceDbuRateMap, instanceTypes, photonMultipliers, dbuRatesMap, dbsqlSizes, modelServingGPUTypes, vectorSearchModes, getVectorSearchRate, getFMAPIDatabricksRate, getFMAPIProprietaryRate, pricingBundle, isPricingBundleLoaded])
   
   // Sync local calculated costs to the store for AI Assistant
   useEffect(() => {
-    const costs: Record<string, { total: number; dbu: number; vm: number; dbus: number }> = {}
+    const costs: Record<string, { total: number; dbu: number; dsu: number; vm: number; dbus: number; dsus: number }> = {}
     lineItems.forEach(item => {
       const itemCosts = calculateItemCost(item, pendingFormEdits[item.line_item_id])
       costs[item.line_item_id] = {
         total: isNaN(itemCosts.totalCost) ? 0 : itemCosts.totalCost,
         dbu: isNaN(itemCosts.dbuCost) ? 0 : itemCosts.dbuCost,
+        dsu: isNaN(itemCosts.dsuCost) ? 0 : itemCosts.dsuCost,
         vm: isNaN(itemCosts.vmCost) ? 0 : itemCosts.vmCost,
-        dbus: isNaN(itemCosts.monthlyDBUs) ? 0 : itemCosts.monthlyDBUs
+        dbus: isNaN(itemCosts.monthlyDBUs) ? 0 : itemCosts.monthlyDBUs,
+        dsus: isNaN(itemCosts.monthlyDSUs) ? 0 : itemCosts.monthlyDSUs,
       }
     })
     setLocalCalculatedCosts(costs)
@@ -1590,10 +2339,15 @@ export default function Calculator() {
     setIsSaving(true)
     try {
       // Convert cloud and tier to uppercase for database constraints
+      const { platform_addons, ...estimateFields } = formData
       const dataToSave = {
-        ...formData,
+        ...estimateFields,
         cloud: formData.cloud.toUpperCase(),
-        tier: formData.tier.toUpperCase()
+        tier: formData.tier.toUpperCase(),
+        discount_config: {
+          ...(currentEstimate?.discount_config || {}),
+          platform_addons,
+        },
       }
       
       if (id && currentEstimate) {
@@ -1785,7 +2539,7 @@ export default function Calculator() {
   const getUsageSummary = (item: LineItem) => {
     // Quantity-based workloads don't use run/hour usage
     const wt = item.workload_type || ''
-    if (['AI_PARSE', 'AI_EXTRACT', 'AI_CLASSIFY', 'SHUTTERSTOCK_IMAGEAI', 'DATABRICKS_APPS'].includes(wt)) return null
+    if (['AI_PARSE', 'AI_EXTRACT', 'AI_CLASSIFY', 'AI_GATEWAY', 'AGENT_EVALUATION', 'GENERAL_STORAGE', 'ZEROBUS', 'SHUTTERSTOCK_IMAGEAI', 'DATABRICKS_APPS'].includes(wt)) return null
     if (item.hours_per_month) {
       return `${item.hours_per_month}h/month`
     }
@@ -1818,6 +2572,12 @@ export default function Calculator() {
         if (item.vector_capacity_millions) {
           details.push({ label: 'Capacity', value: `${item.vector_capacity_millions}M vectors` })
         }
+        if (item.ai_search_reranker_enabled) {
+          details.push({
+            label: 'Reranker',
+            value: `${item.ai_search_reranker_requests_thousands || 0}K requests/mo`,
+          })
+        }
         break
         
       case 'MODEL_SERVING':
@@ -1836,6 +2596,62 @@ export default function Calculator() {
           details.push({ label: 'Endpoint', value: gpuLabels[item.model_serving_gpu_type] || item.model_serving_gpu_type })
         }
         break
+
+      case 'AI_RUNTIME': {
+        const usage = calculateAIRuntimeUsage(
+          formData.cloud || 'aws',
+          item.ai_runtime_accelerator_type,
+          0,
+        )
+        details.push({
+          label: 'Accelerator',
+          value: usage.accelerator?.label || 'Unavailable',
+        })
+        break
+      }
+
+      case 'GENERAL_STORAGE': {
+        const quantity = item.general_storage_quantity ?? 0
+        const unit = (item.general_storage_unit ?? 'gb').toUpperCase()
+        details.push({
+          label: 'Stored Capacity',
+          value: `${quantity.toLocaleString()} ${unit}/month`,
+        })
+        if (unit === 'TB') {
+          details.push({
+            label: 'Billable Capacity',
+            value: `${getGeneralStorageGB(item).toLocaleString()} GB-month`,
+          })
+        }
+        details.push({
+          label: 'Tier 1 Operations',
+          value: `${(item.general_storage_tier1_operations_thousands ?? 0).toLocaleString()}K/month`,
+        })
+        details.push({
+          label: 'Tier 2 Operations',
+          value: `${(item.general_storage_tier2_operations_thousands ?? 0).toLocaleString()}K/month`,
+        })
+        break
+      }
+
+      case 'ZEROBUS': {
+        const usage = calculateZerobusUsage(item)
+        details.push({
+          label: 'Type',
+          value: usage.mode === 'otel'
+            ? 'Zerobus OTel Ingest'
+            : 'Zerobus Ingest',
+        })
+        details.push({
+          label: 'Ingested Data',
+          value: `${formatNumber(usage.monthlyIngestedGB, 3)} GB/month`,
+        })
+        details.push({
+          label: 'Metering',
+          value: `${usage.dbuPerGB.toFixed(3)} DBU/GB`,
+        })
+        break
+      }
         
       case 'LAKEBASE':
         if (item.lakebase_cu) {
@@ -1858,12 +2674,17 @@ export default function Calculator() {
             'input_token': 'Input Tokens',
             'output_token': 'Output Tokens',
             'provisioned_scaling': 'Provisioned Scaling',
-            'provisioned_entry': 'Provisioned Entry'
+            'provisioned_entry': 'Provisioned Entry',
+            'provisioned_scaling_1_month': 'Provisioned Scaling (1 month)',
+            'provisioned_scaling_3_month': 'Provisioned Scaling (3 months)',
+            'provisioned_entry_1_month': 'Provisioned Entry (1 month)',
+            'provisioned_entry_3_month': 'Provisioned Entry (3 months)',
           }
           details.push({ label: 'Rate', value: rateLabels[item.fmapi_rate_type] || item.fmapi_rate_type })
         }
         if (item.fmapi_quantity) {
-          const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(item.fmapi_rate_type || '')
+          const isProvisioned = (item.fmapi_rate_type || '').startsWith('provisioned_')
+            || item.fmapi_rate_type === 'batch_inference'
           details.push({ 
             label: isProvisioned ? 'Hours' : 'Quantity', 
             value: isProvisioned ? `${item.fmapi_quantity}h/mo` : `${item.fmapi_quantity}M` 
@@ -1880,12 +2701,19 @@ export default function Calculator() {
             'input_token': 'Input',
             'output_token': 'Output',
             'cache_read': 'Cache Read',
-            'cache_write': 'Cache Write'
+            'cache_write': 'Cache Write',
+            'batch_inference': 'Batch Inference',
           }
           details.push({ label: 'Rate', value: rateLabels[item.fmapi_rate_type] || item.fmapi_rate_type })
         }
         if (item.fmapi_quantity) {
-          details.push({ label: 'Quantity', value: `${item.fmapi_quantity}M tokens` })
+          const isHourly = item.fmapi_rate_type === 'batch_inference'
+          details.push({
+            label: isHourly ? 'Hours' : 'Quantity',
+            value: isHourly
+              ? `${item.fmapi_quantity}h/mo`
+              : `${item.fmapi_quantity}M tokens`,
+          })
         }
         break
         
@@ -1909,6 +2737,7 @@ export default function Calculator() {
 
       case 'DATABRICKS_APPS':
         details.push({ label: 'Size', value: (item.databricks_apps_size || 'medium').charAt(0).toUpperCase() + (item.databricks_apps_size || 'medium').slice(1) })
+        details.push({ label: 'Apps', value: `${item.databricks_apps_num_apps ?? 1}` })
         break
 
       case 'AI_PARSE':
@@ -1931,6 +2760,40 @@ export default function Calculator() {
           details.push({ label: 'Docs', value: `${formatNumber(item.ai_classify_num_docs / 1000)}K/mo` })
         }
         break
+
+      case 'AI_GATEWAY': {
+        const usage = calculateAIGatewayUsage(item)
+        if (usage.inferenceTables.enabled) {
+          details.push({
+            label: 'Inference Tables',
+            value: `${formatNumber(usage.inferenceTables.monthlyPayloadGB, 3)} GB · ${formatNumber(usage.inferenceTables.monthlyDBUs, 3)} DBUs`,
+          })
+        }
+        if (usage.usageTracking.enabled) {
+          details.push({
+            label: 'Usage Tracking',
+            value: `${formatNumber(usage.usageTracking.monthlyPayloadGB, 3)} GB · ${formatNumber(usage.usageTracking.monthlyDBUs, 3)} DBUs`,
+          })
+        }
+        break
+      }
+
+      case 'AGENT_EVALUATION': {
+        const usage = calculateAgentEvaluationUsage(item)
+        if (usage.labelsEnabled) {
+          details.push({
+            label: 'Evaluation Tokens',
+            value: `${formatNumber(usage.inputTokensMillions, 3)}M input + ${formatNumber(usage.outputTokensMillions, 3)}M output · ${formatNumber(usage.evaluationTokenDBUs, 3)} DBUs`,
+          })
+        }
+        if (usage.syntheticDataEnabled) {
+          details.push({
+            label: 'Synthetic Questions',
+            value: `${usage.syntheticQuestions.toLocaleString()}/mo · ${formatNumber(usage.syntheticQuestionDBUs, 3)} DBUs`,
+          })
+        }
+        break
+      }
 
       case 'SHUTTERSTOCK_IMAGEAI':
         if (item.shutterstock_images) {
@@ -2201,7 +3064,8 @@ export default function Calculator() {
                                     ...prev, 
                                     cloud: cloud.id, 
                                     region: '',
-                                    tier: (cloud.id === 'azure' && prev.tier === 'enterprise') ? '' : prev.tier
+                                    tier: (cloud.id === 'azure' && prev.tier === 'enterprise') ? '' : prev.tier,
+                                    platform_addons: [],
                                   }))
                                   setSelectedCloud(cloud.id)
                                   markAsChanged()
@@ -2267,10 +3131,14 @@ export default function Calculator() {
                           )}
                         >
                           <option value="">{isLoadingRegions ? 'Loading regions...' : 'Select region'}</option>
-                          {regions.map(region => (
-                            <option key={region.region_code} value={region.region_code}>
-                              {region.region_code} ({region.sku_region})
-                            </option>
+                          {regionOptionGroups.map((group) => (
+                            <optgroup key={group.name} label={group.name}>
+                              {group.options.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </optgroup>
                           ))}
                         </select>
                       </div>
@@ -2282,7 +3150,24 @@ export default function Calculator() {
                         <select
                           value={formData.tier}
                           onChange={(e) => {
-                            setFormData(prev => ({ ...prev, tier: e.target.value }))
+                            const nextTier = e.target.value
+                            const selectedAddon = formData.platform_addons[0]
+                            const isUnavailable = selectedAddon
+                              ? Boolean(getPlatformAddonAvailabilityError(
+                                  pricingBundle.platformAddons,
+                                  selectedAddon,
+                                  formData.cloud,
+                                  nextTier,
+                                ))
+                              : false
+                            setFormData(prev => ({
+                              ...prev,
+                              tier: nextTier,
+                              platform_addons: isUnavailable ? [] : prev.platform_addons,
+                            }))
+                            if (isUnavailable) {
+                              toast('Platform add-on cleared because it is unavailable for this tier')
+                            }
                             markAsChanged()
                           }}
                           className={clsx(
@@ -2299,6 +3184,84 @@ export default function Calculator() {
                       </div>
                     </div>
                   )}
+
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <label className="block text-xs font-medium mb-1.5 text-[var(--text-secondary)]">
+                      Platform Add-on
+                    </label>
+                    <select
+                      value={formData.platform_addons[0] || ''}
+                      onChange={(e) => {
+                        const selection = e.target.value as PlatformAddonType | ''
+                        setFormData(prev => ({
+                          ...prev,
+                          platform_addons: selection ? [selection] : [],
+                        }))
+                        markAsChanged()
+                      }}
+                      disabled={!formData.tier || !isPricingBundleLoaded}
+                      className="w-full text-sm"
+                    >
+                      <option value="">None</option>
+                      {PLATFORM_ADDON_TYPES.map(addonType => {
+                        const definition = getPlatformAddonDefinition(
+                          pricingBundle.platformAddons,
+                          addonType,
+                        )
+                        const error = getPlatformAddonAvailabilityError(
+                          pricingBundle.platformAddons,
+                          addonType,
+                          formData.cloud,
+                          formData.tier,
+                        )
+                        return (
+                          <option
+                            key={addonType}
+                            value={addonType}
+                            disabled={Boolean(error)}
+                          >
+                            {definition?.display_name || addonType}
+                            {error ? ` — ${error}` : ''}
+                          </option>
+                        )
+                      })}
+                    </select>
+                    {totalCosts.platformAddon && (
+                      <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-[var(--text-secondary)]">
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Product Spend at List</span>
+                          <span className="font-semibold tabular-nums text-[var(--text-primary)]">
+                            {formatCurrency(totalCosts.productSpendAtList)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 mt-1">
+                          <span>
+                            {totalCosts.platformAddon.displayName}
+                            {' '}({totalCosts.platformAddon.appliedRatePct}%)
+                          </span>
+                          <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                            {formatCurrency(totalCosts.totalPlatformAddonCost)}
+                          </span>
+                        </div>
+                        {totalCosts.platformAddon.promotionLabel && (
+                          <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                            Regular uplift {totalCosts.platformAddon.standardRatePct}%.{' '}
+                            {totalCosts.platformAddon.promotionLabel}.
+                          </p>
+                        )}
+                        {totalCosts.platformAddon.discountPct > 0 && (
+                          <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                            Add-on charge before negotiated discount:{' '}
+                            {formatCurrency(totalCosts.platformAddon.costBeforeDiscount)}.
+                            {' '}{totalCosts.platformAddon.discountPct}% discount applied.
+                          </p>
+                        )}
+                        <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                          Based on Databricks product spend before discounts; cloud VM costs are excluded.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 {/* Save Button */}
@@ -2526,7 +3489,9 @@ export default function Calculator() {
                       const isSelected = selectedItems.has(item.line_item_id)
                       const wType = effectiveItem.workload_type || ''
                       const isServerless = effectiveItem.serverless_enabled || (wType === 'DBSQL' && (effectiveItem.dbsql_warehouse_type || '').toUpperCase() === 'SERVERLESS')
-                      const typeName = workloadTypes.find(w => w.workload_type === wType)?.display_name || wType
+                      const typeName = wType === 'VECTOR_SEARCH'
+                        ? 'AI Search'
+                        : workloadTypes.find(w => w.workload_type === wType)?.display_name || wType
                       const usageSummary = getUsageSummary(effectiveItem)
 
                       // Build structured config for better display - uses effectiveItem for real-time sync
@@ -2574,7 +3539,7 @@ export default function Calculator() {
                             config.details.push(`${effectiveItem.dbsql_num_clusters} clusters`)
                           }
                         } else if (wType === 'VECTOR_SEARCH') {
-                          // Vector Search - mode as badge
+                          // AI Search - mode as badge
                           if (effectiveItem.vector_search_mode) {
                             const modeLabel = effectiveItem.vector_search_mode === 'storage_optimized' ? 'Storage Opt.' : 'Standard'
                             config.badges.push({ text: modeLabel })
@@ -2590,8 +3555,9 @@ export default function Calculator() {
                         } else if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
                           // Foundation Model API - check rate_type for provisioned vs token
                           if (effectiveItem.fmapi_rate_type) {
-                            const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(effectiveItem.fmapi_rate_type)
-                            config.badges.push({ text: isProvisioned ? 'Provisioned' : 'Token' })
+                            const isHourly = effectiveItem.fmapi_rate_type.startsWith('provisioned_')
+                              || effectiveItem.fmapi_rate_type === 'batch_inference'
+                            config.badges.push({ text: isHourly ? 'Hourly' : 'Token' })
                           }
                           if (effectiveItem.fmapi_provider && wType === 'FMAPI_PROPRIETARY') {
                             config.details.push(effectiveItem.fmapi_provider)
@@ -2610,6 +3576,42 @@ export default function Calculator() {
                           if (effectiveItem.lakebase_storage_gb && effectiveItem.lakebase_storage_gb > 0) {
                             config.details.push(`${effectiveItem.lakebase_storage_gb.toLocaleString()} GB`)
                           }
+                        } else if (wType === 'AI_GATEWAY') {
+                          const gatewayUsage = calculateAIGatewayUsage(effectiveItem)
+                          if (gatewayUsage.inferenceTables.enabled) {
+                            config.badges.push({ text: 'Inference Tables' })
+                            config.details.push(
+                              `${formatNumber(gatewayUsage.inferenceTables.monthlyPayloadGB, 3)} GB / ${formatNumber(gatewayUsage.inferenceTables.monthlyDBUs, 3)} DBUs`,
+                            )
+                          }
+                          if (gatewayUsage.usageTracking.enabled) {
+                            config.badges.push({ text: 'Usage Tracking' })
+                            config.details.push(
+                              `${formatNumber(gatewayUsage.usageTracking.monthlyPayloadGB, 3)} GB / ${formatNumber(gatewayUsage.usageTracking.monthlyDBUs, 3)} DBUs`,
+                            )
+                          }
+                        } else if (wType === 'AGENT_EVALUATION') {
+                          const evaluationUsage = calculateAgentEvaluationUsage(effectiveItem)
+                          if (evaluationUsage.labelsEnabled) {
+                            config.badges.push({ text: 'Evaluation Labels' })
+                            config.details.push(
+                              `${formatNumber(evaluationUsage.inputTokensMillions, 3)}M input + ${formatNumber(evaluationUsage.outputTokensMillions, 3)}M output / ${formatNumber(evaluationUsage.evaluationTokenDBUs, 3)} DBUs`,
+                            )
+                          }
+                          if (evaluationUsage.syntheticDataEnabled) {
+                            config.badges.push({ text: 'Synthetic Data' })
+                            config.details.push(
+                              `${evaluationUsage.syntheticQuestions.toLocaleString()} questions / ${formatNumber(evaluationUsage.syntheticQuestionDBUs, 3)} DBUs`,
+                            )
+                          }
+                        } else if (wType === 'ZEROBUS') {
+                          const zerobusUsage = calculateZerobusUsage(effectiveItem)
+                          config.badges.push({
+                            text: zerobusUsage.mode === 'otel' ? 'OTel' : 'Standard',
+                          })
+                          config.details.push(
+                            `${formatNumber(zerobusUsage.monthlyIngestedGB, 3)} GB / ${formatNumber(zerobusUsage.monthlyDBUs, 3)} DBUs`,
+                          )
                         }
                         
                         return config
@@ -2717,6 +3719,7 @@ export default function Calculator() {
                               <WorkloadCostDisplay 
                                 costs={costs} 
                                 size="sm"
+                                showDBUs={effectiveItem.workload_type !== 'GENERAL_STORAGE'}
                                 isLoading={(() => {
                                   const needsVMCosts = (
                                     !effectiveItem.serverless_enabled &&
@@ -2827,23 +3830,21 @@ export default function Calculator() {
                                   <span className="text-[var(--text-muted)]">DBU Cost</span>
                                   <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
                                 </div>
+                                {costs.dsuCost > 0 && (
+                                  <div>
+                                    <span className="text-[var(--text-muted)]">DSU Cost</span>
+                                    <p className="font-semibold text-purple-600 dark:text-purple-400">{formatCurrency(costs.dsuCost)}</p>
+                                  </div>
+                                )}
                                 {/* Hide VM Cost for serverless workloads */}
-                                {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'].includes(wType) && (
+                                {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE', 'AI_GATEWAY', 'AGENT_EVALUATION', 'ZEROBUS'].includes(wType) && (
                                   <div>
                                     <span className="text-[var(--text-muted)]">VM Cost</span>
                                     <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
                                   </div>
                                 )}
                                 
-                                {/* Lakebase: Storage Cost */}
-                                {wType === 'LAKEBASE' && costs.storageCost !== undefined && costs.storageCost > 0 && (
-                                  <div>
-                                    <span className="text-[var(--text-muted)]">Storage Cost</span>
-                                    <p className="font-semibold text-purple-600 dark:text-purple-400">{formatCurrency(costs.storageCost)}</p>
-                                  </div>
-                                )}
-                                
-                                {/* Vector Search: Units Used */}
+                                {/* AI Search: Units Used */}
                                 {wType === 'VECTOR_SEARCH' && costs.unitsUsed !== undefined && (
                                   <div>
                                     <span className="text-[var(--text-muted)]">Units Used</span>
@@ -2906,90 +3907,78 @@ export default function Calculator() {
                                 <div className="mt-2">
                                 {(() => {
                                   // Determine if using run-based or direct hours
-                                  const isRunBased = effectiveItem.runs_per_day && effectiveItem.avg_runtime_minutes && !effectiveItem.hours_per_month
+                                  const isRunBased = Boolean(
+                                    effectiveItem.runs_per_day
+                                    && effectiveItem.avg_runtime_minutes,
+                                  )
                                   const runsPerDay = effectiveItem.runs_per_day || 0
                                   const avgRuntimeMin = effectiveItem.avg_runtime_minutes || 30
-                                  const daysPerMonth = effectiveItem.days_per_month || 30
-                                  const directHours = effectiveItem.hours_per_month || 730
-                                  
-                                  // Calculate hours - prefer run-based calculation when available
-                                  const hoursPerMonth = isRunBased 
-                                    ? runsPerDay * (avgRuntimeMin / 60) * daysPerMonth
-                                    : directHours
+                                  const daysPerMonth = effectiveItem.days_per_month || 22
+                                  const hoursPerMonth = calculateHoursPerMonth(effectiveItem)
                                   
                                   const dbuPrice = costs.dbuPrice || 0
                                   const dbuPriceDisplay = formatDbuPrice(wType, dbuPrice)
                                   
-                                    // Vector Search formula (with storage)
-                                    if (wType === 'VECTOR_SEARCH') {
-                                      const capacity = effectiveItem.vector_capacity_millions || 1
-                                      const mode = effectiveItem.vector_search_mode || 'standard'
-                                      const divisor = mode === 'storage_optimized' ? 64 : 2
-                                      const unitsUsed = Math.ceil(capacity / divisor)
-                                      const dbuPerUnit = mode === 'storage_optimized' ? 18.29 : 4
-                                      const vsStorageGB = effectiveItem.vector_search_storage_gb || 0
-                                      const vsFreeStorageGB = unitsUsed * 20
-                                      const vsBillableStorageGB = Math.max(0, vsStorageGB - vsFreeStorageGB)
-                                      const vsStorageCost = vsBillableStorageGB * 0.023
+                                    if (wType === 'AI_GATEWAY') {
                                       return (
-                                        <div className="space-y-1">
-                                          {/* Hours calculation (if run-based) */}
-                                          {isRunBased && (
-                                            <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
-                                              <span className="font-semibold">Hours:</span>
-                                              <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{runsPerDay} runs/day</span>
-                                              <span>×</span>
-                                              <span>(<span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{avgRuntimeMin}min</span> ÷ 60)</span>
-                                              <span>×</span>
-                                              <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{daysPerMonth} days/mo</span>
-                                              <span>=</span>
-                                              <span className="font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
-                                            </div>
-                                          )}
-                                          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
-                                            <span className="text-blue-600 font-semibold">DBU:</span>
-                                            <span>⌈<span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{capacity}M</span> vectors ÷ {divisor}M⌉</span>
-                                            <span>=</span>
-                                            <span className="font-semibold">{unitsUsed} unit{unitsUsed !== 1 ? 's' : ''}</span>
-                                            <span>×</span>
-                                            <span>{dbuPerUnit.toFixed(2)} DBU/hr/unit</span>
-                                            <span>×</span>
-                                            <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
-                                            <span>=</span>
-                                            <span>{formatNumber(costs.monthlyDBUs)} DBUs</span>
-                                            <span>×</span>
-                                            <span>${dbuPriceDisplay}/DBU</span>
-                                            <span>=</span>
-                                            <span className="text-blue-500 font-semibold">{formatCurrency(costs.dbuCost)}</span>
-                                          </div>
-                                          {vsStorageGB > 0 && (
-                                            <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
-                                              <span className="text-purple-600 font-semibold">Storage:</span>
-                                              <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{vsStorageGB} GB</span>
-                                              <span>−</span>
-                                              <span>{vsFreeStorageGB} GB free</span>
-                                              <span className="text-[var(--text-muted)]">({unitsUsed} units × 20GB)</span>
-                                              <span>=</span>
-                                              <span className="font-semibold">{vsBillableStorageGB} GB</span>
-                                              <span>×</span>
-                                              <span>$0.023/GB</span>
-                                              <span>=</span>
-                                              <span className="text-purple-500 font-semibold">{formatCurrency(vsStorageCost)}</span>
-                                            </div>
-                                          )}
-                                          <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
-                                            <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
-                                            <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
-                                            {vsStorageGB > 0 && (
-                                              <>
-                                                <span>+</span>
-                                                <span className="text-purple-500">{formatCurrency(vsStorageCost)}</span>
-                                              </>
-                                            )}
-                                            <span>=</span>
-                                            <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
-                                          </div>
-                                        </div>
+                                        <AIGatewayCostFormula
+                                          item={effectiveItem}
+                                          costs={costs}
+                                          dbuPriceDisplay={dbuPriceDisplay}
+                                        />
+                                      )
+                                    }
+
+                                    if (wType === 'AGENT_EVALUATION') {
+                                      return (
+                                        <AgentEvaluationCostFormula
+                                          item={effectiveItem}
+                                          costs={costs}
+                                          dbuPriceDisplay={dbuPriceDisplay}
+                                        />
+                                      )
+                                    }
+
+                                    if (wType === 'AI_RUNTIME') {
+                                      return (
+                                        <AIRuntimeCostFormula
+                                          item={effectiveItem}
+                                          costs={costs}
+                                          cloud={formData.cloud || 'aws'}
+                                          dbuPriceDisplay={dbuPriceDisplay}
+                                        />
+                                      )
+                                    }
+
+                                    if (wType === 'GENERAL_STORAGE') {
+                                      return (
+                                        <GeneralStorageCostFormula
+                                          item={effectiveItem}
+                                          costs={costs}
+                                          cloud={formData.cloud || 'aws'}
+                                          unitPrice={costs.dsuPrice || 0}
+                                        />
+                                      )
+                                    }
+
+                                    if (wType === 'ZEROBUS') {
+                                      return (
+                                        <ZerobusCostFormula
+                                          item={effectiveItem}
+                                          costs={costs}
+                                          dbuPriceDisplay={dbuPriceDisplay}
+                                        />
+                                      )
+                                    }
+
+                                    // AI Search formula
+                                    if (wType === 'VECTOR_SEARCH') {
+                                      return (
+                                        <AISearchCostFormula
+                                          item={effectiveItem}
+                                          costs={costs}
+                                          dbuPriceDisplay={dbuPriceDisplay}
+                                        />
                                       )
                                     }
                                   
@@ -2997,10 +3986,13 @@ export default function Calculator() {
                                   if (wType === 'FMAPI_DATABRICKS' || wType === 'FMAPI_PROPRIETARY') {
                                     const quantity = effectiveItem.fmapi_quantity || 1
                                     const rateType = effectiveItem.fmapi_rate_type || 'input_token'
-                                    const isProvisioned = ['provisioned_scaling', 'provisioned_entry'].includes(rateType)
+                                    const isProvisioned = rateType.startsWith('provisioned_')
+                                      || rateType === 'batch_inference'
                                     const dbuPerUnit = quantity > 0 ? costs.monthlyDBUs / quantity : 0
                                     const model = effectiveItem.fmapi_model || 'model'
-                                    const provider = effectiveItem.fmapi_provider || ''
+                                    const provider = wType === 'FMAPI_PROPRIETARY'
+                                      ? effectiveItem.fmapi_provider || ''
+                                      : ''
                                     
                                     return (
                                       <div className="space-y-1">
@@ -3044,7 +4036,7 @@ export default function Calculator() {
                                     const storageGB = effectiveItem.lakebase_storage_gb || 0
                                     const pitrGB = effectiveItem.lakebase_pitr_gb || 0
                                     const snapshotGB = effectiveItem.lakebase_snapshot_gb || 0
-                                    const pricePerDSU = 0.023
+                                    const pricePerDSU = costs.dsuPrice || 0
                                     const localStorageCost = storageGB * 15 * pricePerDSU
                                     const localPitrCost = pitrGB * 8.7 * pricePerDSU
                                     const localSnapshotCost = snapshotGB * 3.91 * pricePerDSU
@@ -3166,7 +4158,7 @@ export default function Calculator() {
                                           {hasStorageCosts && (
                                             <>
                                               <span>+</span>
-                                              <span className="text-purple-500">{formatCurrency(localTotalStorageCost)}</span>
+                                              <span className="text-purple-500">{formatCurrency(costs.dsuCost)}</span>
                                             </>
                                           )}
                                           <span>=</span>
@@ -3184,8 +4176,13 @@ export default function Calculator() {
                                     const msConcurrencyDisp = msScaleOutDisp === 'custom'
                                       ? (effectiveItem.model_serving_concurrency || 4)
                                       : (msPresetsDisp[msScaleOutDisp] || 4)
-                                    const gpuBaseRate = msConcurrencyDisp > 0 && costs.dbuPerHour
-                                      ? costs.dbuPerHour / msConcurrencyDisp : 2
+                                    const isGPU = isModelServingGPUType(gpuType)
+                                    const billingCapacityUnits = getModelServingBillingCapacityUnits(
+                                      gpuType,
+                                      msConcurrencyDisp,
+                                    )
+                                    const baseRate = billingCapacityUnits > 0 && costs.dbuPerHour
+                                      ? costs.dbuPerHour / billingCapacityUnits : 2
                                     return (
                                       <div className="space-y-1">
                                         {isRunBased && (
@@ -3200,13 +4197,34 @@ export default function Calculator() {
                                             <span className="font-semibold">{hoursPerMonth.toFixed(1)}h/mo</span>
                                           </div>
                                         )}
+                                        {isGPU && (
+                                          <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+                                            <span className="text-blue-600 font-semibold">GPU replicas:</span>
+                                            <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">
+                                              {msConcurrencyDisp} concurrency
+                                            </span>
+                                            <span>÷</span>
+                                            <span>4 concurrency/replica</span>
+                                            <span>=</span>
+                                            <span className="font-semibold">
+                                              {billingCapacityUnits} GPU replica{billingCapacityUnits === 1 ? '' : 's'}
+                                            </span>
+                                            <span className="text-[var(--text-muted)]">
+                                              ({msScaleOutDisp} scale-out)
+                                            </span>
+                                          </div>
+                                        )}
                                         <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
                                           <span className="text-blue-600 font-semibold">DBU:</span>
-                                          <span>{gpuBaseRate.toFixed(2)} DBU/hr</span>
+                                          <span>{baseRate.toFixed(2)} DBU/{isGPU ? 'replica-hr' : 'concurrency-hr'}</span>
                                           <span className="text-[var(--text-muted)]">({gpuType})</span>
                                           <span>×</span>
-                                          <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{msConcurrencyDisp} concurrency</span>
-                                          <span className="text-[var(--text-muted)]">({msScaleOutDisp})</span>
+                                          <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">
+                                            {billingCapacityUnits} {isGPU ? `GPU replica${billingCapacityUnits === 1 ? '' : 's'}` : 'concurrency'}
+                                          </span>
+                                          {!isGPU && (
+                                            <span className="text-[var(--text-muted)]">({msScaleOutDisp} scale-out)</span>
+                                          )}
                                           <span>×</span>
                                           <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{hoursPerMonth.toFixed(isRunBased ? 1 : 0)}h</span>
                                           <span>=</span>
@@ -3353,12 +4371,15 @@ export default function Calculator() {
                                   if (wType === 'DATABRICKS_APPS') {
                                     const appsSize = (effectiveItem.databricks_apps_size || 'medium').toLowerCase()
                                     const appsDbuRate = appsSize === 'large' ? 1.0 : 0.5
+                                    const numApps = effectiveItem.databricks_apps_num_apps ?? 1
                                     return (
                                       <div className="space-y-1">
                                         <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
                                           <span className="text-blue-600 font-semibold">DBU:</span>
                                           <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{appsSize.charAt(0).toUpperCase() + appsSize.slice(1)}</span>
-                                          <span className="text-[var(--text-muted)]">({appsDbuRate} DBU/hr)</span>
+                                          <span className="text-[var(--text-muted)]">({appsDbuRate} DBU/app/hr)</span>
+                                          <span>×</span>
+                                          <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{numApps} {numApps === 1 ? 'app' : 'apps'}</span>
                                           <span>×</span>
                                           <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{hoursPerMonth.toFixed(0)}h</span>
                                           <span>=</span>
@@ -3472,8 +4493,12 @@ export default function Calculator() {
                                   const workerInstance = instanceTypes.find(it => it.id === workerNode || it.name === workerNode)
 
                                   // Use getInstanceDbuRate (from dynamic API) with fallback to instanceTypes
-                                  const driverDBURate = getInstanceDbuRate(cloud, driverNode) || driverInstance?.dbu_rate || 0
-                                  const workerDBURate = getInstanceDbuRate(cloud, workerNode) || workerInstance?.dbu_rate || 0
+                                  const driverDBURate = driverNode
+                                    ? getInstanceDbuRate(cloud, driverNode) || driverInstance?.dbu_rate || 0.5
+                                    : 0
+                                  const workerDBURate = workerNode
+                                    ? getInstanceDbuRate(cloud, workerNode) || workerInstance?.dbu_rate || 0.5
+                                    : 0
 
                                   // Get VM costs using getVMPrice (same as cost calculation) - this properly fetches from VM pricing cache
                                   const driverVMCost = region && driverNode
@@ -3505,22 +4530,34 @@ export default function Calculator() {
                                       <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
                                         <span className="text-blue-600 font-semibold">DBU:</span>
                                         {isServerless ? (
-                                          <>
-                                            <span>{dbuPerHour.toFixed(2)} DBU/hr</span>
-                                            <span className="text-[var(--text-muted)] text-[9px]">(Serverless{photonEnabled ? ' + Photon' : ''})</span>
-                                          </>
+                                          <ServerlessComputeDbuBreakdown
+                                            workloadType={wType}
+                                            serverlessMode={effectiveItem.serverless_mode}
+                                            driverNode={driverNode}
+                                            workerNode={workerNode}
+                                            driverDBURate={driverDBURate}
+                                            workerDBURate={workerDBURate}
+                                            numWorkers={numWorkers}
+                                            dbuPerHour={dbuPerHour}
+                                          />
                                         ) : (
                                           <>
                                             <span>(</span>
                                             <span className="font-medium text-[var(--text-primary)]">Driver</span>
                                             <span>{driverNode}</span>
                                             <span className="text-[var(--text-muted)]">({driverDBURate.toFixed(2)} DBU/hr)</span>
-                                            <span>+</span>
-                                            <span className="font-medium text-[var(--text-primary)]">
-                                              {numWorkers} worker{numWorkers !== 1 ? 's' : ''}
-                                            </span>
-                                            <span>{workerNode}</span>
-                                            <span className="text-[var(--text-muted)]">({workerDBURate.toFixed(2)} DBU/hr each)</span>
+                                            {numWorkers > 0 ? (
+                                              <>
+                                                <span>+</span>
+                                                <span className="font-medium text-[var(--text-primary)]">
+                                                  {numWorkers} worker{numWorkers !== 1 ? 's' : ''}
+                                                </span>
+                                                <span>{workerNode}</span>
+                                                <span className="text-[var(--text-muted)]">({workerDBURate.toFixed(2)} DBU/hr each)</span>
+                                              </>
+                                            ) : (
+                                              <span className="text-[var(--text-muted)]">Single node — driver only</span>
+                                            )}
                                             <span>)</span>
                                             {photonEnabled && (
                                               <>
@@ -3650,6 +4687,9 @@ export default function Calculator() {
                   const usageSummary = getUsageSummary(effectiveItem)
                   const typeConfig = getWorkloadTypeConfig(effectiveItem.workload_type)
                   const TypeIcon = typeConfig.icon
+                  const agentEvaluationUsage = effectiveItem.workload_type === 'AGENT_EVALUATION'
+                    ? calculateAgentEvaluationUsage(effectiveItem)
+                    : null
                   // Show details row only in 'expanded' mode OR when the item is expanded for editing
                   const showDetailsRow = workloadsViewMode === 'expanded' || isExpanded
                   
@@ -3702,14 +4742,33 @@ export default function Calculator() {
                               )}
                             </div>
                             <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mt-0.5">
-                              <span>{workloadTypes.find(w => w.workload_type === item.workload_type)?.display_name || item.workload_type}</span>
+                              <span>
+                                {item.workload_type === 'VECTOR_SEARCH'
+                                  ? 'AI Search'
+                                  : workloadTypes.find(w => w.workload_type === item.workload_type)?.display_name || item.workload_type}
+                              </span>
                             </div>
+                            {agentEvaluationUsage && (
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-[var(--text-secondary)] mt-1">
+                                {agentEvaluationUsage.labelsEnabled && (
+                                  <span>
+                                    Evaluation tokens: {formatNumber(agentEvaluationUsage.inputTokensMillions, 3)}M in + {formatNumber(agentEvaluationUsage.outputTokensMillions, 3)}M out · {formatNumber(agentEvaluationUsage.evaluationTokenDBUs, 3)} DBUs
+                                  </span>
+                                )}
+                                {agentEvaluationUsage.syntheticDataEnabled && (
+                                  <span>
+                                    Synthetic: {agentEvaluationUsage.syntheticQuestions.toLocaleString()} questions · {formatNumber(agentEvaluationUsage.syntheticQuestionDBUs, 3)} DBUs
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           
                           {/* Cost - Using shared component */}
                           <WorkloadCostDisplay 
                             costs={costs}
                             size={workloadsViewMode === 'cards' && !isExpanded ? 'md' : 'lg'}
+                            showDBUs={effectiveItem.workload_type !== 'GENERAL_STORAGE'}
                             isLoading={(() => {
                               const wType = effectiveItem.workload_type || ''
                               const needsVMCosts = (
@@ -3770,8 +4829,14 @@ export default function Calculator() {
                                 <span className="text-[var(--text-muted)]">DBU Cost</span>
                                 <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.dbuCost)}</p>
                               </div>
+                            {costs.dsuCost > 0 && (
+                              <div>
+                                <span className="text-[var(--text-muted)]">DSU Cost</span>
+                                <p className="font-semibold text-purple-600 dark:text-purple-400">{formatCurrency(costs.dsuCost)}</p>
+                              </div>
+                            )}
                               {/* Hide VM Cost for serverless workloads */}
-                              {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE'].includes(item.workload_type || '') && (
+                              {!['VECTOR_SEARCH', 'MODEL_SERVING', 'FMAPI_DATABRICKS', 'FMAPI_PROPRIETARY', 'LAKEBASE', 'AI_GATEWAY', 'AGENT_EVALUATION', 'ZEROBUS'].includes(item.workload_type || '') && (
                                 <div>
                                   <span className="text-[var(--text-muted)]">VM Cost</span>
                                   <p className="font-semibold text-[var(--text-primary)]">{formatCurrency(costs.vmCost)}</p>
@@ -3786,7 +4851,7 @@ export default function Calculator() {
                                 </div>
                               )}
                               
-                              {/* Vector Search: Units Used (prominent) */}
+                              {/* AI Search: Units Used (prominent) */}
                               {item.workload_type === 'VECTOR_SEARCH' && costs.unitsUsed !== undefined && (
                                 <div>
                                   <span className="text-[var(--text-muted)]">Units Used</span>
@@ -3867,59 +4932,67 @@ export default function Calculator() {
                                 const dbuPrice = costs.dbuPrice || 0
                                 const dbuPriceDisplay = formatDbuPrice(wType, dbuPrice)
                                 
-                                // Special workloads
-                                // Vector Search formula (with storage)
-                                if (wType === 'VECTOR_SEARCH') {
-                                  const capacity = effectiveItem.vector_capacity_millions || 1
-                                  const mode = effectiveItem.vector_search_mode || 'standard'
-                                  const divisor = mode === 'storage_optimized' ? 64 : 2
-                                  const unitsUsed = Math.ceil(capacity / divisor)
-                                  const dbuPerUnit = mode === 'storage_optimized' ? 18.29 : 4
-                                  const vsStorageGB = effectiveItem.vector_search_storage_gb || 0
-                                  const vsFreeStorageGB = unitsUsed * 20
-                                  const vsBillableStorageGB = Math.max(0, vsStorageGB - vsFreeStorageGB)
-                                  const vsStorageCost = vsBillableStorageGB * 0.023
+                                if (wType === 'AI_GATEWAY') {
                                   return (
-                                    <div className="space-y-1">
-                                      <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
-                                        <span className="text-blue-600 font-semibold">DBU:</span>
-                                        <span>⌈<span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{capacity}M vectors</span> ÷ {divisor}⌉</span>
-                                        <span>= {unitsUsed} units ×</span>
-                                        <span>{dbuPerUnit} DBU/unit/hr ×</span>
-                                        <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{hoursPerMonth.toFixed(0)}h</span>
-                                        <span>=</span>
-                                        <span>{formatNumber(costs.monthlyDBUs)} DBUs × ${dbuPriceDisplay}</span>
-                                        <span>=</span>
-                                        <span className="text-blue-500 font-semibold">{formatCurrency(costs.dbuCost)}</span>
-                                      </div>
-                                      {vsStorageGB > 0 && (
-                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
-                                          <span className="text-purple-600 font-semibold">Storage:</span>
-                                          <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{vsStorageGB} GB</span>
-                                          <span>−</span>
-                                          <span>{vsFreeStorageGB} GB free</span>
-                                          <span className="text-[var(--text-muted)]">({unitsUsed} units × 20GB)</span>
-                                          <span>=</span>
-                                          <span className="font-semibold">{vsBillableStorageGB} GB</span>
-                                          <span>×</span>
-                                          <span>$0.023/GB</span>
-                                          <span>=</span>
-                                          <span className="text-purple-500 font-semibold">{formatCurrency(vsStorageCost)}</span>
-                                        </div>
-                                      )}
-                                      <div className="flex items-center gap-1 text-[10px] font-mono flex-wrap pt-1 border-t border-dashed border-[var(--border-primary)]">
-                                        <span className="text-[var(--text-secondary)] font-semibold">Total:</span>
-                                        <span className="text-blue-500">{formatCurrency(costs.dbuCost)}</span>
-                                        {vsStorageGB > 0 && (
-                                          <>
-                                            <span>+</span>
-                                            <span className="text-purple-500">{formatCurrency(vsStorageCost)}</span>
-                                          </>
-                                        )}
-                                        <span>=</span>
-                                        <span className="text-[var(--text-primary)] font-medium">{formatCurrency(costs.totalCost)}</span>
-                                      </div>
-                                    </div>
+                                    <AIGatewayCostFormula
+                                      item={effectiveItem}
+                                      costs={costs}
+                                      dbuPriceDisplay={dbuPriceDisplay}
+                                    />
+                                  )
+                                }
+
+                                if (wType === 'AGENT_EVALUATION') {
+                                  return (
+                                    <AgentEvaluationCostFormula
+                                      item={effectiveItem}
+                                      costs={costs}
+                                      dbuPriceDisplay={dbuPriceDisplay}
+                                    />
+                                  )
+                                }
+
+                                if (wType === 'AI_RUNTIME') {
+                                  return (
+                                    <AIRuntimeCostFormula
+                                      item={effectiveItem}
+                                      costs={costs}
+                                      cloud={formData.cloud || 'aws'}
+                                      dbuPriceDisplay={dbuPriceDisplay}
+                                    />
+                                  )
+                                }
+
+                                if (wType === 'GENERAL_STORAGE') {
+                                  return (
+                                    <GeneralStorageCostFormula
+                                      item={effectiveItem}
+                                      costs={costs}
+                                      cloud={formData.cloud || 'aws'}
+                                      unitPrice={costs.dsuPrice || 0}
+                                    />
+                                  )
+                                }
+
+                                if (wType === 'ZEROBUS') {
+                                  return (
+                                    <ZerobusCostFormula
+                                      item={effectiveItem}
+                                      costs={costs}
+                                      dbuPriceDisplay={dbuPriceDisplay}
+                                    />
+                                  )
+                                }
+
+                                // Special workloads
+                                // AI Search formula
+                                if (wType === 'VECTOR_SEARCH') {
+                                  return (
+                                    <AISearchCostFormula
+                                      item={effectiveItem}
+                                      costs={costs}
+                                      dbuPriceDisplay={dbuPriceDisplay}
+                                    />
                                   )
                                 }
                                 
@@ -4075,7 +5148,7 @@ export default function Calculator() {
                                   const storageGB = effectiveItem.lakebase_storage_gb || 0
                                   const pitrGB = effectiveItem.lakebase_pitr_gb || 0
                                   const snapshotGB = effectiveItem.lakebase_snapshot_gb || 0
-                                  const pricePerDSU = 0.023
+                                  const pricePerDSU = costs.dsuPrice || 0
                                   const localStorageCost = storageGB * 15 * pricePerDSU
                                   const localPitrCost = pitrGB * 8.7 * pricePerDSU
                                   const localSnapshotCost = snapshotGB * 3.91 * pricePerDSU
@@ -4201,21 +5274,48 @@ export default function Calculator() {
                                 }
                                 
                                 if (wType === 'MODEL_SERVING') {
+                                  const gpuTypeCard = effectiveItem.model_serving_gpu_type || 'cpu'
                                   const msScaleOutCard = effectiveItem.model_serving_scale_out || 'small'
                                   const msPresetsCard: Record<string, number> = { small: 4, medium: 12, large: 40 }
                                   const msConcurrencyCard = msScaleOutCard === 'custom'
                                     ? (effectiveItem.model_serving_concurrency || 4)
                                     : (msPresetsCard[msScaleOutCard] || 4)
-                                  const gpuBaseRateCard = msConcurrencyCard > 0 && costs.dbuPerHour
-                                    ? costs.dbuPerHour / msConcurrencyCard : 2
+                                  const isGPUCard = isModelServingGPUType(gpuTypeCard)
+                                  const billingCapacityUnitsCard = getModelServingBillingCapacityUnits(
+                                    gpuTypeCard,
+                                    msConcurrencyCard,
+                                  )
+                                  const baseRateCard = billingCapacityUnitsCard > 0 && costs.dbuPerHour
+                                    ? costs.dbuPerHour / billingCapacityUnitsCard : 2
                                   return (
                                     <div className="space-y-1">
+                                      {isGPUCard && (
+                                        <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
+                                          <span className="text-blue-600 font-semibold">GPU replicas:</span>
+                                          <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">
+                                            {msConcurrencyCard} concurrency
+                                          </span>
+                                          <span>÷</span>
+                                          <span>4 concurrency/replica</span>
+                                          <span>=</span>
+                                          <span className="font-semibold">
+                                            {billingCapacityUnitsCard} GPU replica{billingCapacityUnitsCard === 1 ? '' : 's'}
+                                          </span>
+                                          <span className="text-[var(--text-muted)]">
+                                            ({msScaleOutCard} scale-out)
+                                          </span>
+                                        </div>
+                                      )}
                                       <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
                                         <span className="text-blue-600 font-semibold">DBU:</span>
-                                        <span>{gpuBaseRateCard.toFixed(2)} DBU/hr</span>
+                                        <span>{baseRateCard.toFixed(2)} DBU/{isGPUCard ? 'replica-hr' : 'concurrency-hr'}</span>
                                         <span>×</span>
-                                        <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{msConcurrencyCard} concurrency</span>
-                                        <span className="text-[var(--text-muted)]">({msScaleOutCard})</span>
+                                        <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">
+                                          {billingCapacityUnitsCard} {isGPUCard ? `GPU replica${billingCapacityUnitsCard === 1 ? '' : 's'}` : 'concurrency'}
+                                        </span>
+                                        {!isGPUCard && (
+                                          <span className="text-[var(--text-muted)]">({msScaleOutCard} scale-out)</span>
+                                        )}
                                         <span>×</span>
                                         <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
@@ -4239,12 +5339,15 @@ export default function Calculator() {
                                 if (wType === 'DATABRICKS_APPS') {
                                   const appsSize = (effectiveItem.databricks_apps_size || 'medium').toLowerCase()
                                   const appsDbuRate = appsSize === 'large' ? 1.0 : 0.5
+                                  const numApps = effectiveItem.databricks_apps_num_apps ?? 1
                                   return (
                                     <div className="space-y-1">
                                       <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
                                         <span className="text-blue-600 font-semibold">DBU:</span>
                                         <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{appsSize.charAt(0).toUpperCase() + appsSize.slice(1)}</span>
-                                        <span className="text-[var(--text-muted)]">({appsDbuRate} DBU/hr)</span>
+                                        <span className="text-[var(--text-muted)]">({appsDbuRate} DBU/app/hr)</span>
+                                        <span>×</span>
+                                        <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{numApps} {numApps === 1 ? 'app' : 'apps'}</span>
                                         <span>×</span>
                                         <span className="font-medium bg-amber-50 dark:bg-amber-900/20 px-0.5 rounded">{hoursPerMonth.toFixed(0)}h</span>
                                         <span>=</span>
@@ -4357,8 +5460,12 @@ export default function Calculator() {
                                 const driverInstance = instanceTypes.find(it => it.id === driverNode || it.name === driverNode)
                                 const workerInstance = instanceTypes.find(it => it.id === workerNode || it.name === workerNode)
 
-                                const driverDBURate = getInstanceDbuRate(cloud, driverNode) || driverInstance?.dbu_rate || 0
-                                const workerDBURate = getInstanceDbuRate(cloud, workerNode) || workerInstance?.dbu_rate || 0
+                                const driverDBURate = driverNode
+                                  ? getInstanceDbuRate(cloud, driverNode) || driverInstance?.dbu_rate || 0.5
+                                  : 0
+                                const workerDBURate = workerNode
+                                  ? getInstanceDbuRate(cloud, workerNode) || workerInstance?.dbu_rate || 0.5
+                                  : 0
 
                                 const driverVMCost = region && driverNode
                                   ? getVMPrice(cloud, region, driverNode, effectiveItem.driver_pricing_tier || 'on_demand', effectiveItem.driver_payment_option || 'no_upfront')
@@ -4389,22 +5496,34 @@ export default function Calculator() {
                                     <div className="flex items-center gap-1 text-[10px] font-mono text-[var(--text-secondary)] flex-wrap">
                                       <span className="text-blue-600 font-semibold">DBU:</span>
                                       {isServerless ? (
-                                        <>
-                                          <span>{dbuPerHour.toFixed(2)} DBU/hr</span>
-                                          <span className="text-[var(--text-muted)] text-[9px]">(Serverless{photonEnabled ? ' + Photon' : ''})</span>
-                                        </>
+                                        <ServerlessComputeDbuBreakdown
+                                          workloadType={wType}
+                                          serverlessMode={effectiveItem.serverless_mode}
+                                          driverNode={driverNode}
+                                          workerNode={workerNode}
+                                          driverDBURate={driverDBURate}
+                                          workerDBURate={workerDBURate}
+                                          numWorkers={numWorkers}
+                                          dbuPerHour={dbuPerHour}
+                                        />
                                       ) : (
                                         <>
                                           <span>(</span>
                                           <span className="font-medium text-[var(--text-primary)]">Driver</span>
                                           <span>{driverNode}</span>
                                           <span className="text-[var(--text-muted)]">({driverDBURate.toFixed(2)} DBU/hr)</span>
-                                          <span>+</span>
-                                          <span className="font-medium text-[var(--text-primary)]">
-                                            {numWorkers} worker{numWorkers !== 1 ? 's' : ''}
-                                          </span>
-                                          <span>{workerNode}</span>
-                                          <span className="text-[var(--text-muted)]">({workerDBURate.toFixed(2)} DBU/hr each)</span>
+                                          {numWorkers > 0 ? (
+                                            <>
+                                              <span>+</span>
+                                              <span className="font-medium text-[var(--text-primary)]">
+                                                {numWorkers} worker{numWorkers !== 1 ? 's' : ''}
+                                              </span>
+                                              <span>{workerNode}</span>
+                                              <span className="text-[var(--text-muted)]">({workerDBURate.toFixed(2)} DBU/hr each)</span>
+                                            </>
+                                          ) : (
+                                            <span className="text-[var(--text-muted)]">Single node — driver only</span>
+                                          )}
                                           <span>)</span>
                                           {photonEnabled && (
                                             <>
@@ -4615,15 +5734,23 @@ export default function Calculator() {
                     </p>
                   </div>
                   
-                  {/* Cost Breakdown Grid - DBU + VM only */}
+                  {/* Cost Breakdown Grid */}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="text-center p-2 sm:p-3 rounded-xl bg-gradient-to-br from-blue-500/5 to-blue-500/10 border border-blue-500/20 min-w-0">
                       <p className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider font-medium mb-1">DBU Cost</p>
                       <p className="text-xs font-bold text-[var(--text-primary)] tabular-nums truncate" title={formatCurrency(totalCosts.totalDBUCost)}>{formatCurrencyCompact(totalCosts.totalDBUCost)}</p>
                     </div>
                     <div className="text-center p-2 sm:p-3 rounded-xl bg-gradient-to-br from-purple-500/5 to-purple-500/10 border border-purple-500/20 min-w-0">
-                      <p className="text-[10px] text-purple-600 dark:text-purple-400 uppercase tracking-wider font-medium mb-1">VM Cost</p>
+                      <p className="text-[10px] text-purple-600 dark:text-purple-400 uppercase tracking-wider font-medium mb-1">DSU Cost</p>
+                      <p className="text-xs font-bold text-[var(--text-primary)] tabular-nums truncate" title={formatCurrency(totalCosts.totalDSUCost)}>{formatCurrencyCompact(totalCosts.totalDSUCost)}</p>
+                    </div>
+                    <div className="text-center p-2 sm:p-3 rounded-xl bg-gradient-to-br from-teal-500/5 to-teal-500/10 border border-teal-500/20 min-w-0">
+                      <p className="text-[10px] text-teal-600 dark:text-teal-400 uppercase tracking-wider font-medium mb-1">VM Cost</p>
                       <p className="text-xs font-bold text-[var(--text-primary)] tabular-nums truncate" title={isLoadingVMCosts ? 'Loading...' : formatCurrency(totalCosts.totalVMCost)}>{isLoadingVMCosts ? '...' : formatCurrencyCompact(totalCosts.totalVMCost)}</p>
+                    </div>
+                    <div className="text-center p-2 sm:p-3 rounded-xl bg-gradient-to-br from-amber-500/5 to-amber-500/10 border border-amber-500/20 min-w-0">
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 uppercase tracking-wider font-medium mb-1">Add-on</p>
+                      <p className="text-xs font-bold text-[var(--text-primary)] tabular-nums truncate" title={formatCurrency(totalCosts.totalPlatformAddonCost)}>{formatCurrencyCompact(totalCosts.totalPlatformAddonCost)}</p>
                     </div>
                   </div>
                   
@@ -4634,6 +5761,25 @@ export default function Calculator() {
                       <span className="text-[10px] italic">Click to view</span>
                     </p>
                     <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                      {totalCosts.platformAddon && (
+                        <div className="w-full p-2 rounded-lg bg-amber-500/5 border border-amber-500/15">
+                          <div className="flex items-center justify-between text-xs gap-2">
+                            <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 font-medium truncate">
+                              <ShieldCheckIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                              {totalCosts.platformAddon.displayName}
+                            </span>
+                            <span className="font-semibold text-[var(--text-primary)] tabular-nums text-[11px]">
+                              {formatCurrency(totalCosts.totalPlatformAddonCost)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                            {totalCosts.platformAddon.appliedRatePct}% of {formatCurrency(totalCosts.productSpendAtList)} product spend at list
+                            {totalCosts.platformAddon.discountPct > 0
+                              ? `, less ${totalCosts.platformAddon.discountPct}% add-on discount`
+                              : ''}
+                          </p>
+                        </div>
+                      )}
                       {(() => {
                         const sortedItems = [...lineItems]
                           .map(item => ({ item, costs: calculateItemCost(item) }))
@@ -4796,11 +5942,24 @@ export default function Calculator() {
                     <span className="font-bold text-[var(--text-primary)] text-xs sm:text-sm md:text-base truncate">{formatCurrency(totalCosts.totalDBUCost)}</span>
                   </div>
                   
-                  {/* VM Cost - purple label, responsive text */}
+                  {/* DSU Cost */}
                   <div className="flex items-center gap-1 min-w-0">
-                    <span className="text-purple-600 dark:text-purple-400 font-semibold text-xs sm:text-sm flex-shrink-0">VM:</span>
+                    <span className="text-purple-600 dark:text-purple-400 font-semibold text-xs sm:text-sm flex-shrink-0">DSU:</span>
+                    <span className="font-bold text-[var(--text-primary)] text-xs sm:text-sm md:text-base truncate">{formatCurrency(totalCosts.totalDSUCost)}</span>
+                  </div>
+
+                  {/* VM Cost */}
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="text-teal-600 dark:text-teal-400 font-semibold text-xs sm:text-sm flex-shrink-0">VM:</span>
                     <span className="font-bold text-[var(--text-primary)] text-xs sm:text-sm md:text-base truncate">{formatCurrency(totalCosts.totalVMCost)}</span>
                   </div>
+
+                  {totalCosts.totalPlatformAddonCost > 0 && (
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold text-xs sm:text-sm flex-shrink-0">Add-on:</span>
+                      <span className="font-bold text-[var(--text-primary)] text-xs sm:text-sm md:text-base truncate">{formatCurrency(totalCosts.totalPlatformAddonCost)}</span>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Right side - Total cost */}

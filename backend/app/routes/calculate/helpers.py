@@ -24,7 +24,7 @@ def get_sku_type(
 
     elif workload_upper == "ALL_PURPOSE":
         if serverless_enabled:
-            return "INTERACTIVE_SERVERLESS_COMPUTE"
+            return "ALL_PURPOSE_SERVERLESS_COMPUTE"
         elif photon_enabled:
             return "ALL_PURPOSE_COMPUTE_(PHOTON)"
         else:
@@ -48,10 +48,19 @@ def get_sku_type(
             return "SQL_COMPUTE"
 
     elif workload_upper == "VECTOR_SEARCH":
-        return "VECTOR_SEARCH_ENDPOINT"
+        return "SERVERLESS_REAL_TIME_INFERENCE"
 
     elif workload_upper == "MODEL_SERVING":
         return "SERVERLESS_REAL_TIME_INFERENCE"
+
+    elif workload_upper == "AI_RUNTIME":
+        return "MODEL_TRAINING"
+
+    elif workload_upper == "GENERAL_STORAGE":
+        return "DATABRICKS_STORAGE"
+
+    elif workload_upper == "ZEROBUS":
+        return "JOBS_SERVERLESS_COMPUTE"
 
     elif workload_upper == "FMAPI_DATABRICKS":
         return "SERVERLESS_REAL_TIME_INFERENCE"
@@ -67,7 +76,14 @@ def get_sku_type(
     elif workload_upper == "DATABRICKS_APPS":
         return "ALL_PURPOSE_SERVERLESS_COMPUTE"
 
-    elif workload_upper in ("AI_PARSE", "AI_EXTRACT", "AI_CLASSIFY", "SHUTTERSTOCK_IMAGEAI"):
+    elif workload_upper in (
+        "AI_PARSE",
+        "AI_EXTRACT",
+        "AI_CLASSIFY",
+        "AI_GATEWAY",
+        "AGENT_EVALUATION",
+        "SHUTTERSTOCK_IMAGEAI",
+    ):
         return "SERVERLESS_REAL_TIME_INFERENCE"
 
     elif workload_upper == "LAKEFLOW_CONNECT":

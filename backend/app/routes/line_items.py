@@ -14,7 +14,14 @@ from app.models.sharing import Sharing
 from app.schemas import LineItemCreate, LineItemUpdate, LineItemResponse
 from app.schemas.line_item import (
     map_ai_parse_api_fields,
+    validate_agent_evaluation_workload_config,
     validate_ai_function_workload_config,
+    validate_ai_gateway_workload_config,
+    validate_ai_runtime_workload_config,
+    validate_ai_search_workload_config,
+    validate_compute_workload_config,
+    validate_general_storage_workload_config,
+    validate_zerobus_workload_config,
 )
 from app.auth import get_current_user
 
@@ -25,6 +32,7 @@ _LOWERCASE_FIELDS = {
     'fmapi_rate_type', 'fmapi_endpoint_type', 'fmapi_context_length',
     'model_serving_gpu_type', 'driver_pricing_tier', 'worker_pricing_tier',
     'dbsql_vm_pricing_tier', 'ai_parse_complexity',
+    'zerobus_mode',
 }
 
 
@@ -43,6 +51,31 @@ def _validate_ai_config_or_422(workload_type: str, workload_config: dict) -> Non
     """Translate JSON configuration validation failures into API errors."""
     try:
         validate_ai_function_workload_config(workload_type, workload_config)
+        validate_ai_gateway_workload_config(workload_type, workload_config)
+        validate_agent_evaluation_workload_config(
+            workload_type,
+            workload_config,
+        )
+        validate_ai_search_workload_config(workload_type, workload_config)
+        validate_ai_runtime_workload_config(workload_type, workload_config)
+        validate_general_storage_workload_config(
+            workload_type,
+            workload_config,
+        )
+        validate_zerobus_workload_config(workload_type, workload_config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _validate_compute_config_or_422(data: dict) -> None:
+    """Translate compute configuration failures into API errors."""
+    try:
+        validate_compute_workload_config(
+            data.get("workload_type"),
+            data.get("driver_node_type"),
+            data.get("worker_node_type"),
+            data.get("num_workers"),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -168,6 +201,7 @@ def create_line_item(
         item_data.get("workload_type"),
         item_data.get("workload_config"),
     )
+    _validate_compute_config_or_422(item_data)
     db_item = LineItem(**item_data)
     if db_item.display_order == 0:
         db_item.display_order = max_order
@@ -224,6 +258,15 @@ def update_line_item(
         update_data.get("workload_type", item.workload_type),
         update_data.get("workload_config", item.workload_config),
     )
+    merged_data = {
+        "workload_type": item.workload_type,
+        "serverless_enabled": item.serverless_enabled,
+        "driver_node_type": item.driver_node_type,
+        "worker_node_type": item.worker_node_type,
+        "num_workers": item.num_workers,
+        **update_data,
+    }
+    _validate_compute_config_or_422(merged_data)
     for field, value in update_data.items():
         setattr(item, field, value)
 

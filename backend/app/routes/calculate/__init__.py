@@ -15,6 +15,18 @@ from app.routes.calculate.databricks_apps_calc import router as databricks_apps_
 from app.routes.calculate.ai_parse_calc import router as ai_parse_router
 from app.routes.calculate.ai_extract_calc import router as ai_extract_router
 from app.routes.calculate.ai_classify_calc import router as ai_classify_router
+from app.routes.calculate.ai_gateway_calc import router as ai_gateway_router
+from app.routes.calculate.agent_evaluation_calc import (
+    router as agent_evaluation_router,
+)
+from app.routes.calculate.ai_runtime_calc import router as ai_runtime_router
+from app.routes.calculate.general_storage_calc import (
+    router as general_storage_router,
+)
+from app.routes.calculate.zerobus_calc import router as zerobus_router
+from app.routes.calculate.platform_addon_calc import (
+    router as platform_addon_router,
+)
 from app.routes.calculate.shutterstock_calc import router as shutterstock_router
 from app.routes.calculate.lakeflow_connect_calc import router as lakeflow_connect_router
 
@@ -31,5 +43,11 @@ router.include_router(databricks_apps_router)
 router.include_router(ai_parse_router)
 router.include_router(ai_extract_router)
 router.include_router(ai_classify_router)
+router.include_router(ai_gateway_router)
+router.include_router(agent_evaluation_router)
+router.include_router(ai_runtime_router)
+router.include_router(general_storage_router)
+router.include_router(zerobus_router)
+router.include_router(platform_addon_router)
 router.include_router(shutterstock_router)
 router.include_router(lakeflow_connect_router)
